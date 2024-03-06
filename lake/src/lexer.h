@@ -3,7 +3,9 @@
 
 #include "common.h"
 
-#include "generated/tokens.h" 
+#include "generated/token.enum.h" 
+
+struct Lake;
 
 struct Token
 {
@@ -21,6 +23,8 @@ struct Lexer
 
 	s64 line;
 	s64 column;
+
+	Lake* lake;
 
 	void init(u8* start);
 

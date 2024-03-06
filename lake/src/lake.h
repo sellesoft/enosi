@@ -15,6 +15,9 @@ struct Lake
 	void init(str path);
 
 	void run();
+
+private:
+
 };
 
 extern Lake lake;

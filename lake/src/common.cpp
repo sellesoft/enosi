@@ -48,6 +48,11 @@ void Mem::copy(void* dst, void* src, u64 n_bytes)
 	memcpy(dst,src,n_bytes);
 }
 
+void Mem::move(void* dst, void* src, u64 n_bytes)
+{
+	memmove(dst, src, n_bytes);
+}
+
 void print(const char* s)
 {
 	printf("%s", s);
@@ -63,5 +68,9 @@ void print(u64 x)
 	printf("%lu", x);
 }
 
+void print(char x)
+{
+	printf("%c", x);
+}
 
 

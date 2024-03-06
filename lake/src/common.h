@@ -41,10 +41,18 @@ struct str
 
 };
 
-template<int N>
-consteval u64 static_string_hash(const char s[N])
+consteval s64 
+consteval_strlen(const char* s) {
+    s64 i = 0;
+    while(s[i]) {
+        i++;
+    }
+    return i;
+}
+
+consteval u64 static_string_hash(const char* s)
 {
-	u64 n = N;
+	u64 n = consteval_strlen(s);
 	u64 seed = 14695981039;
 	while (n--)
 	{
@@ -68,6 +76,7 @@ struct Mem
 	void* reallocate(void* ptr, u64 n_bytes);
 	void  free(void* ptr);
 	void  copy(void* dst, void* src, u64 bytes);
+	void  move(void* dst, void* src, u64 bytes);
 };
 
 extern Mem mem;
@@ -99,9 +108,16 @@ struct dstr
 void print(const char* s);
 void print(str s);
 void print(u64 x);
+void print(char c);
 
 template<typename... T>
-void error(T...args)
+void printv(T... args)
+{
+	(print(args), ...);
+}
+
+template<typename... T>
+void error_nopath(T...args)
 {
 	print("error: ");
 	(print(args), ...);
@@ -111,13 +127,21 @@ void error(T...args)
 template<typename... T>
 void error(str path, u64 line, u64 column, T... args)
 {
-	print(path);
-	print(":");
-	print(line);
-	print(":");
-	print(column);
-	print(": ");
-	error(args...);
+	printv(path,":",line,":",column,": ");
+	error_nopath(args...);
+}
+
+template<typename... T>
+void warn_nopath(T... args)
+{
+	printv("warning: ", args..., "\n");
+}
+
+template<typename... T>
+void warn(str path, u64 line, u64 column, T... args)
+{
+	printv(path,":",line,":",column,":");
+	warn_nopath(args...);
 }
 
 #endif // _lpp_common_h

@@ -5,6 +5,8 @@ lake := ${build_dir}/lake
 
 all: ${lake}
 
+VPATH = src
+
 # collect c files for the common files, lpp, and commonlua
 # and then generate their respective object and dependency
 # file paths
@@ -16,7 +18,7 @@ d_files := $(o_files:.o=.d)
 # clean up stuff we output
 clean:
 	-rm -r build/debug/*
-	-rm -r src/generated
+	-rm -r src/generated/*
 
 # set verbose to false unless it was already specified 
 # on cmdline (eg. make verbose=true)
@@ -71,10 +73,12 @@ ${build_dir}/%.o: %.cpp
 # generic rule for turning c files into dependency files
 ${build_dir}/%.d: %.cpp
 	@mkdir -p $(@D) # ensure directories exist
-	$(v)${preprocessor} $< ${compiler_flags} -MM -MG -MT ${build_dir}/$*.o -o $@
+	$(v)${compiler} -E $< ${compiler_flags} -MM -MG -MT ${build_dir}/$*.o -o $@
 
-src/generated/tokens.h: src/tokens.lua
-	lua $<
+src/generated/token.enum.h    \
+src/generated/token.strings.h \
+src/generated/token.kwmap.h &: src/tokens.lua
+	${v}lua $<
 	$(call print,$<,$@)
 
 # include the dependency files if they have 

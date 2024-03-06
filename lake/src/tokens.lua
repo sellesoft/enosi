@@ -1,8 +1,23 @@
-local output = "src/generated/tokens.h"
+local enum_output  = "src/generated/token.enum.h"
+local str_output   = "src/generated/token.strings.h"
+local kwmap_output = "src/generated/token.kwmap.h"
+
+local write_out = function(path, out)
+	local f = io.open(path, "w")
+
+	if not f then
+		print("failed to open file '"..path.."' for writing")
+		return
+	end
+
+	f:write(out)
+	f:close()
+end
+
 
 local tokens = 
 {
-	"NULL",
+	"Eof",
 
 	"Colon",
 	"Semicolon", 
@@ -17,32 +32,22 @@ local tokens =
 	"Ellises",
 	"DotDouble",
 	"Dot",
-	"Asterisk",
 	"Caret",
 	"Percent",
 	"TildeEqual",
 	"Plus",
 	"Minus",
+	"Solidus",
+	"Asterisk",
 	"LessThan",
 	"LessThanOrEqual",
 	"GreaterThan",
 	"GreaterThanOrEqual",
 
-	"Not",
-	"For",
-	"Do",
-	"If",
-	"Else",
-	"ElseIf",
-	"Then",  
-	"True",
-	"False",
-	"Nil",
-	"And",
-	"Or",
-
+	"Identifier",
 	"Number",
 	"String",
+	"Whitespace",
 
 	-- lake specific
 
@@ -50,6 +55,22 @@ local tokens =
 	"Dollar",
 	"ColonEqual",
 	"QuestionMarkEqual",
+}
+
+local keyword_tokens = {
+	{"Not",    "not"    },
+	{"For",    "for"    },
+	{"Do",     "do"     },
+	{"If",     "if"     },
+	{"Else",   "else"   },
+	{"ElseIf", "elseif" },
+	{"Then",   "then"   },  
+	{"True",   "true"   },
+	{"False",  "false"  },
+	{"Nil",    "nil"    },
+	{"And",    "and"    },
+	{"Or",     "or"     },
+	{"Local",  "local"  },
 }
 
 local out = [[
@@ -61,9 +82,17 @@ for _,v in ipairs(tokens) do
 	out = out.."\t"..v..",\n"	
 end
 
+for _,v in ipairs(keyword_tokens) do
+	out = out.."\t"..v[1]..",\n"
+end
+
 out = out..[[
 };
+]]
 
+write_out(enum_output, out)
+
+out = [[
 static const str tok_strings[] = 
 {
 ]]
@@ -72,16 +101,39 @@ for _,v in ipairs(tokens) do
 	out = out.."\tstrl(\""..v.."\"),\n"
 end
 
+for _,v in ipairs(keyword_tokens) do
+	out = out.."\tstrl(\""..v[1].."\"),\n"
+end
+
 out = out..[[
 };
 ]]
 
-local f = io.open(output, "w")
+write_out(str_output, out)
 
-if not f then
-	print("failed to open file '"..output.."' for writing")
-	return
+out = [[
+struct KWElem
+{
+	u64 hash;
+	tok kind;
+};
+
+static tok is_keyword_or_identifier(str s)
+{
+	u64 hash = s.hash();
+	switch (hash)
+	{
+]]
+
+for _,v in ipairs(keyword_tokens) do
+	out = out.."\t\t case static_string_hash(\""..v[1].."\"): return tok::"..v[1]..";\n"
 end
 
-f:write(out)
-f:close()
+out = out..[[
+	}
+
+	return tok::Identifier;
+}
+]]
+
+write_out(kwmap_output, out)

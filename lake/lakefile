@@ -1,0 +1,71 @@
+mode    ?= "debug"
+verbose ?= false
+
+build_dir := "build/"..build_mode.."/"
+
+lake := build_dir.."lake"
+
+c_files := lake.find("src/*.cpp")
+o_files := lake.replace(c_files, "src/%.cpp", build_dir.."%.o")
+
+compiler     := "clang++"
+linker       := "clang++"
+preprocessor := "cpp"
+
+compiler_flags := $[
+	-std=c++20
+	-Iinclude
+	-Isrc
+	-Wno-switch
+]
+
+if mode == "debug" then
+	compiler_flags ..= $[ -O0 -ggdb3 ]
+else
+	compiler_flags ..= "-O2"
+end
+
+linker_flags := $[
+	-Llib
+	-lluajit
+	-lm
+	-Wl,--export-dynamic
+]
+
+reset := "\33[0m"
+green := "\33[0;32m"
+blue  := "\33[0;34m"
+
+print_success := function(from, to)
+	if to then
+		io.write(green, from, reset, " -> ", blue, to, reset, "\n")
+	else
+		io.write(blue, from, reset, "\n")
+	end
+end
+
+lake.target( lake )
+    :uses(o_files)
+	:recipe(function(inputs, output)
+		result := ` $(linker) $(inputs) $(linker_flags) -o $(output) `
+
+		io.write(result.stderr)
+
+		if result.exit_status ~= 0 then
+			print_success(output)
+		end
+	end)
+
+for c_file, o_file in lake.zip(c_files, o_files) do
+	lake.target( o_file )
+	    :uses(c_file)
+		:recipe(function(input, output)
+			result := ` $(compiler) -c $(input) $(compiler_flags) -o $(output) `
+
+			io.write(result.stderr)
+
+			if result.exit_status ~= 0 then
+				print_success(input, output)
+			end
+		end)
+end
