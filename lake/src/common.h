@@ -108,6 +108,7 @@ struct dstr
 void print(const char* s);
 void print(str s);
 void print(u64 x);
+void print(s64 x);
 void print(char c);
 
 template<typename... T>

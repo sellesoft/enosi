@@ -5,6 +5,8 @@
 
 #include "generated/token.enum.h" 
 
+#include "generated/token.strings.h"
+
 struct Lake;
 
 struct Token
@@ -19,6 +21,7 @@ struct Token
 
 struct Lexer
 {
+	u8* buffer;
 	u8* cursor;
 
 	s64 line;
@@ -26,7 +29,7 @@ struct Lexer
 
 	Lake* lake;
 
-	void init(u8* start);
+	void init(Lake* lake);
 
 	// null if no more tokens
 	Token next_token();

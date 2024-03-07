@@ -2,7 +2,9 @@
 #define _lake_lake_h
 
 #include "common.h"
-#include "lexer.h"
+
+struct Lexer;
+struct Parser;
 
 struct Lake
 {
@@ -10,10 +12,9 @@ struct Lake
 
 	u8* buffer;
 
-	Lexer* lex;
+	Parser* parser;
 
 	void init(str path);
-
 	void run();
 
 private:

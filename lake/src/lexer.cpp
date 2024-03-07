@@ -4,9 +4,13 @@
 #include "ctype.h"
 #include "stdlib.h"
 
-void Lexer::init(u8* start)
+#include "platform.h"
+
+void Lexer::init(Lake* lake_)
 {
-	cursor = start;
+	lake = lake_;
+	buffer = platform::read_file(lake->path);
+	cursor = buffer;
 	line = column = 1;
 }
 
@@ -130,7 +134,12 @@ Token Lexer::next_token()
 				advance(this);
 				if (current(this) == '.')
 				{
-					t.kind = tok::Ellises;
+					t.kind = tok::Ellipses;
+					advance(this);
+				}
+				else if (current(this) == '=')
+				{
+					t.kind = tok::DotDoubleEqual;
 					advance(this);
 				}
 			}

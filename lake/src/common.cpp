@@ -68,6 +68,11 @@ void print(u64 x)
 	printf("%lu", x);
 }
 
+void print(s64 x)
+{
+	printf("%li", x);
+}
+
 void print(char x)
 {
 	printf("%c", x);
