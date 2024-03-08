@@ -53,29 +53,14 @@ void Mem::move(void* dst, void* src, u64 n_bytes)
 	memmove(dst, src, n_bytes);
 }
 
-void print(const char* s)
-{
-	printf("%s", s);
-}
+void print(const char* s) { printf("%s", s); }
 
-void print(str s)
-{
-	printf("%.*s", s.len, s.s);
-}
+void print(str s) { printf("%.*s", s.len, s.s); }
+void print(u32 x) { printf("%u", x); }
+void print(u64 x) { printf("%lu", x); }
+void print(s32 x) { printf("%i", x); }
+void print(s64 x) { printf("%li", x); }
 
-void print(u64 x)
-{
-	printf("%lu", x);
-}
-
-void print(s64 x)
-{
-	printf("%li", x);
-}
-
-void print(char x)
-{
-	printf("%c", x);
-}
+void print(char x) { printf("%c", x); }
 
 

@@ -35,6 +35,10 @@ struct Parser
 
 	/* --------------------------------------------------------------------------------------------
 	 *  Token stack
+	 *
+	 *  TODO(sushi) a linked list of tokens might be better so that inserts 
+	 *              dont need to move as much but we also should never insert 
+	 *              too far back in the list so maybe not a big deal
 	 */
 	struct TokenStack {
 		Token* arr;
@@ -52,8 +56,10 @@ struct Parser
 
 		Token get_last_identifier();
 		b8    insert_before_last_identifier(Token t);
+		void  push_before_whitespace(Token t);
 
 		void print();
+		void print_src();
 	} stack;
 
 	/* --------------------------------------------------------------------------------------------
@@ -77,7 +83,7 @@ struct Parser
 	void chunk();
 	void block();
 	void exprstat();
-	void statement();
+	b8   statement();
 	void last_statement();
 	void funcname();
 	void varlist();
@@ -103,17 +109,17 @@ struct Parser
 	void recfield();
 	void yindex();
 
-	/*  Lakefile syntax sugar
-	 */
-
 	/* --------------------------------------------------------------------------------------------
 	 *  Misc helpers
 	 */
 
-	/*  Advance curt to the next token.
-	 *  Skipping whitespace.
+	/*  Advance curt to the next token while skipping whitespace.
+	 *  In most cases we'll just wanna push the token onto the 
+	 *  stack, but in some cases where we are looking for our 
+	 *  syntax we defer pushing the token until we know what
+	 *  we really want.
 	 */
-	void next_token();
+	void next_token(b8 push_on_stack = true, b8 push_whitespace = true);
 
 	/*  Check that we're at the given token kind
 	 */ 
@@ -124,8 +130,17 @@ struct Parser
 	template<typename... T>
 	void error_here(T... args)
 	{
+		print("** ---- **\n\n");
+		stack.print_src();
+		print("\n\n** ---- **\n\n");
 		error(lake->path, curt.line, curt.column, args...);
 		exit(1);
+	}
+
+	template<typename... T>
+	void warn_here(T... args)
+	{
+		warn(lake->path, curt.line, curt.column, args...);
 	}
 };
 

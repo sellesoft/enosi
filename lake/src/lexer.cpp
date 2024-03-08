@@ -71,7 +71,6 @@ Token Lexer::next_token()
 		} break;
 
 		one_char_token(';', Semicolon);
-		one_char_token('=', Equal);
 		one_char_token(',', Comma);
 		one_char_token('(', ParenLeft);
 		one_char_token(')', ParenRight);
@@ -102,7 +101,8 @@ Token Lexer::next_token()
 		one_or_two_char_token('<', LessThan,    '=', LessThanOrEqual);
 		one_or_two_char_token('>', GreaterThan, '=', GreaterThanOrEqual);
 		one_or_two_char_token(':', Colon,       '=', ColonEqual);
-		
+		one_or_two_char_token('=', Equal,       '=', EqualDouble);
+
 		case '~': {
 			advance(this);
 			if (current(this) != '=')
@@ -202,7 +202,9 @@ Token Lexer::next_token()
 				advance(this);
 				while (at_identifier_char(this) && !eof(this)) advance(this);
 
+				t.raw.len = (cursor - t.raw.s) + len_offset;
 				t.kind = is_keyword_or_identifier(t.raw);
+				return t;
 			}
 		} break;
 	}

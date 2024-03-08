@@ -38,15 +38,12 @@ struct str
 
 	b8 isempty();
 	u64 hash();
-
 };
 
-consteval s64 
-consteval_strlen(const char* s) {
+consteval s64 consteval_strlen(const char* s) {
     s64 i = 0;
-    while(s[i]) {
+    while(s[i])
         i++;
-    }
     return i;
 }
 
@@ -107,7 +104,9 @@ struct dstr
 
 void print(const char* s);
 void print(str s);
+void print(u32 x);
 void print(u64 x);
+void print(s32 x);
 void print(s64 x);
 void print(char c);
 

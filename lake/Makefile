@@ -78,7 +78,7 @@ ${build_dir}/%.d: %.cpp
 src/generated/token.enum.h    \
 src/generated/token.strings.h \
 src/generated/token.kwmap.h &: src/tokens.lua
-	${v}lua $<
+	${v}luajit $<
 	$(call print,$<,$@)
 
 # include the dependency files if they have 

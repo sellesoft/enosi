@@ -45,7 +45,7 @@ print_success := function(from, to)
 end
 
 lake.target( lake )
-    :uses(o_files)
+	:uses(o_files)
 	:recipe(function(inputs, output)
 		result := ` $(linker) $(inputs) $(linker_flags) -o $(output) `
 
@@ -58,7 +58,7 @@ lake.target( lake )
 
 for c_file, o_file in lake.zip(c_files, o_files) do
 	lake.target( o_file )
-	    :uses(c_file)
+		:uses(c_file)
 		:recipe(function(input, output)
 			result := ` $(compiler) -c $(input) $(compiler_flags) -o $(output) `
 

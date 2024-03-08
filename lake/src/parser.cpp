@@ -12,17 +12,19 @@
  *
  */
 
-const Token identifier_lake = {tok::Identifier, strl("lake"), 0, 0};
-const Token identifier_cmd  = {tok::Identifier, strl("cmd"), 0, 0};
+const Token identifier_lake   = {tok::Identifier, strl("lake"), 0, 0};
+const Token identifier_cmd    = {tok::Identifier, strl("cmd"), 0, 0};
+const Token identifier_concat = {tok::Identifier, strl("concat"), 0, 0};
 const Token identifier_declare_if_not_already = {tok::Identifier, strl("declare_if_not_already"), 0, 0};
 
-const Token punctuation_dot    = {tok::Dot, strl("."), 0, 0};
-const Token punctuation_lparen = {tok::ParenLeft, strl("("), 0 ,0};
-const Token punctuation_rparen = {tok::ParenRight, strl(")"), 0, 0};
-const Token punctuation_comma  = {tok::Comma, strl(","), 0, 0};
-const Token punctuation_equal  = {tok::Equal, strl("="), 0, 0 };
-const Token punctuation_lbrace = {tok::BraceLeft, strl("{"), 0, 0};
-const Token punctuation_rbrace = {tok::BraceRight, strl("}"), 0, 0};
+const Token punctuation_dot       = {tok::Dot, strl("."), 0, 0};
+const Token punctuation_lparen    = {tok::ParenLeft, strl("("), 0 ,0};
+const Token punctuation_rparen    = {tok::ParenRight, strl(")"), 0, 0};
+const Token punctuation_comma     = {tok::Comma, strl(","), 0, 0};
+const Token punctuation_equal     = {tok::Equal, strl("="), 0, 0 };
+const Token punctuation_lbrace    = {tok::BraceLeft, strl("{"), 0, 0};
+const Token punctuation_rbrace    = {tok::BraceRight, strl("}"), 0, 0};
+const Token punctuation_dotdouble = {tok::DotDouble, strl(".."), 0, 0};
 
 const Token keyword_local = {tok::Local, strl("local"), 0, 0};
 
@@ -113,6 +115,8 @@ Token Parser::TokenStack::get_last_identifier()
 	}
 }
 
+/* ------------------------------------------------------------------------------------------------
+ */
 b8 Parser::TokenStack::insert_before_last_identifier(Token t)
 {
 	Token* search = arr + len - 1;
@@ -131,6 +135,20 @@ b8 Parser::TokenStack::insert_before_last_identifier(Token t)
 
 /* ------------------------------------------------------------------------------------------------
  */
+void Parser::TokenStack::push_before_whitespace(Token t)
+{
+	if (arr[len-1].kind == Whitespace)
+	{
+		insert(len-1, t);
+	}
+	else
+	{
+		push(t);
+	}
+}
+
+/* ------------------------------------------------------------------------------------------------
+ */
 void Parser::TokenStack::print()
 {
 	for (u32 i = 0; i < len; i++)
@@ -140,6 +158,20 @@ void Parser::TokenStack::print()
 			printv("Whitespace\n");
 		else
 			printv(tok_strings[(u32)t.kind], " ", t.raw, "\n");
+	}
+}
+
+/* ------------------------------------------------------------------------------------------------
+ */
+void Parser::TokenStack::print_src()
+{
+	for (u32 i = 0; i < len; i++)
+	{
+		Token t = arr[i];
+		if (t.kind == String)
+			printv("\"", t.raw, "\"");
+		else
+			::print(t.raw);
 	}
 }
 
@@ -157,6 +189,7 @@ void Parser::init(Lake* lake_)
 	lex = (Lexer*)mem.allocate(sizeof(Lexer));
 	lex->init(lake);
 	curt = {};
+	stack.init();
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -229,13 +262,20 @@ void Parser::start()
 {
 	next_token();
 	chunk();
+	stack.print_src();
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
 void Parser::chunk()
 {
-	statement();
+	for (;;)
+	{
+		if (statement() || block_follow(curt))
+			break;
+		if (at(Semicolon))
+			next_token();
+	}
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -262,6 +302,7 @@ void Parser::funcargs()
 
 			if (!at(ParenRight))
 				error_here("expected a ')' to match '(' at ", save.line, ":", save.column);
+			next_token();
 		} break;
 
 		case BraceLeft: {
@@ -298,6 +339,7 @@ void Parser::parlist()
 
 		if (!at(Comma))
 			break;
+		next_token();
 	}
 }
 
@@ -309,6 +351,7 @@ void Parser::field()
 	
 	if (!at(Identifier))
 		error_here("expected an identifier after '.' or ':'");
+	next_token();
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -329,6 +372,7 @@ void Parser::body(Token start)
 
 	if (!at(End))
 		error_here("expected 'end' to match 'function' at ", start.line, ":", start.column);
+	next_token();
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -357,7 +401,6 @@ void Parser::simpleexpr()
 		case True:
 		case False:
 		case Ellipses:
-			stack.push(curt);
 			break;
 		case BraceLeft:
 			tableconstructor();
@@ -368,6 +411,7 @@ void Parser::simpleexpr()
 			return;
 		default:
 			primaryexpr();
+			return;
 	}
 	next_token();
 }
@@ -421,10 +465,13 @@ void Parser::subexpr(s32 limit)
 	else
 		simpleexpr();
 
-	while (is_bop(curt) && get_priority(curt).left > limit)
+	while (is_bop(curt))
 	{
+		auto prio = get_priority(curt);
+		if (prio.left < limit)
+			break;
 		next_token();
-		subexpr(get_priority(curt).right);
+		subexpr(prio.right);
 	}
 }
 
@@ -450,7 +497,135 @@ void Parser::prefixexpr()
 				error_here("expected ')' to end '(' at ", save.line, ":", save.column);
 		} break;
 
-		case Identifier: break;
+		/* @lakesyntax
+		 */
+		case Dollar: {
+			Token save = curt;
+			next_token(false);
+
+			if (!at(SquareLeft))
+				error_here("expected '[' after '$' to begin whitespace delimited string array");
+			next_token(false);
+
+			stack.push_before_whitespace(punctuation_lbrace);
+
+			if (at(SquareRight))
+			{
+				warn_here("empty whitespace delimited array eg. $[]");
+				stack.push(punctuation_rbrace);
+				next_token(false);
+				break;
+			}
+			
+			for (;;)
+			{
+				Token save = curt;
+
+				for (;;)
+				{
+					curt = lex->next_token();
+					if (curt.kind == Whitespace ||
+						curt.kind == SquareRight)
+						break;
+				}
+
+				stack.push({String, {save.raw.s, (s32)(curt.raw.s - save.raw.s)}, 0, 0});
+				stack.push(punctuation_comma);
+
+				if (curt.kind == SquareRight)
+					break;
+
+				next_token();
+
+				if (curt.kind == SquareRight) // :/
+					break;
+			}
+
+			stack.push(punctuation_rbrace);
+			next_token(false);
+		} break;
+
+		/* @lakesyntax
+		*/
+		case Backtick: {
+			stack.push(identifier_lake);
+			stack.push(punctuation_dot);
+			stack.push(identifier_cmd);
+			stack.push(punctuation_lparen);
+
+			next_token(false,false);
+
+			auto consume_arg = [this]()
+			{
+				Token save = curt;
+
+				for (;;)
+				{
+					if (at(Whitespace) ||
+						at(Dollar)     ||
+						at(Backtick))
+					{
+						return;
+					}
+
+					if (at(Eof))
+						error_here("encountered end of file while consuming command argument that began at ", save.line, ":", save.column);
+					curt = lex->next_token();
+				}
+			};
+
+			for (;;)
+			{
+				switch (curt.kind)
+				{
+					case Dollar: {
+						Token save = curt;
+
+						next_token(false,false);
+
+						if (!at(ParenLeft))
+						{
+							consume_arg();
+							stack.push({String, {save.raw.s, (s32)(curt.raw.s - save.raw.s)}, 0, 0});
+							break;
+						}
+
+						next_token(false,false);
+						expr();
+
+						if (!at(ParenRight))
+							error_here("expected ')' to end interpolated command argument started at ", save.line, ":", save.column);
+						next_token(false,false);
+					} break;
+
+					default: {
+						Token save = curt;
+						consume_arg();
+						stack.push({String, {save.raw.s, (s32)(curt.raw.s - save.raw.s)}, 0, 0});
+						if (at(Whitespace))
+							next_token(false,false);
+					} break;
+
+					case Backtick:
+						break;
+				}
+
+				if (at(Backtick))
+					break;
+
+				stack.push(punctuation_comma);
+			}
+
+			if (stack.arr[stack.len-1].kind == Comma)
+				stack.pop(); // kind silly
+
+			stack.push(punctuation_rparen);
+			next_token(false);
+		} break;
+
+		case Identifier: 
+			next_token();
+			break;
 
 		default: {
 			error_here("expected an identifier or '('");
@@ -499,14 +674,15 @@ void Parser::primaryexpr(b8* is_call)
 	}
 }
 
+/* ------------------------------------------------------------------------------------------------
+ */
 void Parser::exprlist1()
 {
 	expr();
-	next_token();
 	while (at(Comma))
 	{
-		expr();
 		next_token();
+		expr();
 	}
 }
 
@@ -573,8 +749,6 @@ void Parser::tableconstructor()
  */
 void Parser::assignment()
 {
-	next_token();
-
 	if (at(Comma))
 	{
 		primaryexpr();
@@ -582,19 +756,67 @@ void Parser::assignment()
 	}
 	else
 	{
-		next_token();
-		
 		switch(curt.kind)
 		{
 			case QuestionMarkEqual: {
+				if (!stack.insert_before_last_identifier(keyword_local))
+					error_here("encountered '?=' but could not find preceeding identifier to place 'local'.");
+				stack.insert_before_last_identifier(whitespace_space);
+
+				Token last_identifier = stack.get_last_identifier();
+			
+				// TODO(sushi) once we actually gather cli args just do the replacement directly
+				//             here instead of this silly function call thing
+				stack.push(punctuation_equal);
+				stack.push(whitespace_space);
+				stack.push(identifier_lake);
+				stack.push(punctuation_dot);
+				stack.push(identifier_declare_if_not_already);
+				stack.push(punctuation_lparen);
+				stack.push({String, last_identifier.raw, 0, 0});
+				stack.push(punctuation_comma);
 				
+				next_token(false);
+				exprlist1();
+
+				stack.push_before_whitespace(punctuation_rparen);
+			} break;
+
+			case ColonEqual: {
+				if (!stack.insert_before_last_identifier(keyword_local))
+					error_here("encountered ':=' but could not find preceeding identifier to place 'local'.");
+				stack.insert_before_last_identifier(whitespace_space);
+
+				stack.push(punctuation_equal);
+
+				next_token(false);
+				exprlist1();
+			} break;
+
+			case DotDoubleEqual: {
+				Token last_identifier = stack.get_last_identifier();
+				
+				// call a concat function that handles tables and strings
+				stack.push(punctuation_equal);
+				stack.push(whitespace_space);
+				stack.push(identifier_lake);
+				stack.push(punctuation_dot);
+				stack.push(identifier_concat);
+				stack.push(punctuation_lparen);
+				stack.push(last_identifier);
+				stack.push(punctuation_comma);
+
+				next_token(false);
+				exprlist1();
+
+				stack.push_before_whitespace(punctuation_rparen);
+			} break;
+
+			case Equal: {
+				next_token();
+				exprlist1();
 			} break;
 		}
-
-		if (!at(Equal))
-			error_here("expected '='");
-
-		exprlist1();
 	}
 }
 
@@ -610,7 +832,7 @@ void Parser::exprstat()
 
 /* ------------------------------------------------------------------------------------------------
  */
-void Parser::statement()
+b8 Parser::statement()
 {
 	Token save = curt;
 	switch (curt.kind)
@@ -641,7 +863,8 @@ void Parser::statement()
 
 			if (!at(End))
 				error_here("expected 'end' to match if at ", save.line, ":", save.column);
-		} break;
+			next_token();
+		} return false;
 
 		case While: {
 			next_token();
@@ -655,14 +878,14 @@ void Parser::statement()
 
 			if (!at(End))
 				error_here("expected 'end' to match while at ", save.line, ":", save.column);
-		} break;
+		} return false;
 
 		case Do: {
 			next_token();
 			block();
 			if (!at(End))
 				error_here("expected 'end' to match 'do' at ", save.line, ":", save.column);
-		} break;
+		} return false;
 
 		case For: {
 			next_token();
@@ -672,7 +895,6 @@ void Parser::statement()
 				case Equal: {
 					next_token();
 					expr();
-					next_token();
 					if (at(Comma))
 					{
 						next_token();
@@ -689,12 +911,14 @@ void Parser::statement()
 						next_token();
 						if (!at(Identifier))
 							error_here("expected an identifier");
+						next_token();
 					}
-
 					next_token();
+
 					if (!at(In))
 						error_here("expected 'in' for list for statement");
-					
+					next_token();
+
 					exprlist1();
 				} break;
 			}
@@ -707,12 +931,13 @@ void Parser::statement()
 			
 			if (!at(End))
 				error_here("expected 'end' to match 'for' at ", save.line, ":", save.column);
-		} break;
+			next_token();
+		} return false;
 
 		case Repeat: {
 			// TODO(sushi) IDK if i will ever use it but support later 
 			assert(!"repeat is not implemented yet!");
-		} break;
+		} return false;
 
 		case Function: {
 			next_token();
@@ -725,7 +950,7 @@ void Parser::statement()
 			next_token();
 
 			body(save);
-		} break;
+		} return false;
 
 		case Local: {
 			next_token();
@@ -744,7 +969,7 @@ void Parser::statement()
 				if (at(Equal))
 					exprlist1();
 			}
-		} break;
+		} return false;
 
 		case Return: {
 			next_token();
@@ -753,23 +978,37 @@ void Parser::statement()
 				break;
 
 			exprlist1();
-		} break;
+		} return true;
 		
 		case Break: {
 			next_token();
-		} break;
+		} return true;
 
 		default: {
 			exprstat();
-		} break;
+		} return false;
 	}
+	
+	assert(!"unhandled statement case somehow ?? ");
+	return false;
 }
 
-void Parser::next_token()
+void Parser::next_token(b8 push_on_stack, b8 push_whitespace)
 {
-	do {
+	printv(tok_strings[(u32)curt.kind], "\n");
+	if (push_on_stack)
+		stack.push(curt);
+	for (;;)
+	{
 		curt = lex->next_token();
-	} while (at(Whitespace));
+		if (at(Whitespace))
+		{
+			if (push_whitespace)
+				stack.push(curt);
+		}
+		else
+			break;
+	}
 }
 
 b8 Parser::at(tok k)

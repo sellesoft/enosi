@@ -137,7 +137,7 @@ static tok is_keyword_or_identifier(str s)
 ]]
 
 for _,v in ipairs(keyword_tokens) do
-	out = out.."\t\t case static_string_hash(\""..v[1].."\"): return tok::"..v[1]..";\n"
+	out = out.."\t\t case static_string_hash(\""..v[2].."\"): return tok::"..v[1]..";\n"
 end
 
 out = out..[[
