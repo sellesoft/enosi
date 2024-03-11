@@ -54,6 +54,7 @@ void Mem::move(void* dst, void* src, u64 n_bytes)
 }
 
 void print(const char* s) { printf("%s", s); }
+void print(const u8* s) { printf("%s", s); }
 
 void print(str s) { printf("%.*s", s.len, s.s); }
 void print(u32 x) { printf("%u", x); }
@@ -62,5 +63,62 @@ void print(s32 x) { printf("%i", x); }
 void print(s64 x) { printf("%li", x); }
 
 void print(char x) { printf("%c", x); }
+
+dstr dstr::create(const char* s)
+{
+	dstr out = {};
+	if (s)
+	{
+		out.len = strlen(s);
+		out.space = out.len * 2;
+		out.s = (u8*)mem.allocate(sizeof(u8) * out.space);
+		mem.copy(out.s, (void*)s, out.len);
+	}
+	else
+	{
+		out.len = 0;
+		out.space = 8;
+		out.s = (u8*)mem.allocate(sizeof(u8) * out.space);
+	}
+
+	return out;
+}
+
+void dstr::destroy()
+{
+	mem.free(s);
+	len = space = 0;
+}	
+
+void grow_if_needed(dstr* x, s32 new_elems)
+{
+	if (x->len + new_elems <= x->space)
+		return;
+
+	while (x->space < x->len + new_elems)
+		x->space *= 2;
+
+	x->s = (u8*)mem.reallocate(x->s, x->space);
+}
+
+void dstr::append(const char* x)
+{
+	s32 xlen = strlen(x);
+
+	grow_if_needed(this, xlen);
+
+	mem.copy(s+len, (void*)x, xlen);
+
+	len += xlen;
+}
+
+void dstr::append(str x)
+{
+	grow_if_needed(this, x.len);
+	
+	mem.copy(s+len, (void*)x.s, x.len);
+
+	len += x.len;
+}
 
 

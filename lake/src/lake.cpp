@@ -7,328 +7,201 @@
 #include "lexer.h"
 #include "parser.h"
 
-Lake lake;
+#include "target.h"
 
-void Lake::init(str p)
+#include "luahelpers.h"
+
+extern "C"
+{
+#include "lua.h"
+#include "lualib.h"
+#include "lauxlib.h"
+}
+
+const char* lake_internal_table = "__lua__internal";
+
+Lake lake; // global for now, maybe not later 
+
+/* ------------------------------------------------------------------------------------------------ Lake::init
+ */
+void Lake::init(str p, s32 argc_, const char* argv_[])
 {
 	path = p;
 	parser = (Parser*)mem.allocate(sizeof(Parser));
 	parser->init(this);
+	argc = argc_;
+	argv = argv_;
+
+	target_pool = Pool<Target>::create();
+	target_graph = TargetGraph::create();
+	target_queue = TargetList::create();
 }
 
-void Lake::run()
+/* ------------------------------------------------------------------------------------------------ visit
+ */
+void visit(TargetGraph::Vertex* v, TargetList* sorted)
 {
-	parser->start();
-}
+	auto t = v->data;
 
-/*
+	if (t->perm_mark)
+		return;
 
-// advances curt until we come across an arg delimiter
-b8 backtick_consume_arg(Lake* lake, Lexer* lex, TokenStack& stack, Token& curt)
-{
-	using enum tok;
-	
-	Token save = curt;
-
-	for (;;)
+	if (t->temp_mark)
 	{
-		if (   curt.kind == Whitespace 
-		    || curt.kind == Dollar 
-			|| curt.kind == Backtick)
-		{
-			return true;
-		}
-
-		if (curt.kind == Eof)
-		{
-			error(lake->path, save.line, save.column, "encountered end of file while consuming command");
-			exit(1);
-		}
-
-		curt = lex->next_token();
-	}
-}
-
-b8 backtick_dollar(Lake* lake, Lexer* lex, TokenStack& stack, Token& curt)
-{
-	using enum tok;
-
-	Token save = curt;
-
-	curt = lex->next_token();
-
-	if (curt.kind != ParenLeft)
-	{
-		if (!backtick_consume_arg(lake, lex, stack, curt))
-			return false;
-		
-		stack.push({String, {save.raw.s, (s32)(curt.raw.s - save.raw.s)}, 0, 0});
-		return true;
-	}
-
-	for (;;)
-	{
-		curt = lex->next_token();
-
-		if (curt.kind == ParenRight)
-			break;
-
-		stack.push(curt);
-	}
-	
-	curt = lex->next_token();
-
-	return true;
-}
-
-b8 backtick(Lake* lake, Lexer* lex, TokenStack& stack)
-{
-	using enum tok;
-
-	stack.push(identifier_lake);
-	stack.push(punctuation_dot);
-	stack.push(identifier_cmd);
-	stack.push(punctuation_lparen);
-
-	Token t = lex->next_token();
-
-	if (t.kind == Whitespace)
-	{
-		t = lex->next_token();
-		if (t.kind == Backtick)
-		{
-			warn(lake->path, t.column, t.line, "empty cmd!");
-			return true;
-		}
-	}
-
-	for (;;)
-	{
-		switch (t.kind)
-		{
-			case Dollar: {
-				if (!backtick_dollar(lake, lex, stack, t))
-					return false;
-			} break;
-			case Whitespace: {
-				
-			} break;
-			default: {
-				Token save = t;
-				backtick_consume_arg(lake, lex, stack, t);
-				stack.push({String, {save.raw.s, (s32)(t.raw.s - save.raw.s)}, 0, 0});
-			} break;
-			case Backtick:;
-		}
-
-		if (t.kind == Backtick)
-			break;
-
-		stack.push(punctuation_comma);
-
-		t = lex->next_token();
-	}
-	
-	if (stack.stack[stack.len-1].kind == Comma)
-	{
-		stack.pop(); // idk kinda silly
-	}
-
-	stack.push(punctuation_rparen);
-
-	return true;
-}
-
-// probably a whitespace delimited string array $[...]
-void dollar(Lake* lake, Lexer* lex, TokenStack& stack)
-{
-	using enum tok;
-
-	Token t = lex->next_token();
-
-	if (t.kind == Whitespace)
-		t = lex->next_token();
-
-	if (t.kind != SquareLeft)
-	{
-		error(lake->path, t.line, t.column, "expected an opening square '[' after '$' to denote whitespace delimited array.");
+		error_nopath("cycle detected");
 		exit(1);
 	}
 
-	stack.push(punctuation_lbrace);
+	t->temp_mark = true;
 
-	for (;;)
-	{
-		t = lex->next_token();
+	for (TargetVertexList::Node* iter = v->neighbors.head; iter; iter = iter->next)
+		visit(iter->data, sorted);
 
-		if (t.kind == Whitespace)
-		{
-			stack.push(t);
-			continue;
-		}
-		
-		if (t.kind == SquareRight)
-			break;
-		
-		Token save = t;
+	t->temp_mark = false;
+	t->perm_mark = true;
 
-		for (;;)
-		{
-			t = lex->next_token();
-			if (t.kind == Whitespace)
-				break;
-			
-			if (t.kind == SquareRight)
-				break;
-		}
-
-		stack.push({String, {save.raw.s, (s32)(t.raw.s - save.raw.s)}, 0, 0});
-		stack.push(punctuation_comma);
-
-		if (t.kind == Whitespace)
-			stack.push(t);
-
-		if (t.kind == SquareRight)
-			break;
-	}
-	
-	stack.push(punctuation_rbrace);
+	sorted->push_head(t);
 }
 
-void field_list(Lake* lake, Lexer* lexer, Token& curt)
+/* ------------------------------------------------------------------------------------------------ visit
+ */
+void topsort(TargetGraph& g)
 {
-	
+	auto sorted = TargetList::create();
+
+	for (TargetVertexList::Node* iter = g.vertexes.head; iter; iter = iter->next)
+		visit(iter->data, &sorted);
+
+	for (TargetList::Node* n = sorted.head; n; n = n->next)
+		printv(n->data->path, "\n");
 }
 
-void table_constructor(Lake* lake, Lexer* lexer, Token& curt)
-{
-	
-}
-
-void prefix_expr(Lake* lake, Lexer* lexer, Token& curt)
-{
-	
-}
-
-// consume a lua function
-void function(Lake* lake, Lexer* lexer, Token& curt)
-{
-
-}
-
-void expression(Lake* lake, Lexer* lex, Token& curt)
-{
-	using enum tok;
-
-	curt = lex->next_token();
-
-	switch (curt.kind)
-	{
-		case Nil:
-		case False:
-		case True: 
-		case Number:
-		case String:
-		case Ellipses:
-			return;
-		case Function:
-			function(lake, lex, curt);
-		break;
-
-	}
-}
-
+/* ------------------------------------------------------------------------------------------------ Lake::run
+ */
 void Lake::run()
 {
-	using enum tok;
-
-	auto stack = TokenStack::create(); // TODO(sushi) clean up via defer
-
-	for (;;)
+	lua_State* L = lua_open();
+	luaL_openlibs(L);
+	
+	// load the lake module 
+	// TODO(sushi) this needs to be baked into the executable
+	//             try using string.dump()
+	if (luaL_loadfile(L, "src/lake.lua") || lua_pcall(L, 0, 2, 0))
 	{
-		Token t = lex->next_token();
-
-// used when we do a lookahead and have already 
-// gotten the next token
-skip_next_token:
-
-		switch (t.kind)
-		{
-			case ColonEqual: {
-				if (!stack.insert_before_last_identifier(keyword_local))
-				{
-					error(path, t.line, t.column, "encountered ':=' but could not find preceeding identifer to place 'local'.");
-					exit(1);
-				}
-				stack.push(punctuation_equal);
-			} break;
-
-			case Backtick: {
-				backtick(this, lex, stack);
-			} break;
-
-			case DotDoubleEqual: {
-				Token last_id = stack.get_last_identifier();
-
-				if (last_id.kind == Eof)
-				{
-					error(path, t.line, t.column, "couldn't find identifier preceeding '..='.\n");
-					exit(1);
-				}
-
-
-			} break;
-
-			case QuestionMarkEqual: {
-				if (!stack.insert_before_last_identifier(keyword_local))
-				{
-					error(path, t.line, t.column, "encountered '?=' but could not find preceeding identifier to place 'local'.");
-					exit(1);
-				}
-
-				// TODO(sushi) this needs to handle entire lua expressions but for now 
-				//             its just going to handle single tokens
-
-				Token expr = lex->next_token();
-				
-				if (expr.kind == Whitespace)
-					expr = lex->next_token();
-
-				Token last_id = stack.get_last_identifier();
-
-				stack.push(punctuation_equal);
-				stack.push({Whitespace, strl(" "), 0, 0});
-				stack.push(identifier_lake);
-				stack.push(punctuation_dot);
-				stack.push(identifier_declare_if_not_already);
-				stack.push(punctuation_lparen);
-				stack.push(last_id);
-				stack.push(punctuation_comma);
-				stack.push(expr);
-				stack.push(punctuation_rparen);
-			} break;
-
-			case Dollar: {
-				dollar(this, lex, stack);
-			} break;
-
-			default: {
-				stack.push(t);
-			} break;
-		}
-
-		if (t.kind == tok::Eof) break;
-
+		printf("%s\n", lua_tostring(L, -1));
+		lua_pop(L, 1);
+		return;
 	}
 
-	for (s32 i = 0; i < stack.len; i++)
+	// set the internal lake global
+	lua_setglobal(L, lake_internal_table); 
+
+	// set the lake global 
+	lua_setglobal(L, "lake");
+
+	parser->start();
+
+	// TODO(sushi) we can just load the program into lua by token 
+	//             using the loader callback thing in lua_load
+	dstr prog = parser->fin();
+
+	FILE* f = fopen("temp/lakefile", "w");
+	fwrite(prog.s, prog.len, 1, f);
+	fclose(f);
+
+	if (luaL_loadbuffer(L, (char*)prog.s, prog.len, "lakefile") || lua_pcall(L, 0, 0, 0))
 	{
-		Token t = stack.stack[i];
-		if (t.kind == String)
-			printv("\"", t.raw, "\"");
-		else
-			print(stack.stack[i].raw);
+		printf("%s\n", lua_tostring(L, -1));
+		lua_pop(L, 1);
+		return;
+	}
+
+	prog.destroy();
+
+	topsort(target_graph);
+
+	printv("----------\n");
+
+	for (auto iter = target_graph.vertexes.head; iter; iter = iter->next)
+	{
+		Target* t = iter->data->data;
+		printv(t->path, "\n");
+
+		for (auto neighbor = t->vertex->neighbors.head; neighbor; neighbor = neighbor->next)
+		{
+			Target* n = neighbor->data->data;
+			printv("\t", n->path, "\n");
+		}
+	}
+
+	printv("-------\n");
+
+	lua_getglobal(L, lake_internal_table);
+
+	// run_recipe is now at the top 
+
+	for (auto iter = target_queue.head; iter; iter = iter->next)
+	{
+		Target* t = iter->data;
+		if (t->exists())
+		{
+			
+		}
+
+		// get the function 
+		lua_pushstring(L, "run_recipe");
+		lua_gettable(L, -2);
+		
+		// push target's path as argument
+		lua_pushlstring(L, (char*)t->path.s, t->path.len);
+		if (lua_pcall(L, 1, 0, 0))
+		{
+			printf("%s\n", lua_tostring(L, -1));
+			lua_pop(L, 1);
+			return;
+		}
+	}
+
+	lua_pop(L, 2);
+}
+
+
+/* ================================================================================================ Lua API
+ *  Implementation of the api used in the lua lake module.
+ */
+extern "C"
+{
+
+/* ------------------------------------------------------------------------------------------------ lua__create_target
+ */
+Target* lua__create_target(str path)
+{
+	Target* t = lake.target_pool.add();
+	*t = Target::create(path);
+	t->vertex = lake.target_graph.add_vertex(t);
+	t->queue_node = lake.target_queue.push_head(t);
+	return t;
+}
+
+/* ------------------------------------------------------------------------------------------------ lua__make_dep
+ */
+void lua__make_dep(Target* target, Target* dependent)
+{
+	lake.target_graph.add_edge(target->vertex, dependent->vertex);
+	target->dependents.push_head(dependent);
+	dependent->prerequisites.push_head(target);
+	if (target->queue_node)
+	{
+		lake.target_queue.remove(target->queue_node);
+		target->queue_node = nullptr;
 	}
 }
 
-*/
+/* ------------------------------------------------------------------------------------------------ lua__get_cliargs
+ */
+CLIargs lua__get_cliargs()
+{
+	return {lake.argc, lake.argv};
+}
+
+}

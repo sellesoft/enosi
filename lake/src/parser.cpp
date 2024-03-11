@@ -15,7 +15,7 @@
 const Token identifier_lake   = {tok::Identifier, strl("lake"), 0, 0};
 const Token identifier_cmd    = {tok::Identifier, strl("cmd"), 0, 0};
 const Token identifier_concat = {tok::Identifier, strl("concat"), 0, 0};
-const Token identifier_declare_if_not_already = {tok::Identifier, strl("declare_if_not_already"), 0, 0};
+const Token identifier_clivars = {tok::Identifier, strl("clivars"), 0, 0};
 
 const Token punctuation_dot       = {tok::Dot, strl("."), 0, 0};
 const Token punctuation_lparen    = {tok::ParenLeft, strl("("), 0 ,0};
@@ -24,9 +24,10 @@ const Token punctuation_comma     = {tok::Comma, strl(","), 0, 0};
 const Token punctuation_equal     = {tok::Equal, strl("="), 0, 0 };
 const Token punctuation_lbrace    = {tok::BraceLeft, strl("{"), 0, 0};
 const Token punctuation_rbrace    = {tok::BraceRight, strl("}"), 0, 0};
-const Token punctuation_dotdouble = {tok::DotDouble, strl(".."), 0, 0};
+// const Token punctuation_dotdouble = {tok::DotDouble, strl(".."), 0, 0};
 
 const Token keyword_local = {tok::Local, strl("local"), 0, 0};
+const Token keyword_or    = {tok::Or, strl("or"), 0, 0};
 
 const Token whitespace_space = {tok::Whitespace, strl(" "), 0, 0};
 
@@ -175,6 +176,25 @@ void Parser::TokenStack::print_src()
 	}
 }
 
+
+/* ------------------------------------------------------------------------------------------------
+ */
+dstr Parser::fin()
+{
+	dstr out = dstr::create();
+
+	for (u32 i = 0; i < stack.len; i++)
+	{
+		Token t = stack.arr[i];
+		if (t.kind == String)
+			out.appendv("\"", t.raw, "\"");
+		else
+			out.append(t.raw);
+	}
+
+	return out;
+}
+
 /* ================================================================================================
  *
  *  Parsing
@@ -202,7 +222,7 @@ void Parser::destroy()
 
 /* ------------------------------------------------------------------------------------------------
  *  Helpers
- */
+\  * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
 
 /* ------------------------------------------------------------------------------------------------
  */
@@ -262,7 +282,6 @@ void Parser::start()
 {
 	next_token();
 	chunk();
-	stack.print_src();
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -500,7 +519,6 @@ void Parser::prefixexpr()
 		/* @lakesyntax
 		 */
 		case Dollar: {
-			Token save = curt;
 			next_token(false);
 
 			if (!at(SquareLeft))
@@ -771,10 +789,13 @@ void Parser::assignment()
 				stack.push(whitespace_space);
 				stack.push(identifier_lake);
 				stack.push(punctuation_dot);
-				stack.push(identifier_declare_if_not_already);
+				stack.push(identifier_clivars);
+				stack.push(punctuation_dot);
+				stack.push(last_identifier);
+				stack.push(whitespace_space);
+				stack.push(keyword_or);
+				stack.push(whitespace_space);
 				stack.push(punctuation_lparen);
-				stack.push({String, last_identifier.raw, 0, 0});
-				stack.push(punctuation_comma);
 				
 				next_token(false);
 				exprlist1();
@@ -995,7 +1016,6 @@ b8 Parser::statement()
 
 void Parser::next_token(b8 push_on_stack, b8 push_whitespace)
 {
-	printv(tok_strings[(u32)curt.kind], "\n");
 	if (push_on_stack)
 		stack.push(curt);
 	for (;;)

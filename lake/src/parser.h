@@ -34,6 +34,11 @@ struct Parser
 	void destroy();
 
 	/* --------------------------------------------------------------------------------------------
+	 *  Get the final result as a dstr.
+	 */
+	dstr fin();
+
+	/* --------------------------------------------------------------------------------------------
 	 *  Token stack
 	 *
 	 *  TODO(sushi) a linked list of tokens might be better so that inserts 

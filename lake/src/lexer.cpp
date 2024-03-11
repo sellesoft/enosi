@@ -9,7 +9,7 @@
 void Lexer::init(Lake* lake_)
 {
 	lake = lake_;
-	buffer = platform::read_file(lake->path);
+	buffer = read_file(lake->path);
 	cursor = buffer;
 	line = column = 1;
 }

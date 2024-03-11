@@ -94,8 +94,11 @@ struct dstr
 	void append(const char* s);
 	void append(str s);
 
-	template<typename T>
-	void append(T x);
+	template<typename... T>
+	void appendv(T... args)
+	{
+		(append(args), ...);
+	}
 };
 
 /* ----------------------------------------------
@@ -103,6 +106,7 @@ struct dstr
  */
 
 void print(const char* s);
+void print(const u8* s);
 void print(str s);
 void print(u32 x);
 void print(u64 x);

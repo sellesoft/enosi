@@ -11,8 +11,11 @@
 
 #include "dirent.h"
 #include "sys/stat.h"
+#include "errno.h"
+#include "fnmatch.h"
+#include "glob.h"
 
-namespace platform
+extern "C"
 {
 
 /* ------------------------------------------------------------------------------------------------
@@ -54,14 +57,23 @@ DirIter dir_iter(const char* path)
 
 /* ------------------------------------------------------------------------------------------------
  */
-u32 dir_next(char* c, u32 maxlen, DirIter iter)
+s32 dir_next(char* c, u32 maxlen, DirIter iter)
 {
+	errno = 0;
 	struct dirent* d = readdir((DIR*)iter);
 
 	if (!d)
-		return 0;
+	{
+		if (errno)
+		{
+			error_nopath("dir_next(): readdir failed!");
+			perror("readdir");
+			exit(1);
+		}
+		return -1;
+	}
 
-	u32 namelen = strlen(d->d_name);
+	s32 namelen = strlen(d->d_name);
 
 	if (!namelen)
 		return 0;
@@ -75,6 +87,46 @@ u32 dir_next(char* c, u32 maxlen, DirIter iter)
 	memcpy(c, d->d_name, namelen);
 	
 	return namelen;
+}
+
+/* ------------------------------------------------------------------------------------------------
+ *  TODO(sushi) this is pretty messy clean up later
+ */
+Glob glob_create(const char* pattern)
+{
+	glob_t* glob_sys = (glob_t*)mem.allocate(sizeof(glob_t));
+
+	switch (glob(pattern, 0, nullptr, glob_sys))
+	{
+		case GLOB_NOSPACE: {
+			error_nopath("glob_create(): glob() ran out of memory");
+			exit(1);
+		} break;
+
+		case GLOB_ABORTED: {
+			error_nopath("glob_create(): glob() aborted");
+			exit(1);
+		} break;
+
+		case GLOB_NOMATCH: {
+			mem.free(glob_sys);
+			return {};
+		} break;
+	}
+
+	Glob out = {};
+	out.n_paths = glob_sys->gl_pathc;
+	out.paths = (u8**)glob_sys->gl_pathv;
+	out.handle = glob_sys;
+	return out;
+}
+
+/* ------------------------------------------------------------------------------------------------
+ */
+void glob_destroy(Glob glob)
+{
+	globfree((glob_t*)glob.handle);
+	mem.free(glob.handle);
 }
 
 /* ------------------------------------------------------------------------------------------------

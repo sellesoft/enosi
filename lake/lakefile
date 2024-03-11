@@ -1,12 +1,12 @@
 mode    ?= "debug"
 verbose ?= false
 
-build_dir := "build/"..build_mode.."/"
+build_dir := "build/"..mode.."/"
 
-lake := build_dir.."lake"
+lakeexe := build_dir.."lake"
 
 c_files := lake.find("src/*.cpp")
-o_files := lake.replace(c_files, "src/%.cpp", build_dir.."%.o")
+o_files := lake.replace(c_files, "src/(.-).cpp", build_dir.."%1.o")
 
 compiler     := "clang++"
 linker       := "clang++"
@@ -44,7 +44,7 @@ print_success := function(from, to)
 	end
 end
 
-lake.target( lake )
+lake.target( lakeexe )
 	:uses(o_files)
 	:recipe(function(inputs, output)
 		result := ` $(linker) $(inputs) $(linker_flags) -o $(output) `

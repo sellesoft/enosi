@@ -38,7 +38,8 @@ compiler_flags :=     \
 	-std=c++20        \
 	-Iinclude         \
 	-Isrc             \
-	-Wno-switch
+	-Wall             \
+	-Wno-switch       
 
 ifeq ($(build_mode),debug)
 	compiler_flags += -O0 -ggdb3
