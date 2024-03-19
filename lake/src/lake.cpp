@@ -122,16 +122,10 @@ void Lake::run()
 
 	printv("----------\n");
 
-	for (auto iter = target_graph.vertexes.head; iter; iter = iter->next)
+	for (auto iter = target_queue.head; iter; iter = iter->next)
 	{
-		Target* t = iter->data->data;
+		Target* t = iter->data;
 		printv(t->path, "\n");
-
-		for (auto neighbor = t->vertex->neighbors.head; neighbor; neighbor = neighbor->next)
-		{
-			Target* n = neighbor->data->data;
-			printv("\t", n->path, "\n");
-		}
 	}
 
 	printv("-------\n");
@@ -178,18 +172,16 @@ Target* lua__create_target(str path)
 {
 	Target* t = lake.target_pool.add();
 	*t = Target::create(path);
-	t->vertex = lake.target_graph.add_vertex(t);
 	t->queue_node = lake.target_queue.push_head(t);
 	return t;
 }
 
 /* ------------------------------------------------------------------------------------------------ lua__make_dep
  */
-void lua__make_dep(Target* target, Target* dependent)
+void lua__make_dep(Target* target, Target* prereq)
 {
-	lake.target_graph.add_edge(target->vertex, dependent->vertex);
-	target->dependents.push_head(dependent);
-	dependent->prerequisites.push_head(target);
+	target->prerequisites.insert(prereq);
+	prereq->dependents.insert(target);
 	if (target->queue_node)
 	{
 		lake.target_queue.remove(target->queue_node);

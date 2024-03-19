@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include "graph.h"
+#include "avl.h"
 
 struct Target;
 
@@ -11,6 +12,7 @@ typedef Graph<Target>::Vertex   TargetVertex;
 typedef TargetGraph::VertexList TargetVertexList;
 typedef DList<Target>           TargetList;
 typedef TargetList::Node        TargetListNode;
+typedef AVL<Target>             TargetSet;
 
 struct Lexer;
 struct Parser;

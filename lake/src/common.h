@@ -83,8 +83,16 @@ extern Mem mem;
  */
 struct dstr
 {
-	u8* s;
-	s32 len;
+	union 
+	{
+		struct 
+		{
+			u8* s;
+			s32 len;
+		};
+		str fin;
+	};
+
 	s32 space;
 
 	static dstr create(const char* s = 0);
@@ -93,6 +101,7 @@ struct dstr
 
 	void append(const char* s);
 	void append(str s);
+	void append(s64 x);
 
 	template<typename... T>
 	void appendv(T... args)
@@ -147,5 +156,15 @@ void warn(str path, u64 line, u64 column, T... args)
 	printv(path,":",line,":",column,":");
 	warn_nopath(args...);
 }
+
+
+#ifndef defer
+struct defer_dummy {};
+template <class F> struct deferrer { F f; ~deferrer() { f(); } };
+template <class F> deferrer<F> operator*(defer_dummy, F f) { return {f}; }
+#  define DEFER_(LINE) zz_defer##LINE
+#  define DEFER(LINE) DEFER_(LINE)
+#  define defer auto DEFER(__LINE__) = defer_dummy{} *[&]()
+#endif //#ifndef defer
 
 #endif // _lpp_common_h

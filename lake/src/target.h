@@ -2,6 +2,11 @@
  *  Representation of a target, which is a file on disk that we would like to
  *  exist and be newer than its dependencies. All targets have some recipe,
  *  a lua function, used to build them.
+ *
+ *  Currently I am assuming that targets will never be deleted and that 
+ *  targets will never have a reason to be removed from another target's 
+ *  target set. The only thing a target should ever be removed from for
+ *  now is the queue for which we store its node in a doubly linked list. 
  */
 
 #ifndef _lake_target_h
@@ -23,18 +28,15 @@ struct Target
 	// marks used when topologically sorting the graph
 	b8 perm_mark, temp_mark;
 
-	// this target's vertex in the target graph
-	TargetVertex* vertex;
-
 	// this target's node in the target queue
 	// null if the target is not in the queue
 	TargetListNode* queue_node;
 
 	// list of targets this one depends on
-	TargetList prerequisites;
+	TargetSet prerequisites;
 
 	// list of targets that depend on this one
-	TargetList dependents;
+	TargetSet dependents;
 
 
 	/* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -47,7 +49,6 @@ struct Target
 	{
 		Target out = {};
 		out.path = path;
-		out.n_dependencies = 0;
 		out.recipe_ref = 0;
 		return out;
 	}

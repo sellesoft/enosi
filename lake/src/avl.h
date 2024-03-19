@@ -3,8 +3,8 @@
  *  AVL tree implementation
  *	
  *	The tree is specialized to work with unique memory addresses and so does not 
- *	deal with hashing its elements and sorts by the element's address. Its purpose
- *	is primarily for making sure we only store something once.
+ *	deal with hashing its elements and sorts by the element's address. It will
+ *	primarily be used as a set.
  *
  */
 
@@ -24,6 +24,9 @@ struct AVL
 	struct Node
 	{
 		s8 balance_factor; // -1, 0, or 1
+		// TODO(sushi) we may be able to do something neat where we instead store offsets from the nodes position in the 
+		//             pool with s32s or even like s16 to save some space so experiment later
+		//             this would require the pools chunks being connected via doubly connected list
 		Node* left;
 		Node* right;
 		Node* parent;
@@ -60,9 +63,7 @@ struct AVL
 	 */
 	b8 has(T* data)
 	{
-		if (!root)
-			return false;
-		return search(root, data).state == SearchResult::Found;
+		return false;
 	}
 
 	/* -------------------------------------------------------------------------------------------- insert
@@ -109,68 +110,134 @@ struct AVL
 		else
 			search_node->left = new_node;
 
-		// just renaming, we dont actually need to make new 
-		// nodes pointers here but it makes the code easier to read.
-		// though maybe if i need to return nodes later it will be
-		// practically useful
-		Node* parent = search_node;
-		Node* child = new_node;
+		new_node->data = data;
 
 		// walk back up the tree and adjust balance
-		for (;;)
+		for (Node* parent = search_node,* child = new_node; parent; child = parent, parent = child->parent)
 		{
+			Node* new_child = nullptr;
+			Node* parents_parent = parent->parent;
+
 			if (parent->right == child)
 			{
-				
+				// right subtree has increased in height
+				if (parent->balance_factor > 0)
+				{
+					// the parent was already right heavy, so its balance factor
+					// is now +2
+					if (child->balance_factor < 0)
+						new_child = rotate_right_left(parent, child);
+					else 
+						new_child = rotate_left(parent, child);
+				}
+				else
+				{
+					// the parent is either already balanced or left heavy
+					if (parent->balance_factor < 0)
+					{
+						// if left heavy, then we're now balanced by the
+						// addition to the right child.
+						parent->balance_factor = 0;
+						break;
+					}
+					// if we were balanced all we need to do is set the parent's 
+					// balance factor to 1 and move on
+					parent->balance_factor = 1;
+					continue;
+				}
 			}
+			else
+			{
+				if (parent->balance_factor < 0)
+				{
+					if (child->balance_factor > 0)
+						new_child = rotate_left_right(parent, child);
+					else
+						new_child = rotate_right(parent, child);
+				}
+				else
+				{
+					if (parent->balance_factor > 0)
+					{
+						parent->balance_factor = 0;
+						break;
+					}
+					parent->balance_factor = -1;
+					continue;
+				}
+			}
+
+			new_child->parent = parents_parent;
+			if (parents_parent) 
+			{
+				if (parent == parents_parent->left)
+					parents_parent->left = new_child;
+				else
+					parents_parent->right = new_child;
+			}
+			else
+				root = new_child;
+			break;
 		}
+	}
+
+	dstr to_string()
+	{
+		dstr out = dstr::create();
+	
+		if (!root)
+		{
+			out.append("X\n");
+			return out;
+		}
+			
+		to_string_recursive(out, root, 0);
+
+		out.append("\n");
+
+		return out;
 	}
 
 	/* --------------------------------------------------------------------------------------------
 	 *  Internal helpers
 	 */
 private:
-	struct SearchResult
-	{
-		enum {
-			Found,
-			MissingLeft,
-			MissingRight,
-		} result;
 
-		Node* node;
-	};
-
-	/* -------------------------------------------------------------------------------------------- search
-	 *  Searches for a node representing the given data.
-	 */
-	SearchResult search(Node* node, T* data)
+	void to_string_recursive(dstr& out, Node* n, u32 layers)
 	{
-		for (;;)
+		for (s32 i = 0; i < layers; i++) out.append("  ");
+
+		if (n->right || n->left)
+			out.append("(");
+		else
 		{
-			if (node->data == data)
-				return {SearchResult::Found, node};
-
-			b8 less = node->data > data;
-
-			if (less)
-			{
-				if (node->left)
-				{
-					node = node->left;
-					continue;
-				}
-			}
-			else if (node->right)
-			{
-				node = node->right;
-				continue;
-			}
-			
-			return {less ? SearchResult::MissingLeft : SearchResult::MissingRight, node};
+			out.append((s64)n->data);
+			return;
 		}
-	}
 
+		out.appendv((s64)n->data, " ", n->balance_factor, "\n");
+
+		if (n->left)
+			to_string_recursive(out, n->left, layers + 1);
+		else
+		{
+			for (s32 i = 0; i < layers + 1; i++) out.append("  ");
+			out.append("X");
+		}
+
+		out.append("\n");
+		if (n->right)
+			to_string_recursive(out, n->right, layers + 1);
+		else
+		{
+			for (s32 i = 0; i < layers + 1; i++) out.append("  ");
+			out.append("X");
+		}
+
+
+		if (n->right || n->left)
+			out.append(")");
+	}
 
 	/* -------------------------------------------------------------------------------------------- rotate_left
 	 *  (A a (B b g))
@@ -227,8 +294,9 @@ private:
 			A->balance_factor = 
 			B->balance_factor = 0;
 		}
-	}
 
+		return A;
+	}
 	
 	/* -------------------------------------------------------------------------------------------- rotate_right_left
 	 *  (A a (C (B b c) d))
@@ -268,16 +336,51 @@ private:
 			A->balance_factor =  0;
 			C->balance_factor = -1;
 		}
+
+		return B;
 	}
 
-	/* -------------------------------------------------------------------------------------------- rotate_right_left
-	 *  (B (A a b) (C c d))
-	 *  -> 
-	 *  (A a (B b (C c d)))
+	/* -------------------------------------------------------------------------------------------- rotate_left_right
+	 *  (A (C a (B b c)) d)
 	 *  ->
-	 *  (A a (C (B b c) d))
+	 *  (A (B (C a b) c) d)
+	 *  ->
+	 *  (B (C a b) (A c d))
 	 */
+	Node* rotate_left_right(Node* A, Node* C)
+	{
+		Node* B = C->right;
+		Node* b = C->left;
+		C->right = b;
+		if (b) 
+			b->parent = C;
+		B->left = C;	
+		C->parent = B;
+		Node* c = B->right;
+		A->left = c;
+		if (c)
+			c->parent = A;
+		B->right = A;
+		A->parent = B;
 
+		if (!B->balance_factor)
+		{
+			A->balance_factor = 0;
+			C->balance_factor = 0;
+		}
+		else if (B->balance_factor > 0)
+		{
+			A->balance_factor = -1;
+			C->balance_factor =  0;
+		}
+		else
+		{
+			A->balance_factor =  0;
+			C->balance_factor = -1;
+		}
+
+		return B;
+	}
 };
 
 #endif

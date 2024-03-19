@@ -121,4 +121,10 @@ void dstr::append(str x)
 	len += x.len;
 }
 
+void dstr::append(s64 x)
+{
+	grow_if_needed(this, 22);
+	len += snprintf((char*)(s + len), 22, "%li", x);
+}
+
 
