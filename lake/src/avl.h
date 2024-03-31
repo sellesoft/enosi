@@ -2,10 +2,12 @@
  *
  *  AVL tree implementation
  *	
- *	The tree is specialized to work with unique memory addresses and so does not 
- *	deal with hashing its elements and sorts by the element's address. It will
- *	primarily be used as a set.
- *
+ *  Points at memory that DOES NOT MOVE and which can be
+ *  hashed into a key via the GetKey template param.
+ *  
+ *  This is used for uniquely storing targets as well as 
+ *  pointing targets at each other to form the dependency 
+ *  graph.
  */
 
 #ifndef _lake_avl_h
@@ -16,9 +18,20 @@
 
 /* ================================================================================================ AVL
  */
-template<typename T>
+template<
+
+	// the type this tree points at
+	typename T,
+
+	// key accessor
+	// which could be a hash function or member or whatever
+	u64 (*GetKey)(const T*)
+
+>
 struct AVL
 {
+	typedef AVL<T, GetKey> This;
+
 	/* ============================================================================================ AVL::Node
  	*/
 	struct Node
@@ -44,9 +57,9 @@ struct AVL
 
 	/* -------------------------------------------------------------------------------------------- create
 	 */
-	static AVL<T> create()
+	static This create()
 	{
-		AVL<T> out = {};
+		This out = {};
 		out.pool = Pool<Node>::create();
 		return out;
 	}
@@ -78,18 +91,24 @@ struct AVL
 			root->balance_factor = 0;
 			return;
 		}
+
+		u64 data_key = GetKey(data);
 		
 		Node* search_node = root;
 		b8 place_right = true;
 		for (;;)
 		{
-			if (search_node->data == data)
+			u64 search_key = GetKey(search_node->data);
+
+			if (search_key == data_key)
 				return;
 			
-			if (search_node->data > data)
+			if (search_key > data_key)
 			{
 				if (search_node->left)
+				{
 					search_node = search_node->left;
+				}
 				else
 				{
 					place_right = false;
@@ -99,7 +118,7 @@ struct AVL
 			else if (search_node->right)
 				search_node = search_node->right;
 			else
-				break;
+				break; 
 		}
 
 		// need a new node
@@ -180,7 +199,213 @@ struct AVL
 			break;
 		}
 	}
+	
+	/* -------------------------------------------------------------------------------------------- remove
+	 *  Removes the given data from the tree.
+	 */
+	void remove(T* data)
+	{
+		u64 data_key = GetKey(data);
 
+		// find the node representing the given data
+		Node* search_node = root;
+		for (;;)
+		{
+			if (!search_node)
+				return;
+
+			u64 search_key = GetKey(search_node->data);
+
+			if (search_key == data_key)
+				break;
+
+			if (data_key > search_key)
+				search_node = search_node->right;
+			else
+				search_node = search_node->left;
+		}
+
+		Node* target = search_node;
+
+		if (search_node->left && search_node->right)
+		{
+			target = predecessor(search_node);
+			search_node->data = target->data;
+		}
+
+		for (Node* parent = target->parent,* child = target; parent; parent = child->parent)
+		{
+			Node* parents_parent = parent->parent;
+			u8 b = 0;
+
+			if (child == parent->left)
+			{
+				// left subtree decreases
+				if (parent->balance_factor > 0)
+				{
+					// parent was right heavy
+					// so we need to rebalance it 
+					Node* sibling = parent->right;
+					b = sibling->balance_factor;
+					if (b < 0)
+						child = rotate_right_left(parent, sibling);
+					else
+						child = rotate_left(parent, sibling);
+				}
+				else
+				{
+					if (parent->balance_factor == 0)
+					{
+						parent->balance_factor = 1;
+						break;
+					}
+					child = parent;
+					child ->balance_factor = 0;
+					continue;
+				}
+			}
+			else
+			{
+				if (parent->balance_factor < 0)
+				{
+					Node* sibling = parent->left;
+					b = sibling->balance_factor;
+					if (b < 0)
+						child = rotate_left_right(parent, sibling);
+					else
+						child = rotate_right(parent, sibling);
+				}
+				else
+				{
+					if (parent->balance_factor == 0)
+					{
+						parent->balance_factor = -1;
+						break;
+					}
+					child = parent;
+					child ->balance_factor = 0;
+					continue;
+				}
+			}
+
+			child ->parent = parents_parent;
+			if (parents_parent)
+			{
+				if (parent == parents_parent->left)
+					parents_parent->left = child ;
+				else
+					parents_parent->right = child ;
+			}
+			else
+				root = child;
+
+			if (!b)
+				break;
+		}
+
+		Node* child = (target->left ? target->left : target->right);
+
+		if (child)
+			child->parent = target->parent;
+
+		if (target == target->parent->left)
+			target->parent->left = child;
+		else
+			target->parent->right = child;
+
+		// if we found a node, remove it from the tree
+//		if (!search_node->left)
+//		{
+//			replace(search_node, search_node->right);
+//		}
+//		else if (!search_node->right)
+//		{
+//			replace(search_node, search_node->left);
+//		}
+//		else
+//		{
+//			Node* prev = predecessor(search_node);
+//			if (prev->parent != search_node)
+//			{
+//				replace(prev, prev->left);
+//				prev->left = search_node->left;
+//				prev->left->parent = prev;
+//			}
+//			
+//			replace(search_node, prev);
+//			prev->right = search_node->right;
+//			prev->right->parent = prev;
+//		}
+//
+		pool.remove(target);
+	}
+
+	/* -------------------------------------------------------------------------------------------- replace
+	 *  Replaces u with v
+	 */
+	void replace(Node* u, Node* v)
+	{
+		if (!u->parent)
+			root = v;
+		else if (u == u->parent->left)
+			u->parent->left = v;
+		else
+			u->parent->right = v;
+		if (v)
+			v->parent = u->parent;
+	}
+
+	/* -------------------------------------------------------------------------------------------- successor
+	 */
+	Node* successor(Node* n)
+	{
+		if (n->right)
+			return minimum(n->right);
+		Node* parent = n->parent;
+		while (parent && n == parent->right)
+		{
+			n = parent;
+			parent = parent->parent;
+		}
+		return parent;
+	}
+
+	/* -------------------------------------------------------------------------------------------- predecessor
+	 */
+	Node* predecessor(Node* n)
+	{
+		if (n->left)
+			return maximum(n->left);
+		Node* parent = n->parent;
+		while (parent && n == parent->left)
+		{
+			n = parent;
+			parent = parent->parent;
+		}
+		return parent;
+	}
+
+	/* -------------------------------------------------------------------------------------------- maximum
+	 */ 
+	Node* maximum(Node* n)
+	{
+		while (n->right)
+			n = n->right;
+		return n;
+	}
+
+	/* -------------------------------------------------------------------------------------------- minimum
+	 */ 
+	Node* minimum(Node* n)
+	{
+		while (n->left)
+			n = n->left;
+		return n;
+	}
+
+	/* -------------------------------------------------------------------------------------------- to_string
+	 */
+	template<void (*callback)(dstr& out, Node* node)>
 	dstr to_string()
 	{
 		dstr out = dstr::create();
@@ -191,7 +416,7 @@ struct AVL
 			return out;
 		}
 			
-		to_string_recursive(out, root, 0);
+		to_string_recursive<callback>(out, root, 0);
 
 		out.append("\n");
 
@@ -203,6 +428,7 @@ struct AVL
 	 */
 private:
 
+	template<void (*callback)(dstr& out, Node* node)>
 	void to_string_recursive(dstr& out, Node* n, u32 layers)
 	{
 		for (s32 i = 0; i < layers; i++) out.append("  ");
@@ -211,14 +437,15 @@ private:
 			out.append("(");
 		else
 		{
-			out.append((s64)n->data);
+			callback(out, n);
 			return;
 		}
 
-		out.appendv((s64)n->data, " ", n->balance_factor, "\n");
+		callback(out, n);
+		out.appendv("\n");
 
 		if (n->left)
-			to_string_recursive(out, n->left, layers + 1);
+			to_string_recursive<callback>(out, n->left, layers + 1);
 		else
 		{
 			for (s32 i = 0; i < layers + 1; i++) out.append("  ");
@@ -227,13 +454,12 @@ private:
 
 		out.append("\n");
 		if (n->right)
-			to_string_recursive(out, n->right, layers + 1);
+			to_string_recursive<callback>(out, n->right, layers + 1);
 		else
 		{
 			for (s32 i = 0; i < layers + 1; i++) out.append("  ");
 			out.append("X");
 		}
-
 
 		if (n->right || n->left)
 			out.append(")");
@@ -271,31 +497,31 @@ private:
 	}
 
 	/* -------------------------------------------------------------------------------------------- rotate_right
-	 *  (B (A a b) g)
+	 *  (A (B a b) g)
 	 *  ->
-	 *  (A a (B b g))
+	 *  (B a (A b g))
 	 */
 	Node* rotate_right(Node* A, Node* B)
 	{
-		Node* b = A->right;
-		B->left = b;
+		Node* b = B->right;
+		A->left = b;
 		if (b)
-			b->parent = B;
-		A->right = B;
-		B->parent = A;
+			b->parent = A;
+		B->right = A;
+		A->parent = B;
 
-		if (!A->balance_factor)
+		if (!B->balance_factor)
 		{
-			B->balance_factor =  1;
 			A->balance_factor = -1;
+			B->balance_factor =  1;
 		}
 		else
 		{
-			A->balance_factor = 
-			B->balance_factor = 0;
+			B->balance_factor = 
+			A->balance_factor = 0;
 		}
 
-		return A;
+		return B;
 	}
 	
 	/* -------------------------------------------------------------------------------------------- rotate_right_left
@@ -381,6 +607,208 @@ private:
 
 		return B;
 	}
+
+	/* ================================================================================================ AVLIterator
+	 *  Iterates over an AVL tree giving elements in order.
+	 *
+	 *  This is probably overly complicated, but I'm having fun.
+	 */
+	struct Iterator
+	{
+		Node* current;
+
+		enum class State
+		{
+			Root,
+			Up,
+			Left,
+			Right,
+			Finished
+		};
+
+		State state;
+
+
+		/* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+		 */
+
+
+		/* -------------------------------------------------------------------------------------------- AVLIterator<T>()
+		 */
+		Iterator(This& tree) 
+		{ 
+			using enum State;
+
+			current = tree.root;
+
+			if (!current)
+			{
+				state = Finished;
+				return;
+			}
+
+			if (!current->left && !current->right)
+			{
+				state = Up;
+			}
+
+			// decend fully left
+			while (current->left)
+			{
+				current = current->left;
+			}
+
+			state = Left;
+		}
+
+		Iterator()
+		{
+			current = nullptr;
+		}
+
+		/* -------------------------------------------------------------------------------------------- next
+		 */
+		T* next()
+		{
+			using enum State;
+
+			if (state == Finished)
+				return nullptr;
+
+			T* out = current->data;
+
+			switch (state)
+			{
+				case Left:
+					if (current->right)
+					{
+						current = current->right;
+						state = Right;
+					}
+					else
+					{
+						current = current->parent;
+						state = Up;
+					}
+					break;
+
+				case Right:
+					if (current->right)
+						current = current->right;
+					else if (current->parent)
+					{
+						// ascend upwards until we reach a node by moving right.
+						// if we reach a node with no parent it must be the
+						// root and we're done ??
+
+						auto child = current;
+						for (;;)
+						{
+							current = current->parent;
+							if (current->left == child)
+							{
+								state = Up;
+								break;
+							}
+							else if (!current->parent)
+							{
+								// we've reached root from the right most node
+								// so we're done 
+								state = Finished;
+								break;
+							}
+							child = current;
+						}
+					}
+					break;
+
+				case Up:
+					if (current->right)
+					{
+						current = current->right;
+
+						if (current->left)
+						{
+							while (current->left)
+								current = current->left;
+							state = Left;
+						}
+						else
+							state = Right;
+					}
+					else if(current->parent)
+						current = current->parent;
+					else
+						state = Finished;
+					break;
+			}
+
+			return out;
+		}
+
+		/* -------------------------------------------------------------------------------------------- operator->
+		 */
+		T* operator->()
+		{
+			return current->data;
+		}
+
+		/* -------------------------------------------------------------------------------------------- operator*
+		 */
+		T& operator*()
+		{
+			return *current->data;
+		}
+
+		/* -------------------------------------------------------------------------------------------- operator bool
+		 */
+		operator bool()
+		{
+			return state != State::Finished;
+		}
+	};
+	
+	/* -+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ RangeIterator 
+	 *  Iterator for compatibility with C++ ranged for loops 
+	 */
+	struct RangeIterator
+	{
+		Iterator iterator;
+
+		Node* operator++()
+		{
+			iterator.next();
+			return iterator.current;
+		}
+
+		b8 operator !=(const RangeIterator& rhs)
+		{
+			return iterator;
+		}
+
+		T* operator->()
+		{
+			return iterator.current;
+		}
+
+		T& operator*()
+		{
+			return *iterator;
+		}
+	};
+
+public:
+
+	RangeIterator begin()
+	{
+		return RangeIterator{Iterator(*this)};
+	}
+
+	RangeIterator end()
+	{
+		return {};
+	}
 };
+
 
 #endif

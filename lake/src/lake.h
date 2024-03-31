@@ -2,20 +2,17 @@
 #define _lake_lake_h
 
 #include "common.h"
-#include "graph.h"
+#include "list.h"
 #include "avl.h"
-
-struct Target;
-
-typedef Graph<Target>           TargetGraph;
-typedef Graph<Target>::Vertex   TargetVertex;
-typedef TargetGraph::VertexList TargetVertexList;
-typedef DList<Target>           TargetList;
-typedef TargetList::Node        TargetListNode;
-typedef AVL<Target>             TargetSet;
+#include "target.h"
 
 struct Lexer;
 struct Parser;
+
+struct lua_State;
+
+static const char* lake_internal_table = "__lake__internal";
+static const char* lake_targets_table = "__lake__targets";
 
 struct Lake
 {
@@ -23,18 +20,34 @@ struct Lake
 
 	Parser* parser;
 
-	// graph connecting targets
-	TargetGraph target_graph;
-	// queue of targets that have no dependencies
-	TargetList target_queue;
+	lua_State* L;
+
+	// queue of targets that are ready to be built
+	// if necessary, which are those that either
+	// dont have prerequisites or have had all of 
+	// their prerequisites satified.
+	TargetList build_queue;
+
+	// list tracking targets that aren't prerequisites
+	// for any other targets, aka the final targets 
+	// we want to build.
+	TargetList product_list;
+
+	TargetList active_recipes;
+	u32 active_recipe_count;
 
 	Pool<Target> target_pool;
+
+	u32 max_jobs;
 
 	s32          argc;
 	const char** argv;
 
 	void init(str path, s32 argc, const char* argv[]);
 	void run();
+
+	void print_build_queue();
+	void print_product_list();
 };
 
 extern Lake lake;

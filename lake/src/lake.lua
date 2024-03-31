@@ -12,9 +12,6 @@ local lake_internal = {}
 -- internal target map
 local targets = {}
 
--- forward decls
-local Target
-
 -- table for storing vars specified on the command line
 -- to support the '?=' syntax. 
 --   Ex. 
@@ -33,6 +30,9 @@ local Target
 --     mode will be "release".
 --
 lake.clivars = {}
+
+-- used for asyncronously running commands in recipes
+local co = require "coroutine"
 
 
 -- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
@@ -353,8 +353,7 @@ Target.recipe = function(self, f)
 	if "function" ~= type(f) then
 		error("expected a lua function as the recipe of target '"..self.path.."', got: "..type(f), 2)
 	end
-	io.write("setting recipe of target '"..self.path.."' to "..tostring(f).."\n")
-	self.recipe_fn = f
+	self.recipe_fn = co.create(f)
 	return self
 end
 -- |
@@ -382,10 +381,10 @@ end
 -- * >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> -
 
 
--- * ---------------------------------------------------------------------------------------------- lake_internal.run_recipe
--- | Given a target's path this function will attempt to run its recipe. If it fails for some 
--- | reason then an error is thrown. Otherwise returns the result of the recipe function.
-lake_internal.run_recipe = function(path)
+-- * ---------------------------------------------------------------------------------------------- lake_internal.create_recipe_coroutine
+-- | Given a target's path this function will resume its recipe coroutine.
+-- | If the recipe is finished true is returned.
+lake_internal.resume_recipe = function(path)
 	local target = targets[path]
 
 	if not target then
@@ -395,8 +394,20 @@ lake_internal.run_recipe = function(path)
 	if not target.recipe_fn then
 		error("target '"..path.."' does not define a recipe")
 	end
+
+	local result = {co.resume(target.recipe_fn)}
+
+	if not result[0] then
+		error("encountered lua error while running recipe for target '"..path.."':\n"..result[1])
+	end
+
+	if result[1] == nil then
+		return true
+	end
+
+	return false
 end
 -- |
 -- * ----------------------------------------------------------------------------------------------
 
-return lake, lake_internal
+return lake, lake_internal, targets

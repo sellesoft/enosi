@@ -39,7 +39,8 @@ compiler_flags :=     \
 	-Iinclude         \
 	-Isrc             \
 	-Wall             \
-	-Wno-switch       
+	-Wno-switch       \
+	-Wno-\#warnings
 
 ifeq ($(build_mode),debug)
 	compiler_flags += -O0 -ggdb3

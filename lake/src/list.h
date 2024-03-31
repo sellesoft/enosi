@@ -147,6 +147,14 @@ struct DList
 		return out;
 	}
 
+	/* -------------------------------------------------------------------------------------------- create
+	 */
+	void destroy()
+	{
+		pool.destroy();
+		head = tail = nullptr;
+	}
+
 	/* -------------------------------------------------------------------------------------------- is_empty
 	 */
 	b8 is_empty()
@@ -225,6 +233,106 @@ struct DList
 		else
 			tail = x->next;
 	}	
+
+	/* -------------------------------------------------------------------------------------------- destroy
+	 *  removes the given node from the list and also deletes it from the pool
+	 */
+	void destroy(Node* x)
+	{
+		remove(x);
+		pool.remove(x);
+	}
+
+	/* -+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ RangeIterator 
+	 *  Iterator for compatibility with C++ ranged for loops 
+	 */
+	struct RangeIterator
+	{
+		Node* n;
+
+		Node* operator++()
+		{
+			n = n->next;
+			return n;
+		}
+
+		b8 operator !=(const RangeIterator& rhs)
+		{
+			return n != rhs.n;
+		}
+
+		T* operator->()
+		{
+			return n->data;
+		}
+
+		T& operator*()
+		{
+			return *n->data;
+		}
+	};
+
+
+	RangeIterator begin() 
+	{
+		return RangeIterator{head};
+	}
+
+	RangeIterator end() 
+	{
+		return RangeIterator{nullptr};
+	}
+};
+
+
+/* ================================================================================================ DListIterator  
+ */
+template<typename T>
+struct DListIterator
+{
+	DList<T>::Node* current;
+
+	
+	/* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+	 */
+
+
+	/* -------------------------------------------------------------------------------------------- DListIterator<T>()
+	 */
+	DListIterator<T>(DList<T>& list) 
+	{
+		current = list.head;
+	}
+
+	/* -------------------------------------------------------------------------------------------- DListIterator<T>()
+	 */
+	T* next()
+	{
+		if (!current)
+			return nullptr;
+
+		T* out = current->data;
+		current = current->next;
+		return out;
+	}
+
+	/* -------------------------------------------------------------------------------------------- operator->
+	 */
+	T* operator->()
+	{
+		return current->data;
+	}
+
+
+	/* -------------------------------------------------------------------------------------------- operator bool
+	 */
+	operator bool()
+	{
+		return current;
+	}
+
+private:
+
 };
 
 #endif
