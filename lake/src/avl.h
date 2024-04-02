@@ -308,35 +308,14 @@ struct AVL
 		if (child)
 			child->parent = target->parent;
 
-		if (target == target->parent->left)
-			target->parent->left = child;
-		else
-			target->parent->right = child;
+		if (target->parent)
+		{
+			if (target == target->parent->left)
+				target->parent->left = child;
+			else
+				target->parent->right = child;
+		}
 
-		// if we found a node, remove it from the tree
-//		if (!search_node->left)
-//		{
-//			replace(search_node, search_node->right);
-//		}
-//		else if (!search_node->right)
-//		{
-//			replace(search_node, search_node->left);
-//		}
-//		else
-//		{
-//			Node* prev = predecessor(search_node);
-//			if (prev->parent != search_node)
-//			{
-//				replace(prev, prev->left);
-//				prev->left = search_node->left;
-//				prev->left->parent = prev;
-//			}
-//			
-//			replace(search_node, prev);
-//			prev->right = search_node->right;
-//			prev->right->parent = prev;
-//		}
-//
 		pool.remove(target);
 	}
 
@@ -357,7 +336,7 @@ struct AVL
 
 	/* -------------------------------------------------------------------------------------------- successor
 	 */
-	Node* successor(Node* n)
+	static Node* successor(Node* n)
 	{
 		if (n->right)
 			return minimum(n->right);
@@ -372,7 +351,7 @@ struct AVL
 
 	/* -------------------------------------------------------------------------------------------- predecessor
 	 */
-	Node* predecessor(Node* n)
+	static Node* predecessor(Node* n)
 	{
 		if (n->left)
 			return maximum(n->left);
@@ -387,7 +366,7 @@ struct AVL
 
 	/* -------------------------------------------------------------------------------------------- maximum
 	 */ 
-	Node* maximum(Node* n)
+	static Node* maximum(Node* n)
 	{
 		while (n->right)
 			n = n->right;
@@ -396,7 +375,7 @@ struct AVL
 
 	/* -------------------------------------------------------------------------------------------- minimum
 	 */ 
-	Node* minimum(Node* n)
+	static Node* minimum(Node* n)
 	{
 		while (n->left)
 			n = n->left;
@@ -608,192 +587,36 @@ private:
 		return B;
 	}
 
-	/* ================================================================================================ AVLIterator
-	 *  Iterates over an AVL tree giving elements in order.
-	 *
-	 *  This is probably overly complicated, but I'm having fun.
-	 */
-	struct Iterator
-	{
-		Node* current;
+private:
 
-		enum class State
-		{
-			Root,
-			Up,
-			Left,
-			Right,
-			Finished
-		};
-
-		State state;
-
-
-		/* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-		 */
-
-
-		/* -------------------------------------------------------------------------------------------- AVLIterator<T>()
-		 */
-		Iterator(This& tree) 
-		{ 
-			using enum State;
-
-			current = tree.root;
-
-			if (!current)
-			{
-				state = Finished;
-				return;
-			}
-
-			if (!current->left && !current->right)
-			{
-				state = Up;
-			}
-
-			// decend fully left
-			while (current->left)
-			{
-				current = current->left;
-			}
-
-			state = Left;
-		}
-
-		Iterator()
-		{
-			current = nullptr;
-		}
-
-		/* -------------------------------------------------------------------------------------------- next
-		 */
-		T* next()
-		{
-			using enum State;
-
-			if (state == Finished)
-				return nullptr;
-
-			T* out = current->data;
-
-			switch (state)
-			{
-				case Left:
-					if (current->right)
-					{
-						current = current->right;
-						state = Right;
-					}
-					else
-					{
-						current = current->parent;
-						state = Up;
-					}
-					break;
-
-				case Right:
-					if (current->right)
-						current = current->right;
-					else if (current->parent)
-					{
-						// ascend upwards until we reach a node by moving right.
-						// if we reach a node with no parent it must be the
-						// root and we're done ??
-
-						auto child = current;
-						for (;;)
-						{
-							current = current->parent;
-							if (current->left == child)
-							{
-								state = Up;
-								break;
-							}
-							else if (!current->parent)
-							{
-								// we've reached root from the right most node
-								// so we're done 
-								state = Finished;
-								break;
-							}
-							child = current;
-						}
-					}
-					break;
-
-				case Up:
-					if (current->right)
-					{
-						current = current->right;
-
-						if (current->left)
-						{
-							while (current->left)
-								current = current->left;
-							state = Left;
-						}
-						else
-							state = Right;
-					}
-					else if(current->parent)
-						current = current->parent;
-					else
-						state = Finished;
-					break;
-			}
-
-			return out;
-		}
-
-		/* -------------------------------------------------------------------------------------------- operator->
-		 */
-		T* operator->()
-		{
-			return current->data;
-		}
-
-		/* -------------------------------------------------------------------------------------------- operator*
-		 */
-		T& operator*()
-		{
-			return *current->data;
-		}
-
-		/* -------------------------------------------------------------------------------------------- operator bool
-		 */
-		operator bool()
-		{
-			return state != State::Finished;
-		}
-	};
-	
 	/* -+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ RangeIterator 
 	 *  Iterator for compatibility with C++ ranged for loops 
+	 *
+	 *  It is NOT safe to add or remove things from the tree while using this!!
 	 */
 	struct RangeIterator
 	{
-		Iterator iterator;
+		Node* current;
 
 		Node* operator++()
 		{
-			iterator.next();
-			return iterator.current;
+			current = successor(current);
+			return current;
 		}
 
 		b8 operator !=(const RangeIterator& rhs)
 		{
-			return iterator;
+			return current != rhs.current;
 		}
 
 		T* operator->()
 		{
-			return iterator.current;
+			return current;
 		}
 
 		T& operator*()
 		{
-			return *iterator;
+			return *current->data;
 		}
 	};
 
@@ -801,12 +624,12 @@ public:
 
 	RangeIterator begin()
 	{
-		return RangeIterator{Iterator(*this)};
+		return RangeIterator{ root? minimum(root) : nullptr };
 	}
 
 	RangeIterator end()
 	{
-		return {};
+		return RangeIterator{ nullptr };
 	}
 };
 

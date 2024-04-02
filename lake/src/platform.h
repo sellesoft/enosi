@@ -43,7 +43,7 @@ void glob_destroy(Glob glob);
  */
 b8 path_exists(str path);
 
-/* ------------------------------------------------------------------------------------------------
+/* ------------------------------------------------------------------------------------------------ 
  */
 b8 is_file(const char* path);
 b8 is_dir(const char* path);
@@ -52,6 +52,25 @@ b8 is_dir(const char* path);
  *  Returns a timestamp in seconds.
  */
 s64 modtime(const char* path);
+
+/* ================================================================================================ Process
+ *  Opaque handle to the backend's presentation of a process.
+ */
+typedef void* Process;
+
+Process process_spawn(char** args);
+
+typedef struct PollReturn 
+{
+	int stdout_bytes_written;
+	int stderr_bytes_written;
+} PollReturn;
+
+PollReturn process_poll(
+		Process proc, 
+		void* stdout_dest, int stdout_suggested_bytes_read, 
+		void* stderr_dest, int stderr_suggested_bytes_read,
+		void (*on_close)(int));
 
 }
 

@@ -97,6 +97,23 @@ ffi.cdef [[
 	} CLIargs;
 
 	CLIargs lua__get_cliargs();
+
+	void* process_spawn(const char** args);
+
+	typedef struct PollReturn
+	{
+		int out_bytes_written;
+		int err_bytes_written;
+	} PollReturn;
+
+	typedef void (*exit_cb_t)(int);
+
+	PollReturn process_poll(
+		void* proc,
+		void* stdout_dest, int stdout_suggested_bytes_read, 
+		void* stderr_dest, int stderr_suggested_bytes_read,
+		exit_cb_t on_exit);
+
 ]]
 local C = ffi.C
 local strtype = ffi.typeof("str")
@@ -143,7 +160,7 @@ local flatten_table = function(tbl)
 	local out = {}
 
 	function recur(x)
-		for _,v in ipairs(tbl) do
+		for _,v in ipairs(x) do
 			if type(v) == "table" then
 				recur(v)
 			else
@@ -197,6 +214,97 @@ lake.find = function(pattern)
 	end
 
 	return out
+end
+-- |
+-- * ----------------------------------------------------------------------------------------------
+
+-- * ---------------------------------------------------------------------------------------------- lake.cmd
+-- | Takes a variable amount of arguments all of which are expected to be strings or arrays of 
+-- | strings which will be flattened to form a command to run. The first string is the name of the
+-- | process and what follows are arguments to be passed to the process.
+-- |
+-- | This can be used directly, but it meant to be what the command syntax sugar is transformed 
+-- | into. For example:
+-- |
+-- |   result := `gcc -c main.c -o main.c`
+-- | 
+-- | is transformed into
+-- | 
+-- |   local result = lake.cmd("gcc", "-c", "main.c", "-o", "main.c")
+-- | 
+-- | Arrays are flattened recursively so the user does not have to worry about doing this themself.
+lake.cmd = function(...)
+	local args = flatten_table{...}
+
+	local argsarr = ffi.new("const char*["..(#args+1).."]")
+
+	for i,arg in ipairs(args) do
+		if "string" ~= type(arg) then
+			error("argument "..tostring(i).." in call to cmd was not a string, it was a "..type(arg))
+		end
+
+		argsarr[i-1] = ffi.new("const char*", args[i])
+	end
+
+	local handle = C.process_spawn(argsarr)
+
+	if not handle then
+		local argsstr = ""
+		for _,arg in ipairs(args) do
+			argsstr = " "..argsstr..arg.."\n"
+		end
+		error("failed to spawn process with arguments:\n"..argsstr)
+	end
+
+	io.write("spawned process with args: ")
+	for _,arg in ipairs(args) do
+		io.write(" ", arg)
+	end
+	io.write("\n")
+
+	local buffer = require "string.buffer"
+
+	local out_buf = buffer.new()
+	local err_buf = buffer.new()
+
+	local space_wanted = 1000
+
+	local out_ptr, out_len = out_buf:reserve(space_wanted)
+	local err_ptr, err_len = err_buf:reserve(space_wanted)
+
+	local exit_status = nil
+
+	-- cache this somewhere better later
+	-- this is also kind of stupid, only doing it cause its just how i 
+	-- did it long ago in the first lua build sys attempt. The poll 
+	-- function should just return the state of the process.
+	local on_close = function(exit_stat)
+		exit_status = exit_stat
+	end
+
+	local c_callback = ffi.cast("exit_cb_t", on_close)
+
+	while true do
+		local ret =
+			C.process_poll(
+				handle,
+				out_ptr, out_len,
+				err_ptr, err_len,
+				c_callback)
+
+		print(ret.out_bytes_written)
+		print(ret.err_bytes_written)
+
+		out_buf:commit(ret.out_bytes_written)
+		err_buf:commit(ret.err_bytes_written)
+
+		if exit_status then
+			c_callback:free()
+			return exit_status
+		else
+			co.yield(false)
+		end
+	end
 end
 -- |
 -- * ----------------------------------------------------------------------------------------------
@@ -325,18 +433,28 @@ end
 -- | Defines a target or targets that this target directly uses in its recipe. 
 -- | All targets provided here will be passed to the 'inputs' argument of the targets recipe.
 -- | May be a string or a table of strings.
+-- |
+-- | TODO(sushi) currently this assumes the same target wont be passed more than once, which 
+-- |             we need to handle somehow. We could probably just generate an array of 
+-- |             target paths this one depends on from the internal TargetSet just before
+-- |             we run the target's recipe.
+-- |             It also uses a name on the Target object itself which I would like to avoid.
+-- |
+-- | TODO(sushi) Make this variadic
 Target.uses = function(self, x)
 	local x_type = type(x)
 	if "string" == x_type then
 		C.lua__make_dep(self.handle, lake.target(x).handle)
+		table.insert(self.uses_targets, x)
 	elseif "table" == x_type then
 		local flat = flatten_table(x)
 		for i,v in ipairs(flat) do
 			local v_type = type(v)
 			if "string" ~= v_type then
-				error("Element "..i.." of flattened table given to Target.uses is not a string, rather a "..v_type..".", 2)
+				error("Element "..i.." of flattened table given to Target.uses is not a string, rather a "..v_type.." whose value is "..tostring(v)..".", 2)
 			end
 			C.lua__make_dep(self.handle, lake.target(v).handle)
+			table.insert(self.uses_targets, v)
 		end
 	else
 		error("Target.uses can take either a string or a table of strings, got: "..x_type..".", 2)
@@ -381,7 +499,7 @@ end
 -- * >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> -
 
 
--- * ---------------------------------------------------------------------------------------------- lake_internal.create_recipe_coroutine
+-- * ---------------------------------------------------------------------------------------------- lake_internal.resume_recipe
 -- | Given a target's path this function will resume its recipe coroutine.
 -- | If the recipe is finished true is returned.
 lake_internal.resume_recipe = function(path)
@@ -395,10 +513,11 @@ lake_internal.resume_recipe = function(path)
 		error("target '"..path.."' does not define a recipe")
 	end
 
-	local result = {co.resume(target.recipe_fn)}
+	-- TODO(sushi) restructure this stuff so that we dont have to pass these two args everytime we resume
+	local result = {co.resume(target.recipe_fn, target.uses_targets, target.path)}
 
-	if not result[0] then
-		error("encountered lua error while running recipe for target '"..path.."':\n"..result[1])
+	if not result[1] then
+		error("encountered lua error while running recipe for target '"..path.."':\n"..result[2])
 	end
 
 	if result[1] == nil then

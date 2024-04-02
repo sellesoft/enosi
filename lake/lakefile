@@ -3,7 +3,7 @@ verbose ?= false
 
 build_dir := "build/"..mode.."/"
 
-lakeexe := build_dir.."lake"
+lakeexe := lake.target(build_dir.."lake")
 
 c_files := lake.find("src/*.cpp")
 o_files := lake.replace(c_files, "src/(.-).cpp", build_dir.."%1.o")
@@ -44,13 +44,12 @@ print_success := function(from, to)
 	end
 end
 
-lake.target( lakeexe )
+lakeexe
 	:uses(o_files)
 	:recipe(function(inputs, output)
+		print("hello!")
 		result := ` $(linker) $(inputs) $(linker_flags) -o $(output) `
-
 		io.write(result.stderr)
-
 		if result.exit_status ~= 0 then
 			print_success(output)
 		end

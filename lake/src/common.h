@@ -4,16 +4,6 @@
 #include "stdint.h"
 
 /* ----------------------------------------------
- *	TODO(sushi) add more log levels and make them
- *	            dependent on defines.
- */
-#define TRACE(fmt, ...)                        \
-	do {                                       \
-		fprintf(stdout, "\e[36mtrace\e[0m: "); \
-		fprintf(stdout, fmt, ##__VA_ARGS__);   \
-	} while(0); 
-
-/* ----------------------------------------------
  *	Nice typedefs
  */
 typedef uint8_t  u8;

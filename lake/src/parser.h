@@ -28,6 +28,9 @@ struct Parser
 
 	Token curt;
 
+	b8 has_lookahead;
+	Token lookahead_token;
+
 	using enum tok;
 
 	void init(Lake* lake);
@@ -126,9 +129,12 @@ struct Parser
 	 */
 	void next_token(b8 push_on_stack = true, b8 push_whitespace = true);
 
+	void lookahead(b8 push_on_stack = true, b8 push_whitespace = true);
+
 	/*  Check that we're at the given token kind
 	 */ 
 	b8 at(tok k);
+	b8 lookahead_at(tok k);
 
 	/*  Report the error where 'curt' currently is and exit.
 	 */

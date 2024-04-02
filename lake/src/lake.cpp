@@ -18,7 +18,11 @@ extern "C"
 #include "lauxlib.h"
 }
 
+#if 1
 #define trace(...) printv(__VA_ARGS__)
+#else
+#define trace(...)
+#endif
 
 Lake lake; // global for now, maybe not later 
 
@@ -35,9 +39,10 @@ void Lake::init(str p, s32 argc_, const char* argv_[])
 	// TODO(sushi) get from platform and make adjustable by cli
 	max_jobs = 8;
 
-	target_pool  = Pool<Target>::create();
-	build_queue  = TargetList::create();
-	product_list = TargetList::create();
+	target_pool    = Pool<Target>::create();
+	build_queue    = TargetList::create();
+	product_list   = TargetList::create();
+	active_recipes = TargetList::create();
 }
 
 ///* ------------------------------------------------------------------------------------------------ visit
@@ -99,6 +104,19 @@ void Lake::print_product_list()
 	}
 }
 
+void printout(TargetSet& set, u32 depth)
+{
+
+	for (Target& t : set)
+	{
+		for (u32 i = 0; i < depth; i++)
+			print(" ");
+		printv(t.path, "\n");
+
+		printout(t.prerequisites, depth + 1);
+	}
+}
+
 /* ------------------------------------------------------------------------------------------------ Lake::run
  */
 void Lake::run()
@@ -144,42 +162,53 @@ void Lake::run()
 
 	prog.destroy();
 
-	print_build_queue();
-	print_product_list();
-
-	for (Target& t : build_queue)
-	{
-		printv("Dependents of ", t.path, ":\n");
-
-		for (Target& dependent : t.dependents)
-		{
-			printv("  ", dependent.path, "\n");
-		}
-	}
-
 	for (;;)
 	{
 		u32 available_workers = max_jobs - active_recipe_count;
 
+		// trace("There are ", available_workers, " available workers.\n");
+
 		for (u32 i = 0; i < available_workers; i++)
 		{
-			for (auto& target : build_queue)
+			if (build_queue.is_empty())
+				break;
+
+			Target* target = build_queue.front();
+
+			trace("Checking target '", target->path, "' from build queue.\n"); 
+
+			if (target->needs_built())
 			{
-				if (target.needs_built())
-					active_recipes.push_head(&target);
-				else
+				trace("  Target needs built, adding to active recipes list\n");
+				active_recipes.push_head(target);
+				active_recipe_count += 1;
+				build_queue.remove(target->build_node);
+			}
+			else
+			{
+				trace("  Target does not need built, removing from build queue and decrementing all dependents unsatified prereq counts.\n");
+				build_queue.remove(target->build_node);
+				for (auto& dependent : target->dependents)
 				{
-					build_queue.remove(target.build_node);
-					target.remove();
+					if (dependent.unsatified_prereq_count == 1)
+					{
+						trace("  Dependent '", dependent.path, "' has no more unsatisfied prerequisites, adding it to the build queue.\n");
+						dependent.build_node = build_queue.push_head(&dependent);
+						dependent.unsatified_prereq_count = 0;
+					}
+					else
+						dependent.unsatified_prereq_count -= 1;
 				}
 			}
 		}
 
 		for (auto& t : active_recipes)
 		{
+			trace("resuming recipe of target ", t.path, "\n");
 			switch (t.resume_recipe(L))
 			{
 				case Target::RecipeResult::Finished: {
+					trace("  recipe finished");
 					active_recipes.remove(t.active_recipe_node);
 
 					// here we assume the target was built by the recipe
@@ -190,8 +219,7 @@ void Lake::run()
 					for (auto& dependent : t.dependents)
 						dependent.flags.set(Target::Flags::PrerequisiteJustBuilt);
 
-					// remove the target from the graph
-					t.remove();
+					active_recipe_count -= 1;
 				} break;
 
 				case Target::RecipeResult::Error: {

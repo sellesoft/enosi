@@ -5,6 +5,8 @@
 #include "stdlib.h"
 #include "assert.h"
 
+#include "luahelpers.h"
+
 extern "C"
 {
 #include "lua.h"
@@ -25,6 +27,7 @@ Target Target::create(str path)
 {
 	Target out = {};
 	out.path = path;
+	out.hash = path.hash();
 	out.prerequisites = TargetSet::create();
 	out.dependents = TargetSet::create();
 	return out;
@@ -99,15 +102,15 @@ b8 Target::has_recipe(lua_State* L)
 Target::RecipeResult Target::resume_recipe(lua_State* L)
 {
 	lua_getglobal(L, lake_internal_table);
-	defer { lua_pop(L, 1); };
-
-	lua_pushstring(L, "run_recipe");
+	lua_pushstring(L, "resume_recipe");
 	lua_gettable(L, -2);
 
+	defer { lua_pop(L, 2); };
+
 	lua_pushlstring(L, (char*)path.s, path.len);
-	if (lua_pcall(L, 1, 0, 0))
+	if (lua_pcall(L, 1, 1, 0))
 	{
-		printv("lua error while running recipe for target '", path, "':\n", lua_tostring(L, -1));
+		printv("lua error while running recipe for target '", path, "':\n", lua_tostring(L, -1), "\n");
 		lua_pop(L, 1);
 		return RecipeResult::Error;
 	}

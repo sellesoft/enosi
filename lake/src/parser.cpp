@@ -710,7 +710,7 @@ void Parser::recfield()
 {
 	if (at(Identifier))
 	{
-		next_token();
+		next_token(); 
 	}
 	else
 		yindex();
@@ -725,7 +725,6 @@ void Parser::recfield()
 void Parser::tableconstructor()
 {
 	Token save = curt;
-	next_token();
 
 	if (!at(BraceLeft))
 		error_here("expected '{' for table constructor");
@@ -739,12 +738,12 @@ void Parser::tableconstructor()
 		switch (curt.kind)
 		{
 			case Identifier: {
-				next_token();
-				if (!at(Equal))
+				lookahead();
+				if (!lookahead_at(Equal)) 
 					expr();
 				else
 					recfield();
-			} break;
+			} break; 
 
 			case SquareLeft: 
 				recfield();
@@ -761,6 +760,7 @@ void Parser::tableconstructor()
 
 	if (!at(BraceRight))
 		error_here("expected '}' to end table started at ", save.line, ":", save.column);
+	next_token();
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -1016,6 +1016,12 @@ b8 Parser::statement()
 
 void Parser::next_token(b8 push_on_stack, b8 push_whitespace)
 {
+	if (has_lookahead)
+	{
+		has_lookahead = false;
+		curt = lookahead_token;
+	}
+
 	if (push_on_stack)
 		stack.push(curt);
 	for (;;)
@@ -1031,7 +1037,34 @@ void Parser::next_token(b8 push_on_stack, b8 push_whitespace)
 	}
 }
 
+void Parser::lookahead(b8 push_on_stack, b8 push_whitespace)
+{
+	if (has_lookahead)
+		return;
+
+	has_lookahead = true;
+
+	if (push_on_stack)
+		stack.push(curt);
+	for (;;)
+	{
+		lookahead_token = lex->next_token();
+		if (at(Whitespace))
+		{
+			if (push_whitespace)
+				stack.push(lookahead_token);
+		}
+		else
+			break;
+	}
+}
+
 b8 Parser::at(tok k)
 {
 	return curt.kind == k;
+}
+
+b8 Parser::lookahead_at(tok k)
+{
+	return lookahead_token.kind == k;
 }
