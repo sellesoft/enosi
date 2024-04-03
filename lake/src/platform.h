@@ -60,13 +60,18 @@ typedef void* Process;
 
 Process process_spawn(char** args);
 
+typedef enum
+{
+	PollResult_
+} PollResultKind;
+
 typedef struct PollReturn 
 {
 	int stdout_bytes_written;
 	int stderr_bytes_written;
 } PollReturn;
 
-PollReturn process_poll(
+PollReturn process_poll( 
 		Process proc, 
 		void* stdout_dest, int stdout_suggested_bytes_read, 
 		void* stderr_dest, int stderr_suggested_bytes_read,

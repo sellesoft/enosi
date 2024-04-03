@@ -110,14 +110,20 @@ Target::RecipeResult Target::resume_recipe(lua_State* L)
 	lua_pushlstring(L, (char*)path.s, path.len);
 	if (lua_pcall(L, 1, 1, 0))
 	{
-		printv("lua error while running recipe for target '", path, "':\n", lua_tostring(L, -1), "\n");
+		printv(lua_tostring(L, -1), "\n");
 		lua_pop(L, 1);
 		return RecipeResult::Error;
 	}
 
+	if (!lua_isboolean(L, -1))
+	{
+		error_nopath("INTERNAL ERROR 'resume_recipe' did not leave a boolean on the stack");
+		exit(1);
+	}
+
 	if (lua_toboolean(L, -1))
 	{
-		return RecipeResult::Finished;
+		return RecipeResult::Finished; 
 	}
 
 	return RecipeResult::InProgress;

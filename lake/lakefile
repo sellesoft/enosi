@@ -17,6 +17,8 @@ compiler_flags := $[
 	-Iinclude
 	-Isrc
 	-Wno-switch
+	-fcolor-diagnostics
+	-Wno-#warnings
 ]
 
 if mode == "debug" then
@@ -32,9 +34,9 @@ linker_flags := $[
 	-Wl,--export-dynamic
 ]
 
-reset := "\33[0m"
-green := "\33[0;32m"
-blue  := "\33[0;34m"
+reset := string.char(27).."[0m"
+green := string.char(27).."[0;32m"
+blue  := string.char(27).."[0;34m"
 
 print_success := function(from, to)
 	if to then
@@ -47,12 +49,13 @@ end
 lakeexe
 	:uses(o_files)
 	:recipe(function(inputs, output)
-		print("hello!")
 		result := ` $(linker) $(inputs) $(linker_flags) -o $(output) `
-		io.write(result.stderr)
-		if result.exit_status ~= 0 then
+
+		if result.exit_status == 0 then
 			print_success(output)
 		end
+
+		io.write(result.stdout)
 	end)
 
 for c_file, o_file in lake.zip(c_files, o_files) do
@@ -61,10 +64,10 @@ for c_file, o_file in lake.zip(c_files, o_files) do
 		:recipe(function(input, output)
 			result := ` $(compiler) -c $(input) $(compiler_flags) -o $(output) `
 
-			io.write(result.stderr)
-
-			if result.exit_status ~= 0 then
-				print_success(input, output)
+			if result.exit_status == 0 then
+				print_success(input[1], output)
 			end
+
+			io.write(result.stdout)
 		end)
 end

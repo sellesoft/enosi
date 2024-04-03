@@ -405,6 +405,7 @@ void Parser::yindex()
 
 	if (!at(SquareRight))
 		error_here("expected a ']' to end '[' at ", save.line, ":", save.column);
+	next_token();
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -422,17 +423,17 @@ void Parser::simpleexpr()
 		case Ellipses:
 			break;
 		case BraceLeft:
-			tableconstructor();
-			return;
-		case Function:
-			next_token();
+			tableconstructor();     
+			return;  
+		case Function: 
+			next_token(); 
 			body(save);
 			return;
 		default:
-			primaryexpr();
-			return;
+			primaryexpr();   
+			return; 
 	}
-	next_token();
+	next_token();  
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -484,13 +485,13 @@ void Parser::subexpr(s32 limit)
 	else
 		simpleexpr();
 
-	while (is_bop(curt))
+	while (is_bop(curt)) 
 	{
 		auto prio = get_priority(curt);
 		if (prio.left < limit)
 			break;
 		next_token();
-		subexpr(prio.right);
+		subexpr(prio.right); 
 	}
 }
 

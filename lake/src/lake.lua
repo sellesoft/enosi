@@ -256,21 +256,12 @@ lake.cmd = function(...)
 		error("failed to spawn process with arguments:\n"..argsstr)
 	end
 
-	io.write("spawned process with args: ")
-	for _,arg in ipairs(args) do
-		io.write(" ", arg)
-	end
-	io.write("\n")
-
 	local buffer = require "string.buffer"
 
 	local out_buf = buffer.new()
 	local err_buf = buffer.new()
 
-	local space_wanted = 1000
-
-	local out_ptr, out_len = out_buf:reserve(space_wanted)
-	local err_ptr, err_len = err_buf:reserve(space_wanted)
+	local space_wanted = 256
 
 	local exit_status = nil
 
@@ -285,6 +276,9 @@ lake.cmd = function(...)
 	local c_callback = ffi.cast("exit_cb_t", on_close)
 
 	while true do
+		local out_ptr, out_len = out_buf:reserve(space_wanted)
+		local err_ptr, err_len = err_buf:reserve(space_wanted)
+
 		local ret =
 			C.process_poll(
 				handle,
@@ -292,15 +286,16 @@ lake.cmd = function(...)
 				err_ptr, err_len,
 				c_callback)
 
-		print(ret.out_bytes_written)
-		print(ret.err_bytes_written)
-
 		out_buf:commit(ret.out_bytes_written)
 		err_buf:commit(ret.err_bytes_written)
 
 		if exit_status then
 			c_callback:free()
-			return exit_status
+			return {
+				exit_status = exit_status,
+				stdout = out_buf,
+				stderr = err_buf,
+			}
 		else
 			co.yield(false)
 		end
@@ -402,11 +397,11 @@ local Target = {
 	path = "** target with no path! **",
 
 	-- handle to lake's internal representation
-	handle = nil, 
+	handle = nil,
 
 	-- lua function used to build the target
 	recipe_fn = nil,
-	
+
 	-- array of targets this target uses directly
 	uses_targets = nil,
 
@@ -520,7 +515,7 @@ lake_internal.resume_recipe = function(path)
 		error("encountered lua error while running recipe for target '"..path.."':\n"..result[2])
 	end
 
-	if result[1] == nil then
+	if result[2] == nil then
 		return true
 	end
 

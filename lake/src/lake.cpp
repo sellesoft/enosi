@@ -18,7 +18,7 @@ extern "C"
 #include "lauxlib.h"
 }
 
-#if 1
+#if 0
 #define trace(...) printv(__VA_ARGS__)
 #else
 #define trace(...)
@@ -38,59 +38,20 @@ void Lake::init(str p, s32 argc_, const char* argv_[])
 
 	// TODO(sushi) get from platform and make adjustable by cli
 	max_jobs = 8;
-
+ 
 	target_pool    = Pool<Target>::create();
 	build_queue    = TargetList::create();
 	product_list   = TargetList::create();
 	active_recipes = TargetList::create();
 }
 
-///* ------------------------------------------------------------------------------------------------ visit
-// */
-//void visit(TargetGraph::Vertex* v, TargetList* sorted)
-//{
-//	auto t = v->data;
-//
-//	if (t->perm_mark)
-//		return;
-//
-//	if (t->temp_mark)
-//	{
-//		error_nopath("cycle detected");
-//		exit(1);
-//	}
-//
-//	t->temp_mark = true;
-//
-//	for (TargetVertexList::Node* iter = v->neighbors.head; iter; iter = iter->next)
-//		visit(iter->data, sorted);
-//
-//	t->temp_mark = false;
-//	t->perm_mark = true;
-//
-//	sorted->push_head(t);
-//}
-//
-///* ------------------------------------------------------------------------------------------------ visit
-// */
-//void topsort(TargetGraph& g)
-//{
-//	auto sorted = TargetList::create();
-//
-//	for (TargetVertexList::Node* iter = g.vertexes.head; iter; iter = iter->next)
-//		visit(iter->data, &sorted);
-//
-//	for (TargetList::Node* n = sorted.head; n; n = n->next)
-//		printv(n->data->path, "\n");
-//}
-
 void Lake::print_build_queue()
 {
 	print("build_queue:\n");
 
-	for (Target& t : build_queue)
+	for (Target& t : build_queue) 
 	{
-		printv("  ", t.path, "\n");
+		printv("  ", t.path, "\n"); 
 	}
 }
 
@@ -101,7 +62,7 @@ void Lake::print_product_list()
 	for (Target& t : product_list)
 	{
 		printv("  ", t.path, "\n");
-	}
+	} 
 }
 
 void printout(TargetSet& set, u32 depth)
@@ -180,7 +141,7 @@ void Lake::run()
 			if (target->needs_built())
 			{
 				trace("  Target needs built, adding to active recipes list\n");
-				active_recipes.push_head(target);
+				target->active_recipe_node = active_recipes.push_head(target);
 				active_recipe_count += 1;
 				build_queue.remove(target->build_node);
 			}
@@ -202,6 +163,10 @@ void Lake::run()
 			}
 		}
 
+		// if no active recipes were added then we must be done
+		if (!active_recipes.head)
+			break;
+
 		for (auto& t : active_recipes)
 		{
 			trace("resuming recipe of target ", t.path, "\n");
@@ -217,8 +182,17 @@ void Lake::run()
 					// we could probably have an option later that does 
 					// stricter checking.
 					for (auto& dependent : t.dependents)
+					{
 						dependent.flags.set(Target::Flags::PrerequisiteJustBuilt);
-
+						if (dependent.unsatified_prereq_count == 1)
+						{
+							trace("  Dependent '", dependent.path, "' has no more unsatisfied prerequisites, adding it to the build queue.\n");
+							dependent.build_node = build_queue.push_head(&dependent);
+							dependent.unsatified_prereq_count = 0;
+						}
+						else
+							dependent.unsatified_prereq_count -= 1;
+					}
 					active_recipe_count -= 1;
 				} break;
 
@@ -259,19 +233,19 @@ Target* lua__create_target(str path)
  */
 void lua__make_dep(Target* target, Target* prereq)
 {
-	printv("Making '", prereq->path, "' a prerequisite of target '", target->path, "\n");
+	trace("Making '", prereq->path, "' a prerequisite of target '", target->path, "\n");
 	target->prerequisites.insert(prereq);
 	prereq->dependents.insert(target);
 	target->unsatified_prereq_count += 1;
 	if (prereq->product_node)
 	{
-		printv("  Prereq is in product list, so it will be removed\n");
+		trace("  Prereq is in product list, so it will be removed\n");
 		lake.product_list.destroy(prereq->product_node);
 		prereq->product_node = nullptr;
 	}
 	if (target->build_node)
 	{
-		printv("  Target is in build queue, so it will be removed\n");
+		trace("  Target is in build queue, so it will be removed\n");
 		lake.build_queue.destroy(target->build_node);
 		target->build_node = nullptr;
 	}

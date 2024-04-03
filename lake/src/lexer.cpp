@@ -42,7 +42,7 @@ static void advance(Lexer* l)
 #include "generated/token.kwmap.h"
 
 Token Lexer::next_token()
-{
+{ 
 	Token t = {}; 
 	
 	t.kind   = tok::Eof;
@@ -85,7 +85,8 @@ Token Lexer::next_token()
 		one_char_token('-', Minus);
 		one_char_token('`', Backtick);
 		one_char_token('$', Dollar);
-		one_char_token('/', Solidus)
+		one_char_token('/', Solidus);
+		one_char_token('#', Pound);
 		
 #define one_or_two_char_token(c0, k0, c1, k1) \
 		case c0: {                            \
@@ -179,7 +180,7 @@ Token Lexer::next_token()
 					case 'x':
 					case 'X':{
 						advance(this);
-						while(isdigit(current(this))) advance(this);
+						while(isdigit(current(this))) advance(this); 
 						t.kind = tok::Number;
 						t.raw.len = cursor - t.raw.s;
 					} break;

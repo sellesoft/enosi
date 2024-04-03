@@ -238,9 +238,13 @@ Process process_spawn(char** args)
 			exit(1);
 		}
 		// parent branch
+		
+		// close the write end of each pipe since the parent will
+		// not be writing to the child
 		close(stdout_pipes[1]);
 		close(stderr_pipes[1]);
 
+		// duplicate the read pipes 
 		int stdout_fd = dup(stdout_pipes[0]);
 		int stderr_fd = dup(stderr_pipes[0]);
 
@@ -257,10 +261,13 @@ Process process_spawn(char** args)
 		return proc;
 	}
 	else
-	{
+	{ 
+		// close reading pipes because we will not be reading from the parent
 		close(stdout_pipes[0]);
 		close(stderr_pipes[0]);
 
+		// replace our stdout and stderr file descriptors with the 
+		// pipes created by the parent
 		dup2(stdout_pipes[1], 1);
 		dup2(stderr_pipes[1], 2);
 
@@ -298,6 +305,7 @@ PollReturn process_poll(
 				on_close(WEXITSTATUS(status));
 
 			proc_pool.remove(proc);
+			return out;
 		}
 	}
 
@@ -311,7 +319,7 @@ PollReturn process_poll(
 		}
 		else
 		{
-			if (r)
+			if (r)  
 				printv("out read ", r, " bytes\n");
 			checkerr(r, "read");
 			out.stdout_bytes_written = r;
