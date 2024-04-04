@@ -86,9 +86,14 @@ ffi.cdef [[
 	s64 modtime(const char* path);
 
 	typedef struct Target Target;
+	typedef struct TargetGroup TargetGroup;
 
-	Target* lua__create_target(str path);
-	void    lua__make_dep(Target* target, Target* dependent);
+	Target*      lua__create_target(str path);
+	void         lua__make_dep(Target* target, Target* dependent);
+	void         lua__target_set_has_recipe(Target* target);
+	TargetGroup* lua__create_group();
+	void         lua__add_target_to_group(TargetGroup* group, Target* target);
+	b8           lua__target_already_in_group(Target* group);
 
 	typedef struct CLIargs
 	{
@@ -114,6 +119,7 @@ ffi.cdef [[
 		void* stderr_dest, int stderr_suggested_bytes_read,
 		exit_cb_t on_exit);
 
+	u64 get_highres_clock();
 ]]
 local C = ffi.C
 local strtype = ffi.typeof("str")
@@ -130,17 +136,15 @@ local strtype = ffi.typeof("str")
 --   Process command line arguments.
 local args = C.lua__get_cliargs()
 
-print(args.argc)
-
 for i=1,args.argc-1 do
 	local arg = ffi.string(args.argv[i])
-	
+
 	local var, value = arg:match("(%w+)=(%w+)")
-	
+
 	if not var then
 		error("arg "..i.." could not be resolved: "..arg)
 	end
-	
+
 	lake.clivars[var] = value
 
 	print(var, " ", value)
@@ -240,11 +244,23 @@ lake.cmd = function(...)
 
 	for i,arg in ipairs(args) do
 		if "string" ~= type(arg) then
-			error("argument "..tostring(i).." in call to cmd was not a string, it was a "..type(arg))
+			local errstr = "argument "..tostring(i).." in call to cmd was not a string, it was a "..type(arg)..". Arguments were:\n"
+
+			for _,arg in ipairs(args) do
+				errstr = " "..errstr..arg.."\n"
+			end
+
+			error(errstr)
 		end
 
 		argsarr[i-1] = ffi.new("const char*", args[i])
 	end
+
+	--local s = ""
+	--for _,arg in ipairs(args) do
+	--	s = s..arg.." "
+	--end
+	--print(s)
 
 	local handle = C.process_spawn(argsarr)
 
@@ -332,6 +348,9 @@ lake.replace = function(subject, search, repl)
 			table.insert(out, res)
 		end
 		return out
+	elseif type(subject) == "string" then
+		local res = subject:gsub(search, repl)
+		return res
 	else
 		error("unsupported type given as subject of lake.replace: '"..type(subject).."'", 2)
 	end
@@ -384,6 +403,15 @@ lake.zip = function(t1, t2)
 
 	return iter
 end
+
+
+-- * ---------------------------------------------------------------------------------------------- lake.get_highres_clock
+-- | Returns a highres clock in microseconds.
+lake.get_highres_clock = function()
+	return tonumber(C.get_highres_clock())
+end
+-- |
+-- * ----------------------------------------------------------------------------------------------
 
 
 -- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
@@ -459,6 +487,33 @@ end
 -- |
 -- * ----------------------------------------------------------------------------------------------
 
+-- * ---------------------------------------------------------------------------------------------- Target:depends_on
+-- | Defines a target that this target depends on, but does not use in its inputs.
+-- |
+-- | TODO(sushi) Make this variadic
+Target.depends_on = function(self, x)
+	local x_type = type(x)
+	if "string" == x_type then
+		C.lua__make_dep(self.handle, lake.target(x).handle)
+		table.insert(self.depends_on_targets, x)
+	elseif "table" == x_type then
+		local flat = flatten_table(x)
+		for i,v in ipairs(flat) do
+			local v_type = type(v)
+			if "string" ~= v_type then
+				error("Element "..i.." of flattened table given to Target.depends_on is not a string, rather a "..v_type.." whose value is "..tostring(v)..".", 2)
+			end
+			C.lua__make_dep(self.handle, lake.target(v).handle)
+			table.insert(self.depends_on_targets, v)
+		end
+	else
+		error("Target.depends_on can take either a string or a table of strings, got: "..x_type..".", 2)
+	end
+	return self
+end
+-- |
+-- * ----------------------------------------------------------------------------------------------
+
 -- * ---------------------------------------------------------------------------------------------- Target:recipe
 -- | Defines the recipe a target uses to create its file.
 -- | Must be a lua function.
@@ -485,6 +540,113 @@ lake.target = function(path)
 end
 -- |
 -- * ----------------------------------------------------------------------------------------------
+
+-- A grouping of targets that are built from a single invocation of a common recipe.
+local TargetGroup =
+{
+	-- array of targets belonging to this group
+	targets = nil,
+
+	-- handle to C representation of the group
+	handle = nil,
+}
+TargetGroup.__index = TargetGroup
+
+-- * ---------------------------------------------------------------------------------------------- TargetGroup.new
+-- | Create a new TargetGroup.
+TargetGroup.new = function()
+	local o = {}
+	setmetatable(o, TargetGroup)
+	o.targets = {}
+	o.handle = C.lua__create_group()
+	return o
+end
+-- |
+-- * ----------------------------------------------------------------------------------------------
+
+-- * ---------------------------------------------------------------------------------------------- TargetGroup:uses
+-- | Calls 'uses' for every target in this group.
+-- |
+-- | TODO(sushi) if for whatever reason there is an error in Target.uses it will report that it 
+-- |             came from that function, not here, which could be confusing, so fix that 
+-- |             eventually.
+TargetGroup.uses = function(self, x)
+	for _,target in ipairs(self.targets) do
+		target:uses(x)
+	end
+	return self
+end
+-- |
+-- * ----------------------------------------------------------------------------------------------
+
+-- * ---------------------------------------------------------------------------------------------- TargetGroup:depends_on
+-- | Calls 'depends_on' for every target in this group.
+-- |
+-- | TODO(sushi) if for whatever reason there is an error in Target.depends_on it will report that 
+-- |             it came from that function, not here, which could be confusing, so fix that 
+-- |             eventually.
+TargetGroup.depends_on = function(self, x)
+	for _,target in ipairs(self.targets) do
+		target:depends_on(x)
+	end
+	return self
+end
+-- |
+-- * ----------------------------------------------------------------------------------------------
+
+-- * ---------------------------------------------------------------------------------------------- TargetGroup:recipe
+-- | Adds the same recipe to all targets.
+TargetGroup.recipe = function(self, f)
+	for _,target in ipairs(self.targets) do
+		target:recipe(f)
+	end
+	return self
+end
+-- |
+-- * ----------------------------------------------------------------------------------------------
+
+-- * ---------------------------------------------------------------------------------------------- lake.targets
+-- | Creates a grouping of targets, all of which use and depend on the same targets and which 
+-- | all are produced by a single invocation of the given recipe.
+-- | 
+-- | The arguments passed to this function may be strings or tables of strings. Already existing 
+-- | targets *cannot* be added to groups. 
+-- | 
+-- | Unlike 'target', every call to this function creates a new group! So if you want to create a 
+-- | group and refer to it later, you must put it into a variable, for example:
+-- |   
+-- |   a := lake.targets("apple", "banana")
+-- |   b := lake.targets("apple", "banana")
+-- | 
+-- | 'a' and 'b' refer to different groups, and the second call to 'targets' will throw an 
+-- | error, as no target may belong to two different groups!
+lake.targets = function(...)
+	local args = flatten_table{...}
+
+	local group = TargetGroup.new()
+
+	for i,arg in ipairs(args) do
+		if type(arg) ~= "string" then
+			error("flattened argument "..i.." given to lake.targets was not a string, rather a "..type(arg).." with value "..tostring(arg),2)
+		end
+
+		local target = lake.target(arg)
+
+		if target.recipe_fn then
+			error("created target '"..target.path.."' for group, but this target already has a recipe!",2)
+		end
+
+		if C.lua__target_already_in_group(target.handle) ~= 0 then
+			error("target '"..target.path.."' is already in a group!",2)
+		end
+
+		C.lua__add_target_to_group(group.handle, target.handle)
+
+		table.insert(group.targets, target)
+	end
+
+	return group
+end
 
 
 -- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -

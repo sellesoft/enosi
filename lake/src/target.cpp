@@ -7,6 +7,8 @@
 
 #include "luahelpers.h"
 
+#include "logger.h"
+
 extern "C"
 {
 #include "lua.h"
@@ -60,41 +62,36 @@ b8 Target::is_newer_than(Target t)
 b8 Target::needs_built()
 {
 	if (flags.test(Flags::PrerequisiteJustBuilt))
+	{
+		TRACE("Target '", path, "' needs built because the 'PrerequisiteJustBuilt' flag was set.\n");
 		return true;
+	}
 
 	if (!exists())
+	{
+		TRACE("Target '", path, "' needs built because it does not exist on disk.\n");
 		return true;
+	}
 
+	SCOPED_INDENT;
 	for (Target& prereq : prerequisites)
+	{
 		if (prereq.is_newer_than(*this))
+		{
+			TRACE("Target '", path, "' needs built because its prerequisite, '", prereq.path, "', is newer.\n");
 			return true;
+		}
+		TRACE("Prereq '", prereq.path, "' is older than the target.\n");
+	}
 
 	return false;
 }
 
 /* ------------------------------------------------------------------------------------------------ has_recipe
  */
-b8 Target::has_recipe(lua_State* L)
+b8 Target::has_recipe()
 {
-	lua_getglobal(L, lake_targets_table);
-	defer { lua_pop(L, 1); };
-
-	lua_pushlstring(L, (char*)path.s, path.len);
-	lua_gettable(L, -2);
-
-	if (lua_type(L, -1) == LUA_TNIL)
-	{
-		error_nopath("target_get_recipe(): attempted to get target at path '", path, "' but it somehow doesn't exist in the target table\n");
-		exit(1);
-	}
-
-	lua_pushstring(L, "recipe");
-	lua_gettable(L, -2);
-	
-	if (lua_type(L, -1) == LUA_TNIL)
-		return false;
-	else
-		return true;
+	return flags.test(Flags::HasRecipe);
 }
 
 /* ------------------------------------------------------------------------------------------------ resume_recipe
@@ -115,12 +112,6 @@ Target::RecipeResult Target::resume_recipe(lua_State* L)
 		return RecipeResult::Error;
 	}
 
-	if (!lua_isboolean(L, -1))
-	{
-		error_nopath("INTERNAL ERROR 'resume_recipe' did not leave a boolean on the stack");
-		exit(1);
-	}
-
 	if (lua_toboolean(L, -1))
 	{
 		return RecipeResult::Finished; 
@@ -128,15 +119,3 @@ Target::RecipeResult Target::resume_recipe(lua_State* L)
 
 	return RecipeResult::InProgress;
 }
-
-/* ------------------------------------------------------------------------------------------------ remove
- */
-void Target::remove()
-{
-	for (Target& t : prerequisites)
-		t.dependents.remove(this);
-
-	for (Target& t : dependents)
-		t.prerequisites.remove(this);
-}
-

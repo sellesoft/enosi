@@ -31,23 +31,23 @@ struct Lake
 	// list tracking targets that aren't prerequisites
 	// for any other targets, aka the final targets 
 	// we want to build.
-	TargetList product_list;
+	TargetList product_list; 
 
 	TargetList active_recipes;
 	u32 active_recipe_count;
 
 	Pool<Target> target_pool;
 
+	Pool<TargetGroup> target_group_pool;
+
 	u32 max_jobs;
 
 	s32          argc;
 	const char** argv;
 
-	void init(str path, s32 argc, const char* argv[]);
-	void run();
-
-	void print_build_queue();
-	void print_product_list();
+	b8 init(str path, s32 argc, const char* argv[]);
+	b8 process_argv();
+	b8 run();
 };
 
 extern Lake lake;
@@ -62,7 +62,7 @@ extern "C"
 	{
 		s32 argc;
 		const char** argv;
-	} CLIargs;
+	} CLIargs; 
 
 	CLIargs lua__get_cliargs();
 }

@@ -13,6 +13,11 @@ extern "C"
 {
 
 /* ------------------------------------------------------------------------------------------------
+ *  Returns the current time in microseconds.
+ */
+u64 get_highres_clock();
+
+/* ------------------------------------------------------------------------------------------------
  *  Uses mem.allocate so we can use mem.free to free.
  */
 u8* read_file(str path);
@@ -31,13 +36,13 @@ s32     dir_next(char* c, u32 maxlen, DirIter iter);
 struct Glob 
 {
 	s64 n_paths;
-	u8** paths;
+	u8** paths;    
 
 	void* handle;
-};
+}; 
 
 Glob glob_create(const char* pattern);
-void glob_destroy(Glob glob);
+void glob_destroy(Glob glob);  
 
 /* ------------------------------------------------------------------------------------------------
  */

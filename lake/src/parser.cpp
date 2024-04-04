@@ -46,13 +46,13 @@ void Parser::TokenStack::init()
 	len = 0;
 	arr = (Token*)mem.allocate(sizeof(Token) * space);
 }
-
+  
 void Parser::TokenStack::destroy()
 {
 	space = len = 0;
 	mem.free(arr);
 }
-
+  
 /* ------------------------------------------------------------------------------------------------
  */
 void Parser::TokenStack::grow_if_needed(const s32 new_elements)
@@ -315,7 +315,10 @@ void Parser::funcargs()
 			next_token();
 
 			if (at(ParenRight))
+			{
+				next_token();
 				break;
+			}
 
 			exprlist1();
 
@@ -343,10 +346,7 @@ void Parser::funcargs()
 void Parser::parlist()
 {
 	if (at(ParenRight))
-	{	
-		next_token();
 		return;
-	}
 
 	for (;;)
 	{
@@ -493,7 +493,7 @@ void Parser::subexpr(s32 limit)
 		next_token();
 		subexpr(prio.right); 
 	}
-}
+}  
 
 /* ------------------------------------------------------------------------------------------------
  */
@@ -515,6 +515,7 @@ void Parser::prefixexpr()
 			expr();
 			if (!at(ParenRight))
 				error_here("expected ')' to end '(' at ", save.line, ":", save.column);
+			next_token();
 		} break;
 
 		/* @lakesyntax
@@ -924,7 +925,11 @@ b8 Parser::statement()
 					}
 				} break;
 				
-				case In:
+				case In: {
+					next_token();
+					exprlist1();
+				} break;
+
 				case Comma: {
 					next_token();
 
@@ -933,12 +938,11 @@ b8 Parser::statement()
 						next_token();
 						if (!at(Identifier))
 							error_here("expected an identifier");
-						next_token();
 					}
 					next_token();
 
 					if (!at(In))
-						error_here("expected 'in' for list for statement");
+						error_here("expected 'in' for list 'for' statement");
 					next_token();
 
 					exprlist1();

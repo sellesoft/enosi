@@ -134,8 +134,10 @@ struct DList
 	Node* head;
 	Node* tail;
 	
+
 	/* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 	 */
+
 
 	/* -------------------------------------------------------------------------------------------- create
 	 */
@@ -242,6 +244,7 @@ struct DList
 			x->prev->next = x->next;
 		else
 			head = x->next;
+
 		if (x->next)
 			x->next->prev = x->prev;
 		else
@@ -344,9 +347,6 @@ struct DListIterator
 	{
 		return current;
 	}
-
-private:
-
 };
 
 #endif

@@ -14,6 +14,8 @@
 #include "errno.h"
 #include "glob.h"
 
+#include "time.h"
+
 #include "sys/types.h"
 #include "sys/wait.h"
 
@@ -36,13 +38,22 @@ extern "C"
 
 /* ------------------------------------------------------------------------------------------------ read_file
  */
-u8* read_file(str path) 
+u64 get_highres_clock()
+{
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return ts.tv_sec * 1e6 + ts.tv_nsec / 1e3;
+}
+
+/* ------------------------------------------------------------------------------------------------ read_file
+ */
+u8* read_file(str path)  
 {
 	int fd = open((char*)path.s, O_RDONLY);
 
 	if (fd == -1)
 	{
-		error(path, 0, 0, "failed to open file");
+		error_nopath("failed to open file '", path, "'");
 		perror("open");
 		exit(1);
 	}
@@ -54,7 +65,7 @@ u8* read_file(str path)
 
 	ssize_t bytes_read = read(fd, buffer, st.st_size);
 	
-	if (bytes_read != st.st_size)
+	if (bytes_read != st.st_size) 
 	{
 		error(path, 0, 0, "failed to read entire file");
 		perror("read");
@@ -319,8 +330,6 @@ PollReturn process_poll(
 		}
 		else
 		{
-			if (r)  
-				printv("out read ", r, " bytes\n");
 			checkerr(r, "read");
 			out.stdout_bytes_written = r;
 		}
@@ -336,8 +345,6 @@ PollReturn process_poll(
 		}
 		else
 		{
-			if (r)
-				printv("err read ", r, " bytes\n");
 			checkerr(r, "read");
 			out.stderr_bytes_written = r;
 		}

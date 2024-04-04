@@ -7,6 +7,7 @@ lakeexe := lake.target(build_dir.."lake")
 
 c_files := lake.find("src/*.cpp")
 o_files := lake.replace(c_files, "src/(.-).cpp", build_dir.."%1.o")
+d_files := lake.replace(c_files, "src/(.-).cpp", build_dir.."%1.d")
 
 compiler     := "clang++"
 linker       := "clang++"
@@ -38,21 +39,24 @@ reset := string.char(27).."[0m"
 green := string.char(27).."[0;32m"
 blue  := string.char(27).."[0;34m"
 
-print_success := function(from, to)
+print_success := function(from, to, time)
 	if to then
-		io.write(green, from, reset, " -> ", blue, to, reset, "\n")
+		io.write(green, from, reset, " -> ", blue, to, reset, " ", time, "s\n")
 	else
-		io.write(blue, from, reset, "\n")
+		io.write(blue, from, reset, " ", time, "s\n")
 	end
 end
 
 lakeexe
 	:uses(o_files)
 	:recipe(function(inputs, output)
+	
+		start := lake.get_highres_clock()
 		result := ` $(linker) $(inputs) $(linker_flags) -o $(output) `
+		time_took := (lake.get_highres_clock() - start) / 1000000
 
 		if result.exit_status == 0 then
-			print_success(output)
+			print_success(output, nil, time_took)
 		end
 
 		io.write(result.stdout)
@@ -62,12 +66,71 @@ for c_file, o_file in lake.zip(c_files, o_files) do
 	lake.target( o_file )
 		:uses(c_file)
 		:recipe(function(input, output)
+			start := lake.get_highres_clock()
 			result := ` $(compiler) -c $(input) $(compiler_flags) -o $(output) `
+			time_took := (lake.get_highres_clock() - start) / 1000000
 
 			if result.exit_status == 0 then
-				print_success(input[1], output)
+				print_success(input[1], output, time_took)
 			end
 
 			io.write(result.stdout)
 		end)
 end
+
+for c_file, d_file in lake.zip(c_files, d_files) do
+	lake.target( d_file )
+		:uses( c_file )
+		:recipe(function(input, output)
+			result := ` cpp $(input) $(compiler_flags) -MM -MG -MT $(lake.replace(output, "(.-)%.d", "%1.o")) `
+
+			if result.exit_status ~= 0 then
+				error("failed to create dep file '"..output..":\n"..result.stdout)
+			end
+
+			result = lake.replace(result.stderr:get(), "\\\n", "")
+			
+			out := ""
+
+			for file in result:gmatch("%S+") do
+				if file:sub(-1) ~= ":" then
+					out = out..file.."\n"
+				end
+			end
+
+			file := io.open(output, "w")
+
+			if not file then
+				error("failed to open dep file for writing: '"..output.."'")
+			end
+			
+			file:write(out)
+			file:close()
+		end)
+end
+
+for o_file, d_file in lake.zip(o_files, d_files) do
+	file := io.open(d_file, "r")
+
+	if file then
+		str := file:read("*a")
+
+		for file in str:gmatch("%S+") do
+			lake.target(o_file):depends_on(file)
+		end	
+	end
+end
+
+lake.targets("apple", "banana")
+	:depends_on("orange")
+	:recipe(function(inputs, outputs)
+		for _,output in ipairs(outputs) do
+			file := io.open(output, "w")
+			file:close()
+		end
+	end)
+
+lake.target("orange")
+	:recipe(function()
+		io.open("orange", "w"):close()
+	end)

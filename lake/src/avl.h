@@ -76,7 +76,31 @@ struct AVL
 	 */
 	b8 has(T* data)
 	{
-		return false;
+		if (!root)
+			return false;
+
+		u64 data_key = GetKey(data);
+
+		Node* search_node = root;
+		for (;;)
+		{
+			u64 search_key = GetKey(search_node->data);
+
+			if (search_key == data_key)
+				return true;
+
+			if (search_key > data_key)
+			{
+				if (search_node->left)
+					search_node = search_node->left;
+				else
+					return false;
+			}
+			else if (search_node->right)
+				search_node = search_node->right;
+			else
+				return false;
+		}
 	}
 
 	/* -------------------------------------------------------------------------------------------- insert

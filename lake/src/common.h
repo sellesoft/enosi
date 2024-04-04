@@ -66,8 +66,8 @@ struct Mem
 	void  move(void* dst, void* src, u64 bytes);
 };
 
-extern Mem mem;
-
+extern Mem mem; 
+ 
 /* ----------------------------------------------
  *	Basic dynamic string type
  */
@@ -91,12 +91,12 @@ struct dstr
 
 	void append(const char* s);
 	void append(str s);
-	void append(s64 x);
+	void append(s64 x);   
 
 	template<typename... T>
 	void appendv(T... args)
 	{
-		(append(args), ...);
+		(append(args), ...); 
 	}
 };
 
@@ -105,9 +105,9 @@ struct dstr
  */
 
 void print(const char* s);
-void print(const u8* s);
+void print(const u8* s); 
 void print(str s);
-void print(u32 x);
+void print(u32 x); 
 void print(u64 x);
 void print(s32 x);
 void print(s64 x);
@@ -146,7 +146,6 @@ void warn(str path, u64 line, u64 column, T... args)
 	printv(path,":",line,":",column,":");
 	warn_nopath(args...);
 }
-
 
 #ifndef defer
 struct defer_dummy {};

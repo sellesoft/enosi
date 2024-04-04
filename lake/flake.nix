@@ -29,6 +29,7 @@
 						gnumake
 						gdb
 						bear
+						linuxKernel.packages.linux_zen.perf
 					];
 			};
 		});

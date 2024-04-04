@@ -82,7 +82,6 @@ Token Lexer::next_token()
 		one_char_token('^', Caret);
 		one_char_token('%', Percent);
 		one_char_token('+', Plus);
-		one_char_token('-', Minus);
 		one_char_token('`', Backtick);
 		one_char_token('$', Dollar);
 		one_char_token('/', Solidus);
@@ -162,6 +161,17 @@ Token Lexer::next_token()
 			advance(this);
 		} break;
 
+		case '-': {
+			t.kind = tok::Minus;
+			advance(this);
+			if (current(this) == '-')
+			{
+				// consume comment and return the following token
+				while (!at(this, '\n') && !eof(this)) advance(this);
+				return next_token();
+			}
+		} break;
+
 		default: {
 			if (isdigit(current(this)))
 			{
@@ -194,7 +204,7 @@ Token Lexer::next_token()
 			else
 			{
 				// must be either a keyword or identifier
-				if (!isalpha(current(this)))
+				if (!at_identifier_char(this))
 				{
 					error(lake->path, line, column, "invalid token: ", (char)current(this));
 					exit(1);
