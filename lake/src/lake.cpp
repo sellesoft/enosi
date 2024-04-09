@@ -57,11 +57,11 @@ b8 Lake::init(str p, s32 argc_, const char* argv_[])
   
 	DEBUG("Creating target pool and target lists.\n");
 
-	target_pool       = Pool<Target>::create();
-	build_queue       = TargetList::create();
-	product_list      = TargetList::create();
-	active_recipes    = TargetList::create();
-	target_group_pool = Pool<TargetGroup>::create();
+	target_single_pool = Pool<TargetSingle>::create();
+	target_group_pool  = Pool<TargetGroup>::create();
+	build_queue        = TargetList::create();
+	product_list       = TargetList::create();
+	active_recipes     = TargetList::create();
 
 	DEBUG("Loading lua state.\n");
 
@@ -108,7 +108,7 @@ b8 Lake::run()
 
 	// TODO(sushi) this needs to be baked into the executable
 	//             try using string.dump()
-	if (luaL_loadfile(L, "src/lake.lua") || lua_pcall(L, 0, 3, 0))
+	if (luaL_loadfile(L, "src/lake.lua") || lua_pcall(L, 0, 5, 0))
 	{
 		printf("%s\n", lua_tostring(L, -1));
 		lua_pop(L, 1);
@@ -117,6 +117,8 @@ b8 Lake::run()
 
 	INFO("Setting lua globals.\n");
 
+	lua_setglobal(L, lake_coroutine_resume);
+	lua_setglobal(L, lake_recipe_table);
 	lua_setglobal(L, lake_targets_table);
 	lua_setglobal(L, lake_internal_table); 
 	lua_setglobal(L, "lake");
@@ -158,7 +160,7 @@ b8 Lake::run()
 			{
 				Target* target = build_queue.front();
 
-				INFO("Checking target '", target->path, "' from build queue.\n"); 
+				INFO("Checking target '", target->name(), "' from build queue.\n"); 
 				SCOPED_INDENT;
 
 				if (target->needs_built())
@@ -177,14 +179,14 @@ b8 Lake::run()
 					{
 						if (dependent.unsatified_prereq_count == 1)
 						{
-							INFO("Dependent '", dependent.path, "' has no more unsatisfied prerequisites, adding it to the build queue.\n");
+							INFO("Dependent '", dependent.name(), "' has no more unsatisfied prerequisites, adding it to the build queue.\n");
 							dependent.build_node = build_queue.push_tail(&dependent);
 							dependent.unsatified_prereq_count = 0;
 						}
 						else
 						{
 							dependent.unsatified_prereq_count -= 1;
-							TRACE("Dependent '", dependent.path, "' has ", dependent.unsatified_prereq_count, (dependent.unsatified_prereq_count == 1? " unsatisfied prereq left.\n" : " unsatisfied prereqs left.\n"));
+							TRACE("Dependent '", dependent.name(), "' has ", dependent.unsatified_prereq_count, (dependent.unsatified_prereq_count == 1? " unsatisfied prereq left.\n" : " unsatisfied prereqs left.\n"));
 						}
 					}
 				}
@@ -203,7 +205,7 @@ b8 Lake::run()
 			switch (t.resume_recipe(L))
 			{
 				case Target::RecipeResult::Finished: {
-					TRACE("Target '", t.path, "'s recipe has finished.\n");
+					TRACE("Target '", t.name(), "'s recipe has finished.\n");
 					SCOPED_INDENT;
 
 					active_recipes.remove(t.active_recipe_node);
@@ -218,7 +220,7 @@ b8 Lake::run()
 						dependent.flags.set(Target::Flags::PrerequisiteJustBuilt);
 						if (dependent.unsatified_prereq_count == 1)
 						{
-							INFO("Dependent '", dependent.path, "' has no more unsatisfied prerequisites, adding it to the build queue.\n");
+							INFO("Dependent '", dependent.name(), "' has no more unsatisfied prerequisites, adding it to the build queue.\n");
 							dependent.build_node = build_queue.push_tail(&dependent);
 							dependent.unsatified_prereq_count = 0;
 						}
@@ -252,15 +254,15 @@ b8 Lake::run()
 extern "C"
 {
 
-/* ------------------------------------------------------------------------------------------------ lua__create_target
+/* ------------------------------------------------------------------------------------------------ lua__create_single_target
  */
-Target* lua__create_target(str path)
+Target* lua__create_single_target(str path)
 {
-	Target* t = lake.target_pool.add();
-	*t = Target::create(path);
+	TargetSingle* t = lake.target_single_pool.add();
+	t->init(path);
 	t->build_node = lake.build_queue.push_head(t);
 	t->product_node = lake.product_list.push_head(t);
-	INFO("Created target '", t->path, "'.\n");
+	INFO("Created target '", t->name(), "'.\n");
 	return t;
 }
 
@@ -268,7 +270,7 @@ Target* lua__create_target(str path)
  */
 void lua__make_dep(Target* target, Target* prereq)
 {
-	INFO("Making '", prereq->path, "' a prerequisite of target '", target->path, "\n");
+	INFO("Making '", prereq->name(), "' a prerequisite of target '", target->name(), "\n");
 	SCOPED_INDENT;
 
 	if (!target->prerequisites.has(prereq))
@@ -285,6 +287,7 @@ void lua__make_dep(Target* target, Target* prereq)
 		lake.product_list.destroy(prereq->product_node);
 		prereq->product_node = nullptr;
 	}
+
 	if (target->build_node)
 	{
 		TRACE("Target is in build queue, so it will be removed\n");
@@ -293,21 +296,59 @@ void lua__make_dep(Target* target, Target* prereq)
 	}
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__target_set_has_recipe
- *  This is primarily to avoid having to look into the lua state to check this.
+/* ------------------------------------------------------------------------------------------------ lua__target_set_recipe
+ *  Sets the target as having a recipe and returns an index into the recipe table that the calling
+ *  function is expected to use to set the recipe appropriately.
  */
-void lua__target_set_has_recipe(Target* target)
+s32 lua__target_set_recipe(Target* target)
 {
-	TRACE("Target '", target->path, "' is being marked as having a recipe.\n");
-	target->flags.set(Target::Flags::HasRecipe);
+	lua_State* L = lake.L;
+	lua_getglobal(L, lake_recipe_table);
+	defer { lua_pop(L, 1); };
+
+	if (target->flags.test(Target::Flags::HasRecipe))
+	{
+		WARN("Target '", target->name(), "'s recipe is being set again.\n");
+		return target->lua_ref;
+	}	
+	else
+	{
+		TRACE("Target '", target->name(), "' is being marked as having a recipe.\n");
+		target->flags.set(Target::Flags::HasRecipe);
+
+		// get the next slot to fill and then set 'next' to whatever that slot points to
+		lua_pushlstring(L, "next", 4);
+		lua_gettable(L, -2);
+
+		s32 next = lua_tonumber(L, -1);
+		lua_pop(L, 1);
+
+		lua_pushlstring(L, "next", 4);
+		lua_rawgeti(L, -2, next);
+
+		if (lua_isnil(L, -1))
+		{
+			// if we werent pointing at another slot 
+			// just set next to the next value
+			lua_pop(L, 1);
+			lua_pushnumber(L, next+1);
+		}
+		lua_settable(L, -2);
+
+		target->lua_ref = next;
+
+		return next;
+	}
+
 }
 
 /* ------------------------------------------------------------------------------------------------ lua__create_group
  */
-TargetGroup* lua__create_group()
+TargetGroup* lua__create_group_target()
 {
 	TargetGroup* group = lake.target_group_pool.add();
-	group->targets = TargetSet::create();
+	group->init();
+	INFO("Created group '", (void*)group, "'.\n");
 	return group;
 }
 
@@ -317,6 +358,7 @@ void lua__add_target_to_group(TargetGroup* group, Target* target)
 {
 	group->targets.insert(target);
 	target->group = group;
+	INFO("Added target '", target->name(), "' to group '", group->name(), "'.\n");
 }
 
 /* ------------------------------------------------------------------------------------------------ lua__target_already_in_group

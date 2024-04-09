@@ -37,6 +37,7 @@ struct Logger
 	u64 indentation;
 
 	template<typename... T>
+		requires (Printable<T> && ...)
 	void log(Verbosity v, T... args)
 	{
 		using enum Verbosity;

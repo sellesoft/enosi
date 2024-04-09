@@ -12,6 +12,13 @@ local lake_internal = {}
 -- internal target map
 local targets = {}
 
+local recipe_table =
+{
+	next = 1,
+}
+
+
+
 -- table for storing vars specified on the command line
 -- to support the '?=' syntax. 
 --   Ex. 
@@ -88,10 +95,10 @@ ffi.cdef [[
 	typedef struct Target Target;
 	typedef struct TargetGroup TargetGroup;
 
-	Target*      lua__create_target(str path);
+	Target*      lua__create_single_target(str path);
 	void         lua__make_dep(Target* target, Target* dependent);
-	void         lua__target_set_has_recipe(Target* target);
-	TargetGroup* lua__create_group();
+	s32          lua__target_set_recipe(Target* target);
+	TargetGroup* lua__create_group_target();
 	void         lua__add_target_to_group(TargetGroup* group, Target* target);
 	b8           lua__target_already_in_group(Target* group);
 
@@ -421,7 +428,8 @@ end
 -- * >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> -
 
 
-local Target = {
+local Target =
+{
 	path = "** target with no path! **",
 
 	-- handle to lake's internal representation
@@ -444,7 +452,7 @@ Target.new = function(path)
 	local o = {}
 	setmetatable(o, Target)
 	o.path = path
-	o.handle = C.lua__create_target(strtype(path, #path))
+	o.handle = C.lua__create_single_target(strtype(path, #path))
 	o.uses_targets = {}
 	o.depends_on_targets = {}
 	return o
@@ -521,7 +529,8 @@ Target.recipe = function(self, f)
 	if "function" ~= type(f) then
 		error("expected a lua function as the recipe of target '"..self.path.."', got: "..type(f), 2)
 	end
-	self.recipe_fn = co.create(f)
+	local recipeidx = C.lua__target_set_recipe(self.handle)
+	recipe_table[recipeidx] = co.create(f)
 	return self
 end
 -- |
@@ -657,9 +666,8 @@ end
 
 
 -- * ---------------------------------------------------------------------------------------------- lake_internal.resume_recipe
--- | Given a target's path this function will resume its recipe coroutine.
--- | If the recipe is finished true is returned.
-lake_internal.resume_recipe = function(path)
+-- | Given a single target, startsor resumes its recipe coroutine.
+lake_internal.resume_single_recipe = function(path)
 	local target = targets[path]
 
 	if not target then
@@ -686,4 +694,4 @@ end
 -- |
 -- * ----------------------------------------------------------------------------------------------
 
-return lake, lake_internal, targets
+return lake, lake_internal, targets, recipe_table, co.resume

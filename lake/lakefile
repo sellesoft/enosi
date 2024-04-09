@@ -49,10 +49,9 @@ end
 
 lakeexe
 	:uses(o_files)
-	:recipe(function(inputs, output)
-	
+	:recipe(function()
 		start := lake.get_highres_clock()
-		result := ` $(linker) $(inputs) $(linker_flags) -o $(output) `
+		result := ` $(linker) $(o_files) $(linker_flags) -o $(lakeexe) `
 		time_took := (lake.get_highres_clock() - start) / 1000000
 
 		if result.exit_status == 0 then
@@ -65,9 +64,9 @@ lakeexe
 for c_file, o_file in lake.zip(c_files, o_files) do
 	lake.target( o_file )
 		:uses(c_file)
-		:recipe(function(input, output)
+		:recipe(function()
 			start := lake.get_highres_clock()
-			result := ` $(compiler) -c $(input) $(compiler_flags) -o $(output) `
+			result := ` $(compiler) -c $(c_file) $(compiler_flags) -o $(o_file) `
 			time_took := (lake.get_highres_clock() - start) / 1000000
 
 			if result.exit_status == 0 then
@@ -78,6 +77,9 @@ for c_file, o_file in lake.zip(c_files, o_files) do
 		end)
 end
 
+-- create dependency files based on the make rule cpp generates for each cpp file.
+-- we reformat them to just be a newline separated list of files each cpp files depends on
+-- and the lake dependencies are created below this for loop
 for c_file, d_file in lake.zip(c_files, d_files) do
 	lake.target( d_file )
 		:uses( c_file )
@@ -109,6 +111,9 @@ for c_file, d_file in lake.zip(c_files, d_files) do
 		end)
 end
 
+-- load the dependency files that may or may not exist and 
+-- create dependencies between the o file they refer to 
+-- and the files in the file
 for o_file, d_file in lake.zip(o_files, d_files) do
 	file := io.open(d_file, "r")
 

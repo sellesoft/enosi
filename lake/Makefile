@@ -40,7 +40,8 @@ compiler_flags :=     \
 	-Isrc             \
 	-Wall             \
 	-Wno-switch       \
-	-Wno-\#warnings
+	-Wno-\#warnings   \
+	-fno-caret-diagnostics
 
 ifeq ($(build_mode),debug)
 	compiler_flags += -O0 -ggdb3

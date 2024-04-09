@@ -50,7 +50,7 @@ consteval u64 static_string_hash(const char* s)
 	return seed;
 }
 
-#define strl(x) { (u8*)u8##x, sizeof(u8##x)-1 }
+#define strl(x) str{ (u8*)u8##x, sizeof(u8##x)-1 }
 
 /* ----------------------------------------------
  *	Memory wrappers in case I ever want to alter
@@ -107,19 +107,30 @@ struct dstr
 void print(const char* s);
 void print(const u8* s); 
 void print(str s);
+void print(dstr s);
 void print(u32 x); 
 void print(u64 x);
 void print(s32 x);
 void print(s64 x);
 void print(char c);
+void print(void* p);
+
+// help templated stuff give better errors
+template<typename T>
+concept Printable = requires(T x) 
+{
+	print(x);
+};
 
 template<typename... T>
+	requires (Printable<T> && ...)
 void printv(T... args)
 {
 	(print(args), ...);
 }
 
 template<typename... T>
+	requires (Printable<T> && ...)
 void error_nopath(T...args)
 {
 	print("error: ");
@@ -128,6 +139,7 @@ void error_nopath(T...args)
 }
 
 template<typename... T>
+	requires (Printable<T> && ...)
 void error(str path, u64 line, u64 column, T... args)
 {
 	printv(path,":",line,":",column,": ");
@@ -135,12 +147,14 @@ void error(str path, u64 line, u64 column, T... args)
 }
 
 template<typename... T>
+	requires (Printable<T> && ...)
 void warn_nopath(T... args)
 {
 	printv("warning: ", args..., "\n");
 }
 
 template<typename... T>
+	requires (Printable<T> && ...)
 void warn(str path, u64 line, u64 column, T... args)
 {
 	printv(path,":",line,":",column,":");

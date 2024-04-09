@@ -13,6 +13,8 @@ struct lua_State;
 
 static const char* lake_internal_table = "__lake__internal";
 static const char* lake_targets_table = "__lake__targets";
+static const char* lake_recipe_table = "__lake__recipe_table";
+static const char* lake_coroutine_resume = "__lake__coroutine_resume";
 
 struct Lake
 {
@@ -36,9 +38,8 @@ struct Lake
 	TargetList active_recipes;
 	u32 active_recipe_count;
 
-	Pool<Target> target_pool;
-
-	Pool<TargetGroup> target_group_pool;
+	Pool<TargetSingle> target_single_pool;
+	Pool<TargetGroup>  target_group_pool;
 
 	u32 max_jobs;
 
