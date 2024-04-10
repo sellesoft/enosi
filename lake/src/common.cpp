@@ -26,6 +26,11 @@ u64 str::hash()
 	return seed;
 }
 
+b8 str::equal(const char* s)
+{
+	return 0 == strncmp((char*)this->s, s, len);
+}
+
 Mem mem;
 
 void* Mem::allocate(u64 n_bytes)

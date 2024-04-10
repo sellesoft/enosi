@@ -33,140 +33,126 @@ void Target::common_init()
 
 /* ------------------------------------------------------------------------------------------------ TargetSingle::name
  */
-str TargetSingle::name()
+str Target::name()
 {
-	return path;
-}
-
-/* ------------------------------------------------------------------------------------------------ TargetGroup::name
- */
-str TargetGroup::name()
-{
-	return strl("group");
+	switch (kind)
+	{
+		case Kind::Single: return single.path;
+		case Kind::Group: return strl("group");
+	}
 }
 
 /* ------------------------------------------------------------------------------------------------ TargetSingle::init
  */
-void TargetSingle::init(str path_)
+void Target::init_single(str path)
 {
 	common_init();
-	path = path_;
+	kind = Kind::Single;
+	single.path = path;
 	hash = path.hash();
 }
 
 /* ------------------------------------------------------------------------------------------------ TargetGroup::create
  */
-void TargetGroup::init()
+void Target::init_group()
 {
 	common_init();
+	kind = Kind::Group;
 	hash = 0;
-	targets = TargetSet::create();
+	group.targets = TargetSet::create();
 }
 
 /* ------------------------------------------------------------------------------------------------ TargetSingle::exists
  */
-b8 TargetSingle::exists()
+b8 Target::exists()
 {
-	return ::path_exists(path);
-}
-
-/* ------------------------------------------------------------------------------------------------ TargetGroup::exists
- */
-b8 TargetGroup::exists()
-{
-	for (auto& target : targets)
+	switch (kind)
 	{
-		if (!target.exists())
-			return false;
+		case Kind::Single: return ::path_exists(single.path);
+		
+		case Kind::Group:
+			for (auto& target : group.targets)
+			{
+				if (!target.exists())
+					return false;
+			}
+			return true;
 	}
-
-	return true;
 }
 
 /* ------------------------------------------------------------------------------------------------ TargetSingle::modtime
  */
-s64 TargetSingle::modtime()
+s64 Target::modtime()
 {
-	// TODO(sushi) what if our path is not null-terminated ?
-	return ::modtime((char*)path.s);
-}
-
-
-/* ------------------------------------------------------------------------------------------------ TargetGroup::modtime
- *  Returns the oldest modtime. 
- *  TODO(sushi) I'm really not sure if this is correct yet, and I'm not sure if it will ever be 
- *  			used because i dont think anything will ever list the group as a prereq directly,
- *  			only targets that are in it.
- */
-s64 TargetGroup::modtime()
-{
-	WARN("TargetGroup::modtime() was called but I am unsure if its behavior is correct so please check!!");
-	
-	s64 min = 9223372036854775807;
-	for (auto& target : targets)
+	switch (kind)
 	{
-		s64 t = target.modtime();
-		if (t < min) 
-			min = t;
-	}
+		// TODO(sushi) what if our path is not null-terminated ?
+		case Kind::Single: return ::modtime((char*)single.path.s);
 
-	return min;
+		case Kind::Group: {
+			s64 min = 9223372036854775807;
+			for (auto& target : group.targets)
+			{
+				s64 t = target.modtime();
+				if (t < min) 
+					min = t;
+			}
+			return min;
+		}break;
+	}
 }
+
 
 /* ------------------------------------------------------------------------------------------------ TargetSingle::is_newer_than
  */
-b8 TargetSingle::is_newer_than(Target* t)
-{
-	return modtime() > t->modtime();
-}
-
-/* ------------------------------------------------------------------------------------------------ TargetGroup::is_newer_than
- */
-b8 TargetGroup::is_newer_than(Target* t)
+b8 Target::is_newer_than(Target* t)
 {
 	return modtime() > t->modtime();
 }
 
 /* ------------------------------------------------------------------------------------------------ TargetSingle::needs_built
  */
-b8 TargetSingle::needs_built()
+b8 Target::needs_built()
 {
-	if (flags.test(Flags::PrerequisiteJustBuilt))
+	switch (kind)
 	{
-		TRACE("Target '", path, "' needs built because the 'PrerequisiteJustBuilt' flag was set.\n");
-		return true;
+		case Kind::Group:
+		case Kind::Single: {
+			if (flags.test(Flags::PrerequisiteJustBuilt))
+			{
+				TRACE("Target '", single.path, "' needs built because the 'PrerequisiteJustBuilt' flag was set.\n");
+				return true;
+			}
+
+			if (!exists())
+			{
+				TRACE("Target '", single.path, "' needs built because it does not exist on disk.\n");
+				return true;
+			}
+
+		
+			SCOPED_INDENT;
+			for (Target& prereq : prerequisites)
+			{
+				if (prereq.is_newer_than(this))
+				{
+					TRACE("Target '", single.path, "' needs built because its prerequisite, '", prereq.name(), "', is newer.\n");
+					return true;
+				}
+				TRACE("Prereq '", prereq.name(), "' is older than the target.\n");
+			}
+
+		} break;
+
+	//	case Kind::Group: 
+	//		for (auto& target : group.targets)
+	//		{
+	//			if (target.needs_built())
+	//				return true;
+	//		}
+	//		break;
 	}
 
-	if (!exists())
-	{
-		TRACE("Target '", path, "' needs built because it does not exist on disk.\n");
-		return true;
-	}
-
-	SCOPED_INDENT;
-	for (Target& prereq : prerequisites)
-	{
-		if (prereq.is_newer_than(this))
-		{
-			TRACE("Target '", path, "' needs built because its prerequisite, '", prereq.name(), "', is newer.\n");
-			return true;
-		}
-		TRACE("Prereq '", prereq.name(), "' is older than the target.\n");
-	}
-
-	return false;
-}
-
-
-/* ------------------------------------------------------------------------------------------------ TargetGroup::needs_built
- */
-b8 TargetGroup::needs_built()
-{
-	for (auto& target : targets)
-	{
-		if (target.needs_built())
-			return true;
-	}
 	return false;
 }
 
@@ -190,10 +176,10 @@ Target::RecipeResult Target::resume_recipe(lua_State* L)
 	lua_getglobal(L, lake_recipe_table);
 	defer { lua_pop(L, 1); };
 
-	// get the recipe function
-	lua_rawgeti(L, -1, lua_ref);
-
 	lua_getglobal(L, lake_coroutine_resume);
+
+	// get the recipe function
+	lua_rawgeti(L, -2, lua_ref);
 
 	// Resume the recipe by calling co.resume(f).
 	// We only ever expect 2 returns:
@@ -204,7 +190,7 @@ Target::RecipeResult Target::resume_recipe(lua_State* L)
 	// that the recipe is not yet finished, but we dont check for this explicitly.
 	if (lua_pcall(L, 1, 2, 0))
 	{
-		print(lua_tostring(L, -1));
+		printv(lua_tostring(L, -1), "\n");
 		return RecipeResult::Error;
 	}
 
@@ -213,9 +199,11 @@ Target::RecipeResult Target::resume_recipe(lua_State* L)
 	if (!coroutine_success)
 	{
 		// the second arg is the message given by whatever failure occured
-		print(lua_tostring(L, -1));
+		printv(lua_tostring(L, -1), "\n");
 		return RecipeResult::Error;
 	}
+
+	defer { lua_pop(L, 2); };
 
 	if (lua_isnil(L, -1))
 		return RecipeResult::Finished;

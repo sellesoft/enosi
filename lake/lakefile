@@ -55,7 +55,7 @@ lakeexe
 		time_took := (lake.get_highres_clock() - start) / 1000000
 
 		if result.exit_status == 0 then
-			print_success(output, nil, time_took)
+			print_success(lakeexe.path, nil, time_took)
 		end
 
 		io.write(result.stdout)
@@ -70,7 +70,7 @@ for c_file, o_file in lake.zip(c_files, o_files) do
 			time_took := (lake.get_highres_clock() - start) / 1000000
 
 			if result.exit_status == 0 then
-				print_success(input[1], output, time_took)
+				print_success(c_file, o_file, time_took)
 			end
 
 			io.write(result.stdout)
@@ -83,14 +83,14 @@ end
 for c_file, d_file in lake.zip(c_files, d_files) do
 	lake.target( d_file )
 		:uses( c_file )
-		:recipe(function(input, output)
-			result := ` cpp $(input) $(compiler_flags) -MM -MG -MT $(lake.replace(output, "(.-)%.d", "%1.o")) `
+		:recipe(function()
+			result := ` cpp $(c_file) $(compiler_flags) -MM -MG -MT $(lake.replace(d_file, "(.-)%.d", "%1.o")) `
 
 			if result.exit_status ~= 0 then
-				error("failed to create dep file '"..output..":\n"..result.stdout)
+				error("failed to create dep file '"..d_file.."':\n"..result.stdout)
 			end
 
-			result = lake.replace(result.stderr:get(), "\\\n", "")
+			result = lake.replace(result.stderr, "\\\n", "")
 			
 			out := ""
 
@@ -100,10 +100,10 @@ for c_file, d_file in lake.zip(c_files, d_files) do
 				end
 			end
 
-			file := io.open(output, "w")
+			file := io.open(d_file, "w")
 
 			if not file then
-				error("failed to open dep file for writing: '"..output.."'")
+				error("failed to open dep file for writing: '"..d_file.."'")
 			end
 			
 			file:write(out)
@@ -117,6 +117,8 @@ end
 for o_file, d_file in lake.zip(o_files, d_files) do
 	file := io.open(d_file, "r")
 
+	lake.target(o_file):depends_on(d_file)
+
 	if file then
 		str := file:read("*a")
 
@@ -126,16 +128,21 @@ for o_file, d_file in lake.zip(o_files, d_files) do
 	end
 end
 
-lake.targets("apple", "banana")
-	:depends_on("orange")
-	:recipe(function(inputs, outputs)
-		for _,output in ipairs(outputs) do
-			file := io.open(output, "w")
-			file:close()
+lake.targets($[
+		src/generated/token.kwmap.h
+		src/generated/token.enum.h
+		src/generated/token.strings.h
+		])
+	:depends_on "src/tokens.lua"
+	:recipe(function()
+		start := lake.get_highres_clock()
+		result := ` luajit src/tokens.lua `
+		time_took := (lake.get_highres_clock() - start) / 1000000
+
+		if result.exit_status ~= 0 then
+			error("failed to generate token files")
 		end
+
+		print_success("token.*.h", nil, time_took)
 	end)
 
-lake.target("orange")
-	:recipe(function()
-		io.open("orange", "w"):close()
-	end)

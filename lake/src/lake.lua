@@ -17,7 +17,9 @@ local recipe_table =
 	next = 1,
 }
 
-
+-- used for referencing things defined later in this file
+-- as i dont really know of any other good way to do it 
+local forward = {}
 
 -- table for storing vars specified on the command line
 -- to support the '?=' syntax. 
@@ -93,14 +95,14 @@ ffi.cdef [[
 	s64 modtime(const char* path);
 
 	typedef struct Target Target;
-	typedef struct TargetGroup TargetGroup;
 
-	Target*      lua__create_single_target(str path);
-	void         lua__make_dep(Target* target, Target* dependent);
-	s32          lua__target_set_recipe(Target* target);
-	TargetGroup* lua__create_group_target();
-	void         lua__add_target_to_group(TargetGroup* group, Target* target);
-	b8           lua__target_already_in_group(Target* group);
+	Target* lua__create_single_target(str path);
+	void    lua__make_dep(Target* target, Target* dependent);
+	s32     lua__target_set_recipe(Target* target);
+	Target* lua__create_group_target();
+	void    lua__add_target_to_group(Target* group, Target* target);
+	b8      lua__target_already_in_group(Target* group);
+	void    lua__stack_dump();
 
 	typedef struct CLIargs
 	{
@@ -130,6 +132,7 @@ ffi.cdef [[
 ]]
 local C = ffi.C
 local strtype = ffi.typeof("str")
+local ccptype = ffi.typeof("const char*")
 
 
 -- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
@@ -243,11 +246,55 @@ end
 -- | 
 -- |   local result = lake.cmd("gcc", "-c", "main.c", "-o", "main.c")
 -- | 
--- | Arrays are flattened recursively so the user does not have to worry about doing this themself.
+-- | Strings and targets may both be passed. If a target is passed it is resolved to its path. If 
+-- | the target is a group an error is thrown for now as I am not sure yet how that should be 
+-- | handled. Tables of both of these things may be passed and those tables may also contain 
+-- | tables of all of these things recursively. It will be resolved into a flat array of strings
+-- | internally.
+-- |
+-- | TODO(sushi) this has been made very ugly in a fit of trying to get stuff to work again
+-- |             please clean it up soon
 lake.cmd = function(...)
-	local args = flatten_table{...}
+	local args = {}
 
-	local argsarr = ffi.new("const char*["..(#args+1).."]")
+	local argcount = 0
+	function recur(x)
+		for _,v in ipairs(x) do
+			local vtype = type(v)
+
+			if "string" == vtype then
+				table.insert(args, v)
+			elseif "table" == vtype then
+				if forward.TargetGroup == getmetatable(v) then
+					return false, "flattened argument "..argcount.." given to lake.cmd resolves to a target group, which is not currently allowed. You must manually resolve this to a list of target paths."
+				end
+
+				if forward.Target == getmetatable(v) then
+					table.insert(args, v.path)
+				else
+					local success, message = recur(v)
+					if not success then
+						return false, message
+					end
+					goto skip_inc
+				end
+			else
+				return false, "flattened argument "..argcount.." given to lake.cmd was not resolvable to a string. Its value is "..tostring(v)
+			end
+			argcount = argcount + 1
+			::skip_inc::
+		end
+
+		return true
+	end
+
+	local success, message = recur{...}
+
+	if not success then
+		error(message, 2)
+	end
+
+	local argsarr = ffi.new("const char*["..(argcount+1).."]")
 
 	for i,arg in ipairs(args) do
 		if "string" ~= type(arg) then
@@ -260,14 +307,14 @@ lake.cmd = function(...)
 			error(errstr)
 		end
 
-		argsarr[i-1] = ffi.new("const char*", args[i])
+		argsarr[i-1] = ccptype(args[i])
 	end
 
-	--local s = ""
-	--for _,arg in ipairs(args) do
-	--	s = s..arg.." "
-	--end
-	--print(s)
+--	local s = ""
+--	for _,arg in ipairs(args) do
+--		s = s..arg.." "
+--	end
+--	print(s)
 
 	local handle = C.process_spawn(argsarr)
 
@@ -316,8 +363,8 @@ lake.cmd = function(...)
 			c_callback:free()
 			return {
 				exit_status = exit_status,
-				stdout = out_buf,
-				stderr = err_buf,
+				stdout = out_buf:get(),
+				stderr = err_buf:get(),
 			}
 		else
 			co.yield(false)
@@ -445,6 +492,7 @@ local Target =
 	depends_on_targets = nil,
 }
 Target.__index = Target
+forward.Target = Target
 
 -- * ---------------------------------------------------------------------------------------------- Target.new
 -- | Create a new Target.
@@ -560,6 +608,7 @@ local TargetGroup =
 	handle = nil,
 }
 TargetGroup.__index = TargetGroup
+forward.TargetGroup = TargetGroup
 
 -- * ---------------------------------------------------------------------------------------------- TargetGroup.new
 -- | Create a new TargetGroup.
@@ -567,7 +616,7 @@ TargetGroup.new = function()
 	local o = {}
 	setmetatable(o, TargetGroup)
 	o.targets = {}
-	o.handle = C.lua__create_group()
+	o.handle = C.lua__create_group_target()
 	return o
 end
 -- |
@@ -595,8 +644,20 @@ end
 -- |             it came from that function, not here, which could be confusing, so fix that 
 -- |             eventually.
 TargetGroup.depends_on = function(self, x)
-	for _,target in ipairs(self.targets) do
-		target:depends_on(x)
+	local x_type = type(x)
+	if "string" == x_type then
+		C.lua__make_dep(self.handle, lake.target(x).handle)
+	elseif "table" == x_type then
+		local flat = flatten_table(x)
+		for i,v in ipairs(flat) do
+			local v_type = type(v)
+			if "string" ~= v_type then
+				error("Element "..i.." of flattened table given to TargetGroup.depends_on is not a string, rather a "..v_type.." whose value is "..tostring(v)..".", 2)
+			end
+			C.lua__make_dep(self.handle, lake.target(v).handle)
+		end
+	else
+		error("TargetGroup.depends_on can take either a string or a table of strings, got: "..x_type..".", 2)
 	end
 	return self
 end
@@ -606,9 +667,8 @@ end
 -- * ---------------------------------------------------------------------------------------------- TargetGroup:recipe
 -- | Adds the same recipe to all targets.
 TargetGroup.recipe = function(self, f)
-	for _,target in ipairs(self.targets) do
-		target:recipe(f)
-	end
+	local recipeidx = C.lua__target_set_recipe(self.handle)
+	recipe_table[recipeidx] = co.create(f)
 	return self
 end
 -- |

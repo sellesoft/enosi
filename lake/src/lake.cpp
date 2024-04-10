@@ -28,7 +28,7 @@ Logger log;
 b8 Lake::init(str p, s32 argc_, const char* argv_[])
 {
 
-	log.verbosity = Logger::Verbosity::Trace;
+	log.verbosity = Logger::Verbosity::Info;
 	log.indentation = 0;
 
 	INFO("Initializing Lake.\n");
@@ -57,11 +57,10 @@ b8 Lake::init(str p, s32 argc_, const char* argv_[])
   
 	DEBUG("Creating target pool and target lists.\n");
 
-	target_single_pool = Pool<TargetSingle>::create();
-	target_group_pool  = Pool<TargetGroup>::create();
-	build_queue        = TargetList::create();
-	product_list       = TargetList::create();
-	active_recipes     = TargetList::create();
+	target_pool    = Pool<Target>::create();
+	build_queue    = TargetList::create();
+	product_list   = TargetList::create();
+	active_recipes = TargetList::create();
 
 	DEBUG("Loading lua state.\n");
 
@@ -210,23 +209,41 @@ b8 Lake::run()
 
 					active_recipes.remove(t.active_recipe_node);
 
-					// here we assume the target was built by the recipe
-					// and mark its dependents as having a prerequisite that
-					// was just built.
-					// we could probably have an option later that does 
-					// stricter checking.
-					for (auto& dependent : t.dependents)
+					auto update_dependents = [this](Target& t)
 					{
-						dependent.flags.set(Target::Flags::PrerequisiteJustBuilt);
-						if (dependent.unsatified_prereq_count == 1)
+						// here we assume the target was built by the recipe
+						// and mark its dependents as having a prerequisite that
+						// was just built.
+						// we could probably have an option later that does 
+						// stricter checking.
+						for (auto& dependent : t.dependents)
 						{
-							INFO("Dependent '", dependent.name(), "' has no more unsatisfied prerequisites, adding it to the build queue.\n");
-							dependent.build_node = build_queue.push_tail(&dependent);
-							dependent.unsatified_prereq_count = 0;
+							dependent.flags.set(Target::Flags::PrerequisiteJustBuilt);
+							if (dependent.unsatified_prereq_count == 1)
+							{
+								INFO("Dependent '", dependent.name(), "' has no more unsatisfied prerequisites, adding it to the build queue.\n");
+								dependent.build_node = build_queue.push_tail(&dependent);
+								dependent.unsatified_prereq_count = 0;
+							}
+							else
+								dependent.unsatified_prereq_count -= 1;
 						}
-						else
-							dependent.unsatified_prereq_count -= 1;
+					};
+
+					switch (t.kind)
+					{
+						case Target::Kind::Group:
+							for (auto& group_target : t.group.targets)
+							{
+								update_dependents(group_target);
+							}
+							break;
+						case Target::Kind::Single:
+							update_dependents(t);
 					}
+
+
+
 					active_recipe_count -= 1;
 				} break;
 
@@ -248,6 +265,30 @@ b8 Lake::run()
 	return true;
 }
 
+#if LAKE_DEBUG || 1
+
+void assert_group(Target* target)
+{
+	if (target->kind != Target::Kind::Group)
+	{
+		error_nopath("Target '", (void*)target, "' failed group assertion\n");
+		exit(1);
+	}
+}
+
+void assert_single(Target* target)
+{
+	if (target->kind != Target::Kind::Single)
+	{
+		error_nopath("Target '", (void*)target, "' failed single assertion\n");
+	}
+}
+
+#else
+void assert_group(Target*){}
+void assert_single(Target*){}
+#endif
+
 /* ================================================================================================ Lua API
  *  Implementation of the api used in the lua lake module.
  */
@@ -258,8 +299,8 @@ extern "C"
  */
 Target* lua__create_single_target(str path)
 {
-	TargetSingle* t = lake.target_single_pool.add();
-	t->init(path);
+	Target* t = lake.target_pool.add();
+	t->init_single(path);
 	t->build_node = lake.build_queue.push_head(t);
 	t->product_node = lake.product_list.push_head(t);
 	INFO("Created target '", t->name(), "'.\n");
@@ -333,10 +374,10 @@ s32 lua__target_set_recipe(Target* target)
 			lua_pop(L, 1);
 			lua_pushnumber(L, next+1);
 		}
-		lua_settable(L, -2);
+		lua_settable(L, -3);
 
 		target->lua_ref = next;
-
+ 
 		return next;
 	}
 
@@ -344,28 +385,36 @@ s32 lua__target_set_recipe(Target* target)
 
 /* ------------------------------------------------------------------------------------------------ lua__create_group
  */
-TargetGroup* lua__create_group_target()
+Target* lua__create_group_target()
 {
-	TargetGroup* group = lake.target_group_pool.add();
-	group->init();
+	Target* group = lake.target_pool.add();
+	group->init_group();
+	group->build_node = lake.build_queue.push_head(group);
 	INFO("Created group '", (void*)group, "'.\n");
 	return group;
 }
 
 /* ------------------------------------------------------------------------------------------------ lua__add_target_to_group
  */
-void lua__add_target_to_group(TargetGroup* group, Target* target)
+void lua__add_target_to_group(Target* group, Target* target)
 {
-	group->targets.insert(target);
-	target->group = group;
+	assert_group(group);
+	assert_single(target);
+
+	group->group.targets.insert(target);
+	target->single.group = group;
 	INFO("Added target '", target->name(), "' to group '", group->name(), "'.\n");
+
+	if (target->build_node)
+		lake.build_queue.remove(target->build_node);
 }
 
 /* ------------------------------------------------------------------------------------------------ lua__target_already_in_group
  */
 b8 lua__target_already_in_group(Target* target)
 {
-	return target->group != nullptr;
+	assert_single(target);
+	return target->single.group != nullptr;
 }
 
 /* ------------------------------------------------------------------------------------------------ lua__get_cliargs
@@ -373,6 +422,26 @@ b8 lua__target_already_in_group(Target* target)
 CLIargs lua__get_cliargs()
 {
 	return {lake.argc, lake.argv};
+}
+
+/* ------------------------------------------------------------------------------------------------ lua__finalize_group
+ *  Finalizes the given group. We assume no more targets will be added to it and hash together the
+ *  hashes of each target in the group to form the hash of the group. 
+ *
+ *  TODO(sushi) implement this. I don't know if it is actually useful, its only usecase I can
+ *              think of is referring to the same group by calling 'lake.targets' with the 
+ *              same paths, but I don't intend on ever doing that myself.
+ */
+void lua__finalize_group(Target* target)
+{
+	assert_group(target);
+}
+
+/* ------------------------------------------------------------------------------------------------ lua__stack_dump
+ */
+void lua__stack_dump()
+{
+	stack_dump(lake.L);
 }
 
 }

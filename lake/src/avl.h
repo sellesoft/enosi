@@ -36,14 +36,14 @@ struct AVL
  	*/
 	struct Node
 	{
-		s8 balance_factor; // -1, 0, or 1
+		s8 balance_factor = 0; // -1, 0, or 1
 		// TODO(sushi) we may be able to do something neat where we instead store offsets from the nodes position in the 
 		//             pool with s32s or even like s16 to save some space so experiment later
 		//             this would require the pools chunks being connected via doubly connected list
-		Node* left;
-		Node* right;
-		Node* parent;
-		T* data;
+		Node* left = nullptr;
+		Node* right = nullptr;
+		Node* parent = nullptr;
+		T* data = nullptr;
 	};
 	
 	Node* root;
@@ -579,7 +579,7 @@ private:
 	Node* rotate_left_right(Node* A, Node* C)
 	{
 		Node* B = C->right;
-		Node* b = C->left;
+		Node* b = B->left;
 		C->right = b;
 		if (b) 
 			b->parent = C;

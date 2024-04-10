@@ -38,8 +38,7 @@ struct Lake
 	TargetList active_recipes;
 	u32 active_recipe_count;
 
-	Pool<TargetSingle> target_single_pool;
-	Pool<TargetGroup>  target_group_pool;
+	Pool<Target> target_pool;
 
 	u32 max_jobs;
 

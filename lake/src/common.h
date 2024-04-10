@@ -28,6 +28,8 @@ struct str
 
 	b8 isempty();
 	u64 hash();
+
+	b8 equal(const char* s);
 };
 
 consteval s64 consteval_strlen(const char* s) {

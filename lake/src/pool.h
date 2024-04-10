@@ -12,8 +12,6 @@
 #include "common.h"
 #include "stddef.h"
 
-#include "new"
-
 template
 <
 	typename T, // element type
@@ -81,7 +79,7 @@ struct Pool
 		free_slot = slot->next_free_slot;
 
 		slot->used = true;
-		new (&slot->element) T;
+		slot->element = {};
 		return &slot->element;
 	}
 
