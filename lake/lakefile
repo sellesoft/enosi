@@ -23,7 +23,11 @@ compiler_flags := $[
 ]
 
 if mode == "debug" then
-	compiler_flags ..= $[ -O0 -ggdb3 ]
+	compiler_flags ..= $[ 
+		-O0 
+		-ggdb3 
+		-DLAKE_DEBUG=1
+	]
 else
 	compiler_flags ..= "-O2"
 end
@@ -128,21 +132,47 @@ for o_file, d_file in lake.zip(o_files, d_files) do
 	end
 end
 
-lake.targets($[
-		src/generated/token.kwmap.h
-		src/generated/token.enum.h
-		src/generated/token.strings.h
-		])
-	:depends_on "src/tokens.lua"
+generated_target := function(source, output)
+	target := nil
+
+	if type(output) == "table" then
+		target = lake.targets(output)
+	else
+		target = lake.target(output)
+	end
+
+	target:depends_on(source)
+	 	:recipe(function()
+			start := lake.get_highres_clock()
+			result := ` luajit $(source) `
+			time_took := (lake.get_highres_clock() - start) / 1000000
+
+			if result.exit_status == 0 then
+				print_success(source, nil, time_took)
+			end
+
+			io.write(result.stdout, "\n", result.stderr)
+		end)
+end
+
+generated_target("src/cliargs.lua", "src/generated/cliargparser.h")
+
+generated_target("src/tokens.lua", $[
+	src/generated/token.kwmap.h 
+	src/generated/token.enum.h 
+	src/generated/token.strings.h])
+
+
+lake.target("src/generated/lakeluacompiled.h")
+	:depends_on "src/lake.lua"
 	:recipe(function()
 		start := lake.get_highres_clock()
-		result := ` luajit src/tokens.lua `
+		result := ` luajit -b src/lake.lua src/generated/lakeluacompiled.h `
 		time_took := (lake.get_highres_clock() - start) / 1000000
 
-		if result.exit_status ~= 0 then
-			error("failed to generate token files")
+		if result.exit_status == 0 then
+			print_success("src/generated/lakeluacompiled.h", nil, time_took)
 		end
 
-		print_success("token.*.h", nil, time_took)
+		io.write(result.stdout, "\n", result.stderr)
 	end)
-

@@ -16,6 +16,8 @@ static const char* lake_targets_table = "__lake__targets";
 static const char* lake_recipe_table = "__lake__recipe_table";
 static const char* lake_coroutine_resume = "__lake__coroutine_resume";
 
+typedef SList<const char*> LuaCLIArgList;
+
 struct Lake
 {
 	str path;
@@ -40,10 +42,15 @@ struct Lake
 
 	Pool<Target> target_pool;
 
-	u32 max_jobs;
+	// cli args that are handled within lake.lua
+	LuaCLIArgList lua_cli_args; 
+	LuaCLIArgList::Node* lua_cli_arg_iterator;
 
 	s32          argc;
 	const char** argv;
+
+	u32 max_jobs; // --max-jobs <n> or -j <n>
+	b8 print_transformed; // --print-transformed
 
 	b8 init(str path, s32 argc, const char* argv[]);
 	b8 process_argv();

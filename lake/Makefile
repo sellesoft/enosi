@@ -44,7 +44,7 @@ compiler_flags :=     \
 	-fno-caret-diagnostics
 
 ifeq ($(build_mode),debug)
-	compiler_flags += -O0 -ggdb3
+	compiler_flags += -O0 -ggdb3 -DLAKE_DEBUG=1
 else ifeq ($(build_mode),release)
 	compiler_flags += -O2
 endif
@@ -82,6 +82,14 @@ src/generated/token.enum.h    \
 src/generated/token.strings.h \
 src/generated/token.kwmap.h &: src/tokens.lua
 	${v}luajit $<
+	$(call print,$<,$@)
+
+src/generated/cliargparser.h: src/cliargs.lua
+	${v}luajit $<
+	$(call print,$<,$@)
+
+src/generated/lakeluacompiled.h: src/lake.lua
+	${v}luajit -b $< $@
 	$(call print,$<,$@)
 
 # include the dependency files if they have 

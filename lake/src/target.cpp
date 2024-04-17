@@ -210,3 +210,34 @@ Target::RecipeResult Target::resume_recipe(lua_State* L)
 	else
 		return RecipeResult::InProgress;
 }
+
+/* ------------------------------------------------------------------------------------------------ Target::update_dependents
+ */
+void Target::update_dependents(TargetList& build_queue, b8 mark_just_built)
+{
+	switch (kind)
+	{
+		case Kind::Single: {
+			for (auto& dependent : dependents)
+			{
+				if (mark_just_built)
+					dependent.flags.set(Flags::PrerequisiteJustBuilt);
+				if (dependent.unsatified_prereq_count == 1)
+				{
+					INFO("Dependent '", dependent.name(), "' has no more unsatisfied prerequisites, adding it to the build queue.\n");
+					dependent.build_node = build_queue.push_tail(&dependent);
+					dependent.unsatified_prereq_count = 0;
+				}
+				else if (dependent.unsatified_prereq_count != 0)
+					dependent.unsatified_prereq_count -= 1;
+			}
+		} break;
+
+		case Kind::Group: {
+			for (auto& target : group.targets)
+			{
+				target.update_dependents(build_queue, mark_just_built);
+			}
+		} break;
+	}
+}

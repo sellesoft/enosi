@@ -104,13 +104,7 @@ ffi.cdef [[
 	b8      lua__target_already_in_group(Target* group);
 	void    lua__stack_dump();
 
-	typedef struct CLIargs
-	{
-		s32 argc;
-		const char** argv;
-	} CLIargs;
-
-	CLIargs lua__get_cliargs();
+	const char* lua__next_cliarg();
 
 	void* process_spawn(const char** args);
 
@@ -144,20 +138,26 @@ local ccptype = ffi.typeof("const char*")
 
 -- * : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : command line arguments
 --   Process command line arguments.
-local args = C.lua__get_cliargs()
+while true do
+	local arg = C.lua__next_cliarg()
 
-for i=1,args.argc-1 do
-	local arg = ffi.string(args.argv[i])
+	if arg == nil then
+		break
+	end
+
+	arg = ffi.string(arg)
 
 	local var, value = arg:match("(%w+)=(%w+)")
 
 	if not var then
-		error("arg "..i.." could not be resolved: "..arg)
+		-- this is assumed to be a target the user wants to make specifically.
+		-- currently i do not support this because i dont have a usecase for it yet 
+		-- and im not sure how i would integrate that functionality wih how the 
+		-- build system currently works, so we'll throw an error about it for now
+		error("arg '"..arg.."' is not a variable assignment nor a known option. It is assumed that this is a specific target you want to be made (eg. the same behavior as make), but this is not currently supported!")
 	end
 
 	lake.clivars[var] = value
-
-	print(var, " ", value)
 end
 
 

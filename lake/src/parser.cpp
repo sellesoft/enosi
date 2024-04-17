@@ -716,10 +716,12 @@ void Parser::recfield()
 	}
 	else
 		yindex();
-	next_token();
 
 	if(!at(Equal))
 		error_here("expected '=' for table key");
+	next_token();
+
+	expr();
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -754,10 +756,10 @@ void Parser::tableconstructor()
 				expr();
 				break;
 		} 
-		next_token();
 
 		if (!at(Comma) && !at(Semicolon))
 			break;
+		next_token();
 	}
 
 	if (!at(BraceRight))
@@ -1025,6 +1027,7 @@ void Parser::next_token(b8 push_on_stack, b8 push_whitespace)
 	{
 		has_lookahead = false;
 		curt = lookahead_token;
+		return;
 	}
 
 	if (push_on_stack)
@@ -1054,7 +1057,7 @@ void Parser::lookahead(b8 push_on_stack, b8 push_whitespace)
 	for (;;)
 	{
 		lookahead_token = lex->next_token();
-		if (at(Whitespace))
+		if (lookahead_at(Whitespace))
 		{
 			if (push_whitespace)
 				stack.push(lookahead_token);

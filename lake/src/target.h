@@ -150,6 +150,10 @@ struct Target
 	};
 
 	RecipeResult resume_recipe(lua_State* L);
+
+	// when this target is satisfied, handle updating its dependents 
+	// and adding them to the build queue
+	void update_dependents(TargetList& build_queue, b8 mark_just_built);
 };
 
 #endif

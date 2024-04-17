@@ -3,6 +3,7 @@
 
 #include "stdlib.h"
 #include "assert.h"
+#include "ctype.h"
 
 #include "lexer.h"
 #include "parser.h"
@@ -12,6 +13,9 @@
 #include "logger.h"
 
 #include "luahelpers.h"
+
+#include "generated/cliargparser.h"
+#include "generated/lakeluacompiled.h"
 
 extern "C"
 {
@@ -27,14 +31,19 @@ Logger log;
  */
 b8 Lake::init(str p, s32 argc_, const char* argv_[])
 {
-
-	log.verbosity = Logger::Verbosity::Info;
+#if LAKE_DEBUG
+	log.verbosity = Logger::Verbosity::Debug;
+#else
+	log.verbosity = Logger::Verbosity::Warn;
+#endif
 	log.indentation = 0;
 
 	INFO("Initializing Lake.\n");
 	SCOPED_INDENT;
 
 	path = p;
+
+	max_jobs = 1;
 
 	DEBUG("Allocating and initializing parser.\n");
 
@@ -44,17 +53,12 @@ b8 Lake::init(str p, s32 argc_, const char* argv_[])
 	argc = argc_;
 	argv = argv_;
 
-	// TODO(sushi) get from platform and make adjustable by cli
-	//             this should probably just default to 1
-	//             and the cli can manually set it via -j
-	//             and the lakefile can manually set it 
-	//             or request lake to set it to an amount
-	//             appropriate for the number of cores we 
-	//             have.
-	//             however, the cli setting should always
-	//             override whatever the lakefile does.
-	max_jobs = 4;
-  
+	lua_cli_args = LuaCLIArgList::create();
+
+	process_argv();
+
+	lua_cli_arg_iterator = lua_cli_args.head;
+
 	DEBUG("Creating target pool and target lists.\n");
 
 	target_pool    = Pool<Target>::create();
@@ -75,23 +79,102 @@ b8 Lake::init(str p, s32 argc_, const char* argv_[])
 b8 Lake::process_argv()
 {
 	INFO("Processing cli args.\n");
+	SCOPED_INDENT;
 
-	for (u32 i = 0; i < argc; i++)
+	for (s32 i = 1; i < argc; i++)
 	{
 		const char* arg = argv[i];
-		const char* scan = arg;
+		CLIArgType type = parse_cli_arg(arg);
 
-		if (scan[0] == '-')
+		switch (type)
 		{
-			scan += 1;
+			case CLIArgType::Unknown: {
+				if (arg[0] == '-')
+				{
+					error_nopath("unknown switch '", arg, "', use '--help' for info on how to use lake.");
+					exit(1);
+				}
 
-			if (scan[0] == '-')
-			{
-				ERROR("There are no cli args beginning with '--' yet.\n");
-				return false;
-			}
+				// just hand off the arg to be handled in lake.lua.
+				// It is likely a target to be made or a variable set
+				lua_cli_args.push(argv + i);
 
-			
+				DEBUG("Encountered unknown cli arg '", arg, "' so it has been added to the lua cli args list.\n");
+			} break;
+
+			case CLIArgType::JobsBig:
+			case CLIArgType::JobsSmall: {
+				// next arg must be a number
+				i += 1;
+
+				if (i == argc)
+				{
+					error_nopath("expected a number after '", arg, "'");
+					exit(1);
+				}
+
+				arg = argv[i];
+
+				const char* scan = arg;
+				while (*scan)
+				{
+					if (!isdigit(*scan))
+					{
+						error_nopath("given argument '", arg, "' after '", argv[i-1], "' must be a number");
+						exit(1);
+					}
+
+					scan += 1;
+				}
+
+				max_jobs = atoi(arg);
+
+				DEBUG("max_jobs set to ", max_jobs, " via command line argument.\n");
+			} break;
+
+			case CLIArgType::VerboseSmall: {
+				log.verbosity = Logger::Verbosity::Debug;
+				DEBUG("Logger verbosity level set to Debug via command line argument.\n");
+			} break;
+
+			case CLIArgType::VerboseBig: {
+				i += 1;
+
+				if (i == argc) 
+				{
+					error_nopath("expected a verbosity level after '--verbosity'");
+					exit(1);
+				}
+
+#define SET_VERBOSITY(level) \
+				case GLUE(CLIArgType::Option,level): \
+					log.verbosity = Logger::Verbosity::level;\
+					DEBUG("Logger verbosity level set to " STRINGIZE(level) " via command line argument.\n"); \
+					break;
+
+				switch (parse_cli_arg(argv[i]))
+				{
+					SET_VERBOSITY(Trace);
+					SET_VERBOSITY(Debug);
+					SET_VERBOSITY(Info);
+					SET_VERBOSITY(Notice);
+					SET_VERBOSITY(Warn);
+					SET_VERBOSITY(Error);
+					SET_VERBOSITY(Fatal);
+					default: {
+						error_nopath("expected a verbosity level after '--verbosity'");
+						exit(1);
+					} break;
+				}
+
+#undef SET_VERBOSITY
+			} break;
+
+			case CLIArgType::PrintTransformed: {
+				print_transformed = true;
+
+				DEBUG("print_transformed set via command line argument.\n");
+			} break;
 		}
 	}
 
@@ -105,14 +188,22 @@ b8 Lake::run()
 
 	INFO("Loading lake lua module.\n");
 
-	// TODO(sushi) this needs to be baked into the executable
-	//             try using string.dump()
+#if LAKE_DEBUG
 	if (luaL_loadfile(L, "src/lake.lua") || lua_pcall(L, 0, 5, 0))
 	{
 		printf("%s\n", lua_tostring(L, -1));
 		lua_pop(L, 1);
 		return false;
 	}
+#else
+	if (luaL_loadbuffer(L, (char*)luaJIT_BC_lake, luaJIT_BC_lake_SIZE, "lake.lua") ||
+		lua_pcall(L, 0, 5, 0))
+	{
+		ERROR(lua_tostring(L, -1));
+		lua_pop(L, 1);
+		return false;
+	}
+#endif
 
 	INFO("Setting lua globals.\n");
 
@@ -130,9 +221,8 @@ b8 Lake::run()
 	//             using the loader callback thing in lua_load
 	dstr prog = parser->fin();
 
-//	FILE* f = fopen("temp/lakefile", "w");
-//	fwrite(prog.s, prog.len, 1, f);
-//	fclose(f);
+	if (print_transformed)
+		printf("%.*s\n", prog.len, prog.s);
 
 	INFO("Executing transformed lakefile.\n"); 
 	if (luaL_loadbuffer(L, (char*)prog.s, prog.len, "lakefile") || lua_pcall(L, 0, 0, 0))
@@ -174,20 +264,7 @@ b8 Lake::run()
 					INFO("Target does not need built, removing from build queue and decrementing all dependents unsatified prereq counts.\n");
 					SCOPED_INDENT;
 					build_queue.remove(target->build_node);
-					for (auto& dependent : target->dependents)
-					{
-						if (dependent.unsatified_prereq_count == 1)
-						{
-							INFO("Dependent '", dependent.name(), "' has no more unsatisfied prerequisites, adding it to the build queue.\n");
-							dependent.build_node = build_queue.push_tail(&dependent);
-							dependent.unsatified_prereq_count = 0;
-						}
-						else
-						{
-							dependent.unsatified_prereq_count -= 1;
-							TRACE("Dependent '", dependent.name(), "' has ", dependent.unsatified_prereq_count, (dependent.unsatified_prereq_count == 1? " unsatisfied prereq left.\n" : " unsatisfied prereqs left.\n"));
-						}
-					}
+					target->update_dependents(build_queue, false);
 				}
 			}
 		}
@@ -208,42 +285,7 @@ b8 Lake::run()
 					SCOPED_INDENT;
 
 					active_recipes.remove(t.active_recipe_node);
-
-					auto update_dependents = [this](Target& t)
-					{
-						// here we assume the target was built by the recipe
-						// and mark its dependents as having a prerequisite that
-						// was just built.
-						// we could probably have an option later that does 
-						// stricter checking.
-						for (auto& dependent : t.dependents)
-						{
-							dependent.flags.set(Target::Flags::PrerequisiteJustBuilt);
-							if (dependent.unsatified_prereq_count == 1)
-							{
-								INFO("Dependent '", dependent.name(), "' has no more unsatisfied prerequisites, adding it to the build queue.\n");
-								dependent.build_node = build_queue.push_tail(&dependent);
-								dependent.unsatified_prereq_count = 0;
-							}
-							else
-								dependent.unsatified_prereq_count -= 1;
-						}
-					};
-
-					switch (t.kind)
-					{
-						case Target::Kind::Group:
-							for (auto& group_target : t.group.targets)
-							{
-								update_dependents(group_target);
-							}
-							break;
-						case Target::Kind::Single:
-							update_dependents(t);
-					}
-
-
-
+					t.update_dependents(build_queue, true);
 					active_recipe_count -= 1;
 				} break;
 
@@ -265,7 +307,7 @@ b8 Lake::run()
 	return true;
 }
 
-#if LAKE_DEBUG || 1
+#if LAKE_DEBUG
 
 void assert_group(Target* target)
 {
@@ -311,7 +353,7 @@ Target* lua__create_single_target(str path)
  */
 void lua__make_dep(Target* target, Target* prereq)
 {
-	INFO("Making '", prereq->name(), "' a prerequisite of target '", target->name(), "\n");
+	INFO("Making '", prereq->name(), "' a prerequisite of target '", target->name(), "'.\n");
 	SCOPED_INDENT;
 
 	if (!target->prerequisites.has(prereq))
@@ -417,11 +459,16 @@ b8 lua__target_already_in_group(Target* target)
 	return target->single.group != nullptr;
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__get_cliargs
+/* ------------------------------------------------------------------------------------------------ lua__next_cliarg
  */
-CLIargs lua__get_cliargs()
+const char* lua__next_cliarg()
 {
-	return {lake.argc, lake.argv};
+	if (!lake.lua_cli_arg_iterator)
+		return nullptr;
+
+	const char* out = *lake.lua_cli_arg_iterator->data;
+	lake.lua_cli_arg_iterator = lake.lua_cli_arg_iterator->next;
+	return out;
 }
 
 /* ------------------------------------------------------------------------------------------------ lua__finalize_group

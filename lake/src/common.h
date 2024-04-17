@@ -172,4 +172,9 @@ template <class F> deferrer<F> operator*(defer_dummy, F f) { return {f}; }
 #  define defer auto DEFER(__LINE__) = defer_dummy{} *[&]()
 #endif //#ifndef defer
 
+#define STRINGIZE_(a) #a
+#define STRINGIZE(a) STRINGIZE_(a)
+#define GLUE_(a,b) a##b
+#define GLUE(a,b) GLUE_(a,b)
+
 #endif // _lpp_common_h
