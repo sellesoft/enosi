@@ -227,15 +227,22 @@ Token Lexer::next_token()
 				while (isalpha(current()))
 					advance();
 				
-				str name = {t.raw.bytes, s32(cursor.bytes - 1 - t.raw.bytes)};
-				if (t.raw == "true"_str)
+				str name = {t.raw.bytes, u64(cursor.bytes - 1 - t.raw.bytes)};
+				u64 hash = t.raw.hash();
+				switch (hash)
+				{
+				case "true"_hashed: 
 					finish_token(True);
-				else if (t.raw == "false"_str)
+					break;
+				case "false"_hashed:
 					finish_token(False);
-				else if (t.raw == "null"_str)
+					break;
+				case "null"_hashed:
 					finish_token(Null);
-				else
+					break;
+				default:
 					return error_here("unrecognized literal name '", t.raw, "'\n");
+				}
 			}
 		} break;
 	}

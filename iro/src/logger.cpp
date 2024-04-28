@@ -89,7 +89,7 @@ void Logger::write_prefix(Verbosity v, Log::Dest& d)
         time_t t = time(0);
         struct tm* tm = localtime(&t);
         size_t written = strftime(buffer, 64, "[%Y-%m-%d %H:%M:%S] ", tm);
-        io::format(d.io, str{(u8*)buffer, s32(written)});
+        io::format(d.io, str{(u8*)buffer, written});
     }
 
     if (d.flags.test(ShowCategoryName))

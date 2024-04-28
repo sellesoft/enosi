@@ -88,11 +88,11 @@ void Memory::commit(s32 committed_space)
 
 /* ------------------------------------------------------------------------------------------------ Memory::write
  */
-s64 Memory::write(str slice)
+s64 Memory::write(Bytes slice)
 {
 	grow_if_needed(slice.len);
 
-	mem::copy(buffer + len, slice.bytes, slice.len);
+	mem::copy(buffer + len, slice.ptr, slice.len);
 	len += slice.len;
 
 	buffer[len] = 0;
@@ -102,27 +102,27 @@ s64 Memory::write(str slice)
 
 /* ------------------------------------------------------------------------------------------------ Memory::read
  */
-s64 Memory::read(str outbuffer)
+s64 Memory::read(Bytes outbuffer)
 {
 	if (pos == len)
 		return 0;
 
 	s64 bytes_remaining = len - pos;
 	s64 bytes_to_read = (bytes_remaining > outbuffer.len ? outbuffer.len : bytes_remaining);
-	mem::copy(outbuffer.bytes, buffer + pos, bytes_to_read);
+	mem::copy(outbuffer.ptr, buffer + pos, bytes_to_read);
 	pos += bytes_to_read;
 	return bytes_to_read;
 }
 
 /* ------------------------------------------------------------------------------------------------ Memory::read_from
  */
-s64 Memory::read_from(s64 pos, str slice)
+s64 Memory::read_from(s64 pos, Bytes slice)
 {
 	assert(pos < len);
 
 	s64 bytes_remaining = len - pos;
 	s64 bytes_to_read = (bytes_remaining > slice.len ? slice.len : bytes_remaining);
-	mem::copy(slice.bytes, buffer + pos, bytes_to_read);
+	mem::copy(slice.ptr, buffer + pos, bytes_to_read);
 	return bytes_to_read;
 }
 
@@ -229,12 +229,12 @@ void FileDescriptor::close()
 
 /* ------------------------------------------------------------------------------------------------ FileDescriptor::write
  */
-s64 FileDescriptor::write(str slice)
+s64 FileDescriptor::write(Bytes slice)
 {
 	if (!is_open() || !can_write())
 		return 0;
 
-	int r = ::write(fd, slice.bytes, slice.len);
+	int r = ::write(fd, slice.ptr, slice.len);
 
 	if (r == -1)
 	{
@@ -246,12 +246,12 @@ s64 FileDescriptor::write(str slice)
 
 /* ------------------------------------------------------------------------------------------------ FileDescriptor::read
  */
-s64 FileDescriptor::read(str slice)
+s64 FileDescriptor::read(Bytes slice)
 {
 	if (!is_open() || !can_read())
 		return 0;
 
-	int r = ::read(fd, slice.bytes, slice.len);
+	int r = ::read(fd, slice.ptr, slice.len);
 
 	if (r == -1)
 	{
@@ -281,14 +281,14 @@ void StaticBuffer<N>::rewind()
 /* ------------------------------------------------------------------------------------------------ StaticBuffer::write
  */
 template<size_t N>
-s64 StaticBuffer<N>::write(str slice)
+s64 StaticBuffer<N>::write(Bytes slice)
 {
 	if (write_pos == len)
 		return 0;
 
 	s64 space_remaining = len - write_pos;
 	s64 bytes_to_write = (slice.len > space_remaining ? space_remaining : slice.len);
-	mem::copy(buffer + write_pos, slice.bytes, bytes_to_write);
+	mem::copy(buffer + write_pos, slice.ptr, bytes_to_write);
 	write_pos += bytes_to_write;
 	buffer[write_pos] = 0;
 	return bytes_to_write;
@@ -297,14 +297,14 @@ s64 StaticBuffer<N>::write(str slice)
 /* ------------------------------------------------------------------------------------------------ StaticBuffer::read
  */
 template<size_t N>
-s64 StaticBuffer<N>::read(str slice)
+s64 StaticBuffer<N>::read(Bytes slice)
 {
 	if (read_pos == write_pos)
 		return 0;
 
 	s64 space_remaining = write_pos - read_pos;
 	s64 bytes_to_read = (slice.len < space_remaining ? slice.len : space_remaining);
-	mem::copy(slice.bytes, buffer + read_pos, bytes_to_read);
+	mem::copy(slice.ptr, buffer + read_pos, bytes_to_read);
 	read_pos += bytes_to_read;
 	return bytes_to_read;
 }

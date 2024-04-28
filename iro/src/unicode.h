@@ -6,6 +6,7 @@
 #define _iro_unicode_h
 
 #include "common.h"
+#include "containers/slice.h"
 
 namespace iro::utf8
 {
@@ -73,10 +74,12 @@ Codepoint decode_character(u8* s, s32 slen);
 struct str
 {
 	u8* bytes;
-	s64 len;
+	u64 len;
 
 	static str invalid() { return {nullptr}; }
 	b8 is_valid() { return bytes != nullptr; }
+
+	operator Bytes() { return {bytes, len}; }
 
 	b8 isempty();
 
@@ -123,7 +126,7 @@ using str  = utf8::str;
 
 static str operator ""_str (const char* s, size_t len)
 {
-	return str{(u8*)s, (s32)len};
+	return str{(u8*)s, len};
 }
 
 }

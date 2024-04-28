@@ -10,70 +10,70 @@ namespace iro::io
 s64 format(IO* io, u8 x)
 {
 	u8  buffer[32];
-	s32 len = snprintf((char*)buffer, 32, "%hhu", x);
+	u64 len = snprintf((char*)buffer, 32, "%hhu", x);
 	return io->write({buffer, len});
 }
 
 s64 format(IO* io, u16 x)
 {
 	u8  buffer[32];
-	s32 len = snprintf((char*)buffer, 32, "%hu", x);
+	u64 len = snprintf((char*)buffer, 32, "%hu", x);
 	return io->write({buffer, len});
 }
 
 s64 format(IO* io, u32 x)
 {
 	u8  buffer[32];
-	s32 len = snprintf((char*)buffer, 32, "%u", x);
+	u64 len = snprintf((char*)buffer, 32, "%u", x);
 	return io->write({buffer, len});
 }
 
 s64 format(IO* io, u64 x)
 {
 	u8  buffer[32];
-	s32 len = snprintf((char*)buffer, 32, "%lu", x);
+	u64 len = snprintf((char*)buffer, 32, "%lu", x);
 	return io->write({buffer, len});
 }
 
 s64 format(IO* io, s8 x)
 {
 	u8  buffer[32];
-	s32 len = snprintf((char*)buffer, 32, "%hhi", x);
+	u64 len = snprintf((char*)buffer, 32, "%hhi", x);
 	return io->write({buffer, len});
 }
 
 s64 format(IO* io, s16 x)
 {
 	u8  buffer[32];
-	s32 len = snprintf((char*)buffer, 32, "%hi", x);
+	u64 len = snprintf((char*)buffer, 32, "%hi", x);
 	return io->write({buffer, len});
 }
 
 s64 format(IO* io, s32 x)
 {
 	u8  buffer[32];
-	s32 len = snprintf((char*)buffer, 32, "%i", x);
+	u64 len = snprintf((char*)buffer, 32, "%i", x);
 	return io->write({buffer, len});
 }
 
 s64 format(IO* io, s64 x)
 {
 	u8  buffer[32];
-	s32 len = snprintf((char*)buffer, 32, "%li", x);
+	u64 len = snprintf((char*)buffer, 32, "%li", x);
 	return io->write({buffer, len});
 }
 
 s64 format(IO* io, f32 x)
 {
 	u8  buffer[32];
-	s32 len = snprintf((char*)buffer, 32, "%f", x);
+	u64 len = snprintf((char*)buffer, 32, "%f", x);
 	return io->write({buffer, len});
 }
 
 s64 format(IO* io, f64 x)
 {
 	u8  buffer[32];
-	s32 len = snprintf((char*)buffer, 32, "%f", x);
+	u64 len = snprintf((char*)buffer, 32, "%f", x);
 	return io->write({buffer, len});
 }
 
@@ -90,7 +90,7 @@ s64 format(IO* io, char x)
 s64 format(IO* io, void* x)
 {
 	u8 buffer[32];
-	s32 len = snprintf((char*)buffer, 32, "%p", x);
+	u64 len = snprintf((char*)buffer, 32, "%p", x);
 	return io->write({buffer, len});
 }
 

@@ -8,6 +8,7 @@
 #include "common.h"
 #include "unicode.h"
 #include "memory/allocator.h"
+#include "containers/slice.h"
 
 #include "flags.h"
 #include "assert.h"
@@ -32,19 +33,19 @@ struct IO
 	Flags flags = {};
 
 	// Writes the contents of 'slice' into this IO and returns the number of bytes written.
-	virtual s64 write(str slice) = 0;
+	virtual s64 write(Bytes slice) = 0;
 
 	// Reads the contents of this IO into the buffer at 'buffer.bytes' up to 'buffer.len' and 
 	// returns the number of bytes read.
-	virtual s64 read(str buffer) = 0;
+	virtual s64 read(Bytes buffer) = 0;
 
-	virtual b8   open()  { flags.set(Flag::Open);   return true; }
+	virtual b8   open()  { flags.set(Flag::Open); return true; }
 	virtual void close() { flags.unset(Flag::Open); }
 	virtual b8   flush() { return true; }
 
 	// implementable on IO that can seek
 	// reads into buffer starting at 'pos'
-	virtual s64 read_from(s64 pos, str buffer) { assert(false); return 0; }
+	virtual s64 read_from(s64 pos, Bytes buffer) { assert(false); return 0; }
 
 	b8 is_open()   { return flags.test(Flag::Open); }
 	b8 can_read()  { return flags.test(Flag::Readable); }
@@ -70,8 +71,8 @@ protected:
 struct Memory : public IO
 {
 	u8* buffer;
-	s64 len;
-	s64 space;
+	u64 len;
+	u64 space;
 
 	// position in buffer for reading
 	s64 pos;
@@ -103,10 +104,10 @@ struct Memory : public IO
 
 	str as_str() { return {buffer, len}; }
 
-	s64 write(str slice) override;
-	s64 read(str slice) override;
+	s64 write(Bytes slice) override;
+	s64 read(Bytes slice) override;
 
-	s64 read_from(s64 pos, str slice) override;
+	s64 read_from(s64 pos, Bytes slice) override;
 
 	/* ============================================================================================ io::Memory::Rollback
 	 *  Helper for saving a position in the memory to rollback to if the user changes their mind 
@@ -178,8 +179,8 @@ struct FileDescriptor : public IO
 
 	void close() override;
 
-	virtual s64 write(str slice) override;
-	virtual s64 read(str slice) override;
+	virtual s64 write(Bytes slice) override;
+	virtual s64 read(Bytes slice) override;
 };
 
 /* ================================================================================================ io::StaticBuffer
@@ -204,8 +205,8 @@ struct StaticBuffer : public IO
 	void clear();
 	void rewind();
 
-	virtual s64 write(str slice) override;
-	virtual s64 read(str slice) override;
+	virtual s64 write(Bytes slice) override;
+	virtual s64 read(Bytes slice) override;
 };
 
 
