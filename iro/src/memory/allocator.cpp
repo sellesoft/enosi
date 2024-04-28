@@ -4,6 +4,9 @@
 namespace iro::mem
 {
 
+// default allocator used by containers and such
+STLAllocator stl_allocator;
+
 void* STLAllocator::allocate(u64 size)
 {
 	return malloc(size);
