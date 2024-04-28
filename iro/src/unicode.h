@@ -86,7 +86,7 @@ struct str
 	u64 hash();
 
 	// Advances this str by 'n' codepoints and returns the last codepoint passed.
-	// This may return invalid codepoints!
+	// This may return invalid codepoints if this str is not valid utf8!
 	Codepoint advance(s32 n = 1);
 
 	// If the provided buffer is large enough, copy this 
@@ -101,13 +101,13 @@ struct str
 
 	struct pos
 	{
-		s64 x;
+		u64 x;
 
-		static pos found(s64 x) { return {x}; }
-		static pos not_found() { return {-1}; }
-		b8 found() { return x != -1; }
+		static pos found(u64 x) { return {x}; }
+		static pos not_found() { return {(u64)-1}; }
+		b8 found() { return x != (u64)-1; }
 		operator bool() { return found(); }
-		operator s64() { return x; }
+		operator u64() { return x; }
 	};
 
 	// each find function should provide a byte and codepoint variant
