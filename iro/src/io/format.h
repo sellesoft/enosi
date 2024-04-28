@@ -58,7 +58,7 @@ struct SanitizeControlCharacters
 	SanitizeControlCharacters(const str& in) : x(in) {};
 };
 
-s64 format(IO* io, SanitizeControlCharacters x);
+s64 format(IO* io, const SanitizeControlCharacters& x);
 
 }
 
