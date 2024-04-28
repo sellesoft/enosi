@@ -15,8 +15,13 @@ namespace iro
 template<typename T>
 struct Slice
 {
-	T*  ptr;
-	u64 len;
+	T*  ptr = nullptr;
+	u64 len = 0;
+
+	static Slice<T> invalid() { return {nullptr, 0}; }
+	b8 isvalid() { return ptr != nullptr; }
+
+	b8 isempty() { return len == 0; }
 
 	T* begin() { return ptr; }
 	T* end()   { return ptr + len; }
