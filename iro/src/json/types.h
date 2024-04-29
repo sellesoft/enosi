@@ -6,12 +6,12 @@
 #ifndef _iro_json_types_h
 #define _iro_json_types_h
 
-#include "../common.h"
-#include "../unicode.h"
-#include "../containers/avl.h"
-#include "../containers/list.h"
-#include "../containers/array.h"
-#include "../io/io.h"
+#include "common.h"
+#include "unicode.h"
+#include "containers/avl.h"
+#include "containers/list.h"
+#include "containers/array.h"
+#include "io/io.h"
 
 namespace iro::json
 {

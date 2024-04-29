@@ -71,11 +71,11 @@ protected:
 struct Memory : public IO
 {
 	u8* buffer;
-	u64 len;
-	u64 space;
+	u32 len;
+	u32 space;
 
 	// position in buffer for reading
-	s64 pos;
+	s32 pos;
 
 	mem::Allocator* allocator;
 

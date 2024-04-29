@@ -1,5 +1,10 @@
 /*
- *  Formatting utils
+ *  Formatting utils.
+ *
+ *  This file is for defining the 'format' interface. Format functions for types other than
+ *  the formatting wrappers and primitive types should go where those types are defined.
+ *
+ *  Eg. the format function for JSON is next to its definition, not here.
  */
 
 #ifndef _ilo_io_format_h
@@ -7,6 +12,7 @@
 
 #include "../common.h"
 #include "../unicode.h"
+#include "concepts"
 
 namespace iro::io
 {
@@ -14,11 +20,14 @@ namespace iro::io
 struct IO;
 
 /* ------------------------------------------------------------------------------------------------ Formattable
+ *  Defines the interface for 'format' functions, which take an IO* to write to and a variable
+ *  of some type and is expected to write some formatted output to the given IO* then return
+ *  the number of bytes written.
  */
 template<typename T>
 concept Formattable = requires(IO* io, T x)
 {
-	format(io, x);
+	{ format(io, x) } -> std::same_as<s64>;
 };
 
 /* ------------------------------------------------------------------------------------------------ Primitive formatting
@@ -49,8 +58,13 @@ s64 formatv(IO* io, T... args)
 	return accumulator;
 }
 
+/* ------------------------------------------------------------------------------------------------ Formatting wrappers
+ *  Types that wrap other formattable types and perform extra formatting on top of them.
+ *
+ *  TODO(sushi) build up a larger library of formatters later
+ */
+
 /* ================================================================================================ SanitizeControlCharacters
- *  
  */ 
 struct SanitizeControlCharacters
 {
