@@ -6,7 +6,6 @@
 #define _iro_allocator_h
 
 #include "../common.h"
-#include "type_traits"
 
 namespace iro::mem
 {
@@ -26,12 +25,6 @@ struct STLAllocator : Allocator
 };
 
 extern STLAllocator stl_allocator;
-
-template<typename T>
-concept AllocatorT = requires(T x)
-{
-	std::is_base_of_v<Allocator, T> == true;
-};
 
 }
 

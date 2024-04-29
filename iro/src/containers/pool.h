@@ -61,6 +61,7 @@ struct Pool
 	{
 		Self out = {};
 		
+		out.allocator = allocator;
 		out.new_chunk();
 		out.free_slot = out.current_chunk->slots;
 
