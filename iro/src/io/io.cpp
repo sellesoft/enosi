@@ -20,7 +20,7 @@ namespace iro::io
  */
 void Memory::grow_if_needed(s64 wanted_space)
 {
-	if (space - len > wanted_space)
+	if (space - len >= wanted_space)
 		return;
 
 	while (space - len < wanted_space)

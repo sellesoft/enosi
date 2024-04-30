@@ -9,6 +9,8 @@
 #include "../memory/memory.h"
 #include "../memory/allocator.h"
 
+#include "assert.h"
+
 namespace iro
 {
 
@@ -95,6 +97,18 @@ struct Array
 			len() += 1;
 			arr[idx] = x;
 		}
+	}
+
+	T* insert(s32 idx)
+	{
+		assert(idx >= 0 && idx <= len());
+		if (idx == len())
+			return push();
+
+		grow_if_needed(1);
+		mem::move(arr + idx + 1, arr + idx, sizeof(T) * (len() - idx));
+		len() += 1;
+		return new (arr + idx) T;
 	}
 
 	/* -------------------------------------------------------------------------------------------- get_header
