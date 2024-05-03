@@ -50,7 +50,7 @@ struct Token
 	str raw;
 
 	static Token invalid() { return {Kind::Invalid}; }
-    b8 is_valid() { return kind != Kind::Invalid; }
+    b8 isValid() { return kind != Kind::Invalid; }
 };
 
 /* ================================================================================================ json::Lexer
@@ -79,7 +79,7 @@ struct Lexer
 	b8   init(io::IO* input_stream, str stream_name, Logger::Verbosity verbosity = Logger::Verbosity::Warn);
 	void deinit();
 
-	Token next_token();
+	Token nextToken();
 
 private:
 
@@ -89,23 +89,23 @@ private:
 
 	b8 at(u8 c);
 	b8 eof();
-	b8 at_first_identifier_char();
-	b8 at_identifier_char();
-	b8 at_digit();
-	b8 at_whitespace();
+	b8 atFirstIdentifierChar();
+	b8 atIdentifierChar();
+	b8 atDigit();
+	b8 atWhitespace();
 
 	void advance(s32 n = 1);
-	void skip_whitespace();
+	void skipWhitespace();
 
 	template<io::Formattable... T>
-	Token error_here(T... args)
+	Token errorHere(T... args)
 	{
 		ERROR(stream_name, ":"_str, line, ":"_str, column, ": "_str, args..., "\n");
 		return Token::invalid();
 	}
 
 	template<io::Formattable... T>
-	Token error_at(u32 line, u32 column, T... args)
+	Token errorAt(u32 line, u32 column, T... args)
 	{
 		ERROR(stream_name, ":"_str, line, ":"_str, column, ": "_str, args..., "\n");
 		return Token::invalid();

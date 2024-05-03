@@ -76,19 +76,19 @@ struct SList
 		return data;
 	}
 
-	/* -------------------------------------------------------------------------------------------- remove_next
+	/* -------------------------------------------------------------------------------------------- removeNext
 	 *  Removes the node following the one given from the list
 	 */
-	void remove_next(Node* n)
+	void removeNext(Node* n)
 	{
 		Node* save = n->next;
 		n->next = save->next;
 		pool.remove(n);
 	}	
 
-	/* -------------------------------------------------------------------------------------------- is_empty
+	/* -------------------------------------------------------------------------------------------- isEmpty
 	 */
-	b8 is_empty()
+	b8 isEmpty()
 	{
 		return !head;
 	}
@@ -177,16 +177,16 @@ struct DList
 		return tail? tail->data : nullptr;
 	}
 
-	/* -------------------------------------------------------------------------------------------- is_empty
+	/* -------------------------------------------------------------------------------------------- isEmpty
 	 */
-	b8 is_empty()
+	b8 isEmpty()
 	{
 		return !head;
 	}
 
-	/* -------------------------------------------------------------------------------------------- insert_after
+	/* -------------------------------------------------------------------------------------------- insertAfter
 	 */
-	Node* insert_after(Node* x, T* t = nullptr)
+	Node* insertAfter(Node* x, T* t = nullptr)
 	{
 		Node* n = pool.add();
 		n->prev = x;
@@ -202,9 +202,9 @@ struct DList
 		return n;
 	}
 
-	/* -------------------------------------------------------------------------------------------- insert_before
+	/* -------------------------------------------------------------------------------------------- insertBefore
 	 */
-	Node* insert_before(Node* x, T* t = nullptr)
+	Node* insertBefore(Node* x, T* t = nullptr)
 	{
 		Node* n = pool.add();
 		n->next = x;
@@ -220,12 +220,12 @@ struct DList
 		return n;
 	}
 
-	/* -------------------------------------------------------------------------------------------- push_head
+	/* -------------------------------------------------------------------------------------------- pushHead
 	 */
-	Node* push_head(T* x = nullptr)
+	Node* pushHead(T* x = nullptr)
 	{
 		if (head)
-			return insert_before(head, x);
+			return insertBefore(head, x);
 
 		head = pool.add();
 		tail = head;
@@ -233,13 +233,13 @@ struct DList
 		return head;
 	}
 
-	/* -------------------------------------------------------------------------------------------- push_tail
+	/* -------------------------------------------------------------------------------------------- pushTail
 	 */
-	Node* push_tail(T* x = nullptr)
+	Node* pushTail(T* x = nullptr)
 	{
 		if (tail)
-			return insert_after(tail, x);
-		return push_head(x);
+			return insertAfter(tail, x);
+		return pushHead(x);
 	}
 
 	/* -------------------------------------------------------------------------------------------- remove

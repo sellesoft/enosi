@@ -52,27 +52,27 @@ private:
 	Logger logger;
 
 	template<typename... T>
-	b8 error_here(T... args)
+	b8 errorHere(T... args)
 	{
 		ERROR(lexer.stream_name, ":", curt.line, ":", curt.column, ": ", args..., "\n");
 		return false;
 	}
 
 	template<typename... T>
-	b8 error_at(s64 line, s64 column, T... args)
+	b8 errorAt(s64 line, s64 column, T... args)
 	{
 		ERROR(lexer.stream_name, ":", line, ":", column, ": ", args..., "\n");
 		return false;
 	}
 
 	template<typename... T>
-	b8 error_no_location(T... args)
+	b8 errorNoLocation(T... args)
 	{
 		ERROR(args..., "\n");
 		return false;
 	}
 
-	void next_token();
+	void nextToken();
 
 	b8 at(TKind kind);
 

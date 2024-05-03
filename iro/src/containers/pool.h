@@ -62,7 +62,7 @@ struct Pool
 		Self out = {};
 		
 		out.allocator = allocator;
-		out.new_chunk();
+		out.newChunk();
 		out.free_slot = out.current_chunk->slots;
 
 		return out;
@@ -90,7 +90,7 @@ struct Pool
 		Slot* slot = free_slot;
 		if (!slot->next_free_slot)
 		{
-			new_chunk();
+			newChunk();
 			slot->next_free_slot = current_chunk->slots;
 		}
 
@@ -124,9 +124,9 @@ struct Pool
 	 */ 
 private:
 
-	/* -------------------------------------------------------------------------------------------- new_chunk
+	/* -------------------------------------------------------------------------------------------- newChunk
 	 */ 
-	void new_chunk()
+	void newChunk()
 	{
 		auto chunk = (Chunk*)allocator->allocate(sizeof(Chunk));
 		

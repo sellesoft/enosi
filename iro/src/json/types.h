@@ -50,10 +50,10 @@ struct Object
 		u64 hash;
 		Value* value;
 
-		static u64 get_key(const Member* x) { return x->hash; }
+		static u64 getKey(const Member* x) { return x->hash; }
 	};
 
-	typedef AVL<Member, Member::get_key> MemberMap;
+	typedef AVL<Member, Member::getKey> MemberMap;
 	typedef Pool<Member> MemberPool;
 
 	MemberMap  members;
@@ -67,8 +67,8 @@ struct Object
 	b8   init();
 	void deinit();
 
-	b8 add_member(str name, Value* value);
-	Value* find_member(str name);
+	b8 addMember(str name, Value* value);
+	Value* findMember(str name);
 };
 
 /* ================================================================================================ json::Value
@@ -131,9 +131,9 @@ struct JSON
 	void deinit();
 
 	// allocates a value of the given kind from the pool and returns a pointer to it
-	Value* new_value(Value::Kind kind);
+	Value* newValue(Value::Kind kind);
 
-	s64 pretty_print(io::IO* out);
+	s64 prettyPrint(io::IO* out);
 };
 
 } // namespace json
@@ -143,7 +143,7 @@ namespace iro::io
 
 static s64 format(IO* io, json::JSON json)
 {
-	return json.pretty_print(io);
+	return json.prettyPrint(io);
 }
 
 }

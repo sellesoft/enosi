@@ -19,9 +19,9 @@ struct Slice
 	u64 len = 0;
 
 	static Slice<T> invalid() { return {nullptr, 0}; }
-	b8 isvalid() { return ptr != nullptr; }
+	b8 isValid() { return ptr != nullptr; }
 
-	b8 isempty() { return len == 0; }
+	b8 isEmpty() { return len == 0; }
 
 	T* begin() { return ptr; }
 	T* end()   { return ptr + len; }

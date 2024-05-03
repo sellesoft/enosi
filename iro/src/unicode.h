@@ -19,9 +19,9 @@ namespace iro::utf8
 // Returns how many bytes are needed to encode the given 
 // codepoint. If 0 is returned then the given code point
 // should not be encoded.
-u8 bytes_needed_to_encode_character(u32 codepoint);
+u8 bytesNeededToEncodeCharacter(u32 codepoint);
 
-b8 is_continuation_byte(u8 c);
+b8 isContinuationByte(u8 c);
 
 /* ================================================================================================ utf8::Char
  *  Representation of an encoded character with enough space for a 4 byte character and a count
@@ -33,12 +33,12 @@ struct Char
 	u8 count;
 
 	static Char invalid() { return {{},0}; }
-	b8 is_valid() { return count != 0; }
+	b8 isValid() { return count != 0; }
 };
 
 // Encodes the given codepoint into 'ch'.
 // Returns false if failure occurs for any reason.
-Char encode_character(u32 codepoint);
+Char encodeCharacter(u32 codepoint);
 
 /* ================================================================================================ utf8::Codepoint
  *  Representation of a decoded unicode codepoint along with the number of bytes needed it to
@@ -50,9 +50,9 @@ struct Codepoint
 	u32 advance;
 
 	static Codepoint invalid() { return {(u32)-1,0}; }
-	b8 is_valid() { return codepoint != (u32)-1; }
+	b8 isValid() { return codepoint != (u32)-1; }
 
-	operator bool() { return is_valid(); }
+	operator bool() { return isValid(); }
 	operator u32() { return codepoint; }
 
 	b8 operator ==(u32  x) { return codepoint == x; }
@@ -65,7 +65,7 @@ struct Codepoint
 // If decoding fails for any reason, false is returned.
 // TODO(sushi) it may be nice to have an 'unsafe' version w all the valid checks disabled 
 //             if we're ever confident we're dealing with proper utf8 strings
-Codepoint decode_character(u8* s, s32 slen);
+Codepoint decodeCharacter(u8* s, s32 slen);
 
 
 /* ================================================================================================ utf8::str
@@ -77,7 +77,7 @@ struct str
 	u64 len;
 
 	static str invalid() { return {nullptr}; }
-	b8 is_valid() { return bytes != nullptr; }
+	b8 isValid() { return bytes != nullptr; }
 
 	operator Bytes() { return {bytes, len}; }
 
@@ -92,7 +92,7 @@ struct str
 	// If the provided buffer is large enough, copy this 
 	// str into it followed by a null terminator and return true.
 	// Otherwise return false;
-	b8 null_terminate(u8* buffer, s32 buffer_len);
+	b8 nullTerminate(u8* buffer, s32 buffer_len);
 
 	b8 operator ==(str s);
 
@@ -104,16 +104,16 @@ struct str
 		u64 x;
 
 		static pos found(u64 x) { return {x}; }
-		static pos not_found() { return {(u64)-1}; }
+		static pos notFound() { return {(u64)-1}; }
 		b8 found() { return x != (u64)-1; }
 		operator bool() { return found(); }
 		operator u64() { return x; }
 	};
 
 	// each find function should provide a byte and codepoint variant
-	pos find_first(u8 c);
+	pos findFirst(u8 c);
 
-	b8 starts_with(str s);
+	b8 startsWith(str s);
 };
 
 }

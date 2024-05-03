@@ -19,14 +19,14 @@ typedef float    f32;
 typedef double   f64;
 typedef u8       b8; // booean type
 
-consteval s64 consteval_strlen(const char* s) {
+consteval s64 constevalStrlen(const char* s) {
     s64 i = 0;
     while(s[i])
         i++;
     return i;
 }
 
-consteval u64 static_string_hash(const char* s, size_t len)
+consteval u64 staticStringHash(const char* s, size_t len)
 {
 	u64 seed = 14695981039;
 	for (s32 i = 0; i < len; i++)
@@ -39,7 +39,7 @@ consteval u64 static_string_hash(const char* s, size_t len)
 
 consteval u64 operator ""_hashed (const char* s, size_t len)
 {
-	return static_string_hash(s, len);
+	return staticStringHash(s, len);
 }
 
 #ifndef defer
@@ -52,7 +52,7 @@ template <class F> deferrer_with_cancel<F> operator*(defer_with_cancel_dummy, F 
 #  define DEFER_(LINE) zz_defer##LINE
 #  define DEFER(LINE) DEFER_(LINE)
 #  define defer auto DEFER(__LINE__) = defer_dummy{} *[&]()
-#  define defer_with_cancel defer_with_cancel_dummy{} *[&]()
+#  define deferWithCancel defer_with_cancel_dummy{} *[&]()
 #endif //#ifndef defer
 
 #define STRINGIZE_(a) #a

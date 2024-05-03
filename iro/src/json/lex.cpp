@@ -15,15 +15,15 @@ u32 Lexer::current()     { return cursor_codepoint; }
 b8 Lexer::at(u8 c)      { return current() == c; }
 b8 Lexer::eof()         { return at(0); }
 
-b8 Lexer::at_first_identifier_char() { return isalpha(current()) || at('_'); }
-b8 Lexer::at_identifier_char() { return at_first_identifier_char() || isdigit(current()); }
-b8 Lexer::at_whitespace() { return isspace(current()) != 0; }
+b8 Lexer::atFirstIdentifierChar() { return isalpha(current()) || at('_'); }
+b8 Lexer::atIdentifierChar() { return atFirstIdentifierChar() || isdigit(current()); }
+b8 Lexer::atWhitespace() { return isspace(current()) != 0; }
 
 void Lexer::advance(s32 n)
 {
-    auto read_stream_if_needed = [this]()
+    auto readStreamIfNeeded = [this]()
     {
-        if (stream_buffer.at_end() ||
+        if (stream_buffer.atEnd() ||
             cursor.isempty())
         {
             u8* ptr = stream_buffer.reserve(128);
@@ -31,7 +31,7 @@ void Lexer::advance(s32 n)
             if (!bytes_read)
             {
                 cursor_codepoint = utf8::Codepoint::invalid();
-                error_here("failed to read more bytes from input stream");
+                errorHere("failed to read more bytes from input stream");
                 return;
             }
             stream_buffer.commit(bytes_read);
@@ -40,7 +40,7 @@ void Lexer::advance(s32 n)
         }
     };
 
-    read_stream_if_needed();
+    readStreamIfNeeded();
 
 	for (s32 i = 0; i < n; i++)
 	{
@@ -54,20 +54,20 @@ void Lexer::advance(s32 n)
 			column += 1;
 		}
 
-        read_stream_if_needed();
+        readStreamIfNeeded();
 		cursor_codepoint = cursor.advance();
 
         if (!cursor_codepoint)
         {
-            error_here("encountered invalid codepoint!");
+            errorHere("encountered invalid codepoint!");
             return;
         }
 	}
 }
 
-void Lexer::skip_whitespace()
+void Lexer::skipWhitespace()
 {
-	while (at_whitespace())
+	while (atWhitespace())
 		advance();
 }
 
@@ -99,30 +99,30 @@ void Lexer::deinit()
 	flags = Flags::none();
 }
 
-/* ------------------------------------------------------------------------------------------------ json::Lexer::next_token
+/* ------------------------------------------------------------------------------------------------ json::Lexer::nextToken
  */
-Token Lexer::next_token()
+Token Lexer::nextToken()
 {
 	using enum Token::Kind;
 
 	Token t = {};
 
-	auto reset_token = [&t, this]()
+	auto resetToken = [&t, this]()
 	{
 		t.line = line;
 		t.column = column;
 		t.raw.bytes = cursor.bytes - 1;
 	};
 
-	auto finish_token = [&t, this](Token::Kind kind)
+	auto finishToken = [&t, this](Token::Kind kind)
 	{
 		t.raw.len = cursor.bytes - 1 - t.raw.bytes;
 		t.kind = kind;
 	};
 
-	if (at_whitespace())
+	if (atWhitespace())
 	{
-		skip_whitespace();
+		skipWhitespace();
 		if (flags.test(Flag::ReturnWhitespaceTokens))
 		{
 			t.raw.len = cursor.bytes - t.raw.bytes;
@@ -134,11 +134,11 @@ Token Lexer::next_token()
 	if (eof() || cursor.isempty())
 		return {Eof};
 
-	reset_token();
+	resetToken();
 
 	switch (current())
 	{
-#define singleglyph(c, k) case c: advance(); finish_token(k); break;
+#define singleglyph(c, k) case c: advance(); finishToken(k); break;
 		singleglyph('[', LeftSquare);
 		singleglyph(']', RightSquare);
 		singleglyph('{', LeftBrace);
@@ -149,7 +149,7 @@ Token Lexer::next_token()
 		case '"': {
 			// just consume the raw string here, it is processed later in parsing
 			advance();
-			reset_token();
+			resetToken();
 			for (;;)
 			{
 				// skip anything after an escape 
@@ -158,17 +158,17 @@ Token Lexer::next_token()
 				if (at('"'))
 					break;
 				if (eof())
-					return error_at(t.line, t.column, "unexpected end of file while consuming string\n");
+					return errorAt(t.line, t.column, "unexpected end of file while consuming string\n");
 				advance();
 
 			}
-			finish_token(String);
+			finishToken(String);
 			advance();
 		} break;
 
 		default: {
 
-			auto consume_number = [this]()
+			auto consumeNumber = [this]()
 			{
 				if (at('0'))
 					advance();
@@ -180,7 +180,7 @@ Token Lexer::next_token()
 					advance();
 					if (!isdigit(current()))
 					{
-						error_here("expected at least one more digit after frac decimal point\n");
+						errorHere("expected at least one more digit after frac decimal point\n");
 						return false;
 					}
 					while (isdigit(current()))
@@ -194,7 +194,7 @@ Token Lexer::next_token()
 						advance();
 					if (!isdigit(current()))
 					{
-						error_here("expected at least one digit for number exponent\n");
+						errorHere("expected at least one digit for number exponent\n");
 						return false;
 					}
 					while (isdigit(current()))
@@ -208,19 +208,19 @@ Token Lexer::next_token()
 			{
 				advance();
 				if (!isdigit(current()))
-					return error_here("expected a digit after '-'\n");
+					return errorHere("expected a digit after '-'\n");
 
-				if (!consume_number())
+				if (!consumeNumber())
 					return Token::invalid();
 
-				finish_token(Number);
+				finishToken(Number);
 			}
 			else if (isdigit(current()))
 			{
-				if (!consume_number())
+				if (!consumeNumber())
 					return Token::invalid();
 
-				finish_token(Number);
+				finishToken(Number);
 			}
 			else if (isalpha(current()))
 			{
@@ -232,16 +232,16 @@ Token Lexer::next_token()
 				switch (hash)
 				{
 				case "true"_hashed: 
-					finish_token(True);
+					finishToken(True);
 					break;
 				case "false"_hashed:
-					finish_token(False);
+					finishToken(False);
 					break;
 				case "null"_hashed:
-					finish_token(Null);
+					finishToken(Null);
 					break;
 				default:
-					return error_here("unrecognized literal name '", t.raw, "'\n");
+					return errorHere("unrecognized literal name '", t.raw, "'\n");
 				}
 			}
 		} break;

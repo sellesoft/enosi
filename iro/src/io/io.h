@@ -45,22 +45,22 @@ struct IO
 
 	// implementable on IO that can seek
 	// reads into buffer starting at 'pos'
-	virtual s64 read_from(s64 pos, Bytes buffer) { assert(false); return 0; }
+	virtual s64 readFrom(s64 pos, Bytes buffer) { assert(false); return 0; }
 
-	b8 is_open()   { return flags.test(Flag::Open); }
-	b8 can_read()  { return flags.test(Flag::Readable); }
-	b8 can_write() { return flags.test(Flag::Writable); }
+	b8 isOpen()   { return flags.test(Flag::Open); }
+	b8 canRead()  { return flags.test(Flag::Readable); }
+	b8 canWrite() { return flags.test(Flag::Writable); }
 
 protected:
 
 	// helpers for use internally, especially for things that define their own 'flags' like FileDescriptor
-	void set_open()     { flags.set(Flag::Open); }
-	void set_writable() { flags.set(Flag::Writable); }
-	void set_readable() { flags.set(Flag::Readable); }
+	void setOpen()     { flags.set(Flag::Open); }
+	void setWritable() { flags.set(Flag::Writable); }
+	void setReadable() { flags.set(Flag::Readable); }
 
-	void unset_open()     { flags.unset(Flag::Open); }
-	void unset_writable() { flags.unset(Flag::Writable); }
-	void unset_readable() { flags.unset(Flag::Readable); }
+	void unsetOpen()     { flags.unset(Flag::Open); }
+	void unsetWritable() { flags.unset(Flag::Writable); }
+	void unsetReadable() { flags.unset(Flag::Readable); }
 };
 
 /* ================================================================================================ io::Memory
@@ -91,7 +91,7 @@ struct Memory : public IO
 	void rewind() { pos = 0; }
 
 	// Returns if the read position is at the end of the buffer.
-	b8 at_end() { return pos == len; }
+	b8 atEnd() { return pos == len; }
 
 	// Attempts to reserve 'space' bytes and returns a pointer to 
 	// the reserved memory. commit() should be used after a call 
@@ -102,12 +102,12 @@ struct Memory : public IO
 	// Commits space reserved by reserve().
 	void commit(s32 space);
 
-	str as_str() { return {buffer, len}; }
+	str asStr() { return {buffer, len}; }
 
 	s64 write(Bytes slice) override;
 	s64 read(Bytes slice) override;
 
-	s64 read_from(s64 pos, Bytes slice) override;
+	s64 readFrom(s64 pos, Bytes slice) override;
 
 	/* ============================================================================================ io::Memory::Rollback
 	 *  Helper for saving a position in the memory to rollback to if the user changes their mind 
@@ -118,12 +118,12 @@ struct Memory : public IO
 	 */
 	typedef s64 Rollback;
 
-	Rollback create_rollback();
-	void     commit_rollback(Rollback rollback);
+	Rollback createRollback();
+	void     commitRollback(Rollback rollback);
 
 private: 
 	
-	void grow_if_needed(s64 space);
+	void growIfNeeded(s64 space);
 
 };
 
@@ -198,7 +198,7 @@ struct StaticBuffer : public IO
 	s32 read_pos;
 
 	size_t capacity() { return len; }
-	str as_str() { return str{buffer, write_pos}; }
+	str asStr() { return str{buffer, write_pos}; }
 
 	operator char*() { return (char*)buffer; }
 

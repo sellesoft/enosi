@@ -16,9 +16,9 @@
 namespace iro::io
 {
 
-/* ------------------------------------------------------------------------------------------------ Memory::grow_if_needed
+/* ------------------------------------------------------------------------------------------------ Memory::growIfNeeded
  */
-void Memory::grow_if_needed(s64 wanted_space)
+void Memory::growIfNeeded(s64 wanted_space)
 {
 	if (space - len >= wanted_space)
 		return;
@@ -72,7 +72,7 @@ void Memory::close()
  */
 u8* Memory::reserve(s32 wanted_space)
 {
-	grow_if_needed(wanted_space);
+	growIfNeeded(wanted_space);
 	
 	return buffer + len;
 }
@@ -90,7 +90,7 @@ void Memory::commit(s32 committed_space)
  */
 s64 Memory::write(Bytes slice)
 {
-	grow_if_needed(slice.len);
+	growIfNeeded(slice.len);
 
 	mem::copy(buffer + len, slice.ptr, slice.len);
 	len += slice.len;
@@ -114,9 +114,9 @@ s64 Memory::read(Bytes outbuffer)
 	return bytes_to_read;
 }
 
-/* ------------------------------------------------------------------------------------------------ Memory::read_from
+/* ------------------------------------------------------------------------------------------------ Memory::readFrom
  */
-s64 Memory::read_from(s64 pos, Bytes slice)
+s64 Memory::readFrom(s64 pos, Bytes slice)
 {
 	assert(pos < len);
 
@@ -126,16 +126,16 @@ s64 Memory::read_from(s64 pos, Bytes slice)
 	return bytes_to_read;
 }
 
-/* ------------------------------------------------------------------------------------------------ Memory::create_rollback
+/* ------------------------------------------------------------------------------------------------ Memory::createRollback
  */
-Memory::Rollback Memory::create_rollback()
+Memory::Rollback Memory::createRollback()
 {
 	return len;
 }
 
-/* ------------------------------------------------------------------------------------------------ Memory::commit_rollback
+/* ------------------------------------------------------------------------------------------------ Memory::commitRollback
  */
-void Memory::commit_rollback(Rollback rollback)
+void Memory::commitRollback(Rollback rollback)
 {
 	len = rollback;
 }
@@ -144,15 +144,15 @@ void Memory::commit_rollback(Rollback rollback)
  */
 b8 FileDescriptor::open(u64 fd_)
 {
-	if (is_open())
+	if (isOpen())
 		return true;
 
 	fd = fd_;
 
 	// TODO(sushi) set these based on if we're given stdin/out/err
-	set_writable();
-	set_readable();
-	set_open();
+	setWritable();
+	setReadable();
+	setOpen();
 
 	return true;
 }
@@ -162,34 +162,34 @@ b8 FileDescriptor::open(u64 fd_)
 b8 FileDescriptor::open(str path, io::Flags io_flags, Flags fd_flags)
 {
 	using enum io::Flag;
-	if (is_open())
+	if (isOpen())
 		return true;
 
-	if (!io_flags.test_any<Writable, Readable>())
+	if (!io_flags.testAny<Writable, Readable>())
 		return false;
 
 	static const u32 max_path_size = 255;
 	u8 ntbuf[max_path_size];
-	if (!path.null_terminate(ntbuf, max_path_size))
+	if (!path.nullTerminate(ntbuf, max_path_size))
 		return false;
 
 	int flags = 0;
 
-	if (io_flags.test_all<Writable, Readable>())
+	if (io_flags.testAll<Writable, Readable>())
 	{
 		flags |= O_RDWR;
-		set_writable();
-		set_readable();
+		setWritable();
+		setReadable();
 	}
 	else if (io_flags.test(Readable))
 	{
 		flags |= O_RDONLY;
-		set_readable();
+		setReadable();
 	}
 	else if (io_flags.test(Writable))
 	{
 		flags |= O_WRONLY;
-		set_writable();
+		setWritable();
 	}
 
 	if (fd_flags.test(Flag::NonBlocking))
@@ -206,7 +206,7 @@ b8 FileDescriptor::open(str path, io::Flags io_flags, Flags fd_flags)
 		return false;
 	}
 
-	set_open();
+	setOpen();
 	return true;
 }
 
@@ -216,7 +216,7 @@ void FileDescriptor::close()
 {
 	using enum io::Flag;
 
-	if (!is_open() || flags.test(Flag::View))
+	if (!isOpen() || flags.test(Flag::View))
 		return;
 
 	if (::close(fd) == -1)
@@ -224,14 +224,14 @@ void FileDescriptor::close()
 		perror("FileDescriptor::close() in call to ::close()");
 	}
 
-	unset_open();
+	unsetOpen();
 }
 
 /* ------------------------------------------------------------------------------------------------ FileDescriptor::write
  */
 s64 FileDescriptor::write(Bytes slice)
 {
-	if (!is_open() || !can_write())
+	if (!isOpen() || !canWrite())
 		return 0;
 
 	int r = ::write(fd, slice.ptr, slice.len);
@@ -248,7 +248,7 @@ s64 FileDescriptor::write(Bytes slice)
  */
 s64 FileDescriptor::read(Bytes slice)
 {
-	if (!is_open() || !can_read())
+	if (!isOpen() || !canRead())
 		return 0;
 
 	int r = ::read(fd, slice.ptr, slice.len);

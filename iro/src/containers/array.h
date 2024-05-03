@@ -49,20 +49,20 @@ struct Array
 	 */ 
 	void destroy()
 	{
-		allocator->free(get_header());
+		allocator->free(getHeader());
 		arr = nullptr;
 	}
 
 	/* -------------------------------------------------------------------------------------------- len / space
 	 */ 
-	s32& len()   { return get_header()->len; }
-	s32& space() { return get_header()->space; }
+	s32& len()   { return getHeader()->len; }
+	s32& space() { return getHeader()->space; }
 
 	/* -------------------------------------------------------------------------------------------- push
 	 */ 
 	T* push()
 	{
-		grow_if_needed(1);
+		growIfNeeded(1);
 
 		len() += 1;
 		return new (arr + len() - 1) T; 
@@ -70,7 +70,7 @@ struct Array
 
 	void push(const T& x)
 	{
-		grow_if_needed(1);
+		growIfNeeded(1);
 
 		arr[len()] = x;
 		len() += 1;
@@ -87,7 +87,7 @@ struct Array
 	 */ 
 	void insert(s32 idx, const T& x)
 	{
-		grow_if_needed(1);
+		growIfNeeded(1);
 
 		if (!len()) 
 			push(x);
@@ -105,15 +105,15 @@ struct Array
 		if (idx == len())
 			return push();
 
-		grow_if_needed(1);
+		growIfNeeded(1);
 		mem::move(arr + idx + 1, arr + idx, sizeof(T) * (len() - idx));
 		len() += 1;
 		return new (arr + idx) T;
 	}
 
-	/* -------------------------------------------------------------------------------------------- get_header
+	/* -------------------------------------------------------------------------------------------- getHeader
 	 */ 
-	Header* get_header() { return (Header*)arr - 1; }
+	Header* getHeader() { return (Header*)arr - 1; }
 
 	/* -------------------------------------------------------------------------------------------- C++ stuff
 	 */ 
@@ -122,11 +122,11 @@ struct Array
 	T* begin() { return arr; }
 	T* end()   { return arr + len(); }
 
-	/* -------------------------------------------------------------------------------------------- grow_if_needed
+	/* -------------------------------------------------------------------------------------------- growIfNeeded
 	 */ 
-	void grow_if_needed(s32 new_elements)
+	void growIfNeeded(s32 new_elements)
 	{
-		Header* header = get_header();
+		Header* header = getHeader();
 
 		if (header->len + new_elements <= header->space)
 			return;

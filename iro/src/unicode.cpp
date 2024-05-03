@@ -11,9 +11,9 @@ namespace iro::utf8
 
 Logger logger = Logger::create("utf8"_str, Logger::Verbosity::Warn);
 
-/* ------------------------------------------------------------------------------------------------ utf8::bytes_needed_to_encode_character
+/* ------------------------------------------------------------------------------------------------ utf8::bytesNeededToEncodeCharacter
  */
-u8 bytes_needed_to_encode_character(u32 c)
+u8 bytesNeededToEncodeCharacter(u32 c)
 {
 	if (c < 0x80)
 		return 1;
@@ -26,25 +26,25 @@ u8 bytes_needed_to_encode_character(u32 c)
 	return 0; // do not encode this character !!
 }
 
-/* ------------------------------------------------------------------------------------------------ utf8::is_continuation_byte
+/* ------------------------------------------------------------------------------------------------ utf8::isContinuationByte
  */
-b8 is_continuation_byte(u8 c)
+b8 isContinuationByte(u8 c)
 {
 	return ((c) & 0xc0) == 0x80;
 }
 
-/* ------------------------------------------------------------------------------------------------ utf8::encode_character
+/* ------------------------------------------------------------------------------------------------ utf8::encodeCharacter
  */
-Char encode_character(u32 codepoint)
+Char encodeCharacter(u32 codepoint)
 {
 	Char c = {};
 
-	c.count = bytes_needed_to_encode_character(codepoint);
+	c.count = bytesNeededToEncodeCharacter(codepoint);
 
 	switch (c.count)
 	{
 		default:
-			ERROR("utf8::encode_character(): could not resolve a proper number of bytes needed to encode codepoint: ", codepoint, "\n");
+			ERROR("utf8::encodeCharacter(): could not resolve a proper number of bytes needed to encode codepoint: ", codepoint, "\n");
 			return Char::invalid();
 
 		case 1: 
@@ -75,17 +75,17 @@ Char encode_character(u32 codepoint)
 	}
 }
 
-/* ------------------------------------------------------------------------------------------------ utf8::decode_character
+/* ------------------------------------------------------------------------------------------------ utf8::decodeCharacter
  */
-Codepoint decode_character(u8* s, s32 slen)
+Codepoint decodeCharacter(u8* s, s32 slen)
 {
 	assert(s);
 
 	if (slen == 0)
 		return Codepoint::invalid();
 
-#define FERROR(...) ERROR("utf8::decode_character(): "_str, __VA_ARGS__)
-#define FWARN(...)  WARN("utf8::decode_character(): "_str, __VA_ARGS__)
+#define FERROR(...) ERROR("utf8::decodeCharacter(): "_str, __VA_ARGS__)
+#define FWARN(...)  WARN("utf8::decodeCharacter(): "_str, __VA_ARGS__)
 
 	if (s[0] < 0x80)
 	{
@@ -106,7 +106,7 @@ Codepoint decode_character(u8* s, s32 slen)
 			return Codepoint::invalid();
 		}
 
-		if (!is_continuation_byte(s[1]))
+		if (!isContinuationByte(s[1]))
 		{
 			FERROR("encountered 2 byte character but byte 2 is not a continuation byte\n");
 			return Codepoint::invalid();
@@ -124,7 +124,7 @@ Codepoint decode_character(u8* s, s32 slen)
 			return Codepoint::invalid();
 		}
 
-		if (!is_continuation_byte(s[1]) || !is_continuation_byte(s[2]))
+		if (!isContinuationByte(s[1]) || !isContinuationByte(s[2]))
 		{
 			FERROR("encountered 3 byte character but one of the trailing bytes is not a continuation character\n");
 			return Codepoint::invalid();
@@ -156,7 +156,7 @@ Codepoint decode_character(u8* s, s32 slen)
 		return Codepoint::invalid();
 	}
 
-	if (!is_continuation_byte(s[1]) || !is_continuation_byte(s[2]) || !is_continuation_byte(s[3]))
+	if (!isContinuationByte(s[1]) || !isContinuationByte(s[2]) || !isContinuationByte(s[3]))
 	{
 		FERROR("encountered 4 byte character but one of the trailing bytes is not a continuation character\n");
 		return Codepoint::invalid();
@@ -197,7 +197,7 @@ Codepoint str::advance(s32 n)
 
 	for (s32 i = 0; i < n; i++)
 	{
-		c = decode_character(bytes, len);
+		c = decodeCharacter(bytes, len);
 		bytes += c.advance;
 		len -= c.advance;
 	}
@@ -222,7 +222,7 @@ b8 str::operator==(str s)
 }
 
 /* ------------------------------------------------------------------------------------------------ utf8::str::hash
- *  REMEMBER: this needs to be exactly the same as static_string_hash!!!!
+ *  REMEMBER: this needs to be exactly the same as staticStringHash!!!!
  */
 u64 str::hash()
 {
@@ -235,9 +235,9 @@ u64 str::hash()
 	return seed;
 }
 
-/* ------------------------------------------------------------------------------------------------ utf8::str::null_terminate
+/* ------------------------------------------------------------------------------------------------ utf8::str::nullTerminate
  */
-b8 str::null_terminate(u8* buffer, s32 buffer_len)
+b8 str::nullTerminate(u8* buffer, s32 buffer_len)
 {
 	if (buffer_len <= len)
 		return false;
@@ -254,21 +254,21 @@ b8 str::isempty()
 	return len == 0;
 }
 
-/* ------------------------------------------------------------------------------------------------ utf8::str::find_first
+/* ------------------------------------------------------------------------------------------------ utf8::str::findFirst
  */
-str::pos str::find_first(u8 c)
+str::pos str::findFirst(u8 c)
 {
 	for (s32 i = 0; i < len; i++)
 	{
 		if (bytes[i] == c)
 			return pos::found(i);
 	}
-	return pos::not_found();
+	return pos::notFound();
 }
 
-/* ------------------------------------------------------------------------------------------------ utf8::str::starts_with
+/* ------------------------------------------------------------------------------------------------ utf8::str::startsWith
  */
-b8 str::starts_with(str s)
+b8 str::startsWith(str s)
 {
 	if (s.len > len)
 		return false;

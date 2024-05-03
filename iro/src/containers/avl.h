@@ -193,9 +193,9 @@ struct AVL
 					// the parent was already right heavy, so its balance factor
 					// is now +2
 					if (child->balance_factor < 0)
-						new_child = rotate_right_left(parent, child);
+						new_child = rotateRightLeft(parent, child);
 					else 
-						new_child = rotate_left(parent, child);
+						new_child = rotateLeft(parent, child);
 				}
 				else
 				{
@@ -218,9 +218,9 @@ struct AVL
 				if (parent->balance_factor < 0)
 				{
 					if (child->balance_factor > 0)
-						new_child = rotate_left_right(parent, child);
+						new_child = rotateLeftRight(parent, child);
 					else
-						new_child = rotate_right(parent, child);
+						new_child = rotateRight(parent, child);
 				}
 				else
 				{
@@ -296,9 +296,9 @@ struct AVL
 					Node* sibling = parent->right;
 					b = sibling->balance_factor;
 					if (b < 0)
-						child = rotate_right_left(parent, sibling);
+						child = rotateRightLeft(parent, sibling);
 					else
-						child = rotate_left(parent, sibling);
+						child = rotateLeft(parent, sibling);
 				}
 				else
 				{
@@ -319,9 +319,9 @@ struct AVL
 					Node* sibling = parent->left;
 					b = sibling->balance_factor;
 					if (b < 0)
-						child = rotate_left_right(parent, sibling);
+						child = rotateLeftRight(parent, sibling);
 					else
-						child = rotate_right(parent, sibling);
+						child = rotateRight(parent, sibling);
 				}
 				else
 				{
@@ -440,7 +440,7 @@ private:
 	 *  ->
 	 *  (B (A a b) g)
 	 */
-	Node* rotate_left(Node* A, Node* B)
+	Node* rotateLeft(Node* A, Node* B)
 	{
 		Node* b = B->left;
 		A->right = b;
@@ -471,7 +471,7 @@ private:
 	 *  ->
 	 *  (B a (A b g))
 	 */
-	Node* rotate_right(Node* A, Node* B)
+	Node* rotateRight(Node* A, Node* B)
 	{
 		Node* b = B->right;
 		A->left = b;
@@ -494,14 +494,14 @@ private:
 		return B;
 	}
 	
-	/* -------------------------------------------------------------------------------------------- rotate_right_left
+	/* -------------------------------------------------------------------------------------------- rotateRightLeft
 	 *  (A a (C (B b c) d))
 	 *  -> 
 	 *  (A a (B b (C c d)))
 	 *  ->
 	 *  (B (A a b) (C c d))
 	 */
-	Node* rotate_right_left(Node* A, Node* C)
+	Node* rotateRightLeft(Node* A, Node* C)
 	{
 		Node* B = C->left;
 		Node* c = B->right;
@@ -536,14 +536,14 @@ private:
 		return B;
 	}
 
-	/* -------------------------------------------------------------------------------------------- rotate_left_right
+	/* -------------------------------------------------------------------------------------------- rotateLeftRight
 	 *  (A (C a (B b c)) d)
 	 *  ->
 	 *  (A (B (C a b) c) d)
 	 *  ->
 	 *  (B (C a b) (A c d))
 	 */
-	Node* rotate_left_right(Node* A, Node* C)
+	Node* rotateLeftRight(Node* A, Node* C)
 	{
 		Node* B = C->right;
 		Node* b = B->left;

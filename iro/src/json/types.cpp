@@ -53,9 +53,9 @@ void Object::deinit()
 	pool.destroy();
 }
 
-/* ------------------------------------------------------------------------------------------------ json::Object::add_member
+/* ------------------------------------------------------------------------------------------------ json::Object::addMember
  */
-b8 Object::add_member(str name, Value* value)
+b8 Object::addMember(str name, Value* value)
 {
 	Member* m = pool.add();
 	if (!m)
@@ -70,9 +70,9 @@ b8 Object::add_member(str name, Value* value)
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ json::Object::find_member
+/* ------------------------------------------------------------------------------------------------ json::Object::findMember
  */
-Value* Object::find_member(str name)
+Value* Object::findMember(str name)
 {
 	if (Member* member = members.find(name.hash()))
 		return member->value;
@@ -97,9 +97,9 @@ void JSON::deinit()
 	root = nullptr;
 }
 
-/* ------------------------------------------------------------------------------------------------ json::JSON::new_value
+/* ------------------------------------------------------------------------------------------------ json::JSON::newValue
  */
-Value* JSON::new_value(Value::Kind kind)
+Value* JSON::newValue(Value::Kind kind)
 {
 	Value* v = pool.add();
 	if (!v)
@@ -108,9 +108,9 @@ Value* JSON::new_value(Value::Kind kind)
 	return v;
 }
 
-/* ------------------------------------------------------------------------------------------------ pretty_print_recur
+/* ------------------------------------------------------------------------------------------------ prettyPrintRecur
  */
-void pretty_print_recur(io::IO* out, Value* value, s32 depth)
+void prettyPrintRecur(io::IO* out, Value* value, s32 depth)
 {
 	using enum Value::Kind;
 
@@ -137,7 +137,7 @@ void pretty_print_recur(io::IO* out, Value* value, s32 depth)
 			{
 				for (s32 i = 0; i < depth + 1; i++)
 					out->write(" "_str);
-				pretty_print_recur(out, value->array.values[i], depth + 2);
+				prettyPrintRecur(out, value->array.values[i], depth + 2);
 				if (i != len - 1)
 					out->write(","_str);
 				out->write("\n"_str);
@@ -153,7 +153,7 @@ void pretty_print_recur(io::IO* out, Value* value, s32 depth)
 				for (s32 i = 0; i < depth + 1; i++)
 					out->write(" "_str);
                 io::formatv(out, "\"", member.name, "\": ");
-				pretty_print_recur(out, member.value, depth + 2);
+				prettyPrintRecur(out, member.value, depth + 2);
 				out->write("\n"_str);
 			}
 			for (s32 i = 0; i < depth-1; i++)
@@ -163,11 +163,11 @@ void pretty_print_recur(io::IO* out, Value* value, s32 depth)
 	}
 }
 
-/* ------------------------------------------------------------------------------------------------ json::JSON::pretty_print
+/* ------------------------------------------------------------------------------------------------ json::JSON::prettyPrint
  */
-s64 JSON::pretty_print(io::IO* out)
+s64 JSON::prettyPrint(io::IO* out)
 {
-	pretty_print_recur(out, root, 0);
+	prettyPrintRecur(out, root, 0);
     return 0; // TODO(sushi) return number written later... maybe
 }
 

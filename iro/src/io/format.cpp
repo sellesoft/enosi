@@ -126,7 +126,7 @@ s64 format(IO* io, const SanitizeControlCharacters& x)
 			case '\v': bytes_written += io->write("\\v"_str); break;
 			default: {
 				// lol
-				utf8::Char ch = utf8::encode_character(c.codepoint);
+				utf8::Char ch = utf8::encodeCharacter(c.codepoint);
 				bytes_written += io->write({ch.bytes, ch.count});
 			} break;
 		}

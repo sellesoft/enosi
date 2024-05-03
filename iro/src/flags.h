@@ -31,26 +31,26 @@ struct Flags
 		return out;
 	}
 
-	b8 test_all(Flags<T> x)
+	b8 testAll(Flags<T> x)
 	{
 		return (flags & x.flags) == x.flags;
 	}
 
 	template<T... args>
-	b8 test_all()
+	b8 testAll()
 	{
-		return test_all(Flags<T>::from(args...));
+		return testAll(Flags<T>::from(args...));
 	}
 
-	b8 test_any(Flags<T> x)
+	b8 testAny(Flags<T> x)
 	{
 		return (flags & x.flags);
 	}
 
 	template<T... args>
-	b8 test_any()
+	b8 testAny()
 	{
-		return test_any(Flags<T>::from(args...));
+		return testAny(Flags<T>::from(args...));
 	}
 
 	b8 test(T x)

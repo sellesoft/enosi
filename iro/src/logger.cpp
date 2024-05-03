@@ -24,7 +24,7 @@ void Log::deinit()
 
 /* ------------------------------------------------------------------------------------------------ Log::new_destination
  */
-void Log::new_destination(str name, io::IO* d, Dest::Flags flags)
+void Log::newDestination(str name, io::IO* d, Dest::Flags flags)
 {
     destinations.push({name, flags, d});
 }
@@ -51,9 +51,9 @@ enum class Color
     White,
 };
 
-/* ------------------------------------------------------------------------------------------------ try_color
+/* ------------------------------------------------------------------------------------------------ tryColor
  */
-str try_color(Log::Dest& d, Color col)
+str tryColor(Log::Dest& d, Color col)
 {
     if (!d.flags.test(Log::Dest::Flag::AllowColor))
         return ""_str;
@@ -77,9 +77,9 @@ str try_color(Log::Dest& d, Color col)
 #undef x
 }
 
-/* ------------------------------------------------------------------------------------------------ Logger::write_preamble
+/* ------------------------------------------------------------------------------------------------ Logger::writePreamble
  */
-void Logger::write_prefix(Verbosity v, Log::Dest& d)
+void Logger::writePrefix(Verbosity v, Log::Dest& d)
 {
     using enum Log::Dest::Flag;
 
@@ -114,26 +114,26 @@ void Logger::write_prefix(Verbosity v, Log::Dest& d)
         {
             switch (v)
             {
-                case Trace:  io::formatv(d.io, try_color(d, Cyan),    " trace"_str, try_color(d, Reset)); break;
-				case Debug:  io::formatv(d.io, try_color(d, Green),   " debug"_str, try_color(d, Reset)); break;
-				case Info:   io::formatv(d.io, try_color(d, Blue),    "  info"_str, try_color(d, Reset)); break;
-				case Notice: io::formatv(d.io, try_color(d, Magenta), "notice"_str, try_color(d, Reset)); break;
-				case Warn:   io::formatv(d.io, try_color(d, Yellow),  "  warn"_str, try_color(d, Reset)); break;
-				case Error:  io::formatv(d.io, try_color(d, Red),     " error"_str, try_color(d, Reset)); break;
-				case Fatal:  io::formatv(d.io, try_color(d, Red),     " fatal"_str, try_color(d, Reset)); break;
+                case Trace:  io::formatv(d.io, tryColor(d, Cyan),    " trace"_str, tryColor(d, Reset)); break;
+				case Debug:  io::formatv(d.io, tryColor(d, Green),   " debug"_str, tryColor(d, Reset)); break;
+				case Info:   io::formatv(d.io, tryColor(d, Blue),    "  info"_str, tryColor(d, Reset)); break;
+				case Notice: io::formatv(d.io, tryColor(d, Magenta), "notice"_str, tryColor(d, Reset)); break;
+				case Warn:   io::formatv(d.io, tryColor(d, Yellow),  "  warn"_str, tryColor(d, Reset)); break;
+				case Error:  io::formatv(d.io, tryColor(d, Red),     " error"_str, tryColor(d, Reset)); break;
+				case Fatal:  io::formatv(d.io, tryColor(d, Red),     " fatal"_str, tryColor(d, Reset)); break;
             }
         }
         else
         {
             switch (v)
             {
-                case Trace:  io::formatv(d.io, try_color(d, Cyan),    "trace"_str,  try_color(d, Reset)); break;
-				case Debug:  io::formatv(d.io, try_color(d, Green),   "debug"_str,  try_color(d, Reset)); break;
-				case Info:   io::formatv(d.io, try_color(d, Blue),    "info"_str,   try_color(d, Reset)); break;
-				case Notice: io::formatv(d.io, try_color(d, Magenta), "notice"_str, try_color(d, Reset)); break;
-				case Warn:   io::formatv(d.io, try_color(d, Yellow),  "warn"_str,   try_color(d, Reset)); break;
-				case Error:  io::formatv(d.io, try_color(d, Red),     "error"_str,  try_color(d, Reset)); break;
-                case Fatal:  io::formatv(d.io, try_color(d, Red),     "fatal"_str,  try_color(d, Reset)); break;
+                case Trace:  io::formatv(d.io, tryColor(d, Cyan),    "trace"_str,  tryColor(d, Reset)); break;
+				case Debug:  io::formatv(d.io, tryColor(d, Green),   "debug"_str,  tryColor(d, Reset)); break;
+				case Info:   io::formatv(d.io, tryColor(d, Blue),    "info"_str,   tryColor(d, Reset)); break;
+				case Notice: io::formatv(d.io, tryColor(d, Magenta), "notice"_str, tryColor(d, Reset)); break;
+				case Warn:   io::formatv(d.io, tryColor(d, Yellow),  "warn"_str,   tryColor(d, Reset)); break;
+				case Error:  io::formatv(d.io, tryColor(d, Red),     "error"_str,  tryColor(d, Reset)); break;
+                case Fatal:  io::formatv(d.io, tryColor(d, Red),     "fatal"_str,  tryColor(d, Reset)); break;
             }
         }
 
