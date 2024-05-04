@@ -25,7 +25,9 @@
 #define ERROR(...) __HELPER(Error, __VA_ARGS__)
 #define FATAL(...) __HELPER(Fatal, __VA_ARGS__)
 
-#define SCOPED_INDENT iro::ScopedIndent __FILE__##__LINE__
+#define __SCOPED_INDENT(line) iro::ScopedIndent __scoped_indent##line
+#define _SCOPED_INDENT(line) __SCOPED_INDENT(line)
+#define SCOPED_INDENT _SCOPED_INDENT(__LINE__)
 
 #define DEBUGEXPR(expr) DEBUG(STRINGIZE(expr) ": ", expr, '\n')
 
