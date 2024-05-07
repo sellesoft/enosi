@@ -127,62 +127,6 @@ private:
 
 };
 
-/* ================================================================================================ io::FileDescriptor
- *  IO around a system file descriptor.
- *
- *  Currently only supporting linux for now. 
- *  TODO(sushi) split up the implementation of this into platform layers and implement Windows.
- */
-struct FileDescriptor : public IO
-{
-	u64 fd;
-
-	enum class Flag
-	{
-		View, // the file descriptor is not one that we opened, so we will not allow using 'close' on it
-		NonBlocking, // will not block on reads or writes
-		Create, // if a file at the given path does not exist it will be created
-	};
-	typedef iro::Flags<Flag> Flags;
-
-	Flags flags;
-
-	[[deprecated("io::FileDescriptor must be given a file descriptor to open!")]]
-	b8 open() override { return false; }
-
-	// Creates a 'view' on an already existing file descriptor.
-	// All I think I'll use this for atm is stdout/err
-	// This just assumes the given fd is read/writable for now
-	// TODO(sushi) figure out if we can test for read/write-ability somehow
-	b8 open(u64 fd);
-
-	b8 open(
-		str path, 
-		io::Flags io_flags, 
-		Flags fd_flags = Flags::none());
-
-	b8 open(
-		str path,
-		io::Flag io_flag,
-		Flags fd_flags = Flags::none())
-	{
-		return open(path, io::Flags::from(io_flag), fd_flags);
-	}
-
-	b8 open(
-		str path,
-		io::Flag io_flag,
-		Flag fd_flag)
-	{
-		return open(path, io::Flags::from(io_flag), Flags::from(fd_flag));
-	}
-
-	void close() override;
-
-	virtual s64 write(Bytes slice) override;
-	virtual s64 read(Bytes slice) override;
-};
-
 /* ================================================================================================ io::StaticBuffer
  *  IO around a statically sized buffer.
  *  This ensures that the buffer can always be null-terminated, so it makes room for N+1 bytes 
