@@ -10,6 +10,10 @@
 #include "../memory/allocator.h"
 
 #include "assert.h"
+#include "nil.h"
+#include "move.h"
+
+#include "new"
 
 namespace iro
 {
@@ -25,6 +29,11 @@ struct Array
 
 	T* arr;
 	mem::Allocator* allocator;
+
+	static Array<T> create(mem::Allocator* allocator)
+	{
+		return create(8, allocator);
+	}
 
 	/* -------------------------------------------------------------------------------------------- create
 	 */ 
@@ -140,5 +149,21 @@ struct Array
 };
 
 }
+
+template<typename X>
+struct NilValue<iro::Array<X>>
+{
+	constexpr static const iro::Array<X> Value = {nullptr};
+	inline static b8 isNil(const iro::Array<X>& x) { return x.arr == nullptr; }
+};
+
+template<typename T>
+struct MoveTrait<iro::Array<T>>
+{
+	inline static void doMove(iro::Array<T>& from, iro::Array<T>& to)
+	{
+		iro::mem::copy(&to, &from);
+	}
+};
 
 #endif

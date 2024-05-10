@@ -25,6 +25,8 @@ namespace iro::platform
  *  Open a file with the behavior defined by 'flags'. A platform specific handle is written to
  *  'out_handle'.
  *
+ *  'path' must be null-terminated.
+ *
  *  TODO(sushi) gather permission mode flags from windows and linux and pass them here 
  */
 b8 open(fs::File::Handle* out_handle, str path, fs::OpenFlags flags);
@@ -59,12 +61,50 @@ struct Timespec
 };
 
 /* ------------------------------------------------------------------------------------------------ clock_realtime
+ *  Returns a timespec using the systems realtime clock
  */ 
 Timespec clock_realtime();
 
 /* ------------------------------------------------------------------------------------------------ clock_monotonic
+ *  Returns a timespec using the systems monotonic clock
  */ 
 Timespec clock_monotonic();
+
+/* ------------------------------------------------------------------------------------------------ opendir
+ *  Opens a directory stream.
+ *
+ *  'path' must be null terminated.
+ */ 
+b8 opendir(fs::Dir::Handle* out_handle, str path);
+
+/* ------------------------------------------------------------------------------------------------ opendir
+ *  Opens a directory stream using an already existing file handle, assuming the handle is for 
+ *  a directory.
+ */
+b8 opendir(fs::Dir::Handle* out_handle, fs::File::Handle file_handle);
+
+/* ------------------------------------------------------------------------------------------------ closedir
+ *  Closes the given directory stream.
+ */
+b8 closedir(fs::Dir::Handle handle);
+
+/* ------------------------------------------------------------------------------------------------ readdir
+ *  Writes into 'buffer' the name of the next file in the directory referred to by 'handle' and
+ *  returns the number of bytes written. Returns 0 when finished and -1 if an error occurs.
+ */
+s64 readdir(fs::Dir::Handle handle, Bytes buffer);
+
+/* ------------------------------------------------------------------------------------------------ stat
+ *  Fills out the given fs::FileInfo with information about the file at the given path.
+ */
+b8 stat(fs::FileInfo* out_info, str path);
+
+/* ------------------------------------------------------------------------------------------------ file_exists
+ *  Perform a basic check that a file exists at 'path'.
+ *
+ *  'path' must be null-terminated.
+ */
+b8 file_exists(str path);
 
 } // namespace iro::platform
 

@@ -13,7 +13,14 @@
 #include "flags.h"
 #include "assert.h"
 
-namespace iro::io
+#include "nil.h"
+#include "move.h"
+#include "memory/memory.h"
+
+namespace iro
+{
+
+namespace io
 {
 
 enum class Flag
@@ -70,7 +77,7 @@ protected:
  */
 struct Memory : public IO
 {
-	u8* buffer;
+	u8* buffer = nullptr;
 	u32 len;
 	u32 space;
 
@@ -80,6 +87,7 @@ struct Memory : public IO
 	mem::Allocator* allocator;
 
 	b8 open() override { return open(8); }
+	b8 open(mem::Allocator* allocator) { return open(8, allocator); }
 	b8 open(s32 initial_space, mem::Allocator* allocator = &mem::stl_allocator);
 
 	void close() override;
@@ -153,8 +161,11 @@ struct StaticBuffer : public IO
 	virtual s64 read(Bytes slice) override;
 };
 
+}
 
-};
+}
 
+DefineMove(iro::io::Memory, { iro::mem::copy(&to, &from, sizeof(iro::io::Memory)); });
+DefineNilValue(iro::io::Memory, {}, { return x.buffer == nullptr; });
 
 #endif // _iro_io_h

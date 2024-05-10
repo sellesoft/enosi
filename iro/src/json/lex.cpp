@@ -24,7 +24,7 @@ void Lexer::advance(s32 n)
     auto readStreamIfNeeded = [this]()
     {
         if (stream_buffer.atEnd() ||
-            cursor.isempty())
+            cursor.isEmpty())
         {
             u8* ptr = stream_buffer.reserve(128);
             s64 bytes_read = in->read({ptr, 128});
@@ -131,7 +131,7 @@ Token Lexer::nextToken()
 		}
 	}
 
-	if (eof() || cursor.isempty())
+	if (eof() || cursor.isEmpty())
 		return {Eof};
 
 	resetToken();

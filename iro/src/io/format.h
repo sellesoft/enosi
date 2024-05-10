@@ -50,8 +50,7 @@ s64 format(IO* io, const char* x);
 
 /* ------------------------------------------------------------------------------------------------ Generic variadic formatting
  */
-template<Formattable... T>
-s64 formatv(IO* io, T... args)
+s64 formatv(IO* io, Formattable auto... args)
 {
 	s64 accumulator = 0;
 	((accumulator += format(io, args)), ...);

@@ -247,18 +247,23 @@ b8 str::nullTerminate(u8* buffer, s32 buffer_len)
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ utf8::str::isempty
- */
-b8 str::isempty()
-{
-	return len == 0;
-}
-
 /* ------------------------------------------------------------------------------------------------ utf8::str::findFirst
  */
 str::pos str::findFirst(u8 c)
 {
 	for (s32 i = 0; i < len; i++)
+	{
+		if (bytes[i] == c)
+			return pos::found(i);
+	}
+	return pos::notFound();
+}
+
+/* ------------------------------------------------------------------------------------------------ utf8::str::findLast
+ */
+str::pos str::findLast(u8 c)
+{
+	for (s32 i = len-1; i >= 0; i--)
 	{
 		if (bytes[i] == c)
 			return pos::found(i);

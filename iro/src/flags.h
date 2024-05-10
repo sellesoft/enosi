@@ -17,10 +17,18 @@ struct Flags
 {
 	typedef u64 FlagType;
 
-	FlagType flags;
+	FlagType flags = 0;
 	
 	static Flags<T> none() { return {}; }
-	static Flags<T> all()  { return {(FlagType)-1}; }
+	static Flags<T> all()  { Flags<T> out; out.flags = (FlagType)-1; return out; }
+
+	constexpr Flags<T>() {}
+
+	template<typename... Args>
+	constexpr Flags<T>(Args... args)
+	{
+		(set(args), ...);
+	}
 
 	template<typename... Args>
 	static constexpr Flags<T> from(T first, Args... args) 

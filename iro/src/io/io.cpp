@@ -57,7 +57,7 @@ b8 Memory::open(s32 initial_space, mem::Allocator* allocator)
  */
 void Memory::close()
 {
-	if (!flags.test(Flag::Open))
+	if (!isOpen())
 		return;
 
 	allocator->free(buffer);

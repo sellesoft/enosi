@@ -110,7 +110,7 @@ s64 format(IO* io, const SanitizeControlCharacters& x)
 {
 	s64 bytes_written = 0;
 	str s = x.x;
-	while (!s.isempty())
+	while (!s.isEmpty())
 	{
 		utf8::Codepoint c = s.advance();
 

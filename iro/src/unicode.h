@@ -7,6 +7,7 @@
 
 #include "common.h"
 #include "containers/slice.h"
+#include "assert.h"
 
 namespace iro::utf8
 {
@@ -56,6 +57,7 @@ struct Codepoint
 	operator u32() { return codepoint; }
 
 	b8 operator ==(u32  x) { return codepoint == x; }
+	b8 operator ==(Codepoint c) { return codepoint == c.codepoint; }
 	b8 operator !=(u32  x) { return codepoint != x; }
 	b8 operator ==(char x) { return codepoint == x; }
 	b8 operator !=(char x) { return codepoint != x; }
@@ -76,12 +78,16 @@ struct str
 	u8* bytes;
 	u64 len;
 
-	static str invalid() { return {nullptr}; }
-	b8 isValid() { return bytes != nullptr; }
+	static str nil() { return {nullptr}; }
+	b8 isNil() { return bytes == nullptr; } 
 
 	operator Bytes() { return {bytes, len}; }
 
-	b8 isempty();
+	// where 'end' is a pointer to the byte AFTER the last of the range desired
+	static str from(u8* start, u8* end) { return {start, u64(end - start)}; }
+	static str from(u8* start, u64 len) { return {start, len}; }
+
+	b8 isEmpty() { return len == 0; }
 
 	u64 hash();
 
@@ -89,15 +95,22 @@ struct str
 	// This may return invalid codepoints if this str is not valid utf8!
 	Codepoint advance(s32 n = 1);
 
+	void increment(s32 n) { n = (n > len? len : n); bytes += n; len -= n; }
+
 	// If the provided buffer is large enough, copy this 
 	// str into it followed by a null terminator and return true.
 	// Otherwise return false;
 	b8 nullTerminate(u8* buffer, s32 buffer_len);
 
+	str sub(s32 start) { assert(start >= 0 && start < len); return {bytes + start, len - start}; }
+	str sub(s32 start, s32 end) { assert(start >= 0 && start <= end && end <= len); return {bytes + start, u64(end - start)};  }
+
 	b8 operator ==(str s);
 
 	u8* begin() { return bytes; }
 	u8* end()   { return bytes + len; }
+
+	b8 startsWith(str s);
 
 	struct pos
 	{
@@ -112,8 +125,7 @@ struct str
 
 	// each find function should provide a byte and codepoint variant
 	pos findFirst(u8 c);
-
-	b8 startsWith(str s);
+	pos findLast(u8 c);
 };
 
 }
@@ -132,4 +144,8 @@ static str operator ""_str (const char* s, size_t len)
 }
 
 
+
+
+
 #endif // _iro_unicode_h
+
