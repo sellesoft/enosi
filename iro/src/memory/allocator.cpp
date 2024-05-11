@@ -1,5 +1,6 @@
 #include "allocator.h"
 #include "stdlib.h"
+#include "logger.h"
 
 namespace iro::mem
 {

@@ -8,6 +8,7 @@
 #include "common.h"
 #include "containers/slice.h"
 #include "assert.h"
+#include "nil.h"
 
 namespace iro::utf8
 {
@@ -116,11 +117,12 @@ struct str
 	{
 		u64 x;
 
+		pos operator + (const int& rhs) { return pos{x + rhs}; }
 		static pos found(u64 x) { return {x}; }
 		static pos notFound() { return {(u64)-1}; }
 		b8 found() { return x != (u64)-1; }
 		operator bool() { return found(); }
-		operator u64() { return x; }
+		operator s32() { return x; }
 	};
 
 	// each find function should provide a byte and codepoint variant
@@ -143,9 +145,7 @@ static str operator ""_str (const char* s, size_t len)
 
 }
 
-
-
-
+DefineNilValue(iro::utf8::str, {nullptr}, { return x.bytes == nullptr; });
 
 #endif // _iro_unicode_h
 

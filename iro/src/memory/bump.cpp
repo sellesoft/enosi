@@ -9,6 +9,7 @@ b8 Bump::init()
 	allocated_slabs_list = (u8**)mem::stl_allocator.allocate(sizeof(u8**) + slab_size);
 	if (!allocated_slabs_list)
 		return false;
+	*allocated_slabs_list = 0;
 	start = cursor = (u8*)(allocated_slabs_list + 1);
 	return true;
 }

@@ -5,6 +5,7 @@
 #ifndef _iro_fs_h
 #define _iro_fs_h
 
+#include "move.h"
 #include "path.h"
 #include "containers/array.h"
 #include "containers/stackarray.h"
@@ -12,7 +13,6 @@
 #include "concepts"
 #include "time/time.h"
 #include "memory/bump.h"
-#include "move.h"
 #include "nil.h"
 
 namespace iro::fs
@@ -125,6 +125,7 @@ struct Dir
 	// Opens a directory stream at 'path'.
 	// 'path' must be null-terminated.
 	static Dir open(str path);
+	static Dir open(Path path);
 
 	// Open a directory stream using a file handle, if that handle represents a 
 	// directory.
@@ -148,12 +149,12 @@ enum class DirWalkResult
 };
 
 template<typename F>
-concept DirWalkCallback = requires(F f, Path& path)
+concept DirWalkCallback = requires(F f, MayMove<Path>& path)
 { { f(path) } -> std::convertible_to<DirWalkResult>; };
 
 // Walk the given directory using callback 'f' starting at 'path'.
 // The callback controls the walk by returning 'Stop', 'Next', or 'Recurse'.
-void walk(str path, DirWalkCallback auto f);
+void walk(str path, DirWalkCallback auto f, mem::Allocator* allocator = &mem::stl_allocator);
 
 enum class DirGlobResult
 {
@@ -165,11 +166,12 @@ template<typename F>
 concept DirGlobCallback = requires(F f, FileKind k, str s)
 { { f(s, k) } -> std::convertible_to<DirGlobResult>; };
 
-void glob(str pattern, DirGlobCallback auto f);
+void glob(str pattern, DirGlobCallback auto f, mem::Allocator* allocator = &mem::stl_allocator);
 
 }
 
 
+// semantics definitions
 DefineMove(iro::fs::File, { to.handle = from.handle; to.path = move(from.path); });
 DefineNilValue(iro::fs::File, {}, { return x.handle == nullptr; });
 
@@ -179,10 +181,13 @@ DefineNilValue(iro::fs::Dir, {nullptr}, { return x.handle == nullptr; });
 DefineNilValue(iro::fs::FileInfo, {iro::fs::FileKind::Invalid}, { return x.kind == iro::fs::FileKind::Invalid; });
 
 
+
 /* -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -= -=  Templated implementations
  * TODO(sushi) try and move this shit elsewhere. Maybe make them not recursive so they dont 
  *             actually have to pass the templated function pointer like they are.
    =- =- =- =- =- =- =- =- =- =- =- =- =- =- =- =- =- =- =- =- =- =- =- =- =- =- =- =- =- =- =- */
+
+
 
 namespace iro::fs
 {
@@ -192,42 +197,54 @@ namespace __internal
 
 /* ------------------------------------------------------------------------------------------------ walkForReal
  */
-b8 walkForReal(io::Memory* path, DirWalkCallback auto f)
+b8 walkForReal(Path& path, DirWalkCallback auto f)
 {
-	auto dir = Dir::open(path->asStr());
+	auto dir = Dir::open(path);
 
 	if (dir == nil)
 		return false;
 
 	defer { dir.close(); };
 
-	if (path->buffer[path->len-1] != '/')
-		io::format(path, '/');
+	path.makeDir();
+
+	// Path we offer to the user via the callback, which they can move 
+	// elsewhere if they want to take it.
+	MayMove<Path> user_path;
+	defer { if (!user_path.wasMoved()) user_path.destroy(); };
 
 	for (;;)
 	{
-		auto rollback = path->createRollback();
-		defer { path->commitRollback(rollback); };
+		// rollback to the original path after were done messing with this file
+		auto rollback = path.makeRollback();
+		defer { path.commitRollback(rollback); };
 
-		path->reserve(255);
+		u8* buf = path.reserve(255);
 
-		s64 len = dir.next({path->buffer + path->len, path->space - path->len});
+		s64 len = dir.next({buf, 255});
 		if (len < 0)
 			return false;
 		else if (len == 0)
 			return true;
 		
-		path->commit(len);
+		path.commit(len);
 
-		if (len == 1 && path->buffer[path->len-1] == '.' ||
-			len == 2 && path->buffer[path->len-1] == '.' && path->buffer[path->len-2] == '.')
+		if (path.isParentDirectory() || path.isCurrentDirectory())
 			continue;
 
-		// create a Path the user may move() if they want to keep it 
-		Path for_user = Path::from(path->asStr());
-		auto result = f(path);
-		if (for_user == nil)
-			for_user.destroy();
+		if (user_path.wasMoved()) 
+		{
+			// if the user took the copy of the path, make another one
+			user_path = path.copy();
+		}
+		else 
+		{
+			// otherwise just write into the same buffer
+			user_path.clear();
+			user_path.append(path.buffer.asStr());
+		}
+
+		auto result = f(user_path);
 
 		switch (result)
 		{
@@ -238,8 +255,8 @@ b8 walkForReal(io::Memory* path, DirWalkCallback auto f)
 			break;
 
 		case DirWalkResult::StepInto:
-			io::format(path, '/');
-			if (!walk_for_real(path, f))
+			path.makeDir();
+			if (!walkForReal(path, f))
 				return false;
 			break;
 
@@ -253,14 +270,11 @@ b8 walkForReal(io::Memory* path, DirWalkCallback auto f)
 
 /* ------------------------------------------------------------------------------------------------ walk
  */
-void walk(str path, DirWalkCallback auto f)
+void walk(str pathin, DirWalkCallback auto f, mem::Allocator* allocator)
 {
-	io::Memory path_accumulator; 
-	path_accumulator.open(path.len);
-	path_accumulator.write(path);
-	__internal::walkForReal(&path_accumulator, f);
-	path_accumulator.close();
-
+	Path path = Path::from(pathin, allocator);
+	__internal::walkForReal(path, f);
+	path.destroy();
 }
 
 /* ------------------------------------------------------------------------------------------------ glob

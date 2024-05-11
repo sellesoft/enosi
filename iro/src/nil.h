@@ -3,6 +3,9 @@
  *
  *  This allows us to use the value 'nil' anywhere we want to indicate an invalid 
  *  value of a type that implements NilValue.
+ *
+ *  When an object is 'nil' it is in some state where it is useless and, most importantly,
+ *  in a state where it does not own resources.
  *  
  *  This is currently not defined in the iro namespace because I feel my use of it 
  *  will be common, but I'm not sure if this is a good idea yet.
@@ -10,6 +13,8 @@
 
 #ifndef _iro_nil_h
 #define _iro_nil_h
+
+#include "common.h"
 
 /* ================================================================================================ NilValue
  *  Template for types that define a nil value. 
@@ -70,15 +75,52 @@ struct Nil
 	inline bool operator == (const T& rhs) const { return NilValue<T>::isNil(rhs); }
 };
 
+// auxillary for types that define a `==` operator with themselves to avoid the ambiguity
+// or if you just like using a function over an operator
+template<Nillable T>
+release_inline bool isnil(const T& x) { return NilValue<T>::isNil(x); }
+
+// because i like grammar
+template<Nillable T>
+release_inline bool notnil(const T& x) { return not isnil(x); }
+
 /* ------------------------------------------------------------------------------------------------ nil
  *  And finally, *the* nil value.
  */
 constexpr Nil nil = Nil();
 
+/* ------------------------------------------------------------------------------------------------ NilOr
+ *  Type that indicates a value may either be nil or a non-nil value of type T.
+ */
+// This was an attempt at getting usage of things that can be nil to be more explicit, but C++ seems
+// to not be friendly to what I wanted to do.
+//
+// Maybe I'll return to this later if the plain nil usage seems to be too confusing.
+//
+//template<typename T>
+//struct NilOr
+//{
+//	T x;
+//
+//	consteval NilOr<T>(const Nil& n) : x(n) {}
+//	NilOr<T>(T x) : T(x) {}
+//
+//	explicit operator T() { assert(notnil() || !"attempt to coerce a nil value to its underlying type"); return *this;  }
+//
+//	inline bool isnil() { return isnil(*this); }
+//	inline bool notnil() { return notnil(*this); } 
+//};
+//
+// template<typename T>
+// struct NilValue<NilOr<T>>
+// {
+// 	constexpr static const T Value = NilValue<T>::Value;
+// 	inline static bool isNil(const NilOr<T>& x) { return NilValue<T>::isNil(x); }
+// };
+
 /* ------------------------------------------------------------------------------------------------ Common nil value definitions
  *  Some nil value definitions for the common types.
  */
-#include "common.h"
 
 #define DefineTrivialNilValue(T, V) DefineNilValue(T, V, { return x == Value; })
 

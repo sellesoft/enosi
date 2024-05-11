@@ -35,6 +35,7 @@ b8 Path::init(str s, mem::Allocator* allocator)
 void Path::destroy()
 {
 	buffer.close();
+	*this = nil;
 }
 
 /* ------------------------------------------------------------------------------------------------ Path::copy
@@ -46,6 +47,13 @@ Path Path::copy()
 	return out;
 }
 
+/* ------------------------------------------------------------------------------------------------ Path::clear
+ */
+void Path::clear()
+{
+	buffer.clear();
+}
+
 /* ------------------------------------------------------------------------------------------------ Path::basename
  */
 str Path::basename()
@@ -54,7 +62,7 @@ str Path::basename()
 	auto pos = path.findLast('/');
 	if (!pos)
 		return path;
-	return path.sub(pos);
+	return path.sub(pos+1);
 }
 
 /* ------------------------------------------------------------------------------------------------ Path::exists
@@ -81,7 +89,7 @@ b8 Path::isDirectory()
 	if (!exists())
 		return false;
 	// this is kind of an inefficient way to check this but oh well
-	return FileInfo::of(buffer.asStr()).kind == FileKind::Regular;
+	return FileInfo::of(buffer.asStr()).kind == FileKind::Directory;
 }
 
 /* ------------------------------------------------------------------------------------------------ Path::matches
@@ -91,10 +99,8 @@ b8 Path::isDirectory()
  *              if i ever need them or if someone else wants them
  *
  */
-b8 Path::matches(str pattern)
+b8 Path::matches(str name, str pattern)
 {
-	str name = buffer.asStr();
-	
 	// helper for reading the pattern and name
 	struct Reader
 	{
@@ -103,7 +109,7 @@ b8 Path::matches(str pattern)
 
 		Reader(str s) : s(s) { current = utf8::decodeCharacter(s.bytes, s.len); }
 
-		b8 hasNext() { return s.len && s.len != current.advance; }
+		b8 hasNext() { return s.len; }
 
 		void next()
 		{
@@ -118,13 +124,19 @@ b8 Path::matches(str pattern)
 				return *(s.bytes + current.advance);
 			return 0;
 		}
+
+		void set(str n)
+		{
+			s = n;
+			current = utf8::decodeCharacter(s.bytes, s.len);
+		}
 	};
 
 	auto nread = Reader(name);
 	auto pread = Reader(pattern);
 	
-	str next_p = str::nil();
-	str next_n = str::nil();
+	str next_p = nil;
+	str next_n = nil;
 
 	b8 escaped = false;
 
@@ -152,7 +164,6 @@ b8 Path::matches(str pattern)
 				}
 				break;
 			
-
 			case '?':
 				if (nread.hasNext())
 				{
@@ -188,16 +199,23 @@ b8 Path::matches(str pattern)
 
 			// no match was made, try again if we have a place to 
 			// return to from a *
-			if (!next_n.isNil())
+			if (nread.hasNext() && notnil(next_n))
 			{
-				nread.s = next_n;
-				pread.s = next_p;
+				nread.set(next_n);
+				pread.set(next_p);
 				continue;
 			}
-
-			return false;
 		}
+		return false;
 	}
+
+}
+
+/* ------------------------------------------------------------------------------------------------ Path::matches
+ */
+b8 Path::matches(str pattern)
+{
+	return Path::matches(buffer.asStr(), pattern);
 }
 
 }

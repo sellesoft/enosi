@@ -118,6 +118,9 @@ struct Logger
 	{
 		using enum Verbosity;
 
+		if (iro::log.destinations == nil)
+			return;
+
 		for (Log::Dest& destination : iro::log.destinations)
 		{
 			writePrefix(v, destination);

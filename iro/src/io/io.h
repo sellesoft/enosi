@@ -129,6 +129,8 @@ struct Memory : public IO
 	Rollback createRollback();
 	void     commitRollback(Rollback rollback);
 
+	u8& operator[](u32 x) { assert(x <= len); return buffer[x]; }
+
 private: 
 	
 	void growIfNeeded(s64 space);

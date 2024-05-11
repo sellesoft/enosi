@@ -66,13 +66,15 @@ void Memory::close()
 	pos = 0;
 
 	flags.unset(Flag::Open);
+
+	*this = nil;
 }
 
 /* ------------------------------------------------------------------------------------------------ Memory::reserve
  */
 u8* Memory::reserve(s32 wanted_space)
 {
-	growIfNeeded(wanted_space);
+	growIfNeeded(wanted_space+1);
 	
 	return buffer + len;
 }
@@ -90,7 +92,7 @@ void Memory::commit(s32 committed_space)
  */
 s64 Memory::write(Bytes slice)
 {
-	growIfNeeded(slice.len);
+	growIfNeeded(slice.len+1);
 
 	mem::copy(buffer + len, slice.ptr, slice.len);
 	len += slice.len;

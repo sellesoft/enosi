@@ -42,6 +42,15 @@ consteval u64 operator ""_hashed (const char* s, size_t len)
 	return staticStringHash(s, len);
 }
 
+// Useful to be able to call normally-inlined functions from a debugger
+// TODO(sushi) make this debug inline when i actually make it so iro has 
+//             a debug define in its lakemodule
+#if IRO_RELEASE
+#define release_inline inline
+#else
+#define release_inline 
+#endif
+
 #ifndef defer
 struct defer_dummy {};
 struct defer_with_cancel_dummy {};

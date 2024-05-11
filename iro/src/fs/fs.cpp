@@ -122,6 +122,8 @@ File File::fromStdout()
  */
 FileInfo FileInfo::of(str path)
 {
+	assert(notnil(path) && path.len);
+
 	FileInfo out = {};
 	if (!platform::stat(&out, path))
 		return FileInfo::invalid();
@@ -143,6 +145,11 @@ Dir Dir::open(str path)
 		return nil;
 
 	return out;
+}
+
+Dir Dir::open(Path path)
+{
+	return open(path.buffer.asStr());
 }
 
 Dir Dir::open(File::Handle file_handle)

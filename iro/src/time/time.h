@@ -7,6 +7,7 @@
 
 #include "common.h"
 #include "io/format.h"
+#include "nil.h"
 
 namespace iro
 {
@@ -95,9 +96,12 @@ namespace io
 	// prints timespan in seconds
 s64 format(IO* io, const TimeSpan& x);
 s64 format(IO* io, const WithUnits& x);
-}
-
 
 }
+
+}
+
+DefineNilValue(iro::TimePoint, {(u64)-1}, { return x.s == -1; });
+// no nil for timespans rn
 
 #endif // _iro_time_h

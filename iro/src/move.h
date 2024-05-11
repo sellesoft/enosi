@@ -9,6 +9,7 @@
 #define _iro_move_h
 
 #include "nil.h"
+#include "assert.h"
 
 template<typename T>
 struct MoveTrait {};
@@ -28,23 +29,24 @@ concept Movable = Nillable<T> && requires(T& from, T& to)
 
 /* ================================================================================================ Moved
  *  Contains a value that has been moved. Eg. if this is the type of a function parameter, the 
- *  object passed into that function is expected to be moved.
+ *  object passed into that function is the new owner of whatever data that type owns.
  *
  *  Moving an object means to transfer ownership of data that it owns to some other object.
  *  The original owner is then nil'd to indicate that it no longer owns anything.
  */
-template<Nillable T>
+template<Movable T>
 struct Moved : public T {};
 
 template<Movable T>
-void move(T& from, T& to)
+inline void move(T& from, T& to)
 {
+	assert(notnil(from) && "attempt to move a nil value");
 	MoveTrait<T>::doMove(from, to);
 	from = nil;
 }
 
 template<Movable T>
-Moved<T> move(T&& from) // NOTE(sushi) this allows moving temp values, like move(Path::from("hi"_str))
+inline Moved<T> move(T& from)
 {
 	Moved<T> to = {};
 	move(from, (T&)to);
@@ -52,11 +54,9 @@ Moved<T> move(T&& from) // NOTE(sushi) this allows moving temp values, like move
 }
 
 template<Movable T>
-Moved<T> move(T& from)
+inline Moved<T> move(T&& from) // NOTE(sushi) this allows moving temp values, like move(Path::from("hi"_str))
 {
-	Moved<T> to = {};
-	move(from, (T&)to);
-	return to;
+	return move((T&)from);
 }
 
 // Moved values decay to their underlying values when dealing with nil.
@@ -65,6 +65,33 @@ struct NilValue<Moved<T>>
 {
 	constexpr static const T Value = NilValue<T>::Value;
 	inline static bool isNil(const Moved<T>& x) { return NilValue<T>::isNil(x); }
+};
+
+/* ================================================================================================ MayMove
+ *  Wraps an object that may be moved by someone. 
+ */
+template<Movable T>
+struct MayMove : T
+{
+	// By default initialize to the wrapped type's nil value.
+	MayMove<T>() : T(nil) {}
+
+	// Use to set this with the value of something that may be moved.
+	MayMove<T>(const T& x) : T(x) {}
+
+	// Doesn't make sense to copy this, because the value its wrapping.
+	// may be moved.
+	MayMove<T>(const MayMove<T>& x) = delete;
+
+	inline b8 wasMoved() { return ::isnil((T&)*this); }
+	inline Moved<T> move() { return ::move((T&)*this); }
+};
+
+template<Movable T>
+struct NilValue<MayMove<T>>
+{
+	constexpr static const T Value = NilValue<T>::Value;
+	inline static bool isNil(const MayMove<T>& x) { return NilValue<T>::isNil((const T&)x); }
 };
 
 #endif
