@@ -24,7 +24,7 @@
 						gdb
 						bear
 						linuxKernel.packages.linux_zen.perf
-						glibc_memusage
+						valgrind
 					];
 
 				env =

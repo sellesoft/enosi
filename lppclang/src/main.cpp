@@ -73,10 +73,14 @@ void printRecord(Context* ctx, Decl* decl)
 
 int main()
 {
+
 	if (!log.init())
 		return 1;
+	defer { log.deinit(); };
 
 	fs::File out = fs::File::fromStdout();	
+	defer { out.close(); };
+
 	{
 		using enum Log::Dest::Flag;
 
@@ -87,26 +91,39 @@ int main()
 					AllowColor));
 	}
 
-	auto dir = fs::Dir::open("src/"_str);
-	
-	if (!dir.isValid())
 	{
-		ERROR("failed to open dir 'src/'\n");
+		using namespace fs;
+		auto dirs = Array<fs::Path>::create();
+		walk("src/"_str, 
+			[&dirs] (MayMove<Path>& path)
+			{
+				if (Path::matches(path.basename(), "*.cpp"_str))
+				{
+					dirs.push(path.move());
+					return DirWalkResult::Next;
+				}
+				
+				return (path.isDirectory()? DirWalkResult::StepInto : DirWalkResult::Next);
+			});
+
+		for (Path& p : dirs)
+		{
+			io::formatv(&out, p.buffer.asStr(), "\n");
+			p.destroy();
+		}
+
+		dirs.destroy();
+	}
+
+	auto testfile = fs::File::from("src/test.cpp"_str, fs::OpenFlag::Read);
+	if (testfile == nil)
 		return 1;
-	}
+	defer { testfile.close(); };
 
-	fs::File f;
-	while (dir.next(&f))
-	{
-		INFO("src/", f.path.asStr(), "\n");
-	}
-
-
-	fs::File testfile;
-	testfile.open("src/test.cpp"_str, fs::OpenFlags::from(fs::OpenFlag::Read));
 
 	io::Memory buffer;
 	buffer.open();
+	defer { buffer.close(); };
 
 	for (;;)
 	{
@@ -122,8 +139,6 @@ int main()
 
 	if (!createASTFromString(ctx, buffer.asStr()))
 		return 1;
-
-	return 0;
 
 	Decl* tu = getTranslationUnitDecl(ctx);
 	DeclIter* toplevel = createDeclIter(ctx, tu);

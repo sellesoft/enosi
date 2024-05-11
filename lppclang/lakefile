@@ -55,8 +55,6 @@ linker_flags :=
 $[
 	
 	-Lclang/lib
-	-shared
-
 	-Wl,--start-group
 
       -lLLVMWindowsManifest

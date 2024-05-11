@@ -2,3 +2,5 @@ build/debug
 .direnv
 .cache/clangd/index
 clang
+
+temp/

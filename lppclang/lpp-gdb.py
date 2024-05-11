@@ -21,7 +21,9 @@ class str_printer:
         len = self.val["len"]
         print(len)
         if len == 0:
-            return "empty"
+            return "{empty}"
+        if len >= 10000:
+            return "{too large}"
         buf = gdb.selected_inferior().read_memory(s, len).tobytes().decode()
         buf = buf.replace('\n', '\\n')
         buf = buf.replace('\t', '\\t')
