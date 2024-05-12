@@ -81,6 +81,8 @@ void File::close()
 	unsetOpen();
 	unsetReadable();
 	unsetWritable();
+
+	*this = nil;
 }
 
 /* ------------------------------------------------------------------------------------------------ File::write

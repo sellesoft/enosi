@@ -14,6 +14,7 @@
 #include "time/time.h"
 #include "memory/bump.h"
 #include "nil.h"
+#include "scoped.h"
 
 namespace iro::fs
 {
@@ -174,6 +175,7 @@ void glob(str pattern, DirGlobCallback auto f, mem::Allocator* allocator = &mem:
 // semantics definitions
 DefineMove(iro::fs::File, { to.handle = from.handle; to.path = move(from.path); });
 DefineNilValue(iro::fs::File, {}, { return x.handle == nullptr; });
+DefineScoped(iro::fs::File, { x.close(); });
 
 DefineMove(iro::fs::Dir, { to.handle = from.handle; });
 DefineNilValue(iro::fs::Dir, {nullptr}, { return x.handle == nullptr; });
