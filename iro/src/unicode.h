@@ -57,11 +57,11 @@ struct Codepoint
 	operator bool() { return isValid(); }
 	operator u32() { return codepoint; }
 
-	b8 operator ==(u32  x) { return codepoint == x; }
-	b8 operator ==(Codepoint c) { return codepoint == c.codepoint; }
-	b8 operator !=(u32  x) { return codepoint != x; }
-	b8 operator ==(char x) { return codepoint == x; }
-	b8 operator !=(char x) { return codepoint != x; }
+	bool operator ==(u32  x) { return codepoint == x; }
+	bool operator ==(Codepoint c) { return codepoint == c.codepoint; }
+	bool operator !=(u32  x) { return codepoint != x; }
+	bool operator ==(char x) { return codepoint == x; }
+	bool operator !=(char x) { return codepoint != x; }
 };
 
 // Attempt to decode the character at 's' into 'codepoint'.

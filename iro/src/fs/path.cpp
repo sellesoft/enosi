@@ -8,7 +8,7 @@
 namespace iro::fs
 {
 
-static Logger logger = Logger::create("iro.fs.path"_str, Logger::Verbosity::Warn);
+static Logger logger = Logger::create("iro.fs.path"_str, Logger::Verbosity::Trace);
 
 /* ------------------------------------------------------------------------------------------------ Path::from
  */
@@ -98,117 +98,114 @@ b8 Path::isDirectory()
  *              and implement character classes
  *              if i ever need them or if someone else wants them
  *
+ *  Thanks to Robert A. van Engelen for this implementation.
+ *  https://www.codeproject.com/Articles/5163931/Fast-String-Matching-with-Wildcards-Globs-and-Giti
  */
 b8 Path::matches(str name, str pattern)
 {
-	// helper for reading the pattern and name
-	struct Reader
-	{
-		str s;
-		utf8::Codepoint current;
-
-		Reader(str s) : s(s) { current = utf8::decodeCharacter(s.bytes, s.len); }
-
-		b8 hasNext() { return s.len; }
-
-		void next()
-		{
-			s.increment(current.advance);
-			if (hasNext())
-				current = utf8::decodeCharacter(s.bytes, s.len);
-		}
-
-		u8 peekByte()
-		{
-			if (hasNext())
-				return *(s.bytes + current.advance);
-			return 0;
-		}
-
-		void set(str n)
-		{
-			s = n;
-			current = utf8::decodeCharacter(s.bytes, s.len);
-		}
-	};
-
-	auto nread = Reader(name);
-	auto pread = Reader(pattern);
+	s64 name_pos = 0;
+	s64 pattern_pos = 0;
+	s64 name_len = name.len;
+	s64 pattern_len = pattern.len;
 	
-	str next_p = nil;
-	str next_n = nil;
+	s64 name_backup1 = -1;
+	s64 name_backup2 = -1;
+	s64 pattern_backup1 = -1;
+	s64 pattern_backup2 = -1;
 
-	b8 escaped = false;
-
-	for (;;)
+	while (name_pos < name_len)
 	{
-		if (escaped)
+		defer
 		{
-			escaped = false;
+			str namec = {name.bytes + name_pos, name.len - name_pos};
+			str pattc = {pattern.bytes + pattern_pos, pattern.len - pattern_pos};
+			INFO("\n",
+				"name: ", namec, "\n",
+				"patt: ", pattc, "\n");
+		};
+
+		if (pattern_pos < pattern_len)
+		{
+			switch (pattern.bytes[pattern_pos])
+			{
+			case '*':
+				pattern_pos += 1;
+				if (pattern.bytes[pattern_pos] == '*')
+				{
+					pattern_pos += 1;
+					if (pattern_pos > pattern_len)
+						return true; // match anything after **
+					if (pattern.bytes[pattern_pos] != '/')
+						return false;
+					// new **-loop, discard *-loop
+					name_backup1 = 
+					pattern_backup1 = -1;
+					name_backup2 = name_pos;
+					pattern_pos += 1;
+					pattern_backup2 = pattern_pos;
+					continue;
+				}
+				// trailing * matches everything except /
+				name_backup1 = name_pos;
+				pattern_backup1 = pattern_pos;
+				continue;
+
+			case '?':
+				// match char except /
+				if (name.bytes[name_pos] == '/')
+					break;
+				name_pos += 1;
+				pattern_pos += 1;
+				break;
+
+			case '\\':
+				if (pattern_pos + 1 < pattern_len)
+					pattern_pos += 1;
+
+			default:
+				{
+					if (pattern.bytes[pattern_pos] == '/' && name.bytes[name_pos] != '/')
+						break;
+
+					// decode at positions
+					utf8::Codepoint pattern_codepoint = utf8::decodeCharacter(pattern.bytes + pattern_pos, pattern.len - pattern_pos);
+					utf8::Codepoint name_codepoint = utf8::decodeCharacter(name.bytes + name_pos, name.len - name_pos);
+
+					if (pattern_codepoint != name_codepoint)
+						break;
+
+					pattern_pos += pattern_codepoint.advance;
+					name_pos += name_codepoint.advance;
+					continue;
+				}
+			}
+		}
+
+		if (pattern_backup1 != -1 && name.bytes[name_pos] != '/')
+		{
+			name_backup1 += 1;
+			name_pos = name_backup1;
+			pattern_pos = pattern_backup1;
 			continue;
 		}
 
-		if (!nread.hasNext() && !pread.hasNext())
-			return true;
-
-		if (pread.hasNext())
+		if (pattern_backup2 != -1)
 		{
-			switch (pread.current.codepoint)
-			{
-			default:
-				if (nread.current == pread.current)
-				{
-					pread.next();
-					nread.next();
-					continue;
-				}
-				break;
-			
-			case '?':
-				if (nread.hasNext())
-				{
-					nread.next();
-					pread.next();
-					continue;
-				}
-				break;
-
-			case '*':
-				{
-					b8 dbl = '*' == pread.peekByte();
-
-					if (!dbl && nread.current == '/')
-					{
-						pread.next();
-						next_n = str::nil();
-						continue;
-					}
-					else
-					{
-						next_p = pread.s;
-						next_n = nread.s;
-						next_n.increment(nread.current.advance);
-						pread.next();
-						if (dbl)
-							pread.next();
-						continue;
-					}
-				}
-				break;
-			}
-
-			// no match was made, try again if we have a place to 
-			// return to from a *
-			if (nread.hasNext() && notnil(next_n))
-			{
-				nread.set(next_n);
-				pread.set(next_p);
-				continue;
-			}
+			// **-loop, backtrack to last **
+			name_backup2 += 1;
+			name_pos = name_backup2;
+			pattern_pos = pattern_backup2;
+			continue;
 		}
+
 		return false;
 	}
 
+	// ignore trailing stars
+	while (pattern_pos < pattern_len && pattern.bytes[pattern_pos] == '*')
+		pattern_pos += 1;
+
+	return pattern_pos >= pattern_len;
 }
 
 /* ------------------------------------------------------------------------------------------------ Path::matches
