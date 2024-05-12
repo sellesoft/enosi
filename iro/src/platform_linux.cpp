@@ -38,6 +38,18 @@ b8 open(fs::File::Handle* out_handle, str path, fs::OpenFlags flags)
 
 #undef flagmap
 
+	if (flags.testAll<fs::OpenFlag::Read, fs::OpenFlag::Write>())
+		oflags |= O_RDWR;
+	else if (flags.test(fs::OpenFlag::Write))
+		oflags |= O_WRONLY;
+	else if (flags.test(fs::OpenFlag::Read))
+		oflags |= O_RDONLY;
+	else
+	{
+		ERROR("failed to open file at path '", path, "': one of OpenFlag::Read/Write was not given\n");
+		return false;
+	}
+
 	int mode = S_IRWXU;
 
 	int r = ::open((char*)path.bytes, oflags, mode);
