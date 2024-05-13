@@ -37,10 +37,10 @@ struct SList
 
 	/* -------------------------------------------------------------------------------------------- create
 	 */
-	static SList<T> create()
+	static SList<T> create(mem::Allocator* allocator = &mem::stl_allocator)
 	{
 		SList<T> out = {};
-		out.pool = Pool<Node>::create();
+		out.pool = Pool<Node>::create(allocator);
 		out.head = nullptr;
 		return out;
 	}
@@ -147,10 +147,10 @@ struct DList
 
 	/* -------------------------------------------------------------------------------------------- create
 	 */
-	static DList<T> create()
+	static DList<T> create(mem::Allocator* allocator = &mem::stl_allocator)
 	{
 		DList<T> out = {};
-		out.pool = Pool<Node>::create();
+		out.pool = Pool<Node>::create(allocator);
 		out.head = out.tail = nullptr;
 		return out;
 	}
