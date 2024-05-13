@@ -58,8 +58,9 @@ struct Array
 	 */ 
 	void destroy()
 	{
+		clear();
 		allocator->free(getHeader());
-		arr = nullptr;
+		*this = nil;
 	}
 
 	/* -------------------------------------------------------------------------------------------- len / space
@@ -120,6 +121,17 @@ struct Array
 		return new (arr + idx) T;
 	}
 
+	/* -------------------------------------------------------------------------------------------- clear
+	 */ 
+	void clear()
+	{
+		for (s32 i = 0; i < len(); i++)
+		{
+			delete (arr + i);
+		}
+		len() = 0;
+	}
+
 	/* -------------------------------------------------------------------------------------------- getHeader
 	 */ 
 	Header* getHeader() { return (Header*)arr - 1; }
@@ -130,6 +142,9 @@ struct Array
 
 	T* begin() { return arr; }
 	T* end()   { return arr + len(); }
+
+	T* first() { return begin(); } 
+	T* last() { return end() - 1; }
 
 	/* -------------------------------------------------------------------------------------------- growIfNeeded
 	 */ 
@@ -162,7 +177,7 @@ struct MoveTrait<iro::Array<T>>
 {
 	inline static void doMove(iro::Array<T>& from, iro::Array<T>& to)
 	{
-		iro::mem::copy(&to, &from);
+		iro::mem::copy(&to, &from, sizeof(iro::Array<T>));
 	}
 };
 
