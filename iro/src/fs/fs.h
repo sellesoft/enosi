@@ -223,9 +223,9 @@ b8 walkForReal(Path& path, DirWalkCallback auto f)
 		auto rollback = path.makeRollback();
 		defer { path.commitRollback(rollback); };
 
-		u8* buf = path.reserve(255);
+		Bytes buf = path.reserve(255);
 
-		s64 len = dir.next({buf, 255});
+		s64 len = dir.next(buf);
 		if (len < 0)
 			return false;
 		else if (len == 0)

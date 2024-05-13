@@ -41,8 +41,8 @@ struct Path
 
 	void append(io::Formattable auto... args) { io::formatv(&buffer, args...); }
 
-	u8* reserve(s32 space) { return buffer.reserve(space); }
-	void commit(s32 space) { buffer.commit(space); }
+	Bytes reserve(s32 space) { return buffer.reserve(space); }
+	void  commit(s32 space) { buffer.commit(space); }
 
 	void makeDir() { if (buffer.buffer[buffer.len-1] != '/') append('/'); }
 
@@ -74,6 +74,6 @@ struct Path
 }
 
 DefineMove(iro::fs::Path, { to.buffer = move(from.buffer); });
-DefineNilValue(iro::fs::Path, {Nil()}, { return x.buffer == Nil(); });
+DefineNilValue(iro::fs::Path, {}, { return x.buffer == Nil(); });
 
 #endif // _iro_path_h
