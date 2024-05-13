@@ -89,9 +89,13 @@ struct File : public io::IO
 	s64 write(Bytes bytes) override;
 	s64 read(Bytes bytes) override;
 
-	static File fromStdout();
-	static File fromStderr();
-	static File fromStdin();
+	static File stdout() { return fromFileDescriptor(1, "stdout"_str, OpenFlag::Write); }
+	static File stderr() { return fromFileDescriptor(2, "stderr"_str, OpenFlag::Write); }
+	static File stdin()  { return fromFileDescriptor(0, "stdin"_str, OpenFlag::Read); }
+
+	static File fromFileDescriptor(u64 fd, OpenFlags flags);
+	static File fromFileDescriptor(u64 fd, str name, OpenFlags flags, mem::Allocator* allocator = &mem::stl_allocator);
+	static File fromFileDescriptor(u64 fd, Moved<Path> name, OpenFlags flags);
 
 	// Returns a File::Info containing various information about this file.
 	FileInfo getInfo();

@@ -107,16 +107,35 @@ s64 File::read(Bytes bytes)
 	return platform::read(handle, bytes);
 }
 
-/* ------------------------------------------------------------------------------------------------ File::fromStdout
+/* ------------------------------------------------------------------------------------------------ File::fromFileDescriptor
  */
-File File::fromStdout()
+File File::fromFileDescriptor(u64 fd, OpenFlags flags)
 {
 	File out = {};
-	out.handle = (void*)1;
-	str pathname = "stdout"_str;
-	out.path.init(pathname);
-	out.setWritable();
+	out.handle = (void*)fd;
+
 	out.setOpen();
+
+	if (flags.test(OpenFlag::Read))
+		out.setReadable();
+
+	if (flags.test(OpenFlag::Write))
+		out.setWritable();
+
+	out.path = nil;
+
+	return out;
+}
+
+File File::fromFileDescriptor(u64 fd, str name, OpenFlags flags, mem::Allocator* allocator)
+{
+	return fromFileDescriptor(fd, move(Path::from(name, allocator)), flags);
+}
+
+File File::fromFileDescriptor(u64 fd, Moved<Path> name, OpenFlags flags)
+{
+	File out = fromFileDescriptor(fd, flags);
+	out.path = name;
 	return out;
 }
 
