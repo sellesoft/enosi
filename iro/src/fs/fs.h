@@ -67,10 +67,10 @@ enum class FileKind
  */
 struct File : public io::IO
 {
-	typedef void* Handle;
+	typedef u64 Handle;
 
 	// A handle to this file if opened.
-	Handle handle = nullptr;
+	Handle handle = -1;
 
 	Path path = nil;
 
@@ -180,7 +180,7 @@ void glob(str pattern, DirGlobCallback auto f, mem::Allocator* allocator = &mem:
 
 // semantics definitions
 DefineMove(iro::fs::File, { to.handle = from.handle; to.path = move(from.path); });
-DefineNilValue(iro::fs::File, {}, { return x.handle == nullptr; });
+DefineNilValue(iro::fs::File, {}, { return x.handle == -1; });
 DefineScoped(iro::fs::File, { x.close(); });
 
 DefineMove(iro::fs::Dir, { to.handle = from.handle; });

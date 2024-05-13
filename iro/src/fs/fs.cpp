@@ -112,7 +112,7 @@ s64 File::read(Bytes bytes)
 File File::fromFileDescriptor(u64 fd, OpenFlags flags)
 {
 	File out = {};
-	out.handle = (void*)fd;
+	out.handle = fd;
 
 	out.setOpen();
 
