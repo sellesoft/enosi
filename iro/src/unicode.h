@@ -51,10 +51,6 @@ struct Codepoint
 	u32 codepoint;
 	u32 advance;
 
-	static Codepoint invalid() { return {(u32)-1,0}; }
-	b8 isValid() { return codepoint != (u32)-1; }
-
-	operator bool() { return isValid(); }
 	operator u32() { return codepoint; }
 
 	bool operator ==(u32  x) { return codepoint == x; }
@@ -79,14 +75,11 @@ struct str
 	u8* bytes;
 	u64 len;
 
-	static str nil() { return {nullptr}; }
-	b8 isNil() { return bytes == nullptr; } 
-
 	operator Bytes() { return {bytes, len}; }
 
 	// where 'end' is a pointer to the byte AFTER the last of the range desired
-	static str from(u8* start, u8* end) { return {start, u64(end - start)}; }
-	static str from(u8* start, u64 len) { return {start, len}; }
+	static inline str from(u8* start, u8* end) { assert(start >= end); return {start, u64(end - start)}; }
+	static inline str from(u8* start, u64 len) { return {start, len}; }
 
 	b8 isEmpty() { return len == 0; }
 
@@ -110,6 +103,9 @@ struct str
 
 	u8* begin() { return bytes; }
 	u8* end()   { return bytes + len; }
+
+	// returns how many characters there are in this string
+	u64 countCharacters();
 
 	b8 startsWith(str s);
 
@@ -146,6 +142,7 @@ static str operator ""_str (const char* s, size_t len)
 }
 
 DefineNilValue(iro::utf8::str, {nullptr}, { return x.bytes == nullptr; });
+DefineNilValue(iro::utf8::Codepoint, {(u32)-1}, { return x.codepoint != -1; });
 
 #endif // _iro_unicode_h
 

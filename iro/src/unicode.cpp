@@ -198,6 +198,8 @@ Codepoint str::advance(s32 n)
 	for (s32 i = 0; i < n; i++)
 	{
 		c = decodeCharacter(bytes, len);
+		if (!c.isValid())
+			return nil;
 		bytes += c.advance;
 		len -= c.advance;
 	}
@@ -245,6 +247,17 @@ b8 str::nullTerminate(u8* buffer, s32 buffer_len)
 	mem::copy(buffer, bytes, len);
 	buffer[len] = 0;
 	return true;
+}
+
+/* ------------------------------------------------------------------------------------------------ utf8::str::countCharacters
+ */
+u64 str::countCharacters()
+{
+	str scan = *this;
+	u64 accum = 0;
+	while (scan.advance() != nil)
+		accum += 1;
+	return accum;
 }
 
 /* ------------------------------------------------------------------------------------------------ utf8::str::findFirst
