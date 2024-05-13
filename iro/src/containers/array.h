@@ -127,7 +127,7 @@ struct Array
 	{
 		for (s32 i = 0; i < len(); i++)
 		{
-			delete (arr + i);
+			(arr + i)->~T();
 		}
 		len() = 0;
 	}
