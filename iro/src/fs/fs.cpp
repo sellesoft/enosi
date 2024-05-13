@@ -224,7 +224,7 @@ b8 expand_brace_pattern(mem::Allocator* allocator, Array<io::Memory>* expansions
 		}
 
 		auto dc = utf8::decodeCharacter(pattern.bytes, pattern.len);
-		if (!dc.isValid())
+		if (isnil(dc))
 			return false;
 
 		switch (dc.codepoint)

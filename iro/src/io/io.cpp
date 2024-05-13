@@ -72,11 +72,11 @@ void Memory::close()
 
 /* ------------------------------------------------------------------------------------------------ Memory::reserve
  */
-u8* Memory::reserve(s32 wanted_space)
+Bytes Memory::reserve(s32 wanted_space)
 {
 	growIfNeeded(wanted_space+1);
 	
-	return buffer + len;
+	return {buffer + len, u64(wanted_space)};
 }
 
 /* ------------------------------------------------------------------------------------------------ Memory::commit

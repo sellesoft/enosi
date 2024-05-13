@@ -115,10 +115,10 @@ b8 fileExists(str path);
 b8 makeDir(str path, b8 make_parents);
 
 
-/* ------------------------------------------------------------------------------------------------ processOpen
+/* ------------------------------------------------------------------------------------------------ processSpawn
  *  Creates a new process and writes its handle into 'out_handle'.
  */
-b8 processOpen(Process::Handle* out_handle, str file, Slice<str> args, Process::Stream streams[3]);
+b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process::Stream streams[3]);
 
 } // namespace iro::platform
 

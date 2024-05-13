@@ -69,7 +69,7 @@ str Path::basename()
  */
 b8 Path::exists()
 {
-	return platform::file_exists(buffer.asStr());
+	return platform::fileExists(buffer.asStr());
 }
 
 /* ------------------------------------------------------------------------------------------------ Path::isRegularFile

@@ -82,7 +82,7 @@ Codepoint decodeCharacter(u8* s, s32 slen)
 	assert(s);
 
 	if (slen == 0)
-		return Codepoint::invalid();
+		return nil;
 
 #define FERROR(...) ERROR("utf8::decodeCharacter(): "_str, __VA_ARGS__)
 #define FWARN(...)  WARN("utf8::decodeCharacter(): "_str, __VA_ARGS__)
@@ -95,7 +95,7 @@ Codepoint decodeCharacter(u8* s, s32 slen)
 	if ((u32)(s[0] - 0xc2) > (0xf4 - 0xc2))
 	{
 		ERROR("encountered invalid utf8 character\n");
-		return Codepoint::invalid();
+		return nil;
 	}
 
 	if (s[0] < 0xe0)
@@ -103,13 +103,13 @@ Codepoint decodeCharacter(u8* s, s32 slen)
 		if (slen < 2)
 		{
 			FERROR("encountered 2 byte utf8 character but given slen < 2\n");
-			return Codepoint::invalid();
+			return nil;
 		}
 
 		if (!isContinuationByte(s[1]))
 		{
 			FERROR("encountered 2 byte character but byte 2 is not a continuation byte\n");
-			return Codepoint::invalid();
+			return nil;
 		}
 
 		u32 c = ((s[0] & 0x1f) << 6) | (s[1] & 0x3f);
@@ -121,19 +121,19 @@ Codepoint decodeCharacter(u8* s, s32 slen)
 		if (slen < 3)
 		{
 			FERROR("encountered 3 byte character but was given slen < 3\n");
-			return Codepoint::invalid();
+			return nil;
 		}
 
 		if (!isContinuationByte(s[1]) || !isContinuationByte(s[2]))
 		{
 			FERROR("encountered 3 byte character but one of the trailing bytes is not a continuation character\n");
-			return Codepoint::invalid();
+			return nil;
 		}
 
 		if (s[0] == 0xed && s[1] == 0x9f)
 		{
 			FERROR("encounted 3 byte character with surrogate pairs\n");
-			return Codepoint::invalid();
+			return nil;
 		}
 
 		u32 c = ((s[0] & 0x0f) << 18) | 
@@ -144,7 +144,7 @@ Codepoint decodeCharacter(u8* s, s32 slen)
 		{
 			// TODO(sushi) look into why this is wrong
 			FERROR("c->codepoint wound up being < 0x800 which is wrong for some reason idk yet look into it maybe???\n");
-			return Codepoint::invalid(); 
+			return nil; 
 		}
 
 		return {c, 3};
@@ -153,13 +153,13 @@ Codepoint decodeCharacter(u8* s, s32 slen)
 	if (slen < 4)
 	{
 		FERROR("encountered 4 byte character but was given slen < 4\n");
-		return Codepoint::invalid();
+		return nil;
 	}
 
 	if (!isContinuationByte(s[1]) || !isContinuationByte(s[2]) || !isContinuationByte(s[3]))
 	{
 		FERROR("encountered 4 byte character but one of the trailing bytes is not a continuation character\n");
-		return Codepoint::invalid();
+		return nil;
 	}
 
 	if (s[0] == 0xf0)
@@ -167,7 +167,7 @@ Codepoint decodeCharacter(u8* s, s32 slen)
 		if (s[1] < 0x90)
 		{
 			FERROR("encountered a 4 byte character but the codepoint is less than the valid range (0x10000 - 0x10ffff)");
-			return Codepoint::invalid();
+			return nil;
 		}	
 	}
 	else if (s[0] == 0xf4)
@@ -175,7 +175,7 @@ Codepoint decodeCharacter(u8* s, s32 slen)
 		if (s[1] > 0x8f)
 		{
 			FERROR("encountered a 4 byte character but the codepoint is greater than the valid range (0x10000 - 0x10ffff)");
-			return Codepoint::invalid();
+			return nil;
 		}
 	}
 
@@ -198,7 +198,7 @@ Codepoint str::advance(s32 n)
 	for (s32 i = 0; i < n; i++)
 	{
 		c = decodeCharacter(bytes, len);
-		if (!c.isValid())
+		if (isnil(c))
 			return nil;
 		bytes += c.advance;
 		len -= c.advance;
@@ -255,7 +255,7 @@ u64 str::countCharacters()
 {
 	str scan = *this;
 	u64 accum = 0;
-	while (scan.advance() != nil)
+	while (notnil(scan.advance()))
 		accum += 1;
 	return accum;
 }

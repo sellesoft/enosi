@@ -26,17 +26,16 @@ void Lexer::advance(s32 n)
         if (stream_buffer.atEnd() ||
             cursor.isEmpty())
         {
-            u8* ptr = stream_buffer.reserve(128);
-            s64 bytes_read = in->read({ptr, 128});
+            Bytes bytes = stream_buffer.reserve(128);
+            s64 bytes_read = in->read(bytes);
             if (!bytes_read)
             {
-                cursor_codepoint = utf8::Codepoint::invalid();
+                cursor_codepoint = nil;
                 errorHere("failed to read more bytes from input stream");
                 return;
             }
             stream_buffer.commit(bytes_read);
-            cursor.bytes = ptr;
-            cursor.len = 128;
+            cursor = str::from(bytes.ptr, bytes.len);
         }
     };
 
