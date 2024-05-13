@@ -17,6 +17,7 @@
 #include "containers/slice.h"
 
 #include "fs/fs.h"
+#include "process.h"
 
 namespace iro::platform
 {
@@ -99,12 +100,25 @@ s64 readdir(fs::Dir::Handle handle, Bytes buffer);
  */
 b8 stat(fs::FileInfo* out_info, str path);
 
-/* ------------------------------------------------------------------------------------------------ file_exists
+/* ------------------------------------------------------------------------------------------------ fileExists
  *  Perform a basic check that a file exists at 'path'.
  *
  *  'path' must be null-terminated.
  */
-b8 file_exists(str path);
+b8 fileExists(str path);
+
+
+/* ------------------------------------------------------------------------------------------------ makeDir
+ *  Create the directory at 'path'. If make_parents is true, any missing parent directories will be
+ *  created as well.
+ */
+b8 makeDir(str path, b8 make_parents);
+
+
+/* ------------------------------------------------------------------------------------------------ processOpen
+ *  Creates a new process and writes its handle into 'out_handle'.
+ */
+b8 processOpen(Process::Handle* out_handle, str file, Slice<str> args, Process::Stream streams[3]);
 
 } // namespace iro::platform
 
