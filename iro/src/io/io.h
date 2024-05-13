@@ -37,7 +37,7 @@ typedef iro::Flags<Flag> Flags;
  */
 struct IO
 {
-	Flags flags = {};
+	Flags flags;
 
 	// Writes the contents of 'slice' into this IO and returns the number of bytes written.
 	virtual s64 write(Bytes slice) = 0;
@@ -78,13 +78,13 @@ protected:
 struct Memory : public IO
 {
 	u8* buffer = nullptr;
-	u32 len;
-	u32 space;
+	u32 len = 0;
+	u32 space = 0;
 
 	// position in buffer for reading
-	s32 pos;
+	s32 pos = 0;
 
-	mem::Allocator* allocator;
+	mem::Allocator* allocator = nullptr;
 
 	b8 open() override { return open(8); }
 	b8 open(mem::Allocator* allocator) { return open(8, allocator); }
@@ -101,11 +101,10 @@ struct Memory : public IO
 	// Returns if the read position is at the end of the buffer.
 	b8 atEnd() { return pos == len; }
 
-	// Attempts to reserve 'space' bytes and returns a pointer to 
-	// the reserved memory. commit() should be used after a call 
-	// to this function to indicate how many bytes were actually
-	// used.
-	u8* reserve(s32 space);
+	// Attempts to reserve 'space' bytes and returns the Bytes
+	// reserved. Commit should be used to indicate how many 
+	// bytes were actually used.
+	Bytes reserve(s32 space);
 
 	// Commits space reserved by reserve().
 	void commit(s32 space);
