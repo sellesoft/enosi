@@ -151,7 +151,7 @@ struct StaticBuffer : public IO
 	s32 read_pos;
 
 	size_t capacity() { return len; }
-	str asStr() { return str{buffer, write_pos}; }
+	str asStr() { return str{buffer, u64(write_pos)}; }
 
 	operator char*() { return (char*)buffer; }
 

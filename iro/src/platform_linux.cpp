@@ -10,6 +10,7 @@
 #include "string.h"
 #include "sys/uio.h"
 #include "sys/stat.h"
+#include "libexplain/libexplain.h"
 
 #include "ctime"
 
@@ -24,7 +25,7 @@ static iro::Logger logger =
 template<typename... T>
 b8 reportErrno(T... args)
 {
-	ERROR(args..., ": ", strerrorname_np(errno), " ", strerror(errno), "\n");
+	ERROR(args..., "\n");
 	errno = 0;
 	return false;
 }
@@ -66,9 +67,9 @@ b8 open(fs::File::Handle* out_handle, str path, fs::OpenFlags flags)
 
 	// TODO(sushi) handle non-null-terminated strings
 	if (r == -1)
-		return reportErrno("failed to open file at path '", path, "'");
+		return reportErrno("failed to open file at path '", path, "': ", explain_open((char*)path.bytes, oflags, mode));
 
-	*out_handle = (void*)(s64)r;
+	*out_handle = (u64)r;
 
 	return true;
 }
@@ -78,7 +79,7 @@ b8 open(fs::File::Handle* out_handle, str path, fs::OpenFlags flags)
 b8 close(fs::File::Handle handle)
 {
 	if (::close((s64)handle) == -1)
-		return reportErrno("failed to close file with handle ", handle);
+		return reportErrno("failed to close file with handle ", handle, ": ", explain_close((s64)handle));
 	return true;
 }
 
@@ -89,7 +90,7 @@ s64 read(fs::File::Handle handle, Bytes buffer)
 	int r = ::read((s64)handle, buffer.ptr, buffer.len);
 
 	if (r == -1)
-		return reportErrno("failed to read from file with handle ", handle);
+		return reportErrno("failed to read from file with handle ", handle, ": ", explain_read((s64)handle, buffer.ptr, buffer.len));
 	return r;
 }
 
@@ -100,7 +101,7 @@ s64 write(fs::File::Handle handle, Bytes buffer)
 	int r = ::write((s64)handle, buffer.ptr, buffer.len);
 
 	if (r == -1)
-		return reportErrno("failed to write to file with handle ", handle);
+		return reportErrno("failed to write to file with handle ", handle, ": ", explain_write((s64)handle, buffer.ptr, buffer.len));
 	return r;
 }
 
@@ -131,7 +132,7 @@ b8 opendir(fs::Dir::Handle* out_handle, str path)
 	DIR* dir = ::opendir((char*)path.bytes);
 
 	if (!dir)
-		return reportErrno("failed to open dir at path '", path, "'");
+		return reportErrno("failed to open dir at path '", path, "': ", explain_opendir((char*)path.bytes));
 
 	*out_handle = dir;
 	return true;
@@ -146,7 +147,7 @@ b8 opendir(fs::Dir::Handle* out_handle, fs::File::Handle file_handle)
 	DIR* dir = fdopendir((s64)file_handle);
 
 	if (!dir)
-		return reportErrno("failed to open dir from file handle ", file_handle, "'");
+		return reportErrno("failed to open dir from file handle ", file_handle, "': ", strerror(errno));
 
 	*out_handle = dir;
 	return false;
@@ -159,7 +160,7 @@ b8 closedir(fs::Dir::Handle handle)
 	int r = ::closedir((DIR*)handle);
 
 	if (r == -1)
-		return reportErrno("failed to close dir with handle ", handle);
+		return reportErrno("failed to close dir with handle ", handle, ": ", explain_closedir((DIR*)handle));
 
 	return true;
 }
@@ -177,7 +178,7 @@ s64 readdir(fs::Dir::Handle handle, Bytes buffer)
 	{
 		if (errno == 0)
 			return false;
-		reportErrno("failed to read directory stream with handle ", handle);
+		reportErrno("failed to read directory stream with handle ", handle, ": ", explain_readdir((DIR*)handle));
 		return -1;
 	}
 	
@@ -216,7 +217,7 @@ b8 stat(fs::FileInfo* out_info, str path)
 			errno = 0;
 		}
 		else
-			reportErrno("failed to stat file at path '", path, "'");
+			reportErrno("failed to stat file at path '", path, "'", strerror(errno));
 		return false;
 	}
 
@@ -272,7 +273,7 @@ b8 makeDir(str path, b8 make_parents)
 	if (!make_parents)
 	{
 		if (-1 == mkdir((char*)path.bytes, 0777))
-			return reportErrno("failed to make directory at path '", path, "'");
+			return reportErrno("failed to make directory at path '", path, "': ", explain_mkdir((char*)path.bytes, 0777));
 		return true;
 	}
 
@@ -294,7 +295,7 @@ b8 makeDir(str path, b8 make_parents)
 			if (-1 == mkdir((char*)path_buffer, 0777))
 			{
 				if (errno != EEXIST)
-					return reportErrno("failed to make directory at path '", path, "'");
+					return reportErrno("failed to make directory at path '", path, "': ", explain_mkdir((char*)path_buffer, 0777));
 				errno = 0;
 			}
 		}
@@ -308,9 +309,6 @@ b8 makeDir(str path, b8 make_parents)
 b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process::Stream streams[3])
 {
 	assert(out_handle);
-
-	// NOTE(sushi) first arg must be the same as the file being executed
-	assert(file == args[0]);
 
 	struct Info
 	{
@@ -326,6 +324,19 @@ b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process:
 		{streams[2].file, streams[2].non_blocking},
 	};
 
+	// TODO(sushi) replace this with some container thats a stack buffer up to a point then dynamically allocates
+	char* argsc[255] = {};
+	assert(args.len + 1 < 255);
+
+	argsc[0] = (char*)file.bytes;
+
+	for (s32 i = 0; i < args.len; i++)
+	{
+		argsc[i+1] = (char*)args[i].bytes;
+	}
+
+	argsc[args.len+1] = 0;
+
 	for (s32 i = 0; i < 3; i++)
 	{
 		if (!infos[i].f)
@@ -338,7 +349,7 @@ b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process:
 		}
 
 		if (-1 == pipe(infos[i].pipes))
-			return reportErrno("failed to open pipes for stream ", i, " for process '", file, "'");
+			return reportErrno("failed to open pipes for stream ", i, " for process '", file, "': ", explain_pipe(infos[i].pipes));
 	}
 
 	if (pid_t pid = fork())
@@ -346,51 +357,36 @@ b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process:
 		// parent branch
 
 		if (pid == -1)
-			return reportErrno("failed to fork process");
+			return reportErrno("failed to fork process: ", explain_fork());
 
 		// close uneeded pipes
 		for (s32 i = 0; i < 3; i++)
 		{
 			if (!infos[i].f)
+				continue;
+
+			fs::OpenFlags flags = {};
+
+			if (infos[i].non_blocking)
+				flags.set(fs::OpenFlag::NoBlock);
+
+			if (i == 0)
 			{
-				if (i == 0)
-				{
-					// if no stream was given for stdin then
-					// close the writing end of that pipe
-					::close(infos[i].pipes[1]);
-				}
-				else
-				{
-					// if no stream was given for stdout/err
-					// then close the reading ends of those pipes
-					::close(infos[i].pipes[0]);
-				}
+				// close reading end of stdin pipe and set stream file
+				// to write to it 
+				close(infos[i].pipes[0]);
+				int fd = dup(infos[i].pipes[1]);
+				flags.set(fs::OpenFlag::Write);
+				*infos[i].f = fs::File::fromFileDescriptor(fd, flags);
 			}
 			else
 			{
-				fs::OpenFlags flags = {};
-
-				if (infos[i].non_blocking)
-					flags.set(fs::OpenFlag::NoBlock);
-
-				if (i == 0)
-				{
-					// close reading end of stdin pipe and set stream file
-					// to write to it 
-					::close(infos[i].pipes[0]);
-					int fd = dup(infos[i].pipes[1]);
-					flags.set(fs::OpenFlag::Write);
-					*infos[i].f = fs::File::fromFileDescriptor(fd, flags);
-				}
-				else
-				{
-					// close writing end of stdout/err pipes and set stream
-					// files to read from them
-					::close(infos[i].pipes[1]);
-					int fd = dup(infos[i].pipes[0]);
-					flags.set(fs::OpenFlag::Read);
-					*infos[i].f = fs::File::fromFileDescriptor(fd, flags);
-				}
+				// close writing end of stdout/err pipes and set stream
+				// files to read from them
+				close(infos[i].pipes[1]);
+				int fd = dup(infos[i].pipes[0]);
+				flags.set(fs::OpenFlag::Read);
+				*infos[i].f = fs::File::fromFileDescriptor(fd, flags);
 			}
 		}
 
@@ -403,44 +399,29 @@ b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process:
 		for (s32 i = 0; i < 3; i++)
 		{
 			if (!infos[i].f)
+				continue;
+
+			if (i == 0)
 			{
-				if (i == 0)
-				{
-					// if no stream was given for stdin then close 
-					// the reading end of that pipe (we wont be reading from it)
-					::close(infos[i].pipes[0]);
-				}
-				else
-				{
-					// if no stream was given for stdout/err
-					// then close the writing ends of those pipes
-					::close(infos[i].pipes[1]);
-				}
+				// close writing end of stdin pipe
+				close(infos[i].pipes[1]);
+				// replace our stdin fd with the one created by the parent
+				dup2(infos[i].pipes[0], 0);
 			}
 			else
 			{
-				if (i == 0)
-				{
-					// close writing end of stdin pipe
-					::close(infos[i].pipes[1]);
-					// replace our stdin fd with the one created by the parent
-					dup2(infos[i].pipes[0], 0);
-				}
-				else
-				{
-					// close reading end of stdout/err pipes
-					::close(infos[i].pipes[0]);
-					// replace our stdout/err pipes with the ones created by the parent
-					dup2(infos[i].pipes[1], i);
-				}
+				// close reading end of stdout/err pipes
+				close(infos[i].pipes[0]);
+				// replace our stdout/err pipes with the ones created by the parent
+				dup2(infos[i].pipes[1], i);
 			}
 		}
 
-
-
-		if (-1 == execvp((char*)args[0].bytes, (char**)args.ptr))
-			return reportErrno("execvp failed to replace child process with file '", file, "'");
+		if (-1 == execvp(argsc[0], argsc))
+			return reportErrno("execvp failed to replace child process with file '", file, "': ", explain_execvp((char*)args[0].bytes, (char**)args.ptr));
 	}
+
+	return true;
 }
 
 }

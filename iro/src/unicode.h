@@ -142,7 +142,7 @@ static str operator ""_str (const char* s, size_t len)
 }
 
 DefineNilValue(iro::utf8::str, {nullptr}, { return x.bytes == nullptr; });
-DefineNilValue(iro::utf8::Codepoint, {(u32)-1}, { return x.codepoint != -1; });
+DefineNilValue(iro::utf8::Codepoint, {(u32)-1}, { return x.codepoint == (u32)-1; });
 
 #endif // _iro_unicode_h
 
