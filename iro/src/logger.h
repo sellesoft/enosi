@@ -81,6 +81,8 @@ struct Log
 	void newDestination(str name, io::IO* d, Dest::Flags flags);
 };
 
+DefineFlagsOrOp(Log::Dest::Flags, Log::Dest::Flag);
+
 extern Log log;
 
 /* ================================================================================================ Logger

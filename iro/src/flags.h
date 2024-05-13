@@ -15,6 +15,8 @@ namespace iro
 template<typename T>
 struct Flags
 {
+	using FlagEnumType = T;
+
 	typedef u64 FlagType;
 
 	FlagType flags = 0;
@@ -77,6 +79,44 @@ struct Flags
 	}
 };
 
+
+// define this on a flags typedef and the enum it uses to allow 
+// arbitrary use of the enum values like you would normally do in C
+#define DefineFlagsOrOp(FlagsT, EnumT) \
+	static FlagsT operator | (EnumT lhs, EnumT rhs) \
+	{ \
+		return FlagsT::from(lhs, rhs); \
+	} \
+      \
+	static FlagsT& operator | (FlagsT&& lhs, EnumT rhs) \
+	{ \
+		lhs.set(rhs); \
+		return lhs; \
+	} \
+	  \
+	static FlagsT operator | (FlagsT& lhs, EnumT rhs) \
+	{ \
+		lhs.set(rhs); \
+		return lhs; \
+	}
+
+// this doesnt work but maybe it can work some other way ?
+// C++ isnt able to infer the type T if you just use the enums plainly
+//template<typename T>
+//Flags<T> operator | (typename Flags<T>::FlagEnumType lhs, typename Flags<T>::FlagEnumType rhs)
+//{
+//	return Flags<T>::from(lhs, rhs);
+//}
+//
+//template<typename T>
+//Flags<T>& operator | (Flags<T>&& lhs, typename Flags<T>::FlagEnumType rhs)
+//{
+//	lhs.set(rhs);
+//	return lhs;
+//}
+
 }
+
+
 
 #endif

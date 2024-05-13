@@ -45,6 +45,8 @@ enum class OpenFlag
 };
 typedef iro::Flags<OpenFlag> OpenFlags;
 
+DefineFlagsOrOp(OpenFlags, OpenFlag);
+
 /* ================================================================================================ FileKind
  */
 enum class FileKind
