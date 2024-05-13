@@ -75,7 +75,7 @@ struct Nil
 	inline bool operator == (const T& rhs) const { return NilValue<T>::isNil(rhs); }
 };
 
-// auxillary for types that define a `==` operator with themselves to avoid the ambiguity
+// Auxillary for types that define a `==` operator with themselves to avoid the ambiguity
 // or if you just like using a function over an operator
 template<Nillable T>
 release_inline bool isnil(const T& x) { return NilValue<T>::isNil(x); }
@@ -83,6 +83,19 @@ release_inline bool isnil(const T& x) { return NilValue<T>::isNil(x); }
 // because i like grammar
 template<Nillable T>
 release_inline bool notnil(const T& x) { return not isnil(x); }
+
+// 'resolves' a nillable value 'x' to 'v' if x is nil, otherwise does nothing.
+// Returns true if the value was resolved.
+template<Nillable T>
+inline b8 resolve(T& x, T v) 
+{
+	if (isnil(x))
+	{
+		x = v;
+		return true;
+	}
+	return false;
+}
 
 /* ------------------------------------------------------------------------------------------------ nil
  *  And finally, *the* nil value.
