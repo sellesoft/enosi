@@ -197,97 +197,16 @@ s64 Dir::next(Bytes buffer)
 	return platform::readdir(handle, buffer);
 }
 
-namespace __internal
-{
-
-/* ------------------------------------------------------------------------------------------------ expand_brace_pattern
+/* ------------------------------------------------------------------------------------------------ Dir::make
  */
-b8 expand_brace_pattern(mem::Allocator* allocator, Array<io::Memory>* expansions, str pattern)
+b8 Dir::make(str path, b8 make_parents)
 {
-	u8* lbrace = nullptr;
-	u8* rbrace = nullptr;
-	u8* alt_start = nullptr;
-
-	auto alternatives = Array<str>::create(16, allocator);
-
-	s32 nesting = 0;
-	b8 escaped = false;
-
-	str pattern_save = pattern;
-
-	while (!pattern.isEmpty())
-	{
-		if (escaped)
-		{
-			escaped = false;
-			continue;
-		}
-
-		auto dc = utf8::decodeCharacter(pattern.bytes, pattern.len);
-		if (isnil(dc))
-			return false;
-
-		switch (dc.codepoint)
-		{
-		case '{':
-			lbrace = pattern.bytes;
-			nesting += 1;
-			break;
-
-		case '}':
-			nesting -= 1;
-			if (nesting == 0)
-			{
-				rbrace = pattern.bytes;
-				u8* start = 1 + (alt_start? alt_start : lbrace);
-				alternatives.push({start, u64(pattern.bytes - start)});
-				goto done;
-			}
-			break;
-
-		case ',':
-			if (nesting == 1)
-			{
-				u8* start = 1 + (alt_start? alt_start : lbrace);
-				alternatives.push({start, u64(pattern.bytes - start)});
-				alt_start = pattern.bytes;
-			}
-			break;
-
-		case '\\':
-			escaped = true;
-			break;
-		}
-
-		pattern.increment(dc.advance);
-	}
-done:;
-	 
-	if (lbrace && rbrace)
-	{
-		str front = {pattern_save.bytes, u64(lbrace - pattern_save.bytes)};
-		str back  = {rbrace + 1, u64((pattern_save.bytes + pattern_save.len) - rbrace)};
-
-		for (str alt : alternatives)
-		{
-			io::Memory brace_pattern;
-			brace_pattern.open(front.len + back.len + alt.len);
-			io::formatv(&brace_pattern, front, alt, back);
-			if (!expand_brace_pattern(allocator, expansions, brace_pattern.asStr()))
-				return false;
-		}
-
-	}
-	else
-	{
-		auto exp = expansions->push();
-		exp->open(pattern.len, allocator);
-		exp->write(pattern);
-	}
-
-	return true;
+	return platform::makeDir(path, make_parents);
 }
 
+b8 Dir::make(Path path, b8 make_parents)
+{
+	return make(path.buffer.asStr(), make_parents);
 }
 
 }
