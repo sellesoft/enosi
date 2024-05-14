@@ -82,12 +82,10 @@ b8 Path::isRegularFile(str path)
 
 /* ------------------------------------------------------------------------------------------------ Path::isDirectory
  */
-b8 Path::isDirectory()
+b8 Path::isDirectory(str path)
 {
-	if (!exists())
-		return false;
 	// this is kind of an inefficient way to check this but oh well
-	return FileInfo::of(buffer.asStr()).kind == FileKind::Directory;
+	return FileInfo::of(path).kind == FileKind::Directory;
 }
 
 /* ------------------------------------------------------------------------------------------------ Path::matches

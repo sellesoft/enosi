@@ -147,7 +147,7 @@ FileInfo FileInfo::of(str path)
 
 	FileInfo out = {};
 	if (!platform::stat(&out, path))
-		return FileInfo::invalid();
+		return nil;
 	return out;
 }
 
