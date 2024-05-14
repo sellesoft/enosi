@@ -33,9 +33,9 @@ struct TimePoint
 	
 	static TimePoint now();
 	static TimePoint monotonic();
-
-	friend TimeSpan operator-(const TimePoint& lhs, const TimePoint& rhs);
 };
+
+TimeSpan operator-(const TimePoint& lhs, const TimePoint& rhs);
 
 static const char* __default_fmtstr = "%c";
 
