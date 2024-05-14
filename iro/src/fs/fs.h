@@ -114,9 +114,6 @@ struct FileInfo
 	TimePoint last_status_change_time;
 	TimePoint birth_time;
 
-	static FileInfo invalid() { return {FileKind::Invalid}; }
-	b8 isValid() { return kind != FileKind::Invalid; }
-
 	static FileInfo of(str path);
 	static FileInfo of(File file);
 };
@@ -137,6 +134,11 @@ struct Dir
 	// Open a directory stream using a file handle, if that handle represents a 
 	// directory.
 	static Dir open(File::Handle file_handle);
+
+	// Make a directory at 'path'. If 'make_parents' is true,
+	// then all missing parents of the given path will be made as well.
+	static b8 make(str path, b8 make_parents = false);
+	static b8 make(Path path, b8 make_parents = false);
 
 	// Closes this directory stream.
 	void close();
@@ -280,9 +282,8 @@ b8 walkForReal(Path& path, DirWalkCallback auto f)
  */
 void walk(str pathin, DirWalkCallback auto f, mem::Allocator* allocator)
 {
-	Path path = Path::from(pathin, allocator);
+	Path path = scoped(Path::from(pathin, allocator));
 	__internal::walkForReal(path, f);
-	path.destroy();
 }
 
 /* ------------------------------------------------------------------------------------------------ glob
@@ -297,7 +298,6 @@ void glob(str pattern, DirGlobCallback auto f)
 	if (!allocator.init())
 		return;
 	defer { allocator.deinit(); };
-
 }
 
 }
