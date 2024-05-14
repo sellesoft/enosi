@@ -16,6 +16,7 @@
 #include "io/io.h"
 #include "io/format.h"
 #include "move.h"
+#include "scoped.h"
 
 namespace iro::fs
 {
@@ -30,6 +31,10 @@ struct Path
 	static Path from(str s = {}, mem::Allocator* allocator = &mem::stl_allocator);
 
 	static b8 matches(str name, str pattern);
+
+	static b8 exists(str path);
+	static b8 isRegularFile(str path);
+	static b8 isDirectory(str path);
 
 	b8   init(mem::Allocator* allocator = &mem::stl_allocator) { return init({}, allocator); }
 	b8   init(str s, mem::Allocator* allocator = &mem::stl_allocator);
@@ -52,10 +57,10 @@ struct Path
 
 	// Helpers for querying information about the file at this path
 
-	b8 exists();
+	b8 exists() { return Path::exists(buffer.asStr()); }
 
-	b8 isRegularFile();
-	b8 isDirectory();
+	b8 isRegularFile() { return Path::isRegularFile(buffer.asStr()); }
+	b8 isDirectory() { return Path::isDirectory(buffer.asStr()); }
 
 	inline b8 isCurrentDirectory() { return (buffer.len == 1 && buffer[0] == '.') || (buffer.len > 1 && buffer[buffer.len-1] == '.' && buffer[buffer.len-2] == '/'); }
 	inline b8 isParentDirectory() { return (buffer.len == 2 && buffer[0] == '.' && buffer[1] == '.') || (buffer.len > 2 && buffer[buffer.len-1] == '.' && buffer[buffer.len-2] == '.' && buffer[buffer.len-3] == '/'); }
@@ -75,5 +80,6 @@ struct Path
 
 DefineMove(iro::fs::Path, { to.buffer = move(from.buffer); });
 DefineNilValue(iro::fs::Path, {}, { return x.buffer == Nil(); });
+DefineScoped(iro::fs::Path, { x.destroy(); });
 
 #endif // _iro_path_h

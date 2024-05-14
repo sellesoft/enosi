@@ -67,19 +67,17 @@ str Path::basename()
 
 /* ------------------------------------------------------------------------------------------------ Path::exists
  */
-b8 Path::exists()
+b8 Path::exists(str path)
 {
-	return platform::fileExists(buffer.asStr());
+	return platform::fileExists(path);
 }
 
 /* ------------------------------------------------------------------------------------------------ Path::isRegularFile
  */
-b8 Path::isRegularFile()
+b8 Path::isRegularFile(str path)
 {
-	if (!exists())
-		return false;
 	// this is kind of an inefficient way to check this but oh well
-	return FileInfo::of(buffer.asStr()).kind == FileKind::Regular;
+	return FileInfo::of(path).kind == FileKind::Regular;
 }
 
 /* ------------------------------------------------------------------------------------------------ Path::isDirectory
