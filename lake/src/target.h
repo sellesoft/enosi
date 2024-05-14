@@ -13,9 +13,14 @@
 #define _lake_target_h
 
 #include "common.h"
-#include "list.h"
-#include "avl.h"
+#include "unicode.h"
+#include "fs/fs.h"
+#include "fs/path.h"
+#include "containers/list.h"
+#include "containers/avl.h"
 #include "flags.h"
+
+using namespace iro;
 
 struct Target;
 struct lua_State;
@@ -30,6 +35,7 @@ u64 target_hash(const Target* t);
 /* ------------------------------------------------------------------------------------------------
  *  Typedefs for qol.
  */
+typedef Pool<Target>             TargetPool;
 typedef DList<Target>            TargetList;
 typedef TargetList::Node         TargetListNode;
 typedef DListIterator<Target>    TargetListIterator;

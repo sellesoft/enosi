@@ -2,8 +2,14 @@
 #define _lake_lexer_h
 
 #include "common.h"
+#include "unicode.h"
+#include "io/io.h"
+#include "logger.h"
+#include "linemap.h"
 
 #include "generated/token.enum.h" 
+
+using namespace iro;
 
 #include "generated/token.strings.h"
 
@@ -13,26 +19,65 @@ struct Token
 {
 	tok kind;
 
-	str raw;
+	u32 offset;
+	u32 len;
 
-	s64 line;
-	s64 column;
+	u32 line;
+	u32 column;
 };
+
+DefineNilValue(Token, {tok::Nil}, { return x.kind == tok::Nil; });
 
 struct Lexer
 {
-	u8* buffer;
-	u8* cursor;
+	str sourcename;
+	io::IO* in;
+	
+	u32 line;
+	u32 column;
 
-	s64 line;
-	s64 column;
-
-	Lake* lake;
-
-	void init(Lake* lake);
+	b8   init(str sourcename, io::IO* in, Logger::Verbosity verbosity);
+	void deinit();
 
 	// null if no more tokens
-	Token next_token();
+	Token nextToken();
+
+	str getRaw(Token t) { return {cache.buffer + t.offset, t.len}; }
+
+private:
+
+	Logger logger;
+
+	Token curt;
+
+	void initCurt();
+	void finishCurt(tok kind, s32 len_offset = 0);
+
+	utf8::Codepoint cursor_codepoint;
+	str cursor;
+
+	// cached buffer so we can get raw strings from tokens
+	io::Memory cache;
+
+	u32 current();
+	u8* currentptr();
+
+	b8 at(u32 c);
+	b8 eof();
+	b8 atFirstIdentifierChar();
+	b8 atIdentifierChar();
+	b8 atWhitespace();
+
+	void advance(s32 n = 1);
+	void skipWhitespace();
+
+	template<typename... T>
+	b8 errorHere(T... args)
+	{
+		ERROR(sourcename, ":", line, ":", column, ": ", args..., "\n");
+		return false;
+	}
+
 };
 
 #endif

@@ -71,62 +71,41 @@ ffi.cdef [[
 		s32 len;
 	} str;
 
-	u8* read_files(str path);
 
-	typedef void* DirIter;
+	void* lua__createSingleTarget(str path);
+	void  lua__makeDep(void* target, void* dependent);
+	s32   lua__targetSetRecipe(void* target);
+	void* lua__createGroupTarget();
+	void  lua__addTargetToGroup(void* group, void* target);
+	b8    lua__targetAlreadyInGroup(void* group);
+	void  lua__stackDump();
+	u64   lua__getMonotonicClock();
+	b8    lua__makeDir(str path, b8 make_parents);
 
-	DirIter dir_iter(const char* path);
-	u32     dir_next(char* c, u32 maxlen, DirIter iter);
+	const char* lua__nextCliarg();
 
-	typedef struct Glob 
+	void* lua__processSpawn(str file, str* args, u32 args_count);
+	b8    lua__processPoll(
+				void* proc,
+				void* stdout_ptr, u64 stdout_len, u64* out_stdout_bytes_read,
+				void* stderr_ptr, u64 stderr_len, u64* out_stderr_bytes_read,
+				s32* out_exit_code);
+
+	typedef struct
 	{
-		s64 n_paths;
-		u8** paths;
+		str* paths;
+		s32 paths_count;
+		void* __dont_touch__;
+	} LuaGlobResult;
 
-		void* handle;
-	} Glob;
-
-	Glob glob_create(const char* pattern);
-	void glob_destroy(Glob glob);
-
-	b8 is_file(const char* path);
-	b8 is_dir(const char* path);
-
-	s64 modtime(const char* path);
-
-	typedef struct Target Target;
-
-	Target* lua__create_single_target(str path);
-	void    lua__make_dep(Target* target, Target* dependent);
-	s32     lua__target_set_recipe(Target* target);
-	Target* lua__create_group_target();
-	void    lua__add_target_to_group(Target* group, Target* target);
-	b8      lua__target_already_in_group(Target* group);
-	void    lua__stack_dump();
-
-	const char* lua__next_cliarg();
-
-	void* process_spawn(const char** args);
-
-	typedef struct PollReturn
-	{
-		int out_bytes_written;
-		int err_bytes_written;
-	} PollReturn;
-
-	typedef void (*exit_cb_t)(int);
-
-	PollReturn process_poll(
-		void* proc,
-		void* stdout_dest, int stdout_suggested_bytes_read, 
-		void* stderr_dest, int stderr_suggested_bytes_read,
-		exit_cb_t on_exit);
-
-	u64 get_highres_clock();
+	LuaGlobResult lua__globCreate(str pattern);
+	void lua__globDestroy(LuaGlobResult x);
 ]]
 local C = ffi.C
 local strtype = ffi.typeof("str")
 local ccptype = ffi.typeof("const char*")
+
+local make_str = function(s) return strtype(s, #s) end
 
 
 -- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
@@ -139,7 +118,7 @@ local ccptype = ffi.typeof("const char*")
 -- * : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : command line arguments
 --   Process command line arguments.
 while true do
-	local arg = C.lua__next_cliarg()
+	local arg = C.lua__nextCliarg()
 
 	if arg == nil then
 		break
@@ -190,6 +169,7 @@ end
 -- * ----------------------------------------------------------------------------------------------
 
 
+
 -- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
 --      
 --      Lake util functions
@@ -200,6 +180,36 @@ end
 --
 -- * >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> -
 
+
+
+-- * ---------------------------------------------------------------------------------------------- lake.mkdir
+-- | Creates a directory at 'path'. Optionally takes a table of 'options', which are:
+-- |   
+-- |   make_parents: if true, then mkdir will also create any missing parent directories in the 
+-- |                 given path.
+-- |
+-- | Returns true if the directory at the path was created.
+lake.mkdir = function(path, options)
+	if type(path) ~= "string" then
+		error("path given to lake.mkdir is not a string! it is "..type(path), 2)
+	end
+
+	local make_parents = false
+
+	if options then
+		if options.make_parents then
+			make_parents = true
+		end
+	end
+
+	if C.lua__makeDir(strtype(path, #path), make_parents) == 0 then
+		return false
+	end
+
+	return true
+end
+-- |
+-- * ----------------------------------------------------------------------------------------------
 
 -- * ---------------------------------------------------------------------------------------------- lake.find
 -- | Performs a shell glob using the given pattern and returns a list of resulting strings.
@@ -215,17 +225,20 @@ lake.find = function(pattern)
 		error("pattern given to lake.find must be a string!", 2)
 	end
 
-	local glob = C.glob_create(pattern)
+	local glob = C.lua__globCreate(make_str(pattern))
 
-	if not glob.handle then
+	if not glob.paths then
 		return {}
 	end
 
 	local out = {}
 
 	for i=0,tonumber(glob.n_paths-1) do
-		table.insert(out, ffi.string(glob.paths[i]))
+		local s = glob.paths[i]
+		table.insert(out, ffi.string(s.str, s.len))
 	end
+
+	C.lua__globDestroy(glob)
 
 	return out
 end
@@ -294,7 +307,7 @@ lake.cmd = function(...)
 		error(message, 2)
 	end
 
-	local argsarr = ffi.new("const char*["..(argcount+1).."]")
+	local argsarr = ffi.new("str["..(argcount+1).."]")
 
 	for i,arg in ipairs(args) do
 		if "string" ~= type(arg) then
@@ -307,16 +320,10 @@ lake.cmd = function(...)
 			error(errstr)
 		end
 
-		argsarr[i-1] = ccptype(args[i])
+		argsarr[i-1] = make_str(args[i])
 	end
 
---	local s = ""
---	for _,arg in ipairs(args) do
---		s = s..arg.." "
---	end
---	print(s)
-
-	local handle = C.process_spawn(argsarr)
+	local handle = C.lua__processSpawn(argsarr)
 
 	if not handle then
 		local argsstr = ""
@@ -333,38 +340,30 @@ lake.cmd = function(...)
 
 	local space_wanted = 256
 
-	local exit_status = nil
-
-	-- cache this somewhere better later
-	-- this is also kind of stupid, only doing it cause its just how i 
-	-- did it long ago in the first lua build sys attempt. The poll 
-	-- function should just return the state of the process.
-	local on_close = function(exit_stat)
-		exit_status = exit_stat
-	end
-
-	local c_callback = ffi.cast("exit_cb_t", on_close)
+	local exit_code = ffi.new("s32[1]")
+	local out_read = ffi.new("u64[1]")
+	local err_read = ffi.new("u64[1]")
 
 	while true do
 		local out_ptr, out_len = out_buf:reserve(space_wanted)
 		local err_ptr, err_len = err_buf:reserve(space_wanted)
 
 		local ret =
-			C.process_poll(
+			C.lua__processPoll(
 				handle,
-				out_ptr, out_len,
-				err_ptr, err_len,
-				c_callback)
+				out_ptr, out_len, out_read,
+				err_ptr, err_len, err_read,
+				exit_code)
 
-		out_buf:commit(ret.out_bytes_written)
-		err_buf:commit(ret.err_bytes_written)
+		out_buf:commit(out_read[0])
+		err_buf:commit(err_read[0])
 
-		if exit_status then
-			c_callback:free()
-			return {
-				exit_status = exit_status,
+		if ret ~= 0 then
+			return
+			{
+				exit_code = exit_code,
 				stdout = out_buf:get(),
-				stderr = err_buf:get(),
+				stderr = err_buf:get()
 			}
 		else
 			co.yield(false)
@@ -439,6 +438,14 @@ lake.concat = function(lhs, rhs)
 end
 
 lake.zip = function(t1, t2)
+	if type(t1) ~= "table" then
+		error("first argument passed to lake.zip is not a table! it is "..type(t1), 2)
+	end
+
+	if type(t2) ~= "table" then
+		error("second argument passed to lake.zip is not a table! it is "..type(t2), 2)
+	end
+
 	local t1l = #t1
 	local t2l = #t2
 
@@ -462,7 +469,7 @@ end
 -- * ---------------------------------------------------------------------------------------------- lake.get_highres_clock
 -- | Returns a highres clock in microseconds.
 lake.get_highres_clock = function()
-	return tonumber(C.get_highres_clock())
+	return tonumber(C.lua__getMonotonicClock())
 end
 -- |
 -- * ----------------------------------------------------------------------------------------------
@@ -500,10 +507,18 @@ Target.new = function(path)
 	local o = {}
 	setmetatable(o, Target)
 	o.path = path
-	o.handle = C.lua__create_single_target(strtype(path, #path))
+	o.handle = C.lua__createSingleTarget(make_str(path))
 	o.uses_targets = {}
 	o.depends_on_targets = {}
 	return o
+end
+-- |
+-- * ----------------------------------------------------------------------------------------------
+
+-- * ---------------------------------------------------------------------------------------------- Target.__tostring
+-- | Targets return their path in string contexts.
+Target.__tostring = function(self)
+	return self.path
 end
 -- |
 -- * ----------------------------------------------------------------------------------------------
@@ -523,7 +538,7 @@ end
 Target.uses = function(self, x)
 	local x_type = type(x)
 	if "string" == x_type then
-		C.lua__make_dep(self.handle, lake.target(x).handle)
+		C.lua__makeDep(self.handle, lake.target(x).handle)
 		table.insert(self.uses_targets, x)
 	elseif "table" == x_type then
 		local flat = flatten_table(x)
@@ -532,7 +547,7 @@ Target.uses = function(self, x)
 			if "string" ~= v_type then
 				error("Element "..i.." of flattened table given to Target.uses is not a string, rather a "..v_type.." whose value is "..tostring(v)..".", 2)
 			end
-			C.lua__make_dep(self.handle, lake.target(v).handle)
+			C.lua__makeDep(self.handle, lake.target(v).handle)
 			table.insert(self.uses_targets, v)
 		end
 	else
@@ -550,7 +565,7 @@ end
 Target.depends_on = function(self, x)
 	local x_type = type(x)
 	if "string" == x_type then
-		C.lua__make_dep(self.handle, lake.target(x).handle)
+		C.lua__makeDep(self.handle, lake.target(x).handle)
 		table.insert(self.depends_on_targets, x)
 	elseif "table" == x_type then
 		local flat = flatten_table(x)
@@ -559,7 +574,7 @@ Target.depends_on = function(self, x)
 			if "string" ~= v_type then
 				error("Element "..i.." of flattened table given to Target.depends_on is not a string, rather a "..v_type.." whose value is "..tostring(v)..".", 2)
 			end
-			C.lua__make_dep(self.handle, lake.target(v).handle)
+			C.lua__makeDep(self.handle, lake.target(v).handle)
 			table.insert(self.depends_on_targets, v)
 		end
 	else
@@ -577,7 +592,7 @@ Target.recipe = function(self, f)
 	if "function" ~= type(f) then
 		error("expected a lua function as the recipe of target '"..self.path.."', got: "..type(f), 2)
 	end
-	local recipeidx = C.lua__target_set_recipe(self.handle)
+	local recipeidx = C.lua__targetSetRecipe(self.handle)
 	recipe_table[recipeidx] = co.create(f)
 	return self
 end
@@ -616,7 +631,7 @@ TargetGroup.new = function()
 	local o = {}
 	setmetatable(o, TargetGroup)
 	o.targets = {}
-	o.handle = C.lua__create_group_target()
+	o.handle = C.lua__createGroupTarget()
 	return o
 end
 -- |
@@ -639,14 +654,10 @@ end
 
 -- * ---------------------------------------------------------------------------------------------- TargetGroup:depends_on
 -- | Calls 'depends_on' for every target in this group.
--- |
--- | TODO(sushi) if for whatever reason there is an error in Target.depends_on it will report that 
--- |             it came from that function, not here, which could be confusing, so fix that 
--- |             eventually.
 TargetGroup.depends_on = function(self, x)
 	local x_type = type(x)
 	if "string" == x_type then
-		C.lua__make_dep(self.handle, lake.target(x).handle)
+		C.lua__makeDep(self.handle, lake.target(x).handle)
 	elseif "table" == x_type then
 		local flat = flatten_table(x)
 		for i,v in ipairs(flat) do
@@ -654,7 +665,7 @@ TargetGroup.depends_on = function(self, x)
 			if "string" ~= v_type then
 				error("Element "..i.." of flattened table given to TargetGroup.depends_on is not a string, rather a "..v_type.." whose value is "..tostring(v)..".", 2)
 			end
-			C.lua__make_dep(self.handle, lake.target(v).handle)
+			C.lua__makeDep(self.handle, lake.target(v).handle)
 		end
 	else
 		error("TargetGroup.depends_on can take either a string or a table of strings, got: "..x_type..".", 2)
@@ -665,9 +676,9 @@ end
 -- * ----------------------------------------------------------------------------------------------
 
 -- * ---------------------------------------------------------------------------------------------- TargetGroup:recipe
--- | Adds the same recipe to all targets.
+-- | Sets the recipe for this group.
 TargetGroup.recipe = function(self, f)
-	local recipeidx = C.lua__target_set_recipe(self.handle)
+	local recipeidx = C.lua__targetSetRecipe(self.handle)
 	recipe_table[recipeidx] = co.create(f)
 	return self
 end
@@ -705,11 +716,11 @@ lake.targets = function(...)
 			error("created target '"..target.path.."' for group, but this target already has a recipe!",2)
 		end
 
-		if C.lua__target_already_in_group(target.handle) ~= 0 then
+		if C.lua__targetAlreadyInGroup(target.handle) ~= 0 then
 			error("target '"..target.path.."' is already in a group!",2)
 		end
 
-		C.lua__add_target_to_group(group.handle, target.handle)
+		C.lua__addTargetToGroup(group.handle, target.handle)
 
 		table.insert(group.targets, target)
 	end

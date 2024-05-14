@@ -23,23 +23,26 @@ struct Token;
 
 struct Parser
 {
-	Lake* lake;
-	Lexer* lex;
+	Lexer lex;
+
+	str sourcename;
 
 	Token curt;
 
 	b8 has_lookahead;
 	Token lookahead_token;
 
+	Logger logger;
+
 	using enum tok;
 
-	void init(Lake* lake);
+	void init(str sourcename, io::IO* in, Logger::Verbosity verbosity, mem::Allocator* allocator);
 	void destroy();
 
 	/* --------------------------------------------------------------------------------------------
 	 *  Get the final result as a dstr.
 	 */
-	dstr fin();
+	Moved<io::Memory> fin();
 
 	/* --------------------------------------------------------------------------------------------
 	 *  Token stack
@@ -49,25 +52,42 @@ struct Parser
 	 *              too far back in the list so maybe not a big deal
 	 */
 	struct TokenStack {
-		Token* arr;
-		s32    space;
-		s32    len;
+		struct Elem
+		{
+			b8 is_virtual;
 
-		void init();
+			struct Virt { tok kind; str raw; };
+
+			union
+			{
+				Token real;
+				Virt virt;
+			};
+		};
+
+		Array<Elem> arr;
+
+		void init(mem::Allocator* allocator);
 		void destroy();
 
-		void grow_if_needed(const s32 new_elements);
-		
-		void  push(Token t);
-		Token pop();
-		void  insert(s64 idx, Token t);
+		void push(Token t);
+		void push(Elem::Virt v);
+		void insert(s64 idx, Token t);
+		void insert(s64 idx, Elem::Virt v);
+		void pop();
 
-		Token get_last_identifier();
-		b8    insert_before_last_identifier(Token t);
-		void  push_before_whitespace(Token t);
+		template<typename... T>
+		void pushv(T... args)
+		{
+			(push(args), ...);
+		}
 
-		void print();
-		void print_src();
+		Token getLastIdentifier();
+		b8    insertBeforeLastIdentifier(Elem::Virt v);
+		void  pushBeforeWhitespace(Elem::Virt v);
+
+		void print(Parser* p, Logger logger);
+		void printSrc(Parser* p, Logger logger);
 	} stack;
 
 	/* --------------------------------------------------------------------------------------------
@@ -127,31 +147,29 @@ struct Parser
 	 *  syntax we defer pushing the token until we know what
 	 *  we really want.
 	 */
-	void next_token(b8 push_on_stack = true, b8 push_whitespace = true);
+	void nextToken(b8 push_on_stack = true, b8 push_whitespace = true);
 
 	void lookahead(b8 push_on_stack = true, b8 push_whitespace = true);
 
 	/*  Check that we're at the given token kind
 	 */ 
 	b8 at(tok k);
-	b8 lookahead_at(tok k);
+	b8 lookaheadAt(tok k);
 
 	/*  Report the error where 'curt' currently is and exit.
 	 */
 	template<typename... T>
-	void error_here(T... args)
+	void errorHere(T... args)
 	{
-		print("** ---- **\n\n");
-		stack.print_src();
-		print("\n\n** ---- **\n\n");
-		error(lake->path, curt.line, curt.column, args...);
+		stack.printSrc(this, logger);
+		ERROR(sourcename, ":", curt.line, ":", curt.column, ": ", args...);
 		exit(1);
 	}
 
 	template<typename... T>
-	void warn_here(T... args)
+	void warnHere(T... args)
 	{
-		warn(lake->path, curt.line, curt.column, args...);
+		WARN(sourcename, ":", curt.line, ":", curt.column, ": ", args...);
 	}
 };
 

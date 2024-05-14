@@ -4,70 +4,111 @@
 #include "ctype.h"
 #include "stdlib.h"
 
-#include "platform.h"
-
-void Lexer::init(Lake* lake_)
+b8 Lexer::init(str sourcename_, io::IO* instream, Logger::Verbosity verbosity)
 {
-	lake = lake_;
-	buffer = read_file(lake->path);
-	cursor = buffer;
-	line = column = 1;
+	logger = Logger::create("lake.lexer"_str, verbosity);
+	in = instream;
+	sourcename = sourcename_;
+	cache.open();
+	cursor_codepoint = nil;
+	advance();
+	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------
- *  Helpers for getting a character relative to the current position in the stream.
- */
-static u8 current(Lexer* l) { return *l->cursor; }
-static u8 next(Lexer* l) { return *(l->cursor + 1); }
-
-/* ------------------------------------------------------------------------------------------------
- *  Helpers for querying what the character is at the current position in the stream.
- */
-static b8 eof(Lexer* l) { return current(l) == 0; }
-static b8 at(Lexer* l, u8 c) { return current(l) == c; }
-static b8 at_identifier_char(Lexer* l) { return isalnum(current(l)) || current(l) == '_'; }
-
-static void advance(Lexer* l)
+void Lexer::deinit()
 {
-	if (at(l, '\n'))
+	in = nullptr;
+}	
+
+u32 Lexer::current() { return cursor_codepoint; }
+u8* Lexer::currentptr() { return cursor.bytes - cursor_codepoint.advance; }
+
+b8 Lexer::eof() { return current() == 0; }
+b8 Lexer::at(u32 c) { return current() == c; }
+
+b8 Lexer::atFirstIdentifierChar() { return isalpha(current()) || at('_'); }
+b8 Lexer::atIdentifierChar() { return atFirstIdentifierChar() || isdigit(current()); }
+
+b8 Lexer::atWhitespace() { return isspace(current()) != 0; }
+
+void Lexer::advance(s32 n)
+{
+	auto readStreamIfNeeded = [this]()
 	{
-		l->line += 1;
-		l->column = 1;
+		if (!cursor.isEmpty() &&
+			!cache.atEnd())
+			return;
+
+		INFO("reading more from stream\n");
+
+		Bytes reserved = cache.reserve(512);
+		s64 bytes_read = in->read(reserved);
+		if (bytes_read == -1)
+		{
+			// TODO(sushi) if lake is ever changed to be usable as a library
+			//             make this not fatal and use longjmp instead
+			errorHere("failed to read more bytes from input stream!");
+			exit(1);
+		}
+		else if (bytes_read == 0)
+		{
+			cursor_codepoint.codepoint = 0;
+			cursor_codepoint.advance = 1;
+		}
+		cache.commit(bytes_read);
+		cursor.bytes = reserved.ptr;
+		cursor.len = bytes_read;
+		INFO("read ", bytes_read, " bytes. Cursor is now: \n", cursor, "\n");
+	};
+
+	for (s32 i = 0; i < n; i++)
+	{
+		readStreamIfNeeded();
+		if (cursor_codepoint.codepoint == 0)
+			return;
+
+		cursor_codepoint = cursor.advance();
+
+		if (at('\n'))
+		{
+			line += 1;
+			column = 1;
+		}
+		else
+			column += 1;
 	}
-	else
-		l->column += 1;
-	l->cursor += 1;
+
+	INFO("advanced to ", (char)current(), "\n");
 }
 
 #include "generated/token.kwmap.h"
 
-Token Lexer::next_token()
+Token Lexer::nextToken()
 { 
-	Token t = {}; 
-	
-	t.kind   = tok::Eof;
-	t.line   = line;
-	t.column = column;
-	t.raw.s  = cursor;
+	curt.kind = tok::Eof;
+	curt.offset = currentptr() - cache.buffer;
 
 	s32 len_offset = 0;
 
-	if (isspace(current(this)))
+	defer { INFO("outputting token ", tok_strings[(u32)curt.kind], ": ", getRaw(curt), "\n"); };
+
+	if (atWhitespace())
 	{
-		t.kind = tok::Whitespace;
-		while(isspace(current(this))) advance(this);
+		curt.kind = tok::Whitespace;
+		while(atWhitespace()) 
+			advance();
 	}
-	else switch (current(this))
+	else switch (current())
 	{
 		case 0: {
-			t.raw.len = 0;
-			return t;
+			curt.len = 0;
+			return curt;
 		} break;
 
-#define one_char_token(c, k) \
-		case c: {            \
-			t.kind = tok::k; \
-			cursor += 1;     \
+#define one_char_token(c, k)     \
+		case c: {                \
+			curt.kind = tok::k;  \
+			advance();           \
 		} break;
 
 		one_char_token(';', Semicolon);
@@ -89,12 +130,12 @@ Token Lexer::next_token()
 		
 #define one_or_two_char_token(c0, k0, c1, k1) \
 		case c0: {                            \
-			t.kind = tok::k0;                 \
-			advance(this);                    \
-			if (current(this) == c1)          \
+			curt.kind = tok::k0;              \
+			advance();                        \
+			if (current() == c1)              \
 			{                                 \
-				t.kind = tok::k1;             \
-				advance(this);                \
+				curt.kind = tok::k1;          \
+				advance();                    \
 			}                                 \
 		} break;
 
@@ -104,123 +145,131 @@ Token Lexer::next_token()
 		one_or_two_char_token('=', Equal,       '=', EqualDouble);
 
 		case '~': {
-			advance(this);
-			if (current(this) != '=')
+			advance();
+			if (current() != '=')
 			{
-				error(lake->path, line, column, "unknown token. only valid glyph after '~' is '='.");
+				errorHere("unknown token. only valid glyph after '~' is '='.");
 				exit(1);
 			}
-			advance(this);
-			t.kind = tok::TildeEqual;
+			advance();
+			curt.kind = tok::TildeEqual;
 		} break;
 
 		case '?': {
-			advance(this);
-			if (current(this) != '=')
+			advance();
+			if (current() != '=')
 			{
-				error(lake->path, line, column, "unknown token. only valid glyph after '?' is '='.");
+				errorHere("unknown token. only valid glyph after '?' is '='.");
 				exit(1);
 			}
-			advance(this);
-			t.kind = tok::QuestionMarkEqual;
+			advance();
+			curt.kind = tok::QuestionMarkEqual;
 		} break;
 
 		case '.': {
-			t.kind = tok::Dot;
-			advance(this);
-			if (current(this) == '.')
+			curt.kind = tok::Dot;
+			advance();
+			if (current() == '.')
 			{
-				t.kind = tok::DotDouble;
-				advance(this);
-				if (current(this) == '.')
+				curt.kind = tok::DotDouble;
+				advance();
+				if (current() == '.')
 				{
-					t.kind = tok::Ellipses;
-					advance(this);
+					curt.kind = tok::Ellipses;
+					advance();
 				}
-				else if (current(this) == '=')
+				else if (current() == '=')
 				{
-					t.kind = tok::DotDoubleEqual;
-					advance(this);
+					curt.kind = tok::DotDoubleEqual;
+					advance();
 				}
 			}
 		} break;
 
 		case '"': {
 			u64 l = line, c = column;
-			t.kind = tok::String;
-			t.raw.s += 1;
+			curt.kind = tok::String;
+			curt.offset += 1;
 			len_offset = -1; // haha 
-			advance(this);
-			while (current(this) != '"' && !eof(this)) advance(this);
+			advance();
+			while (!at('"') && !eof()) 
+				advance();
 
-			if (eof(this))
+			if (eof())
 			{
-				error(lake->path, line, column, "encountered eof while consuming string that began at ", l, ":", c);
+				errorHere("encountered eof while consuming string that began at ", l, ":", c);
 				exit(1);
 			}
-			advance(this);
+			advance();
 		} break;
 
 		case '-': {
-			t.kind = tok::Minus;
-			advance(this);
-			if (current(this) == '-')
+			curt.kind = tok::Minus;
+			advance();
+			if (current() == '-')
 			{
 				// consume comment and return the following token
-				while (!at(this, '\n') && !eof(this)) advance(this);
-				return next_token();
+				while (!at('\n') && !eof()) advance();
+				return nextToken();
 			}
 		} break;
 
 		default: {
-			if (isdigit(current(this)))
+			if (isdigit(current()))
 			{
-				while (isdigit(current(this))) advance(this);
+				while (isdigit(current())) advance();
 
-				switch (current(this))
+				switch (current())
 				{
 					case 'e':
 					case 'E':
 					case '.': {
-						advance(this);
-						while(isdigit(current(this))) advance(this);
-						t.raw.len = cursor - t.raw.s;
+						advance();
+						while(isdigit(current())) advance();
+						curt.len = (currentptr() - cache.buffer) - curt.offset;
 					} break;
 
 					case 'x':
 					case 'X':{
-						advance(this);
-						while(isdigit(current(this))) advance(this); 
-						t.kind = tok::Number;
-						t.raw.len = cursor - t.raw.s;
+						advance();
+						while(isdigit(current())) advance(); 
+						curt.kind = tok::Number;
+						curt.len = (currentptr() - cache.buffer) - curt.offset;
 					} break;
 
 					default: {
-						t.raw.len = cursor - t.raw.s;
-						t.kind = tok::Number;
+						curt.len = (currentptr() - cache.buffer) - curt.offset;
+						curt.kind = tok::Number;
 					} break;
 				}
 			}
 			else
 			{
-				// must be either a keyword or identifier
-				if (!at_identifier_char(this))
+				if (eof())
 				{
-					error(lake->path, line, column, "invalid token: ", (char)current(this));
+					curt.len = 0;
+					return curt;
+				}
+
+				// must be either a keyword or identifier
+				if (!atFirstIdentifierChar())
+				{
+					errorHere("invalid token: ", (char)current());
 					exit(1);
 				}
 
-				advance(this);
-				while (at_identifier_char(this) && !eof(this)) advance(this);
+				advance();
+				while (atIdentifierChar() && !eof()) 
+					advance();
 
-				t.raw.len = (cursor - t.raw.s) + len_offset;
-				t.kind = is_keyword_or_identifier(t.raw);
-				return t;
+				curt.len = (currentptr() - cache.buffer) - curt.offset + len_offset;
+				curt.kind = is_keyword_or_identifier(getRaw(curt));
+				return curt;
 			}
 		} break;
 	}
 
-	t.raw.len = (cursor - t.raw.s) + len_offset;
+	curt.len = (currentptr() - cache.buffer) - curt.offset + len_offset;
 
-	return t;
+	return curt;
 }

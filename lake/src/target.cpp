@@ -1,6 +1,5 @@
 #include "target.h"
 #include "lake.h"
-#include "platform.h"
 
 #include "stdlib.h"
 #include "assert.h"
@@ -15,6 +14,8 @@ extern "C"
 #include "lualib.h"
 #include "lauxlib.h"
 }
+
+static Logger logger = Logger::create("lake.target"_str, Logger::Verbosity::Trace);
 
 /* ------------------------------------------------------------------------------------------------ target_hash
  */
@@ -38,7 +39,7 @@ str Target::name()
 	switch (kind)
 	{
 		case Kind::Single: return single.path;
-		case Kind::Group: return strl("group");
+		case Kind::Group: return "group"_str;
 	}
 }
 
@@ -68,7 +69,7 @@ b8 Target::exists()
 {
 	switch (kind)
 	{
-		case Kind::Single: return ::path_exists(single.path);
+		case Kind::Single: return fs::Path::exists(single.path);
 		
 		case Kind::Group:
 			for (auto& target : group.targets)
@@ -87,7 +88,7 @@ s64 Target::modtime()
 	switch (kind)
 	{
 		// TODO(sushi) what if our path is not null-terminated ?
-		case Kind::Single: return ::modtime((char*)single.path.s);
+		case Kind::Single: return fs::FileInfo::of(single.path).last_modified_time.s;
 
 		case Kind::Group: {
 			s64 min = 9223372036854775807;
@@ -169,7 +170,7 @@ Target::RecipeResult Target::resume_recipe(lua_State* L)
 {
 	if (!lua_ref || !flags.test(Flags::HasRecipe))
 	{
-		error_nopath("Target '", name(), "' had resume_recipe() called on it, but either it doesn't reference a recipe to run!");
+		ERROR("Target '", name(), "' had resume_recipe() called on it, but it has no recipe!");
 		return RecipeResult::Error;
 	}
 
@@ -190,7 +191,7 @@ Target::RecipeResult Target::resume_recipe(lua_State* L)
 	// that the recipe is not yet finished, but we dont check for this explicitly.
 	if (lua_pcall(L, 1, 2, 0))
 	{
-		printv(lua_tostring(L, -1), "\n");
+		ERROR(lua_tostring(L, -1), "\n");
 		return RecipeResult::Error;
 	}
 
@@ -199,7 +200,7 @@ Target::RecipeResult Target::resume_recipe(lua_State* L)
 	if (!coroutine_success)
 	{
 		// the second arg is the message given by whatever failure occured
-		printv(lua_tostring(L, -1), "\n");
+		ERROR(lua_tostring(L, -1), "\n");
 		return RecipeResult::Error;
 	}
 
@@ -225,7 +226,7 @@ void Target::update_dependents(TargetList& build_queue, b8 mark_just_built)
 				if (dependent.unsatified_prereq_count == 1)
 				{
 					INFO("Dependent '", dependent.name(), "' has no more unsatisfied prerequisites, adding it to the build queue.\n");
-					dependent.build_node = build_queue.push_tail(&dependent);
+					dependent.build_node = build_queue.pushTail(&dependent);
 					dependent.unsatified_prereq_count = 0;
 				}
 				else if (dependent.unsatified_prereq_count != 0)

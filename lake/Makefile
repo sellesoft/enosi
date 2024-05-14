@@ -1,5 +1,5 @@
-build_mode ?= debug
-build_dir := build/${build_mode}
+mode ?= debug
+build_dir := build/${mode}
 
 lake := ${build_dir}/lake
 
@@ -11,7 +11,7 @@ VPATH = src
 # and then generate their respective object and dependency
 # file paths
 
-c_files := $(wildcard src/*.cpp)
+c_files := $(shell find src/ -type f -name '*.cpp')
 o_files := $(foreach file,$(c_files),${build_dir}/$(file:.cpp=.o))
 d_files := $(o_files:.o=.d)
 
@@ -38,20 +38,23 @@ compiler_flags :=     \
 	-std=c++20        \
 	-Iinclude         \
 	-Isrc             \
+	-Isrc/iro/src     \
 	-Wall             \
 	-Wno-switch       \
 	-Wno-\#warnings   \
+	-Wno-unused-function \
 	-fno-caret-diagnostics
 
-ifeq ($(build_mode),debug)
+ifeq ($(mode),debug)
 	compiler_flags += -O0 -ggdb3 -DLAKE_DEBUG=1
-else ifeq ($(build_mode),release)
+else ifeq ($(mode),release)
 	compiler_flags += -O2
 endif
 
 linker_flags := \
 	-Llib       \
 	-lluajit    \
+	-lexplain   \
 	-lm         \
 	-Wl,--export-dynamic
 
@@ -89,7 +92,7 @@ src/generated/cliargparser.h: src/cliargs.lua
 	$(call print,$<,$@)
 
 src/generated/lakeluacompiled.h: src/lake.lua
-	${v}luajit -b $< $@
+	${v}luajit -b -g $< $@
 	$(call print,$<,$@)
 
 # include the dependency files if they have 

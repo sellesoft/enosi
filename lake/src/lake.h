@@ -2,9 +2,10 @@
 #define _lake_lake_h
 
 #include "common.h"
-#include "list.h"
-#include "avl.h"
+#include "containers/list.h"
+#include "containers/avl.h"
 #include "target.h"
+#include "logger.h"
 
 struct Lexer;
 struct Parser;
@@ -46,18 +47,21 @@ struct Lake
 	LuaCLIArgList lua_cli_args; 
 	LuaCLIArgList::Node* lua_cli_arg_iterator;
 
+	Logger logger = Logger::create("lake"_str, Logger::Verbosity::Trace);
+
 	s32          argc;
 	const char** argv;
 
 	u32 max_jobs; // --max-jobs <n> or -j <n>
 	b8 print_transformed; // --print-transformed
 
-	b8 init(str path, s32 argc, const char* argv[]);
-	b8 process_argv();
+	b8 init(const char** argv, int argc, mem::Allocator* allocator = &mem::stl_allocator);
+	b8 process_argv(str* initfile);
 	b8 run();
 };
 
 extern Lake lake;
+extern Logger log;
 
 // api used in the lua lake module 
 extern "C" 

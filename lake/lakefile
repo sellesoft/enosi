@@ -1,7 +1,9 @@
 mode    ?= "debug"
 verbose ?= false
 
-build_dir := "build/"..mode.."/"
+build_dir := "buildtest/"..mode.."/"
+
+lake.mkdir(build_dir, {make_parents = true})
 
 lakeexe := lake.target(build_dir.."lake")
 
@@ -13,10 +15,12 @@ compiler     := "clang++"
 linker       := "clang++"
 preprocessor := "cpp"
 
-compiler_flags := $[
+compiler_flags := 
+$[
 	-std=c++20
 	-Iinclude
 	-Isrc
+	-Isrc/iro/src
 	-Wno-switch
 	-fcolor-diagnostics
 	-Wno-#warnings
@@ -32,7 +36,8 @@ else
 	compiler_flags ..= "-O2"
 end
 
-linker_flags := $[
+linker_flags := 
+$[
 	-Llib
 	-lluajit
 	-lm
@@ -176,3 +181,4 @@ lake.target("src/generated/lakeluacompiled.h")
 
 		io.write(result.stdout, "\n", result.stderr)
 	end)
+

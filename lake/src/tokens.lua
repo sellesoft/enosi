@@ -109,11 +109,11 @@ static const str tok_strings[] =
 ]]
 
 for _,v in ipairs(tokens) do
-	out = out.."\tstrl(\""..v.."\"),\n"
+	out = out.."\t\""..v.."\"_str,\n"
 end
 
 for _,v in ipairs(keyword_tokens) do
-	out = out.."\tstrl(\""..v[1].."\"),\n"
+	out = out.."\t\""..v[1].."\"_str,\n"
 end
 
 out = out..[[
@@ -137,7 +137,7 @@ static tok is_keyword_or_identifier(str s)
 ]]
 
 for _,v in ipairs(keyword_tokens) do
-	out = out.."\t\t case static_string_hash(\""..v[2].."\"): return tok::"..v[1]..";\n"
+	out = out.."\t\t case \""..v[2].."\"_hashed: return tok::"..v[1]..";\n"
 end
 
 out = out..[[

@@ -6,31 +6,39 @@
 #include "assert.h"
 #include "stdlib.h"
 
+#include "logger.h"
+
+#define PARSER_TRACE \
+	TRACE(__func__, ": ", lex.getRaw(curt), "\n"); \
+	SCOPED_INDENT;
+
 /* ================================================================================================
  *
  *   Common token constants that are inserted into the token stack
  *
  */
 
-const Token identifier_lake   = {tok::Identifier, strl("lake"), 0, 0};
-const Token identifier_cmd    = {tok::Identifier, strl("cmd"), 0, 0};
-const Token identifier_concat = {tok::Identifier, strl("concat"), 0, 0};
-const Token identifier_clivars = {tok::Identifier, strl("clivars"), 0, 0};
+#define defVirtTok(v, k, r) static const Parser::TokenStack::Elem::Virt v = {k, r}
 
-const Token punctuation_dot       = {tok::Dot, strl("."), 0, 0};
-const Token punctuation_lparen    = {tok::ParenLeft, strl("("), 0 ,0};
-const Token punctuation_rparen    = {tok::ParenRight, strl(")"), 0, 0};
-const Token punctuation_comma     = {tok::Comma, strl(","), 0, 0};
-const Token punctuation_equal     = {tok::Equal, strl("="), 0, 0 };
-const Token punctuation_lbrace    = {tok::BraceLeft, strl("{"), 0, 0};
-const Token punctuation_rbrace    = {tok::BraceRight, strl("}"), 0, 0};
-// const Token punctuation_dotdouble = {tok::DotDouble, strl(".."), 0, 0};
+defVirtTok(identifier_lake,    tok::Identifier, "lake"_str);
+defVirtTok(identifier_cmd,     tok::Identifier, "cmd"_str);
+defVirtTok(identifier_concat,  tok::Identifier, "concat"_str);
+defVirtTok(identifier_clivars, tok::Identifier, "clivars"_str);
 
-const Token keyword_local = {tok::Local, strl("local"), 0, 0};
-const Token keyword_or    = {tok::Or, strl("or"), 0, 0};
+defVirtTok(punctuation_dot,    tok::Dot, "."_str);
+defVirtTok(punctuation_lparen, tok::ParenLeft, "("_str);
+defVirtTok(punctuation_rparen, tok::ParenRight, ")"_str);
+defVirtTok(punctuation_comma,  tok::Comma, ","_str);
+defVirtTok(punctuation_equal,  tok::Equal, "="_str);
+defVirtTok(punctuation_lbrace, tok::BraceLeft, "{"_str);
+defVirtTok(punctuation_rbrace, tok::BraceRight, "}"_str);
 
-const Token whitespace_space = {tok::Whitespace, strl(" "), 0, 0};
+defVirtTok(keyword_local, tok::Local, "local"_str);
+defVirtTok(keyword_or,    tok::Or, "or"_str);
 
+defVirtTok(whitespace_space, tok::Whitespace, " "_str);
+
+#undef defVirtTok
 
 /* ================================================================================================
  *
@@ -40,77 +48,59 @@ const Token whitespace_space = {tok::Whitespace, strl(" "), 0, 0};
 
 /* ------------------------------------------------------------------------------------------------
  */
-void Parser::TokenStack::init()
+void Parser::TokenStack::init(mem::Allocator* allocator)
 {
-	space = 32;
-	len = 0;
-	arr = (Token*)mem.allocate(sizeof(Token) * space);
+	arr = Array<Elem>::create(16, allocator);
 }
   
 void Parser::TokenStack::destroy()
 {
-	space = len = 0;
-	mem.free(arr);
+	arr.destroy();
 }
   
 /* ------------------------------------------------------------------------------------------------
  */
-void Parser::TokenStack::grow_if_needed(const s32 new_elements)
+void Parser::TokenStack::push(Token t)
 {
-	if (len + new_elements <= space)
-		return;
-
-	while (len + new_elements > space) 
-		space *= 2;
-
-	arr = (Token*)mem.reallocate(arr, sizeof(Token) * space);
-
+	arr.push({.is_virtual = false, .real = t});
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
-void Parser::TokenStack::push(Token t)
+void Parser::TokenStack::push(Elem::Virt v)
 {
-	grow_if_needed(1);
-
-	arr[len] = t;
-	len += 1;
+	arr.push({.is_virtual = true, .virt = v});
 }
 
 void Parser::TokenStack::insert(s64 idx, Token t)
 {
-	assert(idx <= len);
-
-	grow_if_needed(1);
-
-	if (!len) push(t);
-	else
-	{
-		mem.move(arr + idx + 1, arr + idx, sizeof(Token) * (len - idx));
-		len += 1;
-		arr[idx] = t;
-	}
+	arr.insert(idx, {.is_virtual = false, .real = t});
 }
 
-Token Parser::TokenStack::pop() 
+void Parser::TokenStack::insert(s64 idx, Elem::Virt v)
 {
-	len -= 1;
-	return arr[len];
+	arr.insert(idx, {.is_virtual = true, .virt = v});
+}
+
+void Parser::TokenStack::pop() 
+{
+	arr.pop();
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
-Token Parser::TokenStack::get_last_identifier()
+Token Parser::TokenStack::getLastIdentifier()
 {
-
-	Token* search = arr + len - 1;
+	Elem* search = arr.end() - 1;
 	for (;;)
 	{
-		if (search->kind == tok::Identifier)
+		if (search->is_virtual)
+			continue;
+		if (search->real.kind == tok::Identifier)
 		{
-			return *search;
+			return search->real;
 		}
-		else if (search == arr)
+		else if (search == arr.begin())
 			return {tok::Eof};
 		search -= 1;
 	}
@@ -118,17 +108,19 @@ Token Parser::TokenStack::get_last_identifier()
 
 /* ------------------------------------------------------------------------------------------------
  */
-b8 Parser::TokenStack::insert_before_last_identifier(Token t)
+b8 Parser::TokenStack::insertBeforeLastIdentifier(Elem::Virt v)
 {
-	Token* search = arr + len - 1;
+	Elem* search = arr.end() - 1;
 	for (;;)
 	{
-		if (search->kind == tok::Identifier)
+		if (search->is_virtual)
+			continue;
+		if (search->real.kind == tok::Identifier)
 		{
-			insert(search - arr, t);
+			insert(search - arr.begin(), v);
 			return true;
 		}
-		else if (search == arr) 
+		else if (search == arr.begin()) 
 			return false;
 		search -= 1;
 	}
@@ -136,63 +128,97 @@ b8 Parser::TokenStack::insert_before_last_identifier(Token t)
 
 /* ------------------------------------------------------------------------------------------------
  */
-void Parser::TokenStack::push_before_whitespace(Token t)
+void Parser::TokenStack::pushBeforeWhitespace(Elem::Virt v)
 {
-	if (arr[len-1].kind == Whitespace)
+	if (!arr.last()->is_virtual && arr.last()->real.kind == Whitespace)
 	{
-		insert(len-1, t);
+		insert(arr.len()-1, v);
 	}
 	else
 	{
-		push(t);
+		push(v);
 	}
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
-void Parser::TokenStack::print()
+void Parser::TokenStack::print(Parser* p, Logger logger)
 {
-	for (u32 i = 0; i < len; i++)
+	for (u32 i = 0; i < arr.len(); i++)
 	{
-		Token t = arr[i];
-		if (t.kind == tok::Whitespace)
-			printv("Whitespace\n");
+		Elem e = arr[i];
+		if (e.is_virtual)
+		{
+			INFO("Virtual: ", tok_strings[(u32)e.virt.kind], " ", e.virt.raw, "\n");
+		}
 		else
-			printv(tok_strings[(u32)t.kind], " ", t.raw, "\n");
+		{
+			if (e.real.kind == Whitespace)
+			{
+				INFO("Whitespace\n");
+			}
+			else
+			{
+				INFO(tok_strings[(u32)e.real.kind], " ", p->lex.getRaw(e.real), "\n");
+			}
+		}
 	}
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
-void Parser::TokenStack::print_src()
+void Parser::TokenStack::printSrc(Parser* p, Logger logger)
 {
-	for (u32 i = 0; i < len; i++)
+	for (u32 i = 0; i < arr.len(); i++)
 	{
-		Token t = arr[i];
-		if (t.kind == String)
-			printv("\"", t.raw, "\"");
+		Elem e = arr[i];
+		if (e.is_virtual)
+		{
+			INFO(e.virt.raw);
+		}
 		else
-			::print(t.raw);
+		{
+			if (e.real.kind == String)
+			{
+				INFO('"', p->lex.getRaw(e.real), '"');
+			}
+			else
+			{
+				INFO(p->lex.getRaw(e.real));
+			}
+		}
 	}
 }
 
 
 /* ------------------------------------------------------------------------------------------------
  */
-dstr Parser::fin()
+Moved<io::Memory> Parser::fin()
 {
-	dstr out = dstr::create();
+	io::Memory out;
+	out.open();
 
-	for (u32 i = 0; i < stack.len; i++)
+	for (u32 i = 0; i < stack.arr.len(); i++)
 	{
-		Token t = stack.arr[i];
-		if (t.kind == String)
-			out.appendv("\"", t.raw, "\"");
+		TokenStack::Elem e = stack.arr[i];
+		if (e.is_virtual)
+		{
+			io::format(&out, e.virt.raw);
+		}
 		else
-			out.append(t.raw);
+		{
+			if (e.real.kind == String)
+			{
+				io::formatv(&out, '"', lex.getRaw(e.real), '"');
+			}
+			else
+			{
+				io::format(&out, lex.getRaw(e.real));
+			}
+		}
 	}
 
-	return out;
+	return move(out);
 }
 
 /* ================================================================================================
@@ -203,20 +229,20 @@ dstr Parser::fin()
 
 /* ------------------------------------------------------------------------------------------------
  */
-void Parser::init(Lake* lake_)
+void Parser::init(str sourcename, io::IO* in, Logger::Verbosity verbosity, mem::Allocator* allocator)
 {
-	lake = lake_;
-	lex = (Lexer*)mem.allocate(sizeof(Lexer));
-	lex->init(lake);
+	lex.init(sourcename, in, verbosity);
+	stack.init(allocator);
+	logger = Logger::create("lake.parser"_str, verbosity);
 	curt = {};
-	stack.init();
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
 void Parser::destroy()
 {
-	mem.free(lex);
+	stack.destroy();
+	lex.deinit();
 	*this = {};
 }
 
@@ -280,7 +306,8 @@ b8 is_bop(Token t)
  */
 void Parser::start()
 {
-	next_token();
+	PARSER_TRACE;
+	nextToken();
 	chunk();
 }
 
@@ -288,12 +315,13 @@ void Parser::start()
  */
 void Parser::chunk()
 {
+	PARSER_TRACE;
 	for (;;)
 	{
 		if (statement() || block_follow(curt))
 			break;
 		if (at(Semicolon))
-			next_token();
+			nextToken();
 	}
 }
 
@@ -301,6 +329,7 @@ void Parser::chunk()
  */
 void Parser::block()
 {
+	PARSER_TRACE;
 	chunk();
 }
 
@@ -308,23 +337,24 @@ void Parser::block()
  */
 void Parser::funcargs()
 {
+	PARSER_TRACE;
 	Token save = curt;
 	switch (curt.kind)
 	{
 		case ParenLeft: {
-			next_token();
+			nextToken();
 
 			if (at(ParenRight))
 			{
-				next_token();
+				nextToken();
 				break;
 			}
 
 			exprlist1();
 
 			if (!at(ParenRight))
-				error_here("expected a ')' to match '(' at ", save.line, ":", save.column);
-			next_token();
+				errorHere("expected a ')' to match '(' at ", curt.line, ":", curt.column);
+			nextToken();
 		} break;
 
 		case BraceLeft: {
@@ -332,11 +362,11 @@ void Parser::funcargs()
 		} break;
 
 		case String: {
-			next_token();
+			nextToken();
 		} break;
 
 		default: {
-			error_here("expected function argument list, table, or string");
+			errorHere("expected function argument list, table, or string");
 		} break;
 	}
 }
@@ -345,6 +375,7 @@ void Parser::funcargs()
  */
 void Parser::parlist()
 {
+	PARSER_TRACE;
 	if (at(ParenRight))
 		return;
 
@@ -353,12 +384,12 @@ void Parser::parlist()
 		if (at(Ellipses))
 			break;
 		else if (!at(Identifier))
-			error_here("expected an identifier or '...' as function arg");
-		next_token();
+			errorHere("expected an identifier or '...' as function arg");
+		nextToken();
 
 		if (!at(Comma))
 			break;
-		next_token();
+		nextToken();
 	}
 }
 
@@ -366,52 +397,56 @@ void Parser::parlist()
  */
 void Parser::field()
 {
-	next_token();
+	PARSER_TRACE;
+	nextToken();
 	
 	if (!at(Identifier))
-		error_here("expected an identifier after '.' or ':'");
-	next_token();
+		errorHere("expected an identifier after '.' or ':'");
+	nextToken();
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
 void Parser::body(Token start)
 {
+	PARSER_TRACE;
 	if (!at(ParenLeft))
-		error_here("expected '(' to start function parameter list");
-	next_token();
+		errorHere("expected '(' to start function parameter list");
+	nextToken();
 
 	parlist();
 
 	if (!at(ParenRight))
-		error_here("expected ')' to close function parameter list");
-	next_token();
+		errorHere("expected ')' to close function parameter list");
+	nextToken();
 
 	chunk();
 
 	if (!at(End))
-		error_here("expected 'end' to match 'function' at ", start.line, ":", start.column);
-	next_token();
+		errorHere("expected 'end' to match 'function' at ", start.line, ":", start.column);
+	nextToken();
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
 void Parser::yindex()
 {
+	PARSER_TRACE;
 	Token save = curt;
-	next_token();
+	nextToken();
 
 	expr();
 
 	if (!at(SquareRight))
-		error_here("expected a ']' to end '[' at ", save.line, ":", save.column);
-	next_token();
+		errorHere("expected a ']' to end '[' at ", save.line, ":", save.column);
+	nextToken();
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
 void Parser::simpleexpr()
 {
+	PARSER_TRACE;
 	Token save = curt;
 	switch (curt.kind)
 	{
@@ -426,14 +461,14 @@ void Parser::simpleexpr()
 			tableconstructor();     
 			return;  
 		case Function: 
-			next_token(); 
+			nextToken(); 
 			body(save);
 			return;
 		default:
 			primaryexpr();   
 			return; 
 	}
-	next_token();  
+	nextToken();  
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -443,7 +478,7 @@ struct bop_prio
 	u8 left, right;
 };
 
-bop_prio get_priority(Token t)
+bop_prio getPriority(Token t, Parser* p)
 {
 	using enum tok;
 
@@ -467,8 +502,8 @@ bop_prio get_priority(Token t)
 			return {1, 1};
 	}
 
-	error(strl(""), t.line, t.column, "INTERNAL ERROR SOMEHOW WE FAILED TO GET A BINARY OP IN get_priority() ????");
-	exit(1);
+	p->errorHere("INTERNAL ERROR SOMEHOW WE FAILED TO GET A BINARY OP IN get_priority() ????");
+	return {};
 }
 
 #define UOP_PRIO 8
@@ -477,9 +512,10 @@ bop_prio get_priority(Token t)
  */
 void Parser::subexpr(s32 limit)
 {
+	PARSER_TRACE;
 	if (is_uop(curt))
 	{
-		next_token();
+		nextToken();
 		subexpr(UOP_PRIO);
 	}
 	else
@@ -487,10 +523,10 @@ void Parser::subexpr(s32 limit)
 
 	while (is_bop(curt)) 
 	{
-		auto prio = get_priority(curt);
+		auto prio = getPriority(curt, this);
 		if (prio.left < limit)
 			break;
-		next_token();
+		nextToken();
 		subexpr(prio.right); 
 	}
 }  
@@ -499,6 +535,7 @@ void Parser::subexpr(s32 limit)
  */
 void Parser::expr()
 {
+	PARSER_TRACE;
 	subexpr(0);
 }
 
@@ -506,34 +543,35 @@ void Parser::expr()
  */
 void Parser::prefixexpr()
 {
+	PARSER_TRACE;
 	switch (curt.kind)
 	{
 		case ParenLeft: {
 			Token save = curt;
-			next_token();
+			nextToken();
 			
 			expr();
 			if (!at(ParenRight))
-				error_here("expected ')' to end '(' at ", save.line, ":", save.column);
-			next_token();
+				errorHere("expected ')' to end '(' at ", save.line, ":", save.column);
+			nextToken();
 		} break;
 
 		/* @lakesyntax
 		 */
 		case Dollar: {
-			next_token(false);
+			nextToken(false);
 
 			if (!at(SquareLeft))
-				error_here("expected '[' after '$' to begin whitespace delimited string array");
-			next_token(false);
+				errorHere("expected '[' after '$' to begin whitespace delimited string array");
+			nextToken(false);
 
-			stack.push_before_whitespace(punctuation_lbrace);
+			stack.pushBeforeWhitespace(punctuation_lbrace);
 
 			if (at(SquareRight))
 			{
-				warn_here("empty whitespace delimited array eg. $[]");
+				warnHere("empty whitespace delimited array eg. $[]");
 				stack.push(punctuation_rbrace);
-				next_token(false);
+				nextToken(false);
 				break;
 			}
 			
@@ -543,26 +581,26 @@ void Parser::prefixexpr()
 
 				for (;;)
 				{
-					curt = lex->next_token();
+					curt = lex.nextToken();
 					if (curt.kind == Whitespace ||
 						curt.kind == SquareRight)
 						break;
 				}
 
-				stack.push({String, {save.raw.s, (s32)(curt.raw.s - save.raw.s)}, 0, 0});
+				stack.push(Token{String, save.offset, curt.offset - save.offset});
 				stack.push(punctuation_comma);
 
 				if (curt.kind == SquareRight)
 					break;
 
-				next_token();
+				nextToken();
 
 				if (curt.kind == SquareRight) // :/
 					break;
 			}
 
 			stack.push(punctuation_rbrace);
-			next_token(false);
+			nextToken(false);
 		} break;
 
 		/* @lakesyntax
@@ -573,7 +611,7 @@ void Parser::prefixexpr()
 			stack.push(identifier_cmd);
 			stack.push(punctuation_lparen);
 
-			next_token(false,false);
+			nextToken(false,false);
 
 			auto consume_arg = [this]()
 			{
@@ -589,8 +627,8 @@ void Parser::prefixexpr()
 					}
 
 					if (at(Eof))
-						error_here("encountered end of file while consuming command argument that began at ", save.line, ":", save.column);
-					curt = lex->next_token();
+						errorHere("encountered end of file while consuming command argument that began at ", save.line, ":", save.column);
+					nextToken();
 				}
 			};
 
@@ -601,29 +639,29 @@ void Parser::prefixexpr()
 					case Dollar: {
 						Token save = curt;
 
-						next_token(false,false);
+						nextToken(false,false);
 
 						if (!at(ParenLeft))
 						{
 							consume_arg();
-							stack.push({String, {save.raw.s, (s32)(curt.raw.s - save.raw.s)}, 0, 0});
+							stack.push({String, save.offset, curt.offset - save.offset, 0});
 							break;
 						}
 
-						next_token(false,false);
+						nextToken(false,false);
 						expr();
 
 						if (!at(ParenRight))
-							error_here("expected ')' to end interpolated command argument started at ", save.line, ":", save.column);
-						next_token(false,false);
+							errorHere("expected ')' to end interpolated command argument started at ", save.line, ":", save.column);
+						nextToken(false,false);
 					} break;
 
 					default: {
 						Token save = curt;
 						consume_arg();
-						stack.push({String, {save.raw.s, (s32)(curt.raw.s - save.raw.s)}, 0, 0});
+						stack.push({String, save.offset, curt.offset - save.offset, 0});
 						if (at(Whitespace))
-							next_token(false,false);
+							nextToken(false,false);
 					} break;
 
 					case Backtick:
@@ -636,19 +674,19 @@ void Parser::prefixexpr()
 				stack.push(punctuation_comma);
 			}
 
-			if (stack.arr[stack.len-1].kind == Comma)
+			if (stack.arr[stack.arr.len()-1].real.kind == Comma)
 				stack.pop(); // kind silly
 
 			stack.push(punctuation_rparen);
-			next_token(false);
+			nextToken(false);
 		} break;
 
 		case Identifier: 
-			next_token();
+			nextToken();
 			break;
 
 		default: {
-			error_here("expected an identifier or '('");
+			errorHere("expected an identifier or '('");
 		} break;
 	}
 }
@@ -657,6 +695,7 @@ void Parser::prefixexpr()
  */
 void Parser::primaryexpr(b8* is_call)
 {
+	PARSER_TRACE;
 	prefixexpr();
 
 	for (;;)
@@ -672,11 +711,11 @@ void Parser::primaryexpr(b8* is_call)
 			} break;
 
 			case Colon: {
-				next_token();
+				nextToken();
 
 				if (!at(Identifier))
-					error_here("expected an identifier after method call ':'");
-				next_token();
+					errorHere("expected an identifier after method call ':'");
+				nextToken();
 
 				funcargs();
 				if (is_call) *is_call = true;
@@ -698,10 +737,11 @@ void Parser::primaryexpr(b8* is_call)
  */
 void Parser::exprlist1()
 {
+	PARSER_TRACE;
 	expr();
 	while (at(Comma))
 	{
-		next_token();
+		nextToken();
 		expr();
 	}
 }
@@ -710,16 +750,17 @@ void Parser::exprlist1()
  */
 void Parser::recfield()
 {
+	PARSER_TRACE;
 	if (at(Identifier))
 	{
-		next_token(); 
+		nextToken(); 
 	}
 	else
 		yindex();
 
 	if(!at(Equal))
-		error_here("expected '=' for table key");
-	next_token();
+		errorHere("expected '=' for table key");
+	nextToken();
 
 	expr();
 }
@@ -728,11 +769,12 @@ void Parser::recfield()
  */
 void Parser::tableconstructor()
 {
+	PARSER_TRACE;
 	Token save = curt;
 
 	if (!at(BraceLeft))
-		error_here("expected '{' for table constructor");
-	next_token();
+		errorHere("expected '{' for table constructor");
+	nextToken();
 
 	for (;;)
 	{
@@ -743,7 +785,7 @@ void Parser::tableconstructor()
 		{
 			case Identifier: {
 				lookahead();
-				if (!lookahead_at(Equal)) 
+				if (!lookaheadAt(Equal)) 
 					expr();
 				else
 					recfield();
@@ -759,18 +801,19 @@ void Parser::tableconstructor()
 
 		if (!at(Comma) && !at(Semicolon))
 			break;
-		next_token();
+		nextToken();
 	}
 
 	if (!at(BraceRight))
-		error_here("expected '}' to end table started at ", save.line, ":", save.column);
-	next_token();
+		errorHere("expected '}' to end table started at ", save.line, ":", save.column);
+	nextToken();
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
 void Parser::assignment()
 {
+	PARSER_TRACE;
 	if (at(Comma))
 	{
 		primaryexpr();
@@ -781,64 +824,66 @@ void Parser::assignment()
 		switch(curt.kind)
 		{
 			case QuestionMarkEqual: {
-				if (!stack.insert_before_last_identifier(keyword_local))
-					error_here("encountered '?=' but could not find preceeding identifier to place 'local'.");
-				stack.insert_before_last_identifier(whitespace_space);
+				if (!stack.insertBeforeLastIdentifier(keyword_local))
+					errorHere("encountered '?=' but could not find preceeding identifier to place 'local'.");
+				stack.insertBeforeLastIdentifier(whitespace_space);
 
-				Token last_identifier = stack.get_last_identifier();
+				Token last_identifier = stack.getLastIdentifier();
 			
-				// TODO(sushi) once we actually gather cli args just do the replacement directly
-				//             here instead of this silly function call thing
-				stack.push(punctuation_equal);
-				stack.push(whitespace_space);
-				stack.push(identifier_lake);
-				stack.push(punctuation_dot);
-				stack.push(identifier_clivars);
-				stack.push(punctuation_dot);
-				stack.push(last_identifier);
-				stack.push(whitespace_space);
-				stack.push(keyword_or);
-				stack.push(whitespace_space);
-				stack.push(punctuation_lparen);
+				stack.pushv(
+					punctuation_equal, // = lake.clivars.<lastid> or (
+					whitespace_space,
+					identifier_lake,
+					punctuation_dot,
+					identifier_clivars,
+					punctuation_dot,
+					last_identifier,
+					whitespace_space,
+					keyword_or,
+					whitespace_space,
+					punctuation_lparen);
 				
-				next_token(false);
+				nextToken(false);
 				exprlist1();
 
-				stack.push_before_whitespace(punctuation_rparen);
+				stack.pushBeforeWhitespace(punctuation_rparen);
 			} break;
 
 			case ColonEqual: {
-				if (!stack.insert_before_last_identifier(keyword_local))
-					error_here("encountered ':=' but could not find preceeding identifier to place 'local'.");
-				stack.insert_before_last_identifier(whitespace_space);
+				if (!stack.insertBeforeLastIdentifier(keyword_local))
+					errorHere("encountered ':=' but could not find preceeding identifier to place 'local'.");
+				stack.insertBeforeLastIdentifier(whitespace_space);
 
 				stack.push(punctuation_equal);
 
-				next_token(false);
+				nextToken(false);
 				exprlist1();
 			} break;
 
 			case DotDoubleEqual: {
-				Token last_identifier = stack.get_last_identifier();
+				// TODO(sushi) this does not work in cases like a table access eg. files.c will return just c
+				//             we'll need to store more complex information to get this to work properly i think
+				Token last_identifier = stack.getLastIdentifier();
 				
 				// call a concat function that handles tables and strings
-				stack.push(punctuation_equal);
-				stack.push(whitespace_space);
-				stack.push(identifier_lake);
-				stack.push(punctuation_dot);
-				stack.push(identifier_concat);
-				stack.push(punctuation_lparen);
-				stack.push(last_identifier);
-				stack.push(punctuation_comma);
+				stack.pushv(
+	 				punctuation_equal, // = lake.concat(<lastid>,
+					whitespace_space,
+					identifier_lake,
+					punctuation_dot,
+					identifier_concat,
+					punctuation_lparen,
+					last_identifier,
+					punctuation_comma);
 
-				next_token(false);
+				nextToken(false);
 				exprlist1();
 
-				stack.push_before_whitespace(punctuation_rparen);
+				stack.pushBeforeWhitespace(punctuation_rparen);
 			} break;
 
 			case Equal: {
-				next_token();
+				nextToken();
 				exprlist1();
 			} break;
 		}
@@ -849,26 +894,28 @@ void Parser::assignment()
  */
 void Parser::exprstat()
 {
+	PARSER_TRACE;
 	b8 is_call = false;
 	primaryexpr(&is_call);
 	if (!is_call)
 		assignment();
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------H------------------------------------------------------------------------
  */
 b8 Parser::statement()
 {
+	PARSER_TRACE;
 	Token save = curt;
 	switch (curt.kind)
 	{
 		case If: {
-			next_token();
+			nextToken();
 			expr();
 
 			if (!at(Then))
-				error_here("expected 'then' after if condition");
-			next_token();
+				errorHere("expected 'then' after if condition");
+			nextToken();
 
 			block();
 
@@ -876,90 +923,90 @@ b8 Parser::statement()
 			{
 				expr();
 				if (!at(Then))
-					error_here("expected 'then' after elseif condition");
-				next_token();
+					errorHere("expected 'then' after elseif condition");
+				nextToken();
 			}
 
 			if (at(Else))
 			{
-				next_token();
+				nextToken();
 				block();
 			}
 
 			if (!at(End))
-				error_here("expected 'end' to match if at ", save.line, ":", save.column);
-			next_token();
+				errorHere("expected 'end' to match if at ", save.line, ":", save.column);
+			nextToken();
 		} return false;
 
 		case While: {
-			next_token();
+			nextToken();
 			expr();
 
 			if (!at(Do))
-				error_here("expected 'do' after while condition");
-			next_token();
+				errorHere("expected 'do' after while condition");
+			nextToken();
 
 			block();
 
 			if (!at(End))
-				error_here("expected 'end' to match while at ", save.line, ":", save.column);
+				errorHere("expected 'end' to match while at ", save.line, ":", save.column);
 		} return false;
 
 		case Do: {
-			next_token();
+			nextToken();
 			block();
 			if (!at(End))
-				error_here("expected 'end' to match 'do' at ", save.line, ":", save.column);
+				errorHere("expected 'end' to match 'do' at ", save.line, ":", save.column);
 		} return false;
 
 		case For: {
-			next_token();
-			next_token(); // should just be a var name
+			nextToken();
+			nextToken(); // should just be a var name
 			switch (curt.kind)
 			{
 				case Equal: {
-					next_token();
+					nextToken();
 					expr();
 					if (at(Comma))
 					{
-						next_token();
+						nextToken();
 						expr();
 					}
 				} break;
 				
 				case In: {
-					next_token();
+					nextToken();
 					exprlist1();
 				} break;
 
 				case Comma: {
-					next_token();
+					nextToken();
 
 					while (at(Comma))
 					{
-						next_token();
+						nextToken();
 						if (!at(Identifier))
-							error_here("expected an identifier");
+							errorHere("expected an identifier");
 					}
-					next_token();
+					nextToken();
 
 					if (!at(In))
-						error_here("expected 'in' for list 'for' statement");
-					next_token();
+						errorHere("expected 'in' for list 'for' statement");
+					nextToken();
 
 					exprlist1();
 				} break;
 			}
 
 			if (!at(Do))
-				error_here("expected 'do' after for loop");
-			next_token();
+				errorHere("expected 'do' after for loop");
+			nextToken();
 
 			block();
 			
 			if (!at(End))
-				error_here("expected 'end' to match 'for' at ", save.line, ":", save.column);
-			next_token();
+				errorHere("expected 'end' to match 'for' at ", save.line, ":", save.column);
+			nextToken();
 		} return false;
 
 		case Repeat: {
@@ -968,31 +1015,31 @@ b8 Parser::statement()
 		} return false;
 
 		case Function: {
-			next_token();
+			nextToken();
 
 			while (at(Dot))
 				field();
 
 			if (at(Colon))
 				field();
-			next_token();
+			nextToken();
 
 			body(save);
 		} return false;
 
 		case Local: {
-			next_token();
+			nextToken();
 
 			if (at(Function))
 				body(save);
 			else
 			{
-				next_token();
+				nextToken();
 
 				while(at(Comma))
-					next_token();
+					nextToken();
 				
-				next_token();
+				nextToken();
 
 				if (at(Equal))
 					exprlist1();
@@ -1000,7 +1047,7 @@ b8 Parser::statement()
 		} return false;
 
 		case Return: {
-			next_token();
+			nextToken();
 
 			if (block_follow(curt))
 				break;
@@ -1009,7 +1056,7 @@ b8 Parser::statement()
 		} return true;
 		
 		case Break: {
-			next_token();
+			nextToken();
 		} return true;
 
 		default: {
@@ -1021,7 +1068,7 @@ b8 Parser::statement()
 	return false;
 }
 
-void Parser::next_token(b8 push_on_stack, b8 push_whitespace)
+void Parser::nextToken(b8 push_on_stack, b8 push_whitespace)
 {
 	if (has_lookahead)
 	{
@@ -1034,7 +1081,7 @@ void Parser::next_token(b8 push_on_stack, b8 push_whitespace)
 		stack.push(curt);
 	for (;;)
 	{
-		curt = lex->next_token();
+		curt = lex.nextToken();
 		if (at(Whitespace))
 		{
 			if (push_whitespace)
@@ -1056,8 +1103,8 @@ void Parser::lookahead(b8 push_on_stack, b8 push_whitespace)
 		stack.push(curt);
 	for (;;)
 	{
-		lookahead_token = lex->next_token();
-		if (lookahead_at(Whitespace))
+		lookahead_token = lex.nextToken();
+		if (lookaheadAt(Whitespace))
 		{
 			if (push_whitespace)
 				stack.push(lookahead_token);
@@ -1072,7 +1119,7 @@ b8 Parser::at(tok k)
 	return curt.kind == k;
 }
 
-b8 Parser::lookahead_at(tok k)
+b8 Parser::lookaheadAt(tok k)
 {
 	return lookahead_token.kind == k;
 }

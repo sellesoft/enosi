@@ -30,6 +30,8 @@
 						gdb
 						bear
 						linuxKernel.packages.linux_zen.perf
+						explain
+						acl
 					];
 			};
 		});

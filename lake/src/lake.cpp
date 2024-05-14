@@ -11,11 +11,23 @@
 #include "target.h"
 
 #include "logger.h"
-
 #include "luahelpers.h"
 
 #include "generated/cliargparser.h"
 #include "generated/lakeluacompiled.h"
+
+#include "assert.h"
+
+#include "string.h"
+
+#include "time/time.h"
+
+#include "process.h"
+
+#undef stdout
+#undef stderr
+
+using namespace iro;
 
 extern "C"
 {
@@ -24,47 +36,83 @@ extern "C"
 #include "lauxlib.h"
 }
 
+Logger logger = Logger::create("lake"_str, 
+#if LAKE_DEBUG
+		Logger::Verbosity::Debug);
+#else
+		Logger::Verbosity::Warn);
+#endif
+
 Lake lake; // global for now, maybe not later 
-Logger log;
+
+struct ActiveProcess
+{
+	Process process;
+	fs::File stdout;
+	fs::File stderr;
+};
+
+Pool<ActiveProcess> active_process_pool;
 
 /* ------------------------------------------------------------------------------------------------ Lake::init
  */
-b8 Lake::init(str p, s32 argc_, const char* argv_[])
+b8 Lake::init(const char** argv_, int argc_, mem::Allocator* allocator)
 {
-#if LAKE_DEBUG
-	log.verbosity = Logger::Verbosity::Debug;
-#else
-	log.verbosity = Logger::Verbosity::Warn;
-#endif
-	log.indentation = 0;
+	assert(argv_ && allocator);
 
 	INFO("Initializing Lake.\n");
 	SCOPED_INDENT;
 
-	path = p;
-
 	max_jobs = 1;
-
-	DEBUG("Allocating and initializing parser.\n");
-
-	parser = (Parser*)mem.allocate(sizeof(Parser));
-	parser->init(this);
 
 	argc = argc_;
 	argv = argv_;
 
-	lua_cli_args = LuaCLIArgList::create();
+	lua_cli_args = LuaCLIArgList::create(allocator);
+	active_process_pool = Pool<ActiveProcess>::create(allocator);
 
-	process_argv();
+	str initfile_name = nil;
+	if (!process_argv(&initfile_name))
+		return false;
+	b8 resolved = resolve(initfile_name, "lakefile"_str);
+
+	if (resolved)
+	{
+		DEBUG("no initial file specified on cli, searching for 'lakefile'\n");
+	}
+	else
+	{
+		DEBUG("file '", initfile_name, "' was specified as initial file on cli\n");
+	}
+
+	using namespace fs;
+
+	File init = File::from(initfile_name, OpenFlag::Read);
+	if (init == nil)
+	{
+		if (resolved)
+		{
+			FATAL("no initial file was specified (-f) and no file with the default name 'lakefile' could be found\n");
+		}
+		else
+		{
+			FATAL("failed to find specified file (-f) '", initfile_name, "'\n");
+		}
+		return false;
+	}
+
+	// TODO(sushi) try to remember why I was allocating this
+	parser = (Parser*)allocator->allocate(sizeof(Parser));
+	parser->init(initfile_name, &init, logger.verbosity, allocator);
 
 	lua_cli_arg_iterator = lua_cli_args.head;
 
 	DEBUG("Creating target pool and target lists.\n");
 
-	target_pool    = Pool<Target>::create();
-	build_queue    = TargetList::create();
-	product_list   = TargetList::create();
-	active_recipes = TargetList::create();
+	target_pool    = TargetPool::create(allocator);
+	build_queue    = TargetList::create(allocator);
+	product_list   = TargetList::create(allocator);
+	active_recipes = TargetList::create(allocator);
 
 	DEBUG("Loading lua state.\n");
 
@@ -74,107 +122,168 @@ b8 Lake::init(str p, s32 argc_, const char* argv_[])
 	return true;
 }
 
+struct ArgIter
+{
+	const char** argv = nullptr;
+	u64 argc = 0;
+	u64 idx = 0;
+
+	str current = nil;
+
+	ArgIter(const char** argv, u32 argc) : argv(argv), argc(argc) 
+	{  
+		idx = 1;
+		next();
+	}
+
+	void next()
+	{
+		if (idx == argc)
+		{
+			current = nil;
+			return;
+		}
+
+		current = { (u8*)argv[idx++] };
+		current.len = strlen((char*)current.bytes);
+	}
+};
+
+/* ------------------------------------------------------------------------------------------------ process_max_jobs_arg
+ */
+b8 process_max_jobs_arg(Lake* lake, ArgIter* iter)
+{
+	str mjarg = iter->current;
+
+	iter->next();
+	if (isnil(iter->current))
+	{
+		FATAL("expected a number after '--max-jobs'\n");
+		return false;
+	}
+
+	str arg = iter->current;
+
+	u8* scan = arg.bytes;
+
+	while (*scan)
+	{
+		if (!isdigit(*scan))
+		{
+			FATAL("given argument '", arg, "' after '", mjarg, "' must be a number\n");
+			return false;
+		}
+
+		scan += 1;
+	}
+
+	lake->max_jobs = atoi((char*)arg.bytes);
+
+	DEBUG("max_jobs set to ", lake->max_jobs, " via command line argument\n");
+
+	return true;
+}
+
+/* ------------------------------------------------------------------------------------------------ process_arg_double_dash
+ */
+b8 process_arg_double_dash(Lake* lake, str arg, str* initfile, ArgIter* iter)
+{
+	switch (arg.hash())
+	{
+	case "verbosity"_hashed:
+		{
+			iter->next();
+			if (isnil(iter->current))
+			{
+				FATAL("expected a verbosity level after '--verbosity'\n");
+				return false;
+			}
+
+			switch (iter->current.hash())
+			{
+
+#define verbmap(s, level) \
+			case GLUE(s, _hashed): \
+				logger.verbosity = Logger::Verbosity::level;\
+				DEBUG("Logger verbosity level set to " STRINGIZE(level) " via command line argument.\n"); \
+				break;
+			
+			verbmap("trace", Trace);
+			verbmap("debug", Debug);
+			verbmap("info", Info);
+			verbmap("notice", Notice);
+			verbmap("warn", Warn);
+			verbmap("error", Error);
+			verbmap("fatal", Fatal);
+			default:
+				FATAL("expected a verbosity level after '--verbosity'\n");
+				return false;
+#undef verbmap
+
+			}
+		}
+		break;
+
+	case "print-transformed"_hashed:
+		lake->print_transformed = true;
+		break;
+
+	case "max-jobs"_hashed:
+		if (!process_max_jobs_arg(lake, iter))
+			return false;
+		break;
+	}
+
+	return true;
+}
+
+/* ------------------------------------------------------------------------------------------------ process_arg_single_dash
+ */
+b8 process_arg_single_dash(Lake* lake, str arg, str* initfile, ArgIter* iter)
+{
+	switch (arg.hash())
+	{
+	case "v"_hashed:
+		logger.verbosity = Logger::Verbosity::Debug;
+		DEBUG("Logger verbosity set to Debug via command line argument.\n");
+		break;
+
+	case "j"_hashed:
+		if (!process_max_jobs_arg(lake, iter))
+			return false;
+		break;
+	}
+
+	return true;
+}
+
 /* ------------------------------------------------------------------------------------------------ Lake::process_argv
  */
-b8 Lake::process_argv()
+b8 Lake::process_argv(str* initfile)
 {
 	INFO("Processing cli args.\n");
 	SCOPED_INDENT;
 
-	for (s32 i = 1; i < argc; i++)
+	for (ArgIter iter(argv, argc); notnil(iter.current); iter.next())
 	{
-		const char* arg = argv[i];
-		CLIArgType type = parse_cli_arg(arg);
-
-		switch (type)
+		str arg = iter.current;
+		if (arg.len > 1 && arg.bytes[0] == '-')
 		{
-			case CLIArgType::Unknown: {
-				if (arg[0] == '-')
-				{
-					error_nopath("unknown switch '", arg, "', use '--help' for info on how to use lake.");
-					exit(1);
-				}
-
-				// just hand off the arg to be handled in lake.lua.
-				// It is likely a target to be made or a variable set
-				lua_cli_args.push(argv + i);
-
-				DEBUG("Encountered unknown cli arg '", arg, "' so it has been added to the lua cli args list.\n");
-			} break;
-
-			case CLIArgType::JobsBig:
-			case CLIArgType::JobsSmall: {
-				// next arg must be a number
-				i += 1;
-
-				if (i == argc)
-				{
-					error_nopath("expected a number after '", arg, "'");
-					exit(1);
-				}
-
-				arg = argv[i];
-
-				const char* scan = arg;
-				while (*scan)
-				{
-					if (!isdigit(*scan))
-					{
-						error_nopath("given argument '", arg, "' after '", argv[i-1], "' must be a number");
-						exit(1);
-					}
-
-					scan += 1;
-				}
-
-				max_jobs = atoi(arg);
-
-				DEBUG("max_jobs set to ", max_jobs, " via command line argument.\n");
-			} break;
-
-			case CLIArgType::VerboseSmall: {
-				log.verbosity = Logger::Verbosity::Debug;
-				DEBUG("Logger verbosity level set to Debug via command line argument.\n");
-			} break;
-
-			case CLIArgType::VerboseBig: {
-				i += 1;
-
-				if (i == argc) 
-				{
-					error_nopath("expected a verbosity level after '--verbosity'");
-					exit(1);
-				}
-
-#define SET_VERBOSITY(level) \
-				case GLUE(CLIArgType::Option,level): \
-					log.verbosity = Logger::Verbosity::level;\
-					DEBUG("Logger verbosity level set to " STRINGIZE(level) " via command line argument.\n"); \
-					break;
-
-				switch (parse_cli_arg(argv[i]))
-				{
-					SET_VERBOSITY(Trace);
-					SET_VERBOSITY(Debug);
-					SET_VERBOSITY(Info);
-					SET_VERBOSITY(Notice);
-					SET_VERBOSITY(Warn);
-					SET_VERBOSITY(Error);
-					SET_VERBOSITY(Fatal);
-					default: {
-						error_nopath("expected a verbosity level after '--verbosity'");
-						exit(1);
-					} break;
-				}
-
-#undef SET_VERBOSITY
-			} break;
-
-			case CLIArgType::PrintTransformed: {
-				print_transformed = true;
-
-				DEBUG("print_transformed set via command line argument.\n");
-			} break;
+			if (arg.len > 2 && arg.bytes[1] == '-')
+			{
+				if (!process_arg_double_dash(this, arg.sub(2), initfile, &iter))
+					return false;
+			}
+			else
+			{
+				if (!process_arg_single_dash(this, arg.sub(1), initfile, &iter))
+					return false;
+			}
+		}
+		else
+		{
+			lua_cli_args.push(argv + iter.idx);
+			DEBUG("Encountered unknown cli arg '", arg, "' so it has been added to the lua cli args list.\n");
 		}
 	}
 
@@ -219,33 +328,33 @@ b8 Lake::run()
 
 	// TODO(sushi) we can just load the program into lua by token 
 	//             using the loader callback thing in lua_load
-	dstr prog = parser->fin();
+	io::Memory prog = parser->fin();
 
 	if (print_transformed)
-		printf("%.*s\n", prog.len, prog.s);
+		printf("%.*s\n", prog.len, prog.buffer);
 
 	INFO("Executing transformed lakefile.\n"); 
-	if (luaL_loadbuffer(L, (char*)prog.s, prog.len, "lakefile") || lua_pcall(L, 0, 0, 0))
+	if (luaL_loadbuffer(L, (char*)prog.buffer, prog.len, "lakefile") || lua_pcall(L, 0, 0, 0))
 	{
 		printf("%s\n", lua_tostring(L, -1));
 		lua_pop(L, 1);
 		return false;
 	}
 
-	prog.destroy();
+	prog.close();
 
 	INFO("Beginning build loop.\n");
 
 	for (u64 build_pass = 0;;)
 	{
-		if (!build_queue.is_empty() && max_jobs - active_recipe_count)
+		if (!build_queue.isEmpty() && max_jobs - active_recipe_count)
 		{
 			build_pass += 1;
 
 			INFO("Entering build pass ", build_pass, "\n");
 			SCOPED_INDENT;
 
-			while (!build_queue.is_empty() && max_jobs - active_recipe_count)
+			while (!build_queue.isEmpty() && max_jobs - active_recipe_count)
 			{
 				Target* target = build_queue.front();
 
@@ -255,7 +364,7 @@ b8 Lake::run()
 				if (target->needs_built())
 				{
 					INFO("Target needs built, adding to active recipes list\n");
-					target->active_recipe_node = active_recipes.push_head(target);
+					target->active_recipe_node = active_recipes.pushHead(target);
 					active_recipe_count += 1;
 					build_queue.remove(target->build_node);
 				}
@@ -268,9 +377,8 @@ b8 Lake::run()
 				}
 			}
 		}
-
 		
-		if (active_recipes.is_empty() && build_queue.is_empty())
+		if (active_recipes.isEmpty() && build_queue.isEmpty())
 		{
 			INFO("Active recipe list and build queue are empty, we must be finished.\n");
 			break;
@@ -290,7 +398,7 @@ b8 Lake::run()
 				} break;
 
 				case Target::RecipeResult::Error: {
-					error_nopath("recipe error\n");
+					ERROR("recipe error\n");
 					return false;
 				} break;
 
@@ -313,7 +421,7 @@ void assert_group(Target* target)
 {
 	if (target->kind != Target::Kind::Group)
 	{
-		error_nopath("Target '", (void*)target, "' failed group assertion\n");
+		FATAL("Target '", (void*)target, "' failed group assertion\n");
 		exit(1);
 	}
 }
@@ -322,7 +430,8 @@ void assert_single(Target* target)
 {
 	if (target->kind != Target::Kind::Single)
 	{
-		error_nopath("Target '", (void*)target, "' failed single assertion\n");
+		FATAL("Target '", (void*)target, "' failed single assertion\n");
+		exit(1);
 	}
 }
 
@@ -337,21 +446,21 @@ void assert_single(Target*){}
 extern "C"
 {
 
-/* ------------------------------------------------------------------------------------------------ lua__create_single_target
+/* ------------------------------------------------------------------------------------------------ lua__createSingleTarget
  */
-Target* lua__create_single_target(str path)
+Target* lua__createSingleTarget(str path)
 {
 	Target* t = lake.target_pool.add();
 	t->init_single(path);
-	t->build_node = lake.build_queue.push_head(t);
-	t->product_node = lake.product_list.push_head(t);
+	t->build_node = lake.build_queue.pushHead(t);
+	t->product_node = lake.product_list.pushHead(t);
 	INFO("Created target '", t->name(), "'.\n");
 	return t;
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__make_dep
+/* ------------------------------------------------------------------------------------------------ lua__makeDep
  */
-void lua__make_dep(Target* target, Target* prereq)
+void lua__makeDep(Target* target, Target* prereq)
 {
 	INFO("Making '", prereq->name(), "' a prerequisite of target '", target->name(), "'.\n");
 	SCOPED_INDENT;
@@ -379,11 +488,11 @@ void lua__make_dep(Target* target, Target* prereq)
 	}
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__target_set_recipe
+/* ------------------------------------------------------------------------------------------------ lua__targetSetRecipe
  *  Sets the target as having a recipe and returns an index into the recipe table that the calling
  *  function is expected to use to set the recipe appropriately.
  */
-s32 lua__target_set_recipe(Target* target)
+s32 lua__targetSetRecipe(Target* target)
 {
 	lua_State* L = lake.L;
 	lua_getglobal(L, lake_recipe_table);
@@ -422,23 +531,22 @@ s32 lua__target_set_recipe(Target* target)
  
 		return next;
 	}
-
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__create_group
+/* ------------------------------------------------------------------------------------------------ lua__createGroupTarget
  */
-Target* lua__create_group_target()
+Target* lua__createGroupTarget()
 {
 	Target* group = lake.target_pool.add();
 	group->init_group();
-	group->build_node = lake.build_queue.push_head(group);
+	group->build_node = lake.build_queue.pushHead(group);
 	INFO("Created group '", (void*)group, "'.\n");
 	return group;
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__add_target_to_group
+/* ------------------------------------------------------------------------------------------------ lua__addTargetToGroup
  */
-void lua__add_target_to_group(Target* group, Target* target)
+void lua__addTargetToGroup(Target* group, Target* target)
 {
 	assert_group(group);
 	assert_single(target);
@@ -451,17 +559,17 @@ void lua__add_target_to_group(Target* group, Target* target)
 		lake.build_queue.remove(target->build_node);
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__target_already_in_group
+/* ------------------------------------------------------------------------------------------------ lua__targetAlreadyInGroup
  */
-b8 lua__target_already_in_group(Target* target)
+b8 lua__targetAlreadyInGroup(Target* target)
 {
 	assert_single(target);
 	return target->single.group != nullptr;
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__next_cliarg
+/* ------------------------------------------------------------------------------------------------ lua__nextCliarg
  */
-const char* lua__next_cliarg()
+const char* lua__nextCliarg()
 {
 	if (!lake.lua_cli_arg_iterator)
 		return nullptr;
@@ -471,7 +579,7 @@ const char* lua__next_cliarg()
 	return out;
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__finalize_group
+/* ------------------------------------------------------------------------------------------------ lua__finalizeGroup
  *  Finalizes the given group. We assume no more targets will be added to it and hash together the
  *  hashes of each target in the group to form the hash of the group. 
  *
@@ -479,16 +587,139 @@ const char* lua__next_cliarg()
  *              think of is referring to the same group by calling 'lake.targets' with the 
  *              same paths, but I don't intend on ever doing that myself.
  */
-void lua__finalize_group(Target* target)
+void lua__finalizeGroup(Target* target)
 {
 	assert_group(target);
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__stack_dump
+/* ------------------------------------------------------------------------------------------------ lua__stackDump
  */
-void lua__stack_dump()
+void lua__stackDump()
 {
 	stack_dump(lake.L);
 }
+
+/* ------------------------------------------------------------------------------------------------ lua__getMonotonicClock
+ */
+u64 lua__getMonotonicClock()
+{
+	auto now = TimePoint::monotonic();
+	return now.s * 1e6 + now.ns / 1e3;
+}
+
+/* ------------------------------------------------------------------------------------------------ lua__makeDir
+ */
+b8 lua__makeDir(str path, b8 make_parents)
+{
+	return fs::Dir::make(path, make_parents);
+}
+
+/* ------------------------------------------------------------------------------------------------ lua__dirDestroy
+ */
+void lua__dirDestroy(fs::Dir* dir)
+{
+	mem::stl_allocator.deconstruct(dir);
+}
+
+/* ------------------------------------------------------------------------------------------------ lua__processSpawn
+ */
+ActiveProcess* lua__processSpawn(str* args, u32 args_count)
+{
+	assert(args && args_count);
+
+	DEBUG("spawning process from file '", args[0], "'\n");
+	SCOPED_INDENT;
+
+	if (logger.verbosity == Logger::Verbosity::Trace)
+	{
+		TRACE("with args:\n");
+		SCOPED_INDENT;
+		for (s32 i = 0; i < args_count; i++)
+		{
+			TRACE(args[i], "\n");
+		}
+	}	
+
+	ActiveProcess* proc = active_process_pool.add();
+	Process::Stream streams[3] = {{}, {true, &proc->stdout}, {true, &proc->stderr}};
+	proc->process = Process::spawn(args[0], {args+1, args_count-1}, streams);
+	if (isnil(proc->process))
+	{
+		ERROR("failed to spawn process using file '", args[0], "'\n");
+		exit(1);
+	}
+
+	return proc;
+}
+
+/* ------------------------------------------------------------------------------------------------ lua__processPoll
+ */
+b8 lua__processPoll(
+		ActiveProcess* proc, 
+		void* stdout_ptr, u64 stdout_len, u64* out_stdout_bytes_read,
+		void* stderr_ptr, u64 stderr_len, u64* out_stderr_bytes_read,
+		s32* out_exit_code)
+{
+	assert(
+		proc && 
+		stdout_ptr && stdout_len && out_stdout_bytes_read &&
+		stderr_ptr && stderr_len && out_stderr_bytes_read &&
+		out_exit_code);
+
+	*out_stdout_bytes_read = proc->stdout.read({(u8*)stdout_ptr, stdout_len});
+	*out_stderr_bytes_read = proc->stderr.read({(u8*)stderr_ptr, stderr_len});
+
+	proc->process.checkStatus();
+
+	if (proc->process.terminated)
+	{
+		*out_exit_code = proc->process.exit_code;
+		active_process_pool.remove(proc);
+		return true;
+	}
+	return false;
+}
+
+
+/* ------------------------------------------------------------------------------------------------ lua__globCreate
+ *  This could PROBABLY be implemented better but whaaatever.
+ */
+struct LuaGlobResult
+{
+	str* paths;
+	s32 paths_count;
+	mem::Allocator* allocator; // just to be safe
+};
+
+LuaGlobResult lua__globCreate(str pattern)
+{
+	auto matches = Array<str>::create();
+
+	fs::walk("."_str,  
+		[&matches, pattern](MayMove<fs::Path>& path)
+		{
+			if (path.matches(pattern))
+			{
+				str p = path.buffer.asStr();
+				u8* copy = (u8*)mem::stl_allocator.allocate(p.len);
+				matches.push(str{copy, p.len});
+			}
+
+			if (path.isDirectory())
+				return fs::DirWalkResult::StepInto;
+			else 
+				return fs::DirWalkResult::Next;
+		});
+
+	return {matches.arr, matches.len(), matches.allocator};
+}
+
+/* ------------------------------------------------------------------------------------------------ lua__globDestroy
+ */
+void lua__globDestroy(LuaGlobResult x)
+{
+	x.allocator->free(x.paths);
+}
+
 
 }
