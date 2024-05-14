@@ -107,18 +107,23 @@ b8 stat(fs::FileInfo* out_info, str path);
  */
 b8 fileExists(str path);
 
-
 /* ------------------------------------------------------------------------------------------------ makeDir
  *  Create the directory at 'path'. If make_parents is true, any missing parent directories will be
  *  created as well.
  */
 b8 makeDir(str path, b8 make_parents);
 
-
 /* ------------------------------------------------------------------------------------------------ processSpawn
  *  Creates a new process and writes its handle into 'out_handle'.
  */
 b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process::Stream streams[3]);
+
+/* ------------------------------------------------------------------------------------------------ processCheck
+ *  Performs a check on the process referred to by 'handle' and determines if it has existed or
+ *  not. Returns true if it has and writes into 'out_exit_code' the returned code of the process,
+ *  otherwise returns false.
+ */
+b8 processCheck(Process::Handle handle, s32* out_exit_code);
 
 } // namespace iro::platform
 

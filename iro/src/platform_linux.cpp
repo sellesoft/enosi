@@ -10,6 +10,11 @@
 #include "string.h"
 #include "sys/uio.h"
 #include "sys/stat.h"
+#include "sys/wait.h"
+
+// Lib providing detailed explanations for various errors
+// that may occur using the std linux api. Idrk if I 
+// actually like using this so might be removed later.
 #include "libexplain/libexplain.h"
 
 #include "ctime"
@@ -426,6 +431,33 @@ b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process:
 
 	return true;
 }
+
+/* ------------------------------------------------------------------------------------------------ processCheck
+ */
+b8 processCheck(Process::Handle handle, s32* out_exit_code)
+{
+	assert(handle && out_exit_code);
+
+	int status;
+	int r = waitpid((s64)handle, &status, WNOHANG);
+	if (-1 == r)
+	{
+		reportErrno("waitpid failed on process with handle ", handle, ": ", explain_waitpid((s64)handle, &status, WNOHANG));
+		return false;
+	}
+
+	if (r)
+	{
+		if (WIFEXITED(status))
+		{
+			*out_exit_code = WEXITSTATUS(status);
+			return true;
+		}
+	}
+
+	return false;
+}
+
 
 }
 
