@@ -4,17 +4,20 @@
 namespace iro
 {
 
-Process Process::open(str progname, Slice<str> args, Stream streams[3])
+Process Process::spawn(str file, Slice<str> args, Stream streams[3])
 {
 	Process out = {};
-	if (!out.init(progname, args, streams))
+	if (!platform::processSpawn(&out.handle, file, args, streams))
 		return nil;
 	return out;
 }
 
-b8 Process::init(str progname, Slice<str> args, Stream streams[3])
+void Process::checkStatus()
 {
-	return platform::processSpawn(&handle, progname, args, streams);
+	assert(handle);
+
+	if (!terminated)
+		terminated = platform::processCheck(handle, &exit_code);
 }
 
 }
