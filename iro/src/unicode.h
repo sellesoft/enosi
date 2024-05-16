@@ -9,8 +9,16 @@
 #include "containers/slice.h"
 #include "assert.h"
 #include "nil.h"
+#include "container.h"
+#include "iterable.h"
 
-namespace iro::utf8
+namespace iro
+{
+
+template<typename T>
+struct Array;
+
+namespace utf8
 {
 
 /* 
@@ -72,8 +80,8 @@ Codepoint decodeCharacter(u8* s, s32 slen);
  */
 struct str
 {
-	u8* bytes;
-	u64 len;
+	u8* bytes = nullptr;
+	u64 len = 0;
 
 	operator Bytes() { return {bytes, len}; }
 
@@ -104,6 +112,8 @@ struct str
 	u8* begin() { return bytes; }
 	u8* end()   { return bytes + len; }
 
+	u8 last() { return *(end()-1); }
+
 	// returns how many characters there are in this string
 	u64 countCharacters();
 
@@ -117,19 +127,38 @@ struct str
 		static pos found(u64 x) { return {x}; }
 		static pos notFound() { return {(u64)-1}; }
 		b8 found() { return x != (u64)-1; }
-		operator bool() { return found(); }
-		operator s32() { return x; }
+		operator u64() { return x; }
 	};
 
 	// each find function should provide a byte and codepoint variant
 	pos findFirst(u8 c);
 	pos findLast(u8 c);
+
+	void split(u8 c, ExpandableContainer<str> auto* container, b8 remove_empty = true)
+	{
+		str scan = *this;
+
+		while (not scan.isEmpty())
+		{
+			pos p = scan.findFirst(c);
+			if (!p.found())
+			{
+				containerAdd(container, scan);
+				return;
+			}
+
+			if (p == 0 && remove_empty)
+				continue;
+
+			if (!containerAdd(container, scan.sub(0, p)))
+				return;
+
+			scan = scan.sub(p+1);
+		}
+	}
 };
 
 }
-
-namespace iro
-{
 
 // since we only use utf8 internally, just bring the string type into the global namespace
 using str  = utf8::str;
