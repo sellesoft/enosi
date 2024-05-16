@@ -37,7 +37,7 @@ typedef iro::Flags<Flag> Flags;
  */
 struct IO
 {
-	Flags flags;
+	Flags flags = {};
 
 	// Writes the contents of 'slice' into this IO and returns the number of bytes written.
 	virtual s64 write(Bytes slice) = 0;
@@ -118,7 +118,7 @@ struct Memory : public IO
 
 	/* ============================================================================================ io::Memory::Rollback
 	 *  Helper for saving a position in the memory to rollback to if the user changes their mind 
-	 *  about writing something to the buffer.
+	 *  about writing something to the buffer. Note that this also calls rewind() on commit.
 	 *
 	 *  Obviously this is not necessary to have an api for, but I like its explicitness in what's
 	 *  going on.

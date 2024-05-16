@@ -41,9 +41,10 @@ b8 Memory::open(s32 initial_space, mem::Allocator* allocator)
 	flags.set(Flag::Writable);
 	flags.set(Flag::Readable);
 
-	space = initial_space;
+	space = initial_space + 1;
 	pos = len = 0;
 	buffer = (u8*)allocator->allocate(space);
+	buffer[initial_space] = 0;
 
 	if (buffer != nullptr)
 	{
@@ -140,6 +141,7 @@ Memory::Rollback Memory::createRollback()
 void Memory::commitRollback(Rollback rollback)
 {
 	len = rollback;
+	rewind();
 }
 
 /* ------------------------------------------------------------------------------------------------ StaticBuffer::clear
