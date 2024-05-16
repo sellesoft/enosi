@@ -25,6 +25,11 @@ struct File;
 
 struct Path
 {
+	// TODO(sushi) replace this with either a manual implementation of a 
+	//             dynamic buffer or some more general byte buffer as 
+	//             the way this is being used is really pushing what io::Memory
+	//             is meant to be used for.
+	//             plus, the reading api on IO is useless here
 	io::Memory buffer; // dynamic buffer for now, maybe make static later
 
 	// Makes a new Path from the given string.
@@ -54,6 +59,8 @@ struct Path
 	// Returns the final component of this path eg.
 	// src/fs/path.h -> path.h
 	str basename();
+
+	void removeBasename();
 
 	// Helpers for querying information about the file at this path
 
