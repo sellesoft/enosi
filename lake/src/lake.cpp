@@ -18,6 +18,8 @@
 
 #include "assert.h"
 
+
+
 #include "string.h"
 
 #include "time/time.h"
@@ -36,9 +38,10 @@ extern "C"
 #include "lauxlib.h"
 }
 
-Logger logger = Logger::create("lake"_str, 
+static Logger logger = Logger::create("lake"_str, 
+
 #if LAKE_DEBUG
-		Logger::Verbosity::Debug);
+		Logger::Verbosity::Trace);
 #else
 		Logger::Verbosity::Warn);
 #endif
@@ -87,8 +90,8 @@ b8 Lake::init(const char** argv_, int argc_, mem::Allocator* allocator)
 
 	using namespace fs;
 
-	File init = File::from(initfile_name, OpenFlag::Read);
-	if (init == nil)
+	initfile = File::from(initfile_name, OpenFlag::Read);
+	if (initfile == nil)
 	{
 		if (resolved)
 		{
@@ -102,8 +105,8 @@ b8 Lake::init(const char** argv_, int argc_, mem::Allocator* allocator)
 	}
 
 	// TODO(sushi) try to remember why I was allocating this
-	parser = (Parser*)allocator->allocate(sizeof(Parser));
-	parser->init(initfile_name, &init, logger.verbosity, allocator);
+	parser = allocator->construct<Parser>();
+	parser->init(initfile_name, &initfile, allocator);
 
 	lua_cli_arg_iterator = lua_cli_args.head;
 
@@ -120,6 +123,25 @@ b8 Lake::init(const char** argv_, int argc_, mem::Allocator* allocator)
 	luaL_openlibs(L);
 
 	return true;
+}
+
+/* ------------------------------------------------------------------------------------------------ Lake::deinit
+ */
+void Lake::deinit()
+{
+	lua_close(L);
+	active_recipes.destroy();
+	product_list.destroy();
+	build_queue.destroy();
+
+	for (Target& t : target_pool)
+		t.deinit();
+	target_pool.destroy();
+
+	parser->destroy();
+	initfile.close();
+	active_process_pool.destroy();
+	lua_cli_args.destroy();
 }
 
 struct ArgIter
@@ -343,6 +365,8 @@ b8 Lake::run()
 
 	prog.close();
 
+	initfile.close();
+
 	INFO("Beginning build loop.\n");
 
 	for (u64 build_pass = 0;;)
@@ -551,12 +575,18 @@ void lua__addTargetToGroup(Target* group, Target* target)
 	assert_group(group);
 	assert_single(target);
 
+	INFO("Adding target '", target->name(), "' to group '", group->name(), "'.\n");
+	SCOPED_INDENT;
+
 	group->group.targets.insert(target);
 	target->single.group = group;
-	INFO("Added target '", target->name(), "' to group '", group->name(), "'.\n");
 
 	if (target->build_node)
+	{
+		TRACE("Target '", target->name(), "' is in the build queue so it will be removed.\n");
 		lake.build_queue.remove(target->build_node);
+		target->build_node = nullptr;
+	}
 }
 
 /* ------------------------------------------------------------------------------------------------ lua__targetAlreadyInGroup
@@ -680,7 +710,6 @@ b8 lua__processPoll(
 	return false;
 }
 
-
 /* ------------------------------------------------------------------------------------------------ lua__globCreate
  *  This could PROBABLY be implemented better but whaaatever.
  */
@@ -688,37 +717,259 @@ struct LuaGlobResult
 {
 	str* paths;
 	s32 paths_count;
-	mem::Allocator* allocator; // just to be safe
 };
 
 LuaGlobResult lua__globCreate(str pattern)
 {
+	using namespace fs;
+
+	if (pattern.isEmpty())
+		return {};
+
 	auto matches = Array<str>::create();
 
-	fs::walk("."_str,  
-		[&matches, pattern](MayMove<fs::Path>& path)
+	b8 directories_only = pattern.last() == '/';
+
+	auto parts = Array<str>::create();
+	defer { parts.destroy(); };
+
+	pattern.split('/', &parts);
+
+	u64 parts_len = parts.len();
+
+
+	// handle special case where we only have one part 
+	if (parts_len == 1)
+	{
+		auto makePathCopy = [](MayMove<Path>& path)
 		{
-			if (path.matches(pattern))
+			str s;
+			s.len = path.buffer.len;
+			s.bytes = (u8*)mem::stl_allocator.allocate(s.len);
+			mem::copy(s.bytes, path.buffer.buffer, s.len);
+			return s;
+		};
+
+		if (parts[0] == "**"_str)
+		{
+			if (directories_only)
 			{
-				str p = path.buffer.asStr();
-				u8* copy = (u8*)mem::stl_allocator.allocate(p.len);
-				matches.push(str{copy, p.len});
+				// recursively match all directories
+				walk("."_str, 
+					[&](MayMove<Path>& path)
+					{
+						if (path.isDirectory())
+						{
+							matches.push(makePathCopy(path));
+							return DirWalkResult::StepInto;
+						}
+						return DirWalkResult::Next;
+					});
+
+				return {matches.arr, matches.len()};
+			}
+		}
+
+		// attempt to match each file in current directory
+		walk("."_str, 
+			[&](MayMove<Path>& path)
+			{
+				if (path.matches(parts[0]))
+					matches.push(makePathCopy(path));
+				return DirWalkResult::Next;
+			});
+
+		return {matches.arr, matches.len()};
+	}
+	else
+	{
+		// this whole thing probably has like 10000000 mistakes 
+
+		auto makePathCopy = [](Path& path)
+		{
+			str s;
+			s.len = path.buffer.len;
+			s.bytes = (u8*)mem::stl_allocator.allocate(s.len);
+			mem::copy(s.bytes, path.buffer.buffer, s.len);
+			return s;
+		};
+
+		u32 part_idx = 0;
+		u32 part_trail = 0;
+
+		auto incPart = [&]()
+		{
+			part_trail = part_idx;
+			part_idx += 1;
+		};
+
+		auto decPart = [&]()
+		{
+			part_trail = part_idx;
+			part_idx -= 1;
+		};
+
+		auto dir_stack = Array<Dir>::create();
+		auto dir = Dir::open("."_str);
+		auto path = Path::from(""_str);
+
+		defer
+		{
+			for (Dir& d : dir_stack)
+			{
+				d.close();
+			}
+			dir_stack.destroy();
+			dir.close();
+			path.destroy();
+		};
+
+		auto next = [&](b8 remove_basename = true)
+		{
+			if (remove_basename)
+				path.removeBasename();
+			auto rollback = path.makeRollback();
+			for(;;)
+			{
+				Bytes space = path.reserve(255);
+				s64 len = dir.next(space);
+				if (len <= 0)
+					return false;
+				path.commit(len);
+
+				// TODO(sushi) combine these into a single helper
+				if (!path.isParentDirectory() && !path.isCurrentDirectory())
+					return true;
+
+				// cut off the directory and try again
+				path.commitRollback(rollback);
+			}
+		};
+
+		auto stepInto = [&]()
+		{
+			dir_stack.push(dir);
+
+			path.makeDir();
+			dir = Dir::open(path);
+			if (isnil(dir))
+			{
+				dir = *dir_stack.last();
+				dir_stack.pop();
+				return false;
 			}
 
-			if (path.isDirectory())
-				return fs::DirWalkResult::StepInto;
-			else 
-				return fs::DirWalkResult::Next;
-		});
+			return next(false);
+		};
 
-	return {matches.arr, matches.len(), matches.allocator};
+		for (;;)
+		{
+			str part = parts[part_idx];
+			b8 last_part = part_idx == parts.len() - 1;
+
+			if (!last_part && part == "**"_str)
+			{
+				// if we didn't just step back into this part,
+				// match the next part against all files recursively
+				if (part_trail <= part_idx)
+					incPart();
+				else
+					decPart();
+			}
+			else if (part_idx && parts[part_idx - 1] == "**"_str)
+			{
+				if (!next())
+				{
+					if (dir_stack.isEmpty())
+						break;
+					dir.close();
+					dir = *dir_stack.last();
+					dir_stack.pop();
+					decPart();
+				}
+				else
+				{
+					str base = path.basename();
+
+					if (Path::matches(base, part))
+					{
+						matches.push(makePathCopy(path));
+
+						if (path.isDirectory())
+						{
+							if (stepInto())
+							{
+								incPart();
+								continue;
+							}
+						}
+					}
+					else if (path.isDirectory())
+					{
+						if (stepInto())
+						{
+							incPart();
+							continue;
+						}
+					}
+				}
+			}
+			else 
+			{
+				// TODO(sushi) if we know this part is not a pattern and we step back
+				//             into it (part_trail > part_idx) then we can early out 
+				//             of matching files in this directory and just step 
+				//             out again. maybe try compiling patterns later like 
+				//             Crystal does.
+				if (!next())
+				{
+					if (dir_stack.isEmpty())
+						break;
+					dir.close();
+					dir = *dir_stack.last();
+					dir_stack.pop();
+					decPart();
+				}
+				else
+				{
+					str base = path.basename();
+
+					if (Path::matches(base, part))
+					{
+						
+						if (last_part)
+						{
+							matches.push(makePathCopy(path));
+						}
+
+						if (!last_part && path.isDirectory())
+						{
+							if (stepInto())
+							{
+								incPart();
+								continue;
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+
+	return {matches.arr, matches.len()};
 }
 
 /* ------------------------------------------------------------------------------------------------ lua__globDestroy
  */
 void lua__globDestroy(LuaGlobResult x)
 {
-	x.allocator->free(x.paths);
+	auto arr = Array<str>::fromOpaquePointer(x.paths);
+
+	for (str& s : arr)
+		mem::stl_allocator.free(s.bytes);
+
+	arr.destroy();
 }
 
 
