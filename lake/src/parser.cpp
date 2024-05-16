@@ -6,7 +6,7 @@
 #include "assert.h"
 #include "stdlib.h"
 
-#include "logger.h"
+#include "iro/logger.h"
 
 static Logger logger = Logger::create("lake.parser"_str, Logger::Verbosity::Warn);
 
@@ -357,7 +357,6 @@ void Parser::block()
 void Parser::funcargs()
 {
 	PARSER_TRACE;
-	Token save = curt;
 	switch (curt.kind)
 	{
 		case ParenLeft: {

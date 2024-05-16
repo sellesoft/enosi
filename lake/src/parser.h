@@ -11,7 +11,8 @@
 #ifndef _lake_parser_h
 #define _lake_parser_h
 
-#include "common.h"
+#include "iro/common.h"
+
 #include "lexer.h"
 #include "lake.h"
 

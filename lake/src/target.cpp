@@ -6,7 +6,7 @@
 
 #include "luahelpers.h"
 
-#include "logger.h"
+#include "iro/logger.h"
 
 extern "C"
 {

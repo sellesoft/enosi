@@ -38,7 +38,7 @@ compiler_flags :=     \
 	-std=c++20        \
 	-Iinclude         \
 	-Isrc             \
-	-Isrc/iro/src     \
+	-Isrc/iro         \
 	-Wall             \
 	-Wno-switch       \
 	-Wno-\#warnings   \

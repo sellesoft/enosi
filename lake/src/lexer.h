@@ -1,11 +1,11 @@
 #ifndef _lake_lexer_h
 #define _lake_lexer_h
 
-#include "common.h"
-#include "unicode.h"
-#include "io/io.h"
-#include "logger.h"
-#include "linemap.h"
+#include "iro/common.h"
+#include "iro/unicode.h"
+#include "iro/io/io.h"
+#include "iro/logger.h"
+#include "iro/linemap.h"
 
 #include "generated/token.enum.h" 
 

@@ -1,11 +1,12 @@
 #ifndef _lake_lake_h
 #define _lake_lake_h
 
-#include "common.h"
-#include "containers/list.h"
-#include "containers/avl.h"
+#include "iro/common.h"
+#include "iro/containers/list.h"
+#include "iro/containers/avl.h"
+#include "iro/logger.h"
+
 #include "target.h"
-#include "logger.h"
 
 struct Lexer;
 struct Parser;

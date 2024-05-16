@@ -7,9 +7,11 @@ lake.mkdir(build_dir, {make_parents = true})
 
 lakeexe := lake.target(build_dir.."lake")
 
-c_files := lake.find("src/*.cpp")
+c_files := lake.find("src/**/*.cpp")
 o_files := lake.replace(c_files, "src/(.-).cpp", build_dir.."%1.o")
 d_files := lake.replace(c_files, "src/(.-).cpp", build_dir.."%1.d")
+
+print("found ", #c_files, " files")
 
 compiler     := "clang++"
 linker       := "clang++"

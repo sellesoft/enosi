@@ -18,27 +18,39 @@ static CLIArgType parse_cli_arg(const char* arg)
 {
  switch (*arg)
  {
-  case 'i':
+  case 'n':
    arg += 1;
    switch (*arg)
    {
-    case 'n':
+    case 'o':
      arg += 1;
      switch (*arg)
      {
-      case 'f':
+      case 't':
        arg += 1;
        switch (*arg)
        {
-        case 'o':
+        case 'i':
          arg += 1;
          switch (*arg)
          {
-          default:
-           return CLIArgType::Unknown;
-           break;
-          case '\0':
-           return CLIArgType::OptionInfo;
+          case 'c':
+           arg += 1;
+           switch (*arg)
+           {
+            case 'e':
+             arg += 1;
+             switch (*arg)
+             {
+              default:
+               return CLIArgType::Unknown;
+               break;
+              case '\0':
+               return CLIArgType::OptionNotice;
+               break;
+             }
+             break;
+           }
            break;
          }
          break;
@@ -48,23 +60,23 @@ static CLIArgType parse_cli_arg(const char* arg)
      break;
    }
    break;
-  case 'd':
+  case 'f':
    arg += 1;
    switch (*arg)
    {
-    case 'e':
+    case 'a':
      arg += 1;
      switch (*arg)
      {
-      case 'b':
+      case 't':
        arg += 1;
        switch (*arg)
        {
-        case 'u':
+        case 'a':
          arg += 1;
          switch (*arg)
          {
-          case 'g':
+          case 'l':
            arg += 1;
            switch (*arg)
            {
@@ -72,7 +84,7 @@ static CLIArgType parse_cli_arg(const char* arg)
              return CLIArgType::Unknown;
              break;
             case '\0':
-             return CLIArgType::OptionDebug;
+             return CLIArgType::OptionFatal;
              break;
            }
            break;
@@ -104,60 +116,6 @@ static CLIArgType parse_cli_arg(const char* arg)
      arg += 1;
      switch (*arg)
      {
-      case 'm':
-       arg += 1;
-       switch (*arg)
-       {
-        case 'a':
-         arg += 1;
-         switch (*arg)
-         {
-          case 'x':
-           arg += 1;
-           switch (*arg)
-           {
-            case '-':
-             arg += 1;
-             switch (*arg)
-             {
-              case 'j':
-               arg += 1;
-               switch (*arg)
-               {
-                case 'o':
-                 arg += 1;
-                 switch (*arg)
-                 {
-                  case 'b':
-                   arg += 1;
-                   switch (*arg)
-                   {
-                    case 's':
-                     arg += 1;
-                     switch (*arg)
-                     {
-                      default:
-                       return CLIArgType::Unknown;
-                       break;
-                      case '\0':
-                       return CLIArgType::JobsBig;
-                       break;
-                     }
-                     break;
-                   }
-                   break;
-                 }
-                 break;
-               }
-               break;
-             }
-             break;
-           }
-           break;
-         }
-         break;
-       }
-       break;
       case 'p':
        arg += 1;
        switch (*arg)
@@ -249,6 +207,60 @@ static CLIArgType parse_cli_arg(const char* arg)
                          }
                          break;
                        }
+                       break;
+                     }
+                     break;
+                   }
+                   break;
+                 }
+                 break;
+               }
+               break;
+             }
+             break;
+           }
+           break;
+         }
+         break;
+       }
+       break;
+      case 'm':
+       arg += 1;
+       switch (*arg)
+       {
+        case 'a':
+         arg += 1;
+         switch (*arg)
+         {
+          case 'x':
+           arg += 1;
+           switch (*arg)
+           {
+            case '-':
+             arg += 1;
+             switch (*arg)
+             {
+              case 'j':
+               arg += 1;
+               switch (*arg)
+               {
+                case 'o':
+                 arg += 1;
+                 switch (*arg)
+                 {
+                  case 'b':
+                   arg += 1;
+                   switch (*arg)
+                   {
+                    case 's':
+                     arg += 1;
+                     switch (*arg)
+                     {
+                      default:
+                       return CLIArgType::Unknown;
+                       break;
+                      case '\0':
+                       return CLIArgType::JobsBig;
                        break;
                      }
                      break;
@@ -378,84 +390,6 @@ static CLIArgType parse_cli_arg(const char* arg)
      break;
    }
    break;
-  case 'n':
-   arg += 1;
-   switch (*arg)
-   {
-    case 'o':
-     arg += 1;
-     switch (*arg)
-     {
-      case 't':
-       arg += 1;
-       switch (*arg)
-       {
-        case 'i':
-         arg += 1;
-         switch (*arg)
-         {
-          case 'c':
-           arg += 1;
-           switch (*arg)
-           {
-            case 'e':
-             arg += 1;
-             switch (*arg)
-             {
-              default:
-               return CLIArgType::Unknown;
-               break;
-              case '\0':
-               return CLIArgType::OptionNotice;
-               break;
-             }
-             break;
-           }
-           break;
-         }
-         break;
-       }
-       break;
-     }
-     break;
-   }
-   break;
-  case 'f':
-   arg += 1;
-   switch (*arg)
-   {
-    case 'a':
-     arg += 1;
-     switch (*arg)
-     {
-      case 't':
-       arg += 1;
-       switch (*arg)
-       {
-        case 'a':
-         arg += 1;
-         switch (*arg)
-         {
-          case 'l':
-           arg += 1;
-           switch (*arg)
-           {
-            default:
-             return CLIArgType::Unknown;
-             break;
-            case '\0':
-             return CLIArgType::OptionFatal;
-             break;
-           }
-           break;
-         }
-         break;
-       }
-       break;
-     }
-     break;
-   }
-   break;
   case 't':
    arg += 1;
    switch (*arg)
@@ -481,6 +415,72 @@ static CLIArgType parse_cli_arg(const char* arg)
              break;
             case '\0':
              return CLIArgType::OptionTrace;
+             break;
+           }
+           break;
+         }
+         break;
+       }
+       break;
+     }
+     break;
+   }
+   break;
+  case 'i':
+   arg += 1;
+   switch (*arg)
+   {
+    case 'n':
+     arg += 1;
+     switch (*arg)
+     {
+      case 'f':
+       arg += 1;
+       switch (*arg)
+       {
+        case 'o':
+         arg += 1;
+         switch (*arg)
+         {
+          default:
+           return CLIArgType::Unknown;
+           break;
+          case '\0':
+           return CLIArgType::OptionInfo;
+           break;
+         }
+         break;
+       }
+       break;
+     }
+     break;
+   }
+   break;
+  case 'd':
+   arg += 1;
+   switch (*arg)
+   {
+    case 'e':
+     arg += 1;
+     switch (*arg)
+     {
+      case 'b':
+       arg += 1;
+       switch (*arg)
+       {
+        case 'u':
+         arg += 1;
+         switch (*arg)
+         {
+          case 'g':
+           arg += 1;
+           switch (*arg)
+           {
+            default:
+             return CLIArgType::Unknown;
+             break;
+            case '\0':
+             return CLIArgType::OptionDebug;
              break;
            }
            break;

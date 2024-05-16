@@ -1,7 +1,9 @@
 #ifndef _lake_luahelpers_h
 #define _lake_luahelpers_h
 
-#include "common.h"
+// TODO(sushi) move lpp's LuaState into iro and remove this file 
+
+#include "iro/common.h"
 
 extern "C"
 {
@@ -37,7 +39,6 @@ print_lua_table_interior(lua_State* L, int idx, u32 layers, u32 depth) {
 	lua_pushvalue(L, idx);
 	lua_pushnil(L);
 	while(lua_next(L, -2)) {
-		int kt = lua_type(L, -2);
 		int vt = lua_type(L, -1);
 		do_indent;
 		print_lua_value(L, -2);

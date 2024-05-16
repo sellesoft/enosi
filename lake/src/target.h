@@ -12,13 +12,13 @@
 #ifndef _lake_target_h
 #define _lake_target_h
 
-#include "common.h"
-#include "unicode.h"
-#include "fs/fs.h"
-#include "fs/path.h"
-#include "containers/list.h"
-#include "containers/avl.h"
-#include "flags.h"
+#include "iro/common.h"
+#include "iro/unicode.h"
+#include "iro/fs/fs.h"
+#include "iro/fs/path.h"
+#include "iro/containers/list.h"
+#include "iro/containers/avl.h"
+#include "iro/flags.h"
 
 using namespace iro;
 

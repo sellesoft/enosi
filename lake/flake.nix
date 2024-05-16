@@ -32,6 +32,7 @@
 						linuxKernel.packages.linux_zen.perf
 						explain
 						acl
+						valgrind
 					];
 			};
 		});

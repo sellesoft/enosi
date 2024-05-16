@@ -2,3 +2,7 @@
 build/
 compile_commands.json
 .direnv
+
+.project.gf
+
+temp/

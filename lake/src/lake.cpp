@@ -1,5 +1,4 @@
 #include "lake.h"
-#include "platform.h"
 
 #include "stdlib.h"
 #include "assert.h"
@@ -10,7 +9,7 @@
 
 #include "target.h"
 
-#include "logger.h"
+#include "iro/logger.h"
 #include "luahelpers.h"
 
 #include "generated/cliargparser.h"
@@ -22,9 +21,9 @@
 
 #include "string.h"
 
-#include "time/time.h"
+#include "iro/time/time.h"
 
-#include "process.h"
+#include "iro/process.h"
 
 #undef stdout
 #undef stderr

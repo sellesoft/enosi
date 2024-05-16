@@ -1,8 +1,8 @@
 #include "lake.h"
 #include "stdlib.h"
 
-#include "logger.h"
-#include "fs/fs.h"
+#include "iro/logger.h"
+#include "iro/fs/fs.h"
 
 using namespace iro;
 
