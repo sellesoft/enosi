@@ -12,6 +12,8 @@
 #include "../memory/allocator.h"
 #include "new"
 
+#include "container.h"
+
 namespace iro
 {
 
@@ -40,15 +42,15 @@ struct Pool
 
 	struct Chunk
 	{
-		Chunk* next;
+		Chunk* next = nullptr;
 		Slot   slots[N_slots_per_chunk];
 	};
 	
 
-	Chunk* current_chunk;
-	Slot*  free_slot;
+	Chunk* current_chunk = nullptr;
+	Slot*  free_slot = nullptr;
 
-	mem::Allocator* allocator;
+	mem::Allocator* allocator = nullptr;
 
 
 	/* -------------------------------------------------------------------------------------------- 
@@ -72,9 +74,9 @@ struct Pool
 	 */ 
 	void destroy()
 	{
-		Chunk* next = current_chunk->next;
-		for (;current_chunk;)
+		while (current_chunk)	
 		{
+			Chunk* next = current_chunk->next;
 			allocator->free(current_chunk);
 			current_chunk = next;
 		}
@@ -97,15 +99,13 @@ struct Pool
 		free_slot = slot->next_free_slot;
 
 		slot->used = true;
-		new (&slot->element) T;
-		return &slot->element;
+		return new (&slot->element) T;
 	}
 
 	void add(const T& x)
 	{
 		T* v = add();
 		*v = x;
-		return v;
 	}
 
 	/* -------------------------------------------------------------------------------------------- remove
@@ -145,6 +145,8 @@ private:
 	// of this pool. This should only be used sparingly, like 
 	// for deinitializing things when you don't already have 
 	// a better list of them to work with.
+	//
+	// TODO(sushi) this is allll fucked up please clean it up !!!!
 	struct Iterator
 	{
 		Chunk* current;
@@ -157,19 +159,22 @@ private:
 				if (slotidx == N_slots_per_chunk - 1)
 				{
 					current = current->next;
+					slotidx = 0;
 					if (!current)
 						return nullptr;
-					slotidx = 0;
 				}
 				if (current->slots[slotidx].used)
-					return &current->slots[slotidx].element;
+				{
+					slotidx += 1;
+					return &current->slots[slotidx - 1].element;
+				}
 				slotidx += 1;
 			}
 		}
 
 		b8 operator != (const Iterator& rhs)
 		{
-			return rhs.slotidx == slotidx && current == rhs.current;
+			return rhs.slotidx != slotidx || current != rhs.current;
 		}
 
 		T& operator*()
@@ -181,9 +186,11 @@ private:
 public:
 
 	Iterator begin() { return {current_chunk, 0}; }
-	Iterator end()   { return {nullptr,0}; }
+	Iterator end()   { return {nullptr, 0}; }
 };
 
 }
+
+// DefineExpandableContainerT(iro::Pool, { self->add(value); return true; });
 
 #endif

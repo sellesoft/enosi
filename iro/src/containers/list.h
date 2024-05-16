@@ -20,8 +20,8 @@ struct SList
 	 */
 	struct Node
 	{
-		T*    data;
-		Node* next;
+		T*    data = nullptr;
+		Node* next = nullptr;
 
 		operator T&() { return *data; }
 	};
@@ -130,9 +130,9 @@ struct DList
 	*/
 	struct Node 
 	{
-		T*    data;
-		Node* next;
-		Node* prev;
+		T*    data = nullptr;
+		Node* next = nullptr;
+		Node* prev = nullptr;
 	};
 
 	Pool<Node> pool;

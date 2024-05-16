@@ -12,6 +12,8 @@
 #include "assert.h"
 #include "nil.h"
 #include "move.h"
+#include "container.h"
+#include "iterable.h"
 
 #include "new"
 
@@ -23,12 +25,19 @@ struct Array
 {
 	struct Header
 	{
-		s32 len;
-		s32 space;
+		s32 len = 0;
+		s32 space = 0;
+		mem::Allocator* allocator = nullptr;
 	};
 
-	T* arr;
-	mem::Allocator* allocator;
+	T* arr = nullptr;
+
+	static Header* getHeader(T* ptr) { return (Header*)ptr - 1; }
+	static s32& len(T* ptr) { return getHeader(ptr)->len; }
+	static s32& space(T* ptr) { return getHeader(ptr)->space; }
+	static mem::Allocator* allocator(T* ptr) { return getHeader(ptr)->allocator; }
+
+	static Array<T> fromOpaquePointer(T* ptr) { return Array<T>{ptr}; }
 
 	static Array<T> create(mem::Allocator* allocator)
 	{
@@ -42,12 +51,12 @@ struct Array
 		init_space = (8 > init_space ? 8 : init_space);
 
 		Array<T> out = {};
-		out.allocator = allocator;
 
 		Header* header = (Header*)allocator->allocate(sizeof(Header) + init_space * sizeof(T));
 
 		header->space = init_space;
 		header->len = 0;
+		header->allocator = allocator;
 
 		out.arr = (T*)(header + 1);
 
@@ -59,7 +68,7 @@ struct Array
 	void destroy()
 	{
 		clear();
-		allocator->free(getHeader());
+		allocator()->free(getHeader());
 		*this = nil;
 	}
 
@@ -67,6 +76,9 @@ struct Array
 	 */ 
 	s32& len()   { return getHeader()->len; }
 	s32& space() { return getHeader()->space; }
+	mem::Allocator* allocator() { return getHeader()->allocator; }
+
+	b8 isEmpty() { return len() == 0; }
 
 	/* -------------------------------------------------------------------------------------------- push
 	 */ 
@@ -121,6 +133,20 @@ struct Array
 		return new (arr + idx) T;
 	}
 
+	/* -------------------------------------------------------------------------------------------- remove
+	 */ 
+	void remove(T* x)
+	{
+		return remove(x - arr);
+	}
+
+	void remove(s32 idx)
+	{
+		assert(idx >= 0 && idx < len());
+		mem::move(arr + idx + 1, arr + idx, sizeof(T) * (len() - idx));
+		len() -= 1;
+	}
+
 	/* -------------------------------------------------------------------------------------------- clear
 	 */ 
 	void clear()
@@ -158,7 +184,7 @@ struct Array
 		while (header->len + new_elements > header->space)
 			header->space *= 2;
 
-		header = (Header*)allocator->reallocate(header, sizeof(Header) + header->space * sizeof(T));
+		header = (Header*)header->allocator->reallocate(header, sizeof(Header) + header->space * sizeof(T));
 		arr = (T*)(header + 1);
 	}
 };
@@ -180,5 +206,18 @@ struct MoveTrait<iro::Array<T>>
 		iro::mem::copy(&to, &from, sizeof(iro::Array<T>));
 	}
 };
+
+DefineExpandableContainerT(iro::Array, { self->push(value); return true; });
+DefineReducibleContainerT(iro::Array, { self->remove(x); return true; });
+DefineIndexableContainerT(iro::Array, { return &self->arr[idx]; });
+
+DefineIterableT(iro::Array, { s32 idx = 0; }, 
+		{ 
+			if (idx >= self->len())
+				return nullptr;
+			auto* out = &self->arr[idx]; 
+			idx += 1; 
+			return out; 
+		});
 
 #endif
