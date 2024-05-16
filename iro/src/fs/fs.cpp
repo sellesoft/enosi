@@ -74,7 +74,9 @@ void File::close()
 	if (!isOpen())
 		return;
 
-	platform::close(handle);
+	// ugh
+	if (handle > 2)
+		platform::close(handle);
 	
 	path.destroy();
 

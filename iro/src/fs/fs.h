@@ -211,12 +211,16 @@ b8 walkForReal(Path& path, DirWalkCallback auto f)
 {
 	auto dir = Dir::open(path);
 
+	// if were starting in cwd we dont want it to appear in the path we give
+	// so just clear it 
+	// TODO(sushi) this is kinda dumb
+	if (path.isCurrentDirectory())
+		path.clear();
+
 	if (dir == nil)
 		return false;
 
 	defer { dir.close(); };
-
-	path.makeDir();
 
 	// Path we offer to the user via the callback, which they can move 
 	// elsewhere if they want to take it.
@@ -282,7 +286,7 @@ b8 walkForReal(Path& path, DirWalkCallback auto f)
  */
 void walk(str pathin, DirWalkCallback auto f, mem::Allocator* allocator)
 {
-	Path path = scoped(Path::from(pathin, allocator));
+	auto path = scoped(Path::from(pathin, allocator));
 	__internal::walkForReal(path, f);
 }
 
