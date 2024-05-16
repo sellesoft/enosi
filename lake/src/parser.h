@@ -32,11 +32,9 @@ struct Parser
 	b8 has_lookahead;
 	Token lookahead_token;
 
-	Logger logger;
-
 	using enum tok;
 
-	void init(str sourcename, io::IO* in, Logger::Verbosity verbosity, mem::Allocator* allocator);
+	void init(str sourcename, io::IO* in, mem::Allocator* allocator);
 	void destroy();
 
 	/* --------------------------------------------------------------------------------------------
@@ -86,8 +84,8 @@ struct Parser
 		b8    insertBeforeLastIdentifier(Elem::Virt v);
 		void  pushBeforeWhitespace(Elem::Virt v);
 
-		void print(Parser* p, Logger logger);
-		void printSrc(Parser* p, Logger logger);
+		void print(Parser* p);
+		void printSrc(Parser* p);
 	} stack;
 
 	/* --------------------------------------------------------------------------------------------
@@ -159,18 +157,10 @@ struct Parser
 	/*  Report the error where 'curt' currently is and exit.
 	 */
 	template<typename... T>
-	void errorHere(T... args)
-	{
-		stack.printSrc(this, logger);
-		ERROR(sourcename, ":", curt.line, ":", curt.column, ": ", args...);
-		exit(1);
-	}
+	void errorHere(T... args);
 
 	template<typename... T>
-	void warnHere(T... args)
-	{
-		WARN(sourcename, ":", curt.line, ":", curt.column, ": ", args...);
-	}
+	void warnHere(T... args);
 };
 
 #endif

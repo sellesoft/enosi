@@ -4,9 +4,18 @@
 #include "ctype.h"
 #include "stdlib.h"
 
-b8 Lexer::init(str sourcename_, io::IO* instream, Logger::Verbosity verbosity)
+static Logger logger = Logger::create("lake.lexer"_str, Logger::Verbosity::Warn);
+
+template<typename... T>
+b8 Lexer::errorHere(T... args)
 {
-	logger = Logger::create("lake.lexer"_str, verbosity);
+	ERROR(sourcename, ":", line, ":", column, ": ", args..., "\n");
+	return false;
+}
+
+
+b8 Lexer::init(str sourcename_, io::IO* instream)
+{
 	in = instream;
 	sourcename = sourcename_;
 	cache.open();
@@ -39,8 +48,6 @@ void Lexer::advance(s32 n)
 			!cache.atEnd())
 			return;
 
-		INFO("reading more from stream\n");
-
 		Bytes reserved = cache.reserve(512);
 		s64 bytes_read = in->read(reserved);
 		if (bytes_read == -1)
@@ -52,13 +59,14 @@ void Lexer::advance(s32 n)
 		}
 		else if (bytes_read == 0)
 		{
+			// for some reason i have to do this for this lexer
+			// but not lpp's lexer and its kiiinda scary!!
 			cursor_codepoint.codepoint = 0;
 			cursor_codepoint.advance = 1;
 		}
 		cache.commit(bytes_read);
 		cursor.bytes = reserved.ptr;
 		cursor.len = bytes_read;
-		INFO("read ", bytes_read, " bytes. Cursor is now: \n", cursor, "\n");
 	};
 
 	for (s32 i = 0; i < n; i++)
@@ -78,7 +86,6 @@ void Lexer::advance(s32 n)
 			column += 1;
 	}
 
-	INFO("advanced to ", (char)current(), "\n");
 }
 
 #include "generated/token.kwmap.h"
@@ -90,7 +97,7 @@ Token Lexer::nextToken()
 
 	s32 len_offset = 0;
 
-	defer { INFO("outputting token ", tok_strings[(u32)curt.kind], ": ", getRaw(curt), "\n"); };
+	// defer { INFO("outputting token ", tok_strings[(u32)curt.kind], ": ", getRaw(curt), "\n"); };
 
 	if (atWhitespace())
 	{

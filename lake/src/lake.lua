@@ -84,7 +84,7 @@ ffi.cdef [[
 
 	const char* lua__nextCliarg();
 
-	void* lua__processSpawn(str file, str* args, u32 args_count);
+	void* lua__processSpawn(str* args, u32 args_count);
 	b8    lua__processPoll(
 				void* proc,
 				void* stdout_ptr, u64 stdout_len, u64* out_stdout_bytes_read,
@@ -95,7 +95,6 @@ ffi.cdef [[
 	{
 		str* paths;
 		s32 paths_count;
-		void* __dont_touch__;
 	} LuaGlobResult;
 
 	LuaGlobResult lua__globCreate(str pattern);
@@ -233,9 +232,9 @@ lake.find = function(pattern)
 
 	local out = {}
 
-	for i=0,tonumber(glob.n_paths-1) do
+	for i=0,tonumber(glob.paths_count-1) do
 		local s = glob.paths[i]
-		table.insert(out, ffi.string(s.str, s.len))
+		table.insert(out, ffi.string(s.s, s.len))
 	end
 
 	C.lua__globDestroy(glob)
@@ -323,7 +322,7 @@ lake.cmd = function(...)
 		argsarr[i-1] = make_str(args[i])
 	end
 
-	local handle = C.lua__processSpawn(argsarr)
+	local handle = C.lua__processSpawn(argsarr, argcount+1)
 
 	if not handle then
 		local argsstr = ""

@@ -36,7 +36,7 @@ struct Lexer
 	u32 line;
 	u32 column;
 
-	b8   init(str sourcename, io::IO* in, Logger::Verbosity verbosity);
+	b8   init(str sourcename, io::IO* in);
 	void deinit();
 
 	// null if no more tokens
@@ -45,8 +45,6 @@ struct Lexer
 	str getRaw(Token t) { return {cache.buffer + t.offset, t.len}; }
 
 private:
-
-	Logger logger;
 
 	Token curt;
 
@@ -72,11 +70,7 @@ private:
 	void skipWhitespace();
 
 	template<typename... T>
-	b8 errorHere(T... args)
-	{
-		ERROR(sourcename, ":", line, ":", column, ": ", args..., "\n");
-		return false;
-	}
+	b8 errorHere(T... args);
 
 };
 

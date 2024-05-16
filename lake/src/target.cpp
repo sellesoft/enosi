@@ -30,17 +30,20 @@ void Target::common_init()
 {
 	prerequisites = TargetSet::create();
 	dependents = TargetSet::create();
+	build_node = product_node = nullptr;
 }
 
 /* ------------------------------------------------------------------------------------------------ TargetSingle::name
  */
 str Target::name()
 {
+	assert(kind != Kind::Unknown);
 	switch (kind)
 	{
 		case Kind::Single: return single.path;
 		case Kind::Group: return "group"_str;
 	}
+	return {};
 }
 
 /* ------------------------------------------------------------------------------------------------ TargetSingle::init
@@ -63,10 +66,21 @@ void Target::init_group()
 	group.targets = TargetSet::create();
 }
 
+/* ------------------------------------------------------------------------------------------------ Target::deinit
+ */
+void Target::deinit()
+{
+	prerequisites.destroy();
+	dependents.destroy();
+	if (kind == Kind::Group)
+		group.targets.destroy();
+}
+
 /* ------------------------------------------------------------------------------------------------ TargetSingle::exists
  */
 b8 Target::exists()
 {
+	assert(kind != Kind::Unknown);
 	switch (kind)
 	{
 		case Kind::Single: return fs::Path::exists(single.path);
@@ -79,12 +93,14 @@ b8 Target::exists()
 			}
 			return true;
 	}
+	return {};
 }
 
 /* ------------------------------------------------------------------------------------------------ TargetSingle::modtime
  */
 s64 Target::modtime()
 {
+	assert(kind != Kind::Unknown);
 	switch (kind)
 	{
 		// TODO(sushi) what if our path is not null-terminated ?
@@ -101,6 +117,7 @@ s64 Target::modtime()
 			return min;
 		}break;
 	}
+	return {};
 }
 
 

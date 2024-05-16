@@ -52,10 +52,14 @@ struct Lake
 	s32          argc;
 	const char** argv;
 
+	fs::File initfile = nil;
+
 	u32 max_jobs; // --max-jobs <n> or -j <n>
 	b8 print_transformed; // --print-transformed
 
-	b8 init(const char** argv, int argc, mem::Allocator* allocator = &mem::stl_allocator);
+	b8   init(const char** argv, int argc, mem::Allocator* allocator = &mem::stl_allocator);
+	void deinit();
+
 	b8 process_argv(str* initfile);
 	b8 run();
 };

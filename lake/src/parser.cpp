@@ -8,9 +8,29 @@
 
 #include "logger.h"
 
+static Logger logger = Logger::create("lake.parser"_str, Logger::Verbosity::Warn);
+
+template<typename... T>
+void Parser::errorHere(T... args)
+{
+	stack.printSrc(this);
+	ERROR(sourcename, ":", curt.line, ":", curt.column, ": ", args...);
+	exit(1);
+}
+
+template<typename... T>
+void Parser::warnHere(T... args)
+{
+	WARN(sourcename, ":", curt.line, ":", curt.column, ": ", args...);
+}
+
+#if 0
 #define PARSER_TRACE \
 	TRACE(__func__, ": ", lex.getRaw(curt), "\n"); \
 	SCOPED_INDENT;
+#else
+#define PARSER_TRACE
+#endif
 
 /* ================================================================================================
  *
@@ -142,7 +162,7 @@ void Parser::TokenStack::pushBeforeWhitespace(Elem::Virt v)
 
 /* ------------------------------------------------------------------------------------------------
  */
-void Parser::TokenStack::print(Parser* p, Logger logger)
+void Parser::TokenStack::print(Parser* p)
 {
 	for (u32 i = 0; i < arr.len(); i++)
 	{
@@ -167,29 +187,28 @@ void Parser::TokenStack::print(Parser* p, Logger logger)
 
 /* ------------------------------------------------------------------------------------------------
  */
-void Parser::TokenStack::printSrc(Parser* p, Logger logger)
+void Parser::TokenStack::printSrc(Parser* p)
 {
 	for (u32 i = 0; i < arr.len(); i++)
 	{
 		Elem e = arr[i];
 		if (e.is_virtual)
 		{
-			INFO(e.virt.raw);
+			INFO(e.virt.raw, "\n");
 		}
 		else
 		{
 			if (e.real.kind == String)
 			{
-				INFO('"', p->lex.getRaw(e.real), '"');
+				INFO('"', p->lex.getRaw(e.real), '"', "\n");
 			}
 			else
 			{
-				INFO(p->lex.getRaw(e.real));
+				INFO(p->lex.getRaw(e.real), "\n");
 			}
 		}
 	}
 }
-
 
 /* ------------------------------------------------------------------------------------------------
  */
@@ -229,11 +248,10 @@ Moved<io::Memory> Parser::fin()
 
 /* ------------------------------------------------------------------------------------------------
  */
-void Parser::init(str sourcename, io::IO* in, Logger::Verbosity verbosity, mem::Allocator* allocator)
+void Parser::init(str sourcename, io::IO* in, mem::Allocator* allocator)
 {
-	lex.init(sourcename, in, verbosity);
+	lex.init(sourcename, in);
 	stack.init(allocator);
-	logger = Logger::create("lake.parser"_str, verbosity);
 	curt = {};
 }
 
@@ -309,6 +327,7 @@ void Parser::start()
 	PARSER_TRACE;
 	nextToken();
 	chunk();
+	stack.printSrc(this);
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -613,7 +632,7 @@ void Parser::prefixexpr()
 
 			nextToken(false,false);
 
-			auto consume_arg = [this]()
+			auto consume_arg = [this](b8 push_on_stack)
 			{
 				Token save = curt;
 
@@ -628,7 +647,7 @@ void Parser::prefixexpr()
 
 					if (at(Eof))
 						errorHere("encountered end of file while consuming command argument that began at ", save.line, ":", save.column);
-					nextToken();
+					nextToken(push_on_stack);
 				}
 			};
 
@@ -643,7 +662,7 @@ void Parser::prefixexpr()
 
 						if (!at(ParenLeft))
 						{
-							consume_arg();
+							consume_arg(true);
 							stack.push({String, save.offset, curt.offset - save.offset, 0});
 							break;
 						}
@@ -658,8 +677,9 @@ void Parser::prefixexpr()
 
 					default: {
 						Token save = curt;
-						consume_arg();
+						consume_arg(false);
 						stack.push({String, save.offset, curt.offset - save.offset, 0});
+						TRACE(lex.getRaw(stack.arr.last()->real), "\n");
 						if (at(Whitespace))
 							nextToken(false,false);
 					} break;

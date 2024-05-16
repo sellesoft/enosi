@@ -49,11 +49,12 @@ struct Target
 {
 	enum class Kind
 	{
+		Unknown,
 		Single,
 		Group,
 	};
 
-	Kind kind;
+	Kind kind = Kind::Unknown;
 
 	union
 	{
@@ -68,6 +69,8 @@ struct Target
 			TargetSet targets;
 		} group;
 	};
+
+	Target() {}
 
 	u64 hash;
 	
@@ -124,6 +127,8 @@ struct Target
 
 	void init_single(str path);
 	void init_group();
+
+	void deinit();
 
 	// Returns whether or not this target exists on disk.
 	b8 exists();
