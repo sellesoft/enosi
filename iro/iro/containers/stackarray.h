@@ -5,7 +5,7 @@
 #ifndef _iro_stackarray_h
 #define _iro_stackarray_h
 
-#include "common.h"
+#include "../common.h"
 #include "slice.h"
 
 namespace iro
@@ -26,7 +26,7 @@ struct StackArray
 
 	/* -------------------------------------------------------------------------------------------- capacity
 	 */
-	s64 capacity() { return Capacity; }
+	u64 capacity() { return Capacity; }
 
 	/* -------------------------------------------------------------------------------------------- push
 	 */
