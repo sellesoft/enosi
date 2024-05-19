@@ -2,6 +2,7 @@
 
 #include "logger.h"
 #include "unicode.h"
+#include "containers/stackarray.h"
 
 #include "fcntl.h"
 #include "errno.h"
@@ -90,24 +91,43 @@ b8 close(fs::File::Handle handle)
 
 /* ------------------------------------------------------------------------------------------------ read
  */
-s64 read(fs::File::Handle handle, Bytes buffer)
+s64 read(fs::File::Handle handle, Bytes buffer, b8 non_blocking)
 {
 	int r = ::read((s64)handle, buffer.ptr, buffer.len);
 
 	if (r == -1)
-		return reportErrno("failed to read from file with handle ", handle, ": ", explain_read((s64)handle, buffer.ptr, buffer.len));
+	{
+		if (errno != EAGAIN || !non_blocking)
+			return reportErrno("failed to read from file with handle ", handle, ": ", explain_read((s64)handle, buffer.ptr, buffer.len));
+		else 
+			r = errno = 0;
+	}
 	return r;
 }
 
 /* ------------------------------------------------------------------------------------------------ write
  */
-s64 write(fs::File::Handle handle, Bytes buffer)
+s64 write(fs::File::Handle handle, Bytes buffer, b8 non_blocking)
 {
 	int r = ::write((s64)handle, buffer.ptr, buffer.len);
 
 	if (r == -1)
-		return reportErrno("failed to write to file with handle ", handle, ": ", explain_write((s64)handle, buffer.ptr, buffer.len));
+	{
+		if (errno != EAGAIN || !non_blocking)
+			return reportErrno("failed to write to file with handle ", handle, ": ", explain_write((s64)handle, buffer.ptr, buffer.len));
+		else 
+			r = errno = 0;
+	}
 	return r;
+}
+
+/* ------------------------------------------------------------------------------------------------ setNonBlocking
+ */
+b8 setNonBlocking(fs::File::Handle handle)
+{
+	if (-1 == fcntl((s64)handle, F_SETFL, fcntl((s64)handle, F_GETFL, 0) | O_NONBLOCK))
+		return reportErrno("failed to set file with handle ", handle, " as non-blocking: ", explain_fcntl((s64)handle, F_SETFL, O_NONBLOCK | fcntl((s64)handle, F_GETFL, 0)));
+	return true;
 }
 
 /* ------------------------------------------------------------------------------------------------ clock_realtime
@@ -380,18 +400,18 @@ b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process:
 				// close reading end of stdin pipe and set stream file
 				// to write to it 
 				close(infos[i].pipes[0]);
-				int fd = dup(infos[i].pipes[1]);
+				// int fd = dup();
 				flags.set(fs::OpenFlag::Write);
-				*infos[i].f = fs::File::fromFileDescriptor(fd, flags);
+				*infos[i].f = fs::File::fromFileDescriptor(infos[i].pipes[1], flags);
 			}
 			else
 			{
 				// close writing end of stdout/err pipes and set stream
 				// files to read from them
 				close(infos[i].pipes[1]);
-				int fd = dup(infos[i].pipes[0]);
+				// int fd = dup();
 				flags.set(fs::OpenFlag::Read);
-				*infos[i].f = fs::File::fromFileDescriptor(fd, flags);
+				*infos[i].f = fs::File::fromFileDescriptor(infos[i].pipes[0], flags);
 			}
 		}
 
@@ -424,7 +444,7 @@ b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process:
 
 		if (-1 == execvp(argsc[0], argsc))
 		{
-			reportErrno("execvp failed to replace child process with file '", file, "': ", explain_execvp((char*)args[0].bytes, (char**)args.ptr));
+			reportErrno("execvp failed to replace child process with file '", file, "': ", explain_execvp(argsc[0], argsc));
 			exit(1);
 		}
 	}
@@ -456,6 +476,28 @@ b8 processCheck(Process::Handle handle, s32* out_exit_code)
 	}
 
 	return false;
+}
+
+/* ------------------------------------------------------------------------------------------------ realpath
+ */
+b8 realpath(fs::Path* path)
+{
+	StackArray<u8, PATH_MAX> buf;
+
+	if (::realpath((char*)path->buffer.buffer, (char*)buf.arr) == nullptr)
+	{
+		reportErrno("failed to canonicalize path ", *path, "': ", explain_realpath((char*)path->buffer.buffer, (char*)buf.arr));
+		return false;
+	}
+
+	buf.len = strlen((char*)buf.arr);
+
+	path->buffer.clear();
+	path->buffer.reserve(buf.len);
+	path->buffer.commit(buf.len);
+	mem::copy(path->buffer.buffer, buf.arr, buf.len);
+
+	return true;
 }
 
 

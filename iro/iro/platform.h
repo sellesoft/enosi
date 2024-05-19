@@ -40,17 +40,26 @@ b8 close(fs::File::Handle handle);
 /* ------------------------------------------------------------------------------------------------ read
  *  Reads data from a file opened by a previous call to open() into 'buffer'. This is equivalent to 
  *  Linux's read().
+ *  If the file referred to by handle is set to not block on read/writes, set non_blocking to true
+ *  to suppress the error that normally appears (on Linux, at least).
  *
  *  TODO(sushi) implement equivalents to Linux's pread/pwrite and readv/writev.
  */
-s64 read(fs::File::Handle handle, Bytes buffer);
+s64 read(fs::File::Handle handle, Bytes buffer, b8 non_blocking = false);
 
 /* ------------------------------------------------------------------------------------------------ write
  *  Writes data to a file opened by a previous call to open(). In the same manner as read(), this
  *  is equivalent to Linux's write().
+ *  If the file referred to by handle is set to not block on read/writes, set non_blocking to true
+ *  to suppress the error that normally appears (on Linux, at least).
  */
-s64 write(fs::File::Handle handle, Bytes buffer);
+s64 write(fs::File::Handle handle, Bytes buffer, b8 non_blocking = false);
 
+/* ------------------------------------------------------------------------------------------------ setNonBlocking
+ *  Sets the given file handle as non-blocking, eg. read will not block if there is no buffered 
+ *  data take and write will not block until something consumes the written data.
+ */
+b8 setNonBlocking(fs::File::Handle handle);
 
 /* ================================================================================================ Timespec
  *  Data returned by clock functions.
@@ -124,6 +133,12 @@ b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process:
  *  otherwise returns false.
  */
 b8 processCheck(Process::Handle handle, s32* out_exit_code);
+
+/* ------------------------------------------------------------------------------------------------ realpath
+ *	Converts the given path, that must exist, to a canonical path, that is with segments /./ and 
+ *	/../ evaluated and links followed.
+ */
+b8 realpath(fs::Path* path);
 
 } // namespace iro::platform
 
