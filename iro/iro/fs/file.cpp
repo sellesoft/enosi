@@ -60,6 +60,8 @@ b8 File::open(Moved<Path> path, OpenFlags flags)
 	if (flags.test(OpenFlag::Write))
 		setWritable();
 
+	openflags = flags;
+
 	this->path = path;
 
 	return true;
@@ -93,7 +95,7 @@ s64 File::write(Bytes bytes)
 		!canWrite())
 		return -1;
 
-	return platform::write(handle, bytes);
+	return platform::write(handle, bytes, openflags.test(OpenFlag::NoBlock));
 }
 
 /* ------------------------------------------------------------------------------------------------ File::read
@@ -104,7 +106,7 @@ s64 File::read(Bytes bytes)
 		!canRead())
 		return -1;
 
-	return platform::read(handle, bytes);
+	return platform::read(handle, bytes, openflags.test(OpenFlag::NoBlock));
 }
 
 /* ------------------------------------------------------------------------------------------------ File::fromFileDescriptor
@@ -114,6 +116,9 @@ File File::fromFileDescriptor(u64 fd, OpenFlags flags)
 	File out = {};
 	out.handle = fd;
 
+	DEBUG("creating File from file descriptor ", fd, "\n");
+	SCOPED_INDENT;
+
 	out.setOpen();
 
 	if (flags.test(OpenFlag::Read))
@@ -122,7 +127,15 @@ File File::fromFileDescriptor(u64 fd, OpenFlags flags)
 	if (flags.test(OpenFlag::Write))
 		out.setWritable();
 
+	if (flags.test(OpenFlag::NoBlock))
+	{
+		TRACE("setting as non-blocking\n");
+		platform::setNonBlocking(out.handle);
+	}
+
 	out.path = nil;
+
+	out.openflags = flags;
 
 	return out;
 }

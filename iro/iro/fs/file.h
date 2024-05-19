@@ -70,6 +70,8 @@ struct File : public io::IO
 
 	Path path = nil;
 
+	OpenFlags openflags;
+
 	static File from(str path, OpenFlags flags, mem::Allocator* allocator = &mem::stl_allocator);
 	static File from(Path path, OpenFlags flags, mem::Allocator* allocator = &mem::stl_allocator);
 	static File from(Moved<Path> path, OpenFlags flags);
