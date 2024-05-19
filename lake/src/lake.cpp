@@ -17,13 +17,12 @@
 
 #include "assert.h"
 
-
-
 #include "string.h"
 
 #include "iro/time/time.h"
 
 #include "iro/process.h"
+#include "iro/fs/glob.h"
 
 #undef stdout
 #undef stderr
@@ -40,7 +39,7 @@ extern "C"
 static Logger logger = Logger::create("lake"_str, 
 
 #if LAKE_DEBUG
-		Logger::Verbosity::Trace);
+		Logger::Verbosity::Debug);
 #else
 		Logger::Verbosity::Warn);
 #endif
@@ -54,7 +53,7 @@ struct ActiveProcess
 	fs::File stderr;
 };
 
-Pool<ActiveProcess> active_process_pool;
+Pool<ActiveProcess> active_process_pool = {};
 
 /* ------------------------------------------------------------------------------------------------ Lake::init
  */
@@ -202,6 +201,8 @@ b8 process_max_jobs_arg(Lake* lake, ArgIter* iter)
 
 	DEBUG("max_jobs set to ", lake->max_jobs, " via command line argument\n");
 
+	lake->max_jobs_set_on_cli = true;
+
 	return true;
 }
 
@@ -225,8 +226,8 @@ b8 process_arg_double_dash(Lake* lake, str arg, str* initfile, ArgIter* iter)
 
 #define verbmap(s, level) \
 			case GLUE(s, _hashed): \
-				logger.verbosity = Logger::Verbosity::level;\
 				DEBUG("Logger verbosity level set to " STRINGIZE(level) " via command line argument.\n"); \
+				logger.verbosity = Logger::Verbosity::level;\
 				break;
 			
 			verbmap("trace", Trace);
@@ -681,32 +682,50 @@ ActiveProcess* lua__processSpawn(str* args, u32 args_count)
 	return proc;
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__processPoll
+/* ------------------------------------------------------------------------------------------------ lua__processRead
  */
-b8 lua__processPoll(
+void lua__processRead(
 		ActiveProcess* proc, 
 		void* stdout_ptr, u64 stdout_len, u64* out_stdout_bytes_read,
-		void* stderr_ptr, u64 stderr_len, u64* out_stderr_bytes_read,
-		s32* out_exit_code)
+		void* stderr_ptr, u64 stderr_len, u64* out_stderr_bytes_read)
 {
 	assert(
-		proc && 
+		proc &&
 		stdout_ptr && stdout_len && out_stdout_bytes_read &&
-		stderr_ptr && stderr_len && out_stderr_bytes_read &&
-		out_exit_code);
+		stderr_ptr && stderr_len && out_stderr_bytes_read);
+	TRACE("reading ", (void*)proc, "\n");
 
 	*out_stdout_bytes_read = proc->stdout.read({(u8*)stdout_ptr, stdout_len});
 	*out_stderr_bytes_read = proc->stderr.read({(u8*)stderr_ptr, stderr_len});
+}
+
+/* ------------------------------------------------------------------------------------------------ lua__processPoll
+ */
+b8 lua__processPoll(ActiveProcess* proc, s32* out_exit_code)
+{
+	assert(proc && out_exit_code);
+	TRACE("polling ", (void*)proc, "\n");
 
 	proc->process.checkStatus();
 
 	if (proc->process.terminated)
 	{
 		*out_exit_code = proc->process.exit_code;
-		active_process_pool.remove(proc);
 		return true;
 	}
 	return false;
+}
+
+/* ------------------------------------------------------------------------------------------------ lua__processClose
+ */
+void lua__processClose(ActiveProcess* proc)
+{
+	assert(proc);
+	DEBUG("closing proc ", (void*)proc, "\n");
+
+	proc->stdout.close();
+	proc->stderr.close();
+	active_process_pool.remove(proc);
 }
 
 /* ------------------------------------------------------------------------------------------------ lua__globCreate
@@ -720,242 +739,18 @@ struct LuaGlobResult
 
 LuaGlobResult lua__globCreate(str pattern)
 {
-	using namespace fs;
-
-	if (pattern.isEmpty())
-		return {};
 
 	auto matches = Array<str>::create();
-
-	b8 directories_only = pattern.last() == '/';
-
-	auto parts = Array<str>::create();
-	defer { parts.destroy(); };
-
-	pattern.split('/', &parts);
-
-	u64 parts_len = parts.len();
-
-
-	// handle special case where we only have one part 
-	if (parts_len == 1)
-	{
-		auto makePathCopy = [](MayMove<Path>& path)
+	auto glob = fs::Globber::create(pattern);
+	glob.run(
+		[&matches](fs::Path& p)
 		{
-			str s;
-			s.len = path.buffer.len;
-			s.bytes = (u8*)mem::stl_allocator.allocate(s.len);
-			mem::copy(s.bytes, path.buffer.buffer, s.len);
-			return s;
-		};
-
-		if (parts[0] == "**"_str)
-		{
-			if (directories_only)
-			{
-				// recursively match all directories
-				walk("."_str, 
-					[&](MayMove<Path>& path)
-					{
-						if (path.isDirectory())
-						{
-							matches.push(makePathCopy(path));
-							return DirWalkResult::StepInto;
-						}
-						return DirWalkResult::Next;
-					});
-
-				return {matches.arr, matches.len()};
-			}
-		}
-
-		// attempt to match each file in current directory
-		walk("."_str, 
-			[&](MayMove<Path>& path)
-			{
-				if (path.matches(parts[0]))
-					matches.push(makePathCopy(path));
-				return DirWalkResult::Next;
-			});
-
-		return {matches.arr, matches.len()};
-	}
-	else
-	{
-		// this whole thing probably has like 10000000 mistakes 
-
-		auto makePathCopy = [](Path& path)
-		{
-			str s;
-			s.len = path.buffer.len;
-			s.bytes = (u8*)mem::stl_allocator.allocate(s.len);
-			mem::copy(s.bytes, path.buffer.buffer, s.len);
-			return s;
-		};
-
-		u32 part_idx = 0;
-		u32 part_trail = 0;
-
-		auto incPart = [&]()
-		{
-			part_trail = part_idx;
-			part_idx += 1;
-		};
-
-		auto decPart = [&]()
-		{
-			part_trail = part_idx;
-			part_idx -= 1;
-		};
-
-		auto dir_stack = Array<Dir>::create();
-		auto dir = Dir::open("."_str);
-		auto path = Path::from(""_str);
-
-		defer
-		{
-			for (Dir& d : dir_stack)
-			{
-				d.close();
-			}
-			dir_stack.destroy();
-			dir.close();
-			path.destroy();
-		};
-
-		auto next = [&](b8 remove_basename = true)
-		{
-			if (remove_basename)
-				path.removeBasename();
-			auto rollback = path.makeRollback();
-			for(;;)
-			{
-				Bytes space = path.reserve(255);
-				s64 len = dir.next(space);
-				if (len <= 0)
-					return false;
-				path.commit(len);
-
-				// TODO(sushi) combine these into a single helper
-				if (!path.isParentDirectory() && !path.isCurrentDirectory())
-					return true;
-
-				// cut off the directory and try again
-				path.commitRollback(rollback);
-			}
-		};
-
-		auto stepInto = [&]()
-		{
-			dir_stack.push(dir);
-
-			path.makeDir();
-			dir = Dir::open(path);
-			if (isnil(dir))
-			{
-				dir = *dir_stack.last();
-				dir_stack.pop();
-				return false;
-			}
-
-			return next(false);
-		};
-
-		for (;;)
-		{
-			str part = parts[part_idx];
-			b8 last_part = part_idx == parts.len() - 1;
-
-			if (!last_part && part == "**"_str)
-			{
-				// if we didn't just step back into this part,
-				// match the next part against all files recursively
-				if (part_trail <= part_idx)
-					incPart();
-				else
-					decPart();
-			}
-			else if (part_idx && parts[part_idx - 1] == "**"_str)
-			{
-				if (!next())
-				{
-					if (dir_stack.isEmpty())
-						break;
-					dir.close();
-					dir = *dir_stack.last();
-					dir_stack.pop();
-					decPart();
-				}
-				else
-				{
-					str base = path.basename();
-
-					if (Path::matches(base, part))
-					{
-						matches.push(makePathCopy(path));
-
-						if (path.isDirectory())
-						{
-							if (stepInto())
-							{
-								incPart();
-								continue;
-							}
-						}
-					}
-					else if (path.isDirectory())
-					{
-						if (stepInto())
-						{
-							incPart();
-							continue;
-						}
-					}
-				}
-			}
-			else 
-			{
-				// TODO(sushi) if we know this part is not a pattern and we step back
-				//             into it (part_trail > part_idx) then we can early out 
-				//             of matching files in this directory and just step 
-				//             out again. maybe try compiling patterns later like 
-				//             Crystal does.
-				if (!next())
-				{
-					if (dir_stack.isEmpty())
-						break;
-					dir.close();
-					dir = *dir_stack.last();
-					dir_stack.pop();
-					decPart();
-				}
-				else
-				{
-					str base = path.basename();
-
-					if (Path::matches(base, part))
-					{
-						
-						if (last_part)
-						{
-							matches.push(makePathCopy(path));
-						}
-
-						if (!last_part && path.isDirectory())
-						{
-							if (stepInto())
-							{
-								incPart();
-								continue;
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
-
+			str match = p.buffer.asStr();
+			str* s = matches.push();
+			*s = match.allocateCopy();
+			return true;
+		});
+	glob.destroy();
 	return {matches.arr, matches.len()};
 }
 
@@ -969,6 +764,21 @@ void lua__globDestroy(LuaGlobResult x)
 		mem::stl_allocator.free(s.bytes);
 
 	arr.destroy();
+}
+
+
+/* ------------------------------------------------------------------------------------------------ lua__setMaxJobs
+ */
+void lua__setMaxJobs(s32 n)
+{
+	if (!lake.max_jobs_set_on_cli)
+	{
+		NOTICE("max_jobs set to ", n, " from lakefile call to lake.maxjobs\n");
+
+		// TODO(sushi) make a thing to get number of logical processors and also 
+		//             warn here if max jobs is set too high
+		lake.max_jobs = n;
+	}
 }
 
 

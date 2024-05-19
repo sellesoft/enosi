@@ -631,7 +631,7 @@ void Parser::prefixexpr()
 
 			nextToken(false,false);
 
-			auto consume_arg = [this](b8 push_on_stack)
+			auto consume_arg = [this]()
 			{
 				Token save = curt;
 
@@ -646,7 +646,7 @@ void Parser::prefixexpr()
 
 					if (at(Eof))
 						errorHere("encountered end of file while consuming command argument that began at ", save.line, ":", save.column);
-					nextToken(push_on_stack);
+					curt = lex.nextToken();
 				}
 			};
 
@@ -661,7 +661,7 @@ void Parser::prefixexpr()
 
 						if (!at(ParenLeft))
 						{
-							consume_arg(true);
+							consume_arg();
 							stack.push({String, save.offset, curt.offset - save.offset, 0});
 							break;
 						}
@@ -676,7 +676,7 @@ void Parser::prefixexpr()
 
 					default: {
 						Token save = curt;
-						consume_arg(false);
+						consume_arg();
 						stack.push({String, save.offset, curt.offset - save.offset, 0});
 						TRACE(lex.getRaw(stack.arr.last()->real), "\n");
 						if (at(Whitespace))

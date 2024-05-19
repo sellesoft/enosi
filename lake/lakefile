@@ -1,31 +1,40 @@
 mode    ?= "debug"
 verbose ?= false
 
-build_dir := "buildtest/"..mode.."/"
+lake.maxjobs(8)
+
+build_dir = "buildtest/"..mode.."/"
 
 lake.mkdir(build_dir, {make_parents = true})
 
-lakeexe := lake.target(build_dir.."lake")
+lakeexe := lake.target(build_dir.."lpp")
 
-c_files := lake.find("src/**/*.cpp")
-o_files := lake.replace(c_files, "src/(.-).cpp", build_dir.."%1.o")
-d_files := lake.replace(c_files, "src/(.-).cpp", build_dir.."%1.d")
+files := {}
 
-print("found ", #c_files, " files")
+files.c = lake.find("src/**/*.cpp")
+files.o = lake.replace(files.c, "(src/.-)%.cpp", build_dir.."%1.o")
+files.d = lake.replace(files.o, "(.-)%.o", "%1.d")
 
 compiler     := "clang++"
 linker       := "clang++"
 preprocessor := "cpp"
 
+string.starts_with = function(self, s)
+	return self:sub(1,#s) == s
+end
+
 compiler_flags := 
 $[
+	
 	-std=c++20
 	-Iinclude
 	-Isrc
-	-Isrc/iro/src
+	-Isrc/iro
 	-Wno-switch
 	-fcolor-diagnostics
+	-fno-caret-diagnostics
 	-Wno-#warnings
+
 ]
 
 if mode == "debug" then
@@ -40,15 +49,17 @@ end
 
 linker_flags := 
 $[
+	
 	-Llib
 	-lluajit
-	-lm
+	-lexplain
 	-Wl,--export-dynamic
 ]
 
-reset := string.char(27).."[0m"
-green := string.char(27).."[0;32m"
-blue  := string.char(27).."[0;34m"
+reset := "\027[0m"
+green := "\027[0;32m"
+blue  := "\027[0;34m"
+red   := "\027[0;31m"
 
 print_success := function(from, to, time)
 	if to then
@@ -58,46 +69,74 @@ print_success := function(from, to, time)
 	end
 end
 
-lakeexe
-	:uses(o_files)
-	:recipe(function()
-		start := lake.get_highres_clock()
-		result := ` $(linker) $(o_files) $(linker_flags) -o $(lakeexe) `
-		time_took := (lake.get_highres_clock() - start) / 1000000
+linker_recipe := function(input, output)
+	if output == nil or input == nil then
+		error("linker_recipe passed a nil input or output", 2)
+	end
 
-		if result.exit_status == 0 then
-			print_success(lakeexe.path, nil, time_took)
-		end
+    return function()
+        -- make sure the output path exists
+        dir := tostring(output):match("(.*)/")
+        lake.mkdir(dir, {make_parents = true})
 
-		io.write(result.stdout)
-	end)
+        start := lake.get_highres_clock()
+        result := ` $(linker) $(input) $(linker_flags) -o $(output) `
+        time_took := (lake.get_highres_clock() - start) / 1000000
 
-for c_file, o_file in lake.zip(c_files, o_files) do
-	lake.target( o_file )
-		:uses(c_file)
-		:recipe(function()
-			start := lake.get_highres_clock()
-			result := ` $(compiler) -c $(c_file) $(compiler_flags) -o $(o_file) `
-			time_took := (lake.get_highres_clock() - start) / 1000000
-
-			if result.exit_status == 0 then
-				print_success(c_file, o_file, time_took)
-			end
-
+        if result.exit_code == 0 then
+            io.write(blue, tostring(output), reset, " ", time_took, "s\n")
 			io.write(result.stdout)
-		end)
+        else
+            io.write(red, "compiling ", blue, tostring(output), red, " failed", reset, ":\n")
+			io.write(result.stdout)
+			error(red.."linker failed"..reset)
+        end
+    end
+end
+
+compiler_recipe := function(input, output)
+    return function()
+        dir := tostring(output):match("(.*)/")
+        lake.mkdir(dir, {make_parents = true})
+
+        start := lake.get_highres_clock()
+        result := ` $(compiler) -c $(compiler_flags) $(input) -o $(output) `
+        time_took := (lake.get_highres_clock() - start) / 1000000
+
+        if result.exit_code == 0 then
+            io.write(green, input, reset, " -> ", blue, output, reset, " ", time_took, "s\n")
+			io.write(result.stdout)
+        else
+            io.write(red, "compiling ", blue, output, red, " failed", reset, ":\n")
+			io.write(result.stdout)
+			-- error(red.."compiler failed"..reset)
+        end
+    end
+end
+
+lakeexe:depends_on(files.o):recipe(linker_recipe(files.o, lakeexe))
+
+for c_file, o_file in lake.zip(files.c, files.o) do
+    lake.target(o_file):depends_on(c_file):recipe(compiler_recipe(c_file, o_file))
 end
 
 -- create dependency files based on the make rule cpp generates for each cpp file.
 -- we reformat them to just be a newline separated list of files each cpp files depends on
 -- and the lake dependencies are created below this for loop
-for c_file, d_file in lake.zip(c_files, d_files) do
+for c_file, d_file in lake.zip(files.c, files.d) do
 	lake.target( d_file )
 		:uses( c_file )
 		:recipe(function()
-			result := ` cpp $(c_file) $(compiler_flags) -MM -MG -MT $(lake.replace(d_file, "(.-)%.d", "%1.o")) `
+            dir := tostring(d_file):match("(.*)/")
+            lake.mkdir(dir, {make_parents = true})
 
-			if result.exit_status ~= 0 then
+			-- cflags_str := os.getenv("NIX_CFLAGS_COMPILE")
+			-- cflags := {}
+			-- for word in cflags_str:gmatch("%S+") do table.insert(cflags, word) end
+
+			result := ` clang++ $(c_file) $(compiler_flags) -MM -MG -MT $(lake.replace(d_file, "(.-)%.d", "%1.o")) `
+
+			if result.exit_code ~= 0 then
 				error("failed to create dep file '"..d_file.."':\n"..result.stdout)
 			end
 
@@ -107,6 +146,11 @@ for c_file, d_file in lake.zip(c_files, d_files) do
 
 			for file in result:gmatch("%S+") do
 				if file:sub(-1) ~= ":" then
+					-- need to manually filter out 'new' because cpp doesn't find that its a 
+					-- system header for whatever reason
+					if file:starts_with("generated") then
+						out = out.."src/"
+					end
 					out = out..file.."\n"
 				end
 			end
@@ -125,7 +169,7 @@ end
 -- load the dependency files that may or may not exist and 
 -- create dependencies between the o file they refer to 
 -- and the files in the file
-for o_file, d_file in lake.zip(o_files, d_files) do
+for o_file, d_file in lake.zip(files.o, files.d) do
 	file := io.open(d_file, "r")
 
 	lake.target(o_file):depends_on(d_file)
@@ -134,7 +178,9 @@ for o_file, d_file in lake.zip(o_files, d_files) do
 		str := file:read("*a")
 
 		for file in str:gmatch("%S+") do
-			lake.target(o_file):depends_on(file)
+			if file ~= "\\" then
+				lake.target(o_file):depends_on(file)
+			end
 		end	
 	end
 end
@@ -169,7 +215,6 @@ generated_target("src/tokens.lua", $[
 	src/generated/token.enum.h 
 	src/generated/token.strings.h])
 
-
 lake.target("src/generated/lakeluacompiled.h")
 	:depends_on "src/lake.lua"
 	:recipe(function()
@@ -183,4 +228,4 @@ lake.target("src/generated/lakeluacompiled.h")
 
 		io.write(result.stdout, "\n", result.stderr)
 	end)
-
+  

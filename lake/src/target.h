@@ -60,7 +60,7 @@ struct Target
 	{
 		struct
 		{
-			str path;
+			fs::Path path;
 			Target* group;
 		} single;
 

@@ -3,6 +3,8 @@
 
 #include "iro/logger.h"
 #include "iro/fs/fs.h"
+#include "iro/fs/glob.h"
+#include "iro/fs/path.h"
 
 using namespace iro;
 
@@ -20,16 +22,19 @@ int main(const int argc, const char* argv[])
 {
 	if (!iro::log.init())
 		return 1;
+	defer { iro::log.deinit(); };
 
-	fs::File stdout = fs::File::stdout();
-	defer { stdout.close(); };
+	auto f = fs::File::from("temp/log"_str, fs::OpenFlag::Create | fs::OpenFlag::Truncate | fs::OpenFlag::Write);
+
 	{
 		using enum Log::Dest::Flag;
-		iro::log.newDestination("stdout"_str, &stdout, 
+		iro::log.newDestination("stdout"_str, &fs::stdout, 
 				AllowColor | 
 				ShowCategoryName |
 				ShowVerbosity |
-				PadVerbosity);
+				PadVerbosity |
+				TrackLongestName);
+		iro::log.newDestination("templog"_str, &f, {});
 	}
 
 	if (!lake.init(argv, argc))

@@ -85,11 +85,12 @@ ffi.cdef [[
 	const char* lua__nextCliarg();
 
 	void* lua__processSpawn(str* args, u32 args_count);
-	b8    lua__processPoll(
-				void* proc,
-				void* stdout_ptr, u64 stdout_len, u64* out_stdout_bytes_read,
-				void* stderr_ptr, u64 stderr_len, u64* out_stderr_bytes_read,
-				s32* out_exit_code);
+	void lua__processRead(
+		void* proc, 
+		void* stdout_ptr, u64 stdout_len, u64* out_stdout_bytes_read,
+		void* stderr_ptr, u64 stderr_len, u64* out_stderr_bytes_read);
+	b8 lua__processPoll(void* proc, s32* out_exit_code);
+	void lua__processClose(void* proc);
 
 	typedef struct
 	{
@@ -99,6 +100,8 @@ ffi.cdef [[
 
 	LuaGlobResult lua__globCreate(str pattern);
 	void lua__globDestroy(LuaGlobResult x);
+
+	void lua__setMaxJobs(s32 n);
 ]]
 local C = ffi.C
 local strtype = ffi.typeof("str")
@@ -180,6 +183,13 @@ end
 -- * >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> -
 
 
+
+-- * ---------------------------------------------------------------------------------------------- lake.maxjobs
+-- | Attempt to set the max jobs lake will use to build targets. If this number is set on command
+-- | line, then this call is ignored.
+lake.maxjobs = function(n)
+	C.lua__setMaxJobs(n)
+end
 
 -- * ---------------------------------------------------------------------------------------------- lake.mkdir
 -- | Creates a directory at 'path'. Optionally takes a table of 'options', which are:
@@ -343,24 +353,37 @@ lake.cmd = function(...)
 	local out_read = ffi.new("u64[1]")
 	local err_read = ffi.new("u64[1]")
 
-	while true do
+	local doRead = function()
 		local out_ptr, out_len = out_buf:reserve(space_wanted)
 		local err_ptr, err_len = err_buf:reserve(space_wanted)
 
-		local ret =
-			C.lua__processPoll(
-				handle,
-				out_ptr, out_len, out_read,
-				err_ptr, err_len, err_read,
-				exit_code)
+		C.lua__processRead(handle,
+			out_ptr, out_len, out_read,
+			err_ptr, err_len, err_read)
+
+		-- print(out_read[0], err_read[0])
 
 		out_buf:commit(out_read[0])
 		err_buf:commit(err_read[0])
 
+		return out_read[0] + err_read[0]
+	end
+
+	while true do
+		doRead()
+
+		local ret = C.lua__processPoll(handle, exit_code)
+
 		if ret ~= 0 then
+			-- try to read until we stop recieving data because the process can report
+			-- that its terminated before all of its buffered output is consumed
+			while doRead() ~= 0 do end
+
+			C.lua__processClose(handle)
+
 			return
 			{
-				exit_code = exit_code,
+				exit_code = exit_code[0],
 				stdout = out_buf:get(),
 				stderr = err_buf:get()
 			}

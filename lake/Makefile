@@ -17,7 +17,7 @@ d_files := $(o_files:.o=.d)
 
 # clean up stuff we output
 clean:
-	-rm -r build/debug/*
+	-rm -r build/*
 	-rm -r src/generated/*
 
 # set verbose to false unless it was already specified 

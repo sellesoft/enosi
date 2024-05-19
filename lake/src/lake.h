@@ -48,15 +48,16 @@ struct Lake
 	LuaCLIArgList lua_cli_args; 
 	LuaCLIArgList::Node* lua_cli_arg_iterator;
 
-	Logger logger = Logger::create("lake"_str, Logger::Verbosity::Trace);
-
 	s32          argc;
 	const char** argv;
 
 	fs::File initfile = nil;
 
 	u32 max_jobs; // --max-jobs <n> or -j <n>
+	b8 max_jobs_set_on_cli;
+
 	b8 print_transformed; // --print-transformed
+
 
 	b8   init(const char** argv, int argc, mem::Allocator* allocator = &mem::stl_allocator);
 	void deinit();

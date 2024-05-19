@@ -96,6 +96,36 @@ static CLIArgType parse_cli_arg(const char* arg)
      break;
    }
    break;
+  case 'i':
+   arg += 1;
+   switch (*arg)
+   {
+    case 'n':
+     arg += 1;
+     switch (*arg)
+     {
+      case 'f':
+       arg += 1;
+       switch (*arg)
+       {
+        case 'o':
+         arg += 1;
+         switch (*arg)
+         {
+          default:
+           return CLIArgType::Unknown;
+           break;
+          case '\0':
+           return CLIArgType::OptionInfo;
+           break;
+         }
+         break;
+       }
+       break;
+     }
+     break;
+   }
+   break;
   case '-':
    arg += 1;
    switch (*arg)
@@ -426,19 +456,19 @@ static CLIArgType parse_cli_arg(const char* arg)
      break;
    }
    break;
-  case 'i':
+  case 'w':
    arg += 1;
    switch (*arg)
    {
-    case 'n':
+    case 'a':
      arg += 1;
      switch (*arg)
      {
-      case 'f':
+      case 'r':
        arg += 1;
        switch (*arg)
        {
-        case 'o':
+        case 'n':
          arg += 1;
          switch (*arg)
          {
@@ -446,7 +476,7 @@ static CLIArgType parse_cli_arg(const char* arg)
            return CLIArgType::Unknown;
            break;
           case '\0':
-           return CLIArgType::OptionInfo;
+           return CLIArgType::OptionWarn;
            break;
          }
          break;
@@ -483,36 +513,6 @@ static CLIArgType parse_cli_arg(const char* arg)
              return CLIArgType::OptionDebug;
              break;
            }
-           break;
-         }
-         break;
-       }
-       break;
-     }
-     break;
-   }
-   break;
-  case 'w':
-   arg += 1;
-   switch (*arg)
-   {
-    case 'a':
-     arg += 1;
-     switch (*arg)
-     {
-      case 'r':
-       arg += 1;
-       switch (*arg)
-       {
-        case 'n':
-         arg += 1;
-         switch (*arg)
-         {
-          default:
-           return CLIArgType::Unknown;
-           break;
-          case '\0':
-           return CLIArgType::OptionWarn;
            break;
          }
          break;

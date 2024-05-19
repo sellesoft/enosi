@@ -33,6 +33,9 @@
 						explain
 						acl
 						valgrind
+						crystal
+						crystalline
+						rr
 					];
 			};
 		});

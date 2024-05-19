@@ -15,7 +15,7 @@ extern "C"
 #include "lauxlib.h"
 }
 
-static Logger logger = Logger::create("lake.target"_str, Logger::Verbosity::Trace);
+static Logger logger = Logger::create("lake.target"_str, Logger::Verbosity::Error);
 
 /* ------------------------------------------------------------------------------------------------ target_hash
  */
@@ -40,7 +40,7 @@ str Target::name()
 	assert(kind != Kind::Unknown);
 	switch (kind)
 	{
-		case Kind::Single: return single.path;
+		case Kind::Single: return single.path.buffer.asStr();
 		case Kind::Group: return "group"_str;
 	}
 	return {};
@@ -52,7 +52,15 @@ void Target::init_single(str path)
 {
 	common_init();
 	kind = Kind::Single;
-	single.path = path;
+	auto temp = fs::Path::from(path);
+	mem::copy(&single.path, &temp, sizeof(fs::Path)); 
+	// TODO(sushi) make a lexical absolute thing so that this can still work in that case.
+	//             this needs to be done because i use cpp to get the headers a cpp 
+	//             file depends on, which gives the paths relative to where they're 
+	//             being included from, so if i dont sanitize them multiple targets
+	//             will be created for the same file since targets are based on the path.
+	if (single.path.exists())
+		single.path.makeAbsolute();
 	hash = path.hash();
 }
 
@@ -74,6 +82,8 @@ void Target::deinit()
 	dependents.destroy();
 	if (kind == Kind::Group)
 		group.targets.destroy();
+	else
+		single.path.destroy();
 }
 
 /* ------------------------------------------------------------------------------------------------ TargetSingle::exists
@@ -83,7 +93,7 @@ b8 Target::exists()
 	assert(kind != Kind::Unknown);
 	switch (kind)
 	{
-		case Kind::Single: return fs::Path::exists(single.path);
+		case Kind::Single: return single.path.exists();
 		
 		case Kind::Group:
 			for (auto& target : group.targets)
@@ -104,7 +114,7 @@ s64 Target::modtime()
 	switch (kind)
 	{
 		// TODO(sushi) what if our path is not null-terminated ?
-		case Kind::Single: return fs::FileInfo::of(single.path).last_modified_time.s;
+		case Kind::Single: return fs::FileInfo::of(single.path.buffer.asStr()).last_modified_time.s;
 
 		case Kind::Group: {
 			s64 min = 9223372036854775807;
