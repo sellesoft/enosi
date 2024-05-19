@@ -49,12 +49,17 @@ struct Path
 
 	void clear();
 
-	void append(io::Formattable auto... args) { io::formatv(&buffer, args...); }
+	Path& appendDir(str dir) { append("/"_str, dir); return *this; }
+	Path& appendDir(Slice<u8> dir) { append("/"_str, str{dir.ptr, dir.len}); return *this; }
+	Path& append(io::Formattable auto... args) { io::formatv(&buffer, args...); return *this; }
 
 	Bytes reserve(s32 space) { return buffer.reserve(space); }
 	void  commit(s32 space) { buffer.commit(space); }
 
-	void makeDir() { if (buffer.buffer[buffer.len-1] != '/') append('/'); }
+	b8 makeAbsolute();
+
+	// TODO(sushi) rename cause this can be confused with actually creating the directory at this path
+	Path& makeDir() { if (buffer.len != 0 && buffer.buffer[buffer.len-1] != '/') append('/'); return *this; }
 
 	// Returns the final component of this path eg.
 	// src/fs/path.h -> path.h
@@ -82,6 +87,16 @@ struct Path
 	Rollback makeRollback() { return buffer.createRollback(); }
 	void commitRollback(Rollback rollback) { buffer.commitRollback(rollback); }
 };
+
+}
+
+namespace iro::io
+{
+	
+static s64 format(io::IO* io, fs::Path& x)
+{
+	return io::format(io, x.buffer.asStr());
+}
 
 }
 

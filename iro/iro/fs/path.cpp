@@ -14,7 +14,7 @@ static Logger logger = Logger::create("iro.fs.path"_str, Logger::Verbosity::Trac
 Path Path::from(str s, mem::Allocator* allocator)
 {
 	Path out = {};
-	out.init(s);
+	out.init(s, allocator);
 	return out;
 }
 
@@ -42,7 +42,7 @@ void Path::destroy()
 Path Path::copy()
 {
 	Path out = {};
-	out.init(buffer.asStr());
+	out.init(buffer.asStr(), buffer.allocator);
 	return out;
 }
 
@@ -51,6 +51,13 @@ Path Path::copy()
 void Path::clear()
 {
 	buffer.clear();
+}
+
+/* ------------------------------------------------------------------------------------------------ Path::makeAbsolute
+ */
+b8 Path::makeAbsolute()
+{
+	return platform::realpath(this);
 }
 
 /* ------------------------------------------------------------------------------------------------ Path::basename
