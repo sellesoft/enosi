@@ -53,7 +53,7 @@ b8 walkForReal(Path& path, DirWalkCallback auto f)
 	// Path we offer to the user via the callback, which they can move 
 	// elsewhere if they want to take it.
 	MayMove<Path> user_path;
-	defer { if (!user_path.wasMoved()) user_path.destroy(); };
+	defer { if (!user_path.wasMoved()) user_path->destroy(); };
 
 	for (;;)
 	{
@@ -82,8 +82,8 @@ b8 walkForReal(Path& path, DirWalkCallback auto f)
 		else 
 		{
 			// otherwise just write into the same buffer
-			user_path.clear();
-			user_path.append(path.buffer.asStr());
+			user_path->clear();
+			user_path->append(path.buffer.asStr());
 		}
 
 		auto result = f(user_path);

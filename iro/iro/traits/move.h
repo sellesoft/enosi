@@ -71,20 +71,27 @@ struct NilValue<Moved<T>>
  *  Wraps an object that may be moved by someone. 
  */
 template<Movable T>
-struct MayMove : T
+struct MayMove
 {
+	T x;
+
 	// By default initialize to the wrapped type's nil value.
-	MayMove<T>() : T(nil) {}
+	MayMove<T>() : x(nil) {}
 
 	// Use to set this with the value of something that may be moved.
-	MayMove<T>(const T& x) : T(x) {}
+	MayMove<T>(const T& x) { *this = x; };
+
+	MayMove<T>& operator =(const T& x) { assert(wasMoved()); this->x = x; return *this; }
 
 	// Doesn't make sense to copy this, because the value its wrapping.
 	// may be moved.
 	MayMove<T>(const MayMove<T>& x) = delete;
 
-	inline b8 wasMoved() { return ::isnil((T&)*this); }
-	inline Moved<T> move() { return ::move((T&)*this); }
+	T* operator ->() { assert(not wasMoved()); return &x; }
+	Moved<T> operator *() { return move(); }
+
+	inline b8 wasMoved() { return isnil(x); }
+	inline Moved<T> move() { return assert(not wasMoved()); ::move(x); }
 };
 
 template<Movable T>
