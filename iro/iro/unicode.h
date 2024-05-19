@@ -10,6 +10,9 @@
 #include "traits/nil.h"
 #include "traits/container.h"
 
+#include "memory/allocator.h"
+#include "memory/memory.h"
+
 #include "assert.h"
 
 namespace iro::utf8
@@ -82,6 +85,7 @@ struct str
 	// where 'end' is a pointer to the byte AFTER the last of the range desired
 	static inline str from(u8* start, u8* end) { assert(start >= end); return {start, u64(end - start)}; }
 	static inline str from(u8* start, u64 len) { return {start, len}; }
+	static inline str from(Slice<u8> slice) { return {slice.ptr, slice.len}; }
 
 	b8 isEmpty() { return len == 0; }
 
@@ -106,7 +110,7 @@ struct str
 	u8* begin() { return bytes; }
 	u8* end()   { return bytes + len; }
 
-	u8 last() { return *(end()-1); }
+	u8& last() { return *(end()-1); }
 
 	// returns how many characters there are in this string
 	u64 countCharacters();
@@ -149,6 +153,15 @@ struct str
 
 			scan = scan.sub(p+1);
 		}
+	}
+
+	str allocateCopy(mem::Allocator* allocator = &mem::stl_allocator)
+	{
+		str out;
+		out.bytes = (u8*)allocator->allocate(len);
+		out.len = len;
+		mem::copy(out.bytes, bytes, len);
+		return out;
 	}
 };
 
