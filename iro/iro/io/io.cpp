@@ -13,6 +13,8 @@
 
 #include "assert.h"
 
+#undef stdout
+
 namespace iro::io
 {
 

@@ -34,6 +34,12 @@ typedef iro::Flags<Flag> Flags;
 
 /* ================================================================================================ io::IO
  *  Base interface for input/output
+ *
+ *  TODO(sushi) try to make a trait that handles this behavior so we don't have to use vtables to 
+ *              support this. Though I guess then we lose dynamic dispatch? I dunno, maybe traits
+ *          	could do something with virtual stuff to move the vtables off of the actual 
+ *          	structures implementing the behavior? I just dont like how this makes me need 
+ *          	to use 'new' but there's probably no escaping that.
  */
 struct IO
 {
@@ -72,8 +78,6 @@ protected:
 
 /* ================================================================================================ io::Memory
  *  IO around a memory buffer that may grow.
- *
- *  TODO(sushi) implement allocators and make this take one.
  */
 struct Memory : public IO
 {
@@ -140,7 +144,10 @@ private:
  *  IO around a statically sized buffer.
  *  This ensures that the buffer can always be null-terminated, so it makes room for N+1 bytes 
  *  and on every write sets the byte after the write_pos to 0.
- */
+ *
+ *  TODO(sushi) this sucks and ive found it to be useless in most cases. Either get rid of this
+ *              or fix it so its not so useless.
+ */ 
 template<size_t N>
 struct StaticBuffer : public IO
 {
