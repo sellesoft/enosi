@@ -6,23 +6,21 @@ namespace iro::mem
 
 b8 Bump::init()
 {
-	allocated_slabs_list = (u8**)mem::stl_allocator.allocate(sizeof(u8**) + slab_size);
-	if (!allocated_slabs_list)
+	slabs = (Slab*)mem::stl_allocator.allocate(sizeof(Slab));
+	if (!slabs)
 		return false;
-	*allocated_slabs_list = 0;
-	start = cursor = (u8*)(allocated_slabs_list + 1);
+	slabs->next = nullptr;
+	start = cursor = slabs->content;
 	return true;
 }
 
 void Bump::deinit()
 {
-	for (;;)
+	while (slabs)
 	{
-		u8** next = (u8**)*allocated_slabs_list;
-		mem::stl_allocator.free(allocated_slabs_list);
-		if (!next)
-			break;
-		allocated_slabs_list = next;
+		Slab* next = slabs->next;
+		mem::stl_allocator.free(slabs);
+		slabs = next;
 	}
 }
 
@@ -37,9 +35,10 @@ void* Bump::allocate(u64 size)
 
 	if (cursor - start + total_size > slab_size)
 	{
-		u8* newslab = (u8*)mem::stl_allocator.allocate(sizeof(u8**) + slab_size);
-		*((u8**)start - 1) = newslab;
-		start = cursor = newslab + 1;
+		Slab* newslab = (Slab*)mem::stl_allocator.allocate(sizeof(Slab));
+		newslab->next = slabs;
+		slabs = newslab;
+		start = cursor = newslab->content;
 	}
 
 	u64* header = (u64*)cursor;

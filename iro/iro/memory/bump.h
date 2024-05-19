@@ -19,10 +19,16 @@ struct Bump : public Allocator
 {
 	const static u32 slab_size = 4096;
 
+	struct Slab
+	{
+		Slab* next;
+		u8 content[slab_size];
+	};
+
 	u8* start;
 	u8* cursor;
 
-	u8** allocated_slabs_list;
+	Slab* slabs;
 
 	b8   init();
 	void deinit();
