@@ -50,11 +50,9 @@ inline V* next(T<V>* x)
 	return IterableTrait<T<V>>::next(x);
 }
 
-template<template<class> class T, typename V>
-concept Iterator = requires()
-{
-	IterableTrait<T<V>>::Iterator;
-};
+template<typename V, template<typename> typename T>
+struct Iterator : IterableTrait<T<V>>::Iterator {};
+
 
 
 #endif // _iro_iterable_h
