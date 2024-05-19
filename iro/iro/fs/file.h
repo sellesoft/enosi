@@ -99,6 +99,8 @@ struct File : public io::IO
 	FileInfo getInfo();
 };
 
+static File stdout = File::stdout();
+
 /* ================================================================================================ fs::FileInfo
  */
 struct FileInfo
