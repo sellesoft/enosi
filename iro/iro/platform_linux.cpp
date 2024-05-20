@@ -350,17 +350,15 @@ b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process:
 	};
 
 	// TODO(sushi) replace this with some container thats a stack buffer up to a point then dynamically allocates
-	char* argsc[255] = {};
-	assert(args.len + 1 < 255);
-
-	argsc[0] = (char*)file.bytes;
-
+	Array<char*> argsc = Array<char*>::create(args.len);
+	argsc.push((char*)file.bytes);
 	for (s32 i = 0; i < args.len; i++)
 	{
-		argsc[i+1] = (char*)args[i].bytes;
+		argsc.push((char*)args[i+i].bytes);
 	}
+	argsc.push(nullptr);
 
-	argsc[args.len+1] = 0;
+	defer { argsc.destroy(); };
 
 	for (s32 i = 0; i < 3; i++)
 	{
@@ -442,9 +440,9 @@ b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process:
 			}
 		}
 
-		if (-1 == execvp(argsc[0], argsc))
+		if (-1 == execvp(argsc.arr[0], argsc.arr))
 		{
-			reportErrno("execvp failed to replace child process with file '", file, "': ", explain_execvp(argsc[0], argsc));
+			reportErrno("execvp failed to replace child process with file '", file, "': ", explain_execvp(argsc.arr[0], argsc.arr));
 			exit(1);
 		}
 	}
