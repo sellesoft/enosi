@@ -70,17 +70,11 @@ struct Nil
 	// note this also handles the case of checking if a pointer is nil
 	template<Nillable T>
 	consteval operator T*() const { return nullptr; }
-
-	template<Nillable T>
-	inline bool operator == (const T& rhs) const { return NilValue<T>::isNil(rhs); }
 };
 
-// Auxillary for types that define a `==` operator with themselves to avoid the ambiguity
-// or if you just like using a function over an operator
 template<Nillable T>
 release_inline bool isnil(const T& x) { return NilValue<T>::isNil(x); }
 
-// because i like grammar
 template<Nillable T>
 release_inline bool notnil(const T& x) { return not isnil(x); }
 
