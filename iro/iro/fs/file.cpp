@@ -22,7 +22,7 @@ File File::from(Path path, OpenFlags flags, mem::Allocator* allocator)
 
 File File::from(Moved<Path> path, OpenFlags flags)
 {
-	if (path == nil)
+	if (isnil(path))
 	{
 		ERROR("nil path given to File::from()\n");
 		return nil;

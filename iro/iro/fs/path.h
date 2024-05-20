@@ -101,7 +101,7 @@ static s64 format(io::IO* io, fs::Path& x)
 }
 
 DefineMove(iro::fs::Path, { to.buffer = move(from.buffer); });
-DefineNilValue(iro::fs::Path, {}, { return x.buffer == Nil(); });
+DefineNilValue(iro::fs::Path, {}, { return isnil(x.buffer); });
 DefineScoped(iro::fs::Path, { x.destroy(); });
 
 #endif // _iro_path_h

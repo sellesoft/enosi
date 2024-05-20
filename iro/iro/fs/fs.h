@@ -45,7 +45,7 @@ b8 walkForReal(Path& path, DirWalkCallback auto f)
 	if (path.isCurrentDirectory())
 		path.clear();
 
-	if (dir == nil)
+	if (isnil(dir))
 		return false;
 
 	defer { dir.close(); };

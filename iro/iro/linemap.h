@@ -46,7 +46,7 @@ struct LineMap
 
 }
 
-DefineNilValue(LineMap, {nil}, { return x.line_offsets == nil; });
+DefineNilValue(LineMap, {nil}, { return isnil(x.line_offsets); });
 DefineMove(LineMap, { to.cached = from.cached; move(from.line_offsets, to.line_offsets); });
 
 #endif // _iro_linemap_h

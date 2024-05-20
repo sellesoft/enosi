@@ -67,8 +67,11 @@ struct Array
 	 */ 
 	void destroy()
 	{
+		if (isnil(*this))
+			return;
 		clear();
-		allocator()->free(getHeader());
+		mem::Allocator* a = allocator();
+		a->free(getHeader());
 		*this = nil;
 	}
 
