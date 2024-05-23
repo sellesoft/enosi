@@ -1,0 +1,38 @@
+options := lake.getOptions()
+
+mode := options.mode or "debug"
+build_dir := options.build_dir
+
+if not build_dir then
+	error("options.build_dir was not specified", 2)
+end
+
+compiler_recipe := options.compiler_recipe
+
+if not compiler_recipe then
+	error("compiler recipe not provided in options", 2)
+end
+
+dep_file_recipe := options.dep_file_recipe
+
+if not dep_file_recipe then
+	error("dep file recipe not provided in options")
+end
+
+c_files := lake.find("iro/**/*.cpp")
+
+for i,c_file in ipairs(c_files) do
+	c_files[i] = lake.target(c_file)
+	print(tostring(c_files[i]))
+end
+
+for _,c_file in ipairs(c_files) do
+	print(tostring(c_file))
+	o_file := tostring(c_file):gsub("(.-)%.cpp", build_dir.."%1.o")
+	d_file := o_file:gsub("(.-)%.o", "%1.d")
+
+	lake.target(o_file):depends_on(c_file):recipe(compiler_recipe(c_file, o_file))
+	lake.target(d_file):depends_on(d_file):recipe(dep_file_recipe(c_file, d_file))
+end
+
+
