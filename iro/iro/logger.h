@@ -15,7 +15,7 @@
 #include "io/io.h"
 #include "io/format.h"
 
-#define __HELPER(v, ...) if ((u32)logger.verbosity <= (u32)Logger::Verbosity::v) logger.log(Logger::Verbosity::v, __VA_ARGS__)
+#define __HELPER(v, ...) (((u32)logger.verbosity <= (u32)Logger::Verbosity::v) && (logger.log(Logger::Verbosity::v, __VA_ARGS__), true))
 
 #define TRACE(...) __HELPER(Trace, __VA_ARGS__)
 #define DEBUG(...) __HELPER(Debug, __VA_ARGS__)
