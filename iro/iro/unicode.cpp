@@ -52,8 +52,8 @@ Char encodeCharacter(u32 codepoint)
 			return c;
 
 		case 2:
-			c.bytes[0] = (u8)(0x11000000 + (codepoint >> 6));
-			c.bytes[1] = (u8)(0x10000000 + (codepoint & 0x00111111));
+			c.bytes[0] = (u8)(0b11000000 + (codepoint >> 6));
+			c.bytes[1] = (u8)(0b10000000 + (codepoint & 0b00111111));
 			return c;
 
 		// NOTE(sushi) just like the lib I'm referencing, utf8proc, the range 
@@ -61,16 +61,16 @@ Char encodeCharacter(u32 codepoint)
 		//             reserved for utf16.
 		//             MAYBE ill fix this later if its a problem
 		case 3:
-			c.bytes[0] = (u8)(0x11100000 + (codepoint >> 12));
-			c.bytes[1] = (u8)(0x11000000 + ((codepoint >> 6) & 0x00111111));
-			c.bytes[2] = (u8)(0x11000000 + (codepoint & 0x00111111));
+			c.bytes[0] = (u8)(0b11100000 + (codepoint >> 12));
+			c.bytes[1] = (u8)(0b11000000 + ((codepoint >> 6) & 0b00111111));
+			c.bytes[2] = (u8)(0b11000000 + (codepoint & 0b00111111));
 			return c;
 
 		case 4:
-			c.bytes[0] = (u8)(0x11110000 + (codepoint >> 18));
-			c.bytes[1] = (u8)(0x11000000 + ((codepoint >> 12) & 0x00111111));
-			c.bytes[2] = (u8)(0x11000000 + ((codepoint >>  6) & 0x00111111));
-			c.bytes[3] = (u8)(0x11000000 + (codepoint & 0x00111111));
+			c.bytes[0] = (u8)(0b11110000 + (codepoint >> 18));
+			c.bytes[1] = (u8)(0b11000000 + ((codepoint >> 12) & 0b00111111));
+			c.bytes[2] = (u8)(0b11000000 + ((codepoint >>  6) & 0b00111111));
+			c.bytes[3] = (u8)(0b11000000 + (codepoint & 0b00111111));
 			return c;
 	}
 }
