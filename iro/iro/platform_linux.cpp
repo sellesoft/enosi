@@ -354,7 +354,7 @@ b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process:
 	argsc.push((char*)file.bytes);
 	for (s32 i = 0; i < args.len; i++)
 	{
-		argsc.push((char*)args[i+i].bytes);
+		argsc.push((char*)args[i].bytes);
 	}
 	argsc.push(nullptr);
 
@@ -498,6 +498,58 @@ b8 realpath(fs::Path* path)
 	return true;
 }
 
+/* ------------------------------------------------------------------------------------------------ cwd
+ */
+fs::Path cwd(mem::Allocator* allocator)
+{
+	fs::Path path;
+	
+	if (!path.init(allocator))
+		return nil;
+
+	const u64 maxlen = PATH_MAX * 4;
+	u64 bufferlen = PATH_MAX;
+
+	path.reserve(bufferlen);
+
+	for (;;)
+	{
+		if (!getcwd((char*)path.buffer.buffer, bufferlen))
+		{
+			if (errno != ERANGE)
+			{
+				reportErrno("failed to get cwd: ", explain_getcwd((char*)path.buffer.buffer, bufferlen));
+				path.destroy();
+				return nil;
+			}
+
+			errno = 0;
+			bufferlen *= 2;
+
+			if (bufferlen > maxlen)
+			{
+				ERROR("the length of cwd is greater than the max length cwd() is willing to allocate (", maxlen, ")!\n");
+				path.destroy();
+				return nil;
+			}
+
+			path.reserve(bufferlen);
+			continue;
+		}
+
+		path.commit(strlen((char*)path.buffer.buffer));
+		return path;
+	}
+}
+
+/* ------------------------------------------------------------------------------------------------ chdir
+ */
+b8 chdir(str path)
+{
+	if (-1 == ::chdir((char*)path.bytes))
+		return reportErrno("failed to chdir into path '", path, "': ", explain_chdir((char*)path.bytes));
+	return true;
+}
 
 }
 

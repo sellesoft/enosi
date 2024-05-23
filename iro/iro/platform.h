@@ -140,6 +140,24 @@ b8 processCheck(Process::Handle handle, s32* out_exit_code);
  */
 b8 realpath(fs::Path* path);
 
+/* ------------------------------------------------------------------------------------------------ cwd
+ *  Returns the current working directory. This always allocates memory with the given allocator
+ *  and needs to be freed later if the function is successful, so a Path is returned rather than
+ *  a plain str.
+ *
+ *  NOTE that this function may need to try to allocate a buffer large enough to fit the cwd 
+ *  multiple times! If the given allocator does not support realloc/free the memory needs to be 
+ *  freeable some other way! This is probably not the greatest way to support this function
+ *  and it should be changed later. Maybe it can take an io::IO* ? If only POSIX specified
+ *  a function to just get the length of the cwd path!!!
+ */ 
+fs::Path cwd(mem::Allocator* allocator = &mem::stl_allocator);
+
+/* ------------------------------------------------------------------------------------------------ chdir
+ *  Changes the working directory of the program to the one specified at 'path'.
+ */
+b8 chdir(str path);
+
 } // namespace iro::platform
 
 #endif

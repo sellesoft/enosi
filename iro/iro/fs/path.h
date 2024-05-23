@@ -6,6 +6,8 @@
  *
  *  Paths must use '/' as the separator.
  *  TODO(sushi) normalize paths when I start getting stuff to work on Windows
+ *  TODO(sushi) this api is a huuuuge mess as its just been me piling stuff onto it as I need it.
+ *              organize it later PLEASE
  */
 
 #ifndef _iro_path_h
@@ -35,11 +37,18 @@ struct Path
 	// Makes a new Path from the given string.
 	static Path from(str s = {}, mem::Allocator* allocator = &mem::stl_allocator);
 
+	static Path cwd(mem::Allocator* allocator = &mem::stl_allocator);
+
+	static b8 chdir(str s);
+
 	static b8 matches(str name, str pattern);
 
 	static b8 exists(str path);
 	static b8 isRegularFile(str path);
 	static b8 isDirectory(str path);
+
+	static str basename(str path);
+	static str removeBasename(str path);
 
 	b8   init(mem::Allocator* allocator = &mem::stl_allocator) { return init({}, allocator); }
 	b8   init(str s, mem::Allocator* allocator = &mem::stl_allocator);
@@ -61,11 +70,13 @@ struct Path
 	// TODO(sushi) rename cause this can be confused with actually creating the directory at this path
 	Path& makeDir() { if (buffer.len != 0 && buffer.buffer[buffer.len-1] != '/') append('/'); return *this; }
 
+	b8 chdir() { return chdir(buffer.asStr()); }
+
 	// Returns the final component of this path eg.
 	// src/fs/path.h -> path.h
-	str basename();
+	str basename() { return basename(buffer.asStr()); }
 
-	void removeBasename();
+	void removeBasename() { buffer.len = removeBasename(buffer.asStr()).len; }
 
 	// Helpers for querying information about the file at this path
 
