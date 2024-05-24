@@ -3,11 +3,11 @@ verbose ?= false
 
 lake.maxjobs(8)
 
-build_dir = "buildtest/"..mode.."/"
+build_dir := "buildtest/"..mode.."/"
 
 lake.mkdir(build_dir, {make_parents = true})
 
-lakeexe := lake.target(build_dir.."lpp")
+lakeexe := lake.target(build_dir.."lake")
 
 files := {}
 
@@ -88,7 +88,7 @@ linker_recipe := function(input, output)
 			io.write(result.stdout)
         else
             io.write(red, "compiling ", blue, tostring(output), red, " failed", reset, ":\n")
-			io.write(result.stdout)
+			io.write(result.stdout, result.stderr)
 			error(red.."linker failed"..reset)
         end
     end
@@ -108,17 +108,13 @@ compiler_recipe := function(input, output)
 			io.write(result.stdout)
         else
             io.write(red, "compiling ", blue, output, red, " failed", reset, ":\n")
-			io.write(result.stdout)
+			io.write(result.stdout, result.stderr)
 			-- error(red.."compiler failed"..reset)
         end
     end
 end
 
-lakeexe:depends_on(files.o):recipe(linker_recipe(files.o, lakeexe))
 
-for c_file, o_file in lake.zip(files.c, files.o) do
-    lake.target(o_file):depends_on(c_file):recipe(compiler_recipe(c_file, o_file))
-end
 
 -- create dependency files based on the make rule cpp generates for each cpp file.
 -- we reformat them to just be a newline separated list of files each cpp files depends on
@@ -134,10 +130,12 @@ for c_file, d_file in lake.zip(files.c, files.d) do
 			-- cflags := {}
 			-- for word in cflags_str:gmatch("%S+") do table.insert(cflags, word) end
 
+			print(c_file)
+
 			result := ` clang++ $(c_file) $(compiler_flags) -MM -MG -MT $(lake.replace(d_file, "(.-)%.d", "%1.o")) `
 
 			if result.exit_code ~= 0 then
-				error("failed to create dep file '"..d_file.."':\n"..result.stdout)
+				error("failed to create dep file '"..d_file.."':\n"..result.stdout..result.stderr)
 			end
 
 			result = lake.replace(result.stderr, "\\\n", "")
@@ -183,6 +181,62 @@ for o_file, d_file in lake.zip(files.o, files.d) do
 			end
 		end	
 	end
+end
+
+dep_file_recipe := function(input, output)
+	if not input or not output then
+		error("nil input or output passed to dep_file_recipe()", 2)
+	end
+
+	return function()
+		dir := tostring(output):match("(.*)/")
+		lake.mkdir(dir, {make_parents = true})
+
+		result := ` clang++ $(input) $(compiler_flags) -MM -MG -MT $(lake.replace(output, "(.-)%.d", "%1.o")) `
+
+		if result.exit_code ~= 0 then
+			error("failed to create dep file '"..output.."':\n"..result.stdout..result.stderr)
+		end
+
+		result = lake.replace(result.stderr, "\\\n", "")
+		
+		out := ""
+
+		for file in result:gmatch("%S+") do
+			if file:sub(-1) ~= ":" then
+				out = out..file.."\n"
+			end
+		end
+
+		file := io.open(output, "w")
+
+		if not file then
+			error("failed to open dep file for writing: '"..output.."'")
+		end
+		
+		file:write(out)
+		file:close()
+	end
+end
+
+iro_o_files := {}
+
+lake.import "src/iro/lakemodule" 
+{ 
+	mode = mode, 
+	report_o_file = function(o_file)
+		-- correct the given file's path
+		print("src/iro/"..tostring(o_file))
+		table.insert(iro_o_files, "src/iro/"..tostring(o_file))
+	end,
+	compiler_recipe = compiler_recipe,
+	dep_file_recipe = dep_file_recipe,
+}
+
+lakeexe:depends_on(files.o):recipe(linker_recipe({files.o, iro_o_files}, lakeexe))
+
+for c_file, o_file in lake.zip(files.c, files.o) do
+    lake.target(o_file):depends_on(c_file):recipe(compiler_recipe(c_file, o_file))
 end
 
 generated_target := function(source, output)
