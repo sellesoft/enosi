@@ -15,6 +15,10 @@ c_files := $(shell find src/ -type f -name '*.cpp')
 o_files := $(foreach file,$(c_files),${build_dir}/$(file:.cpp=.o))
 d_files := $(o_files:.o=.d)
 
+iro_c_files := $(shell find ../iro/iro/ -type f -name '*.cpp')
+iro_o_files := $(foreach file,$(iro_c_files),${build_dir}/$(file:.cpp=.o))
+iro_d_files := $(iro_o_files:.o=.d)
+
 # clean up stuff we output
 clean:
 	-rm -r build/*
@@ -38,7 +42,7 @@ compiler_flags :=     \
 	-std=c++20        \
 	-Iinclude         \
 	-Isrc             \
-	-Isrc/iro         \
+	-I../iro          \
 	-Wall             \
 	-Wno-switch       \
 	-Wno-\#warnings   \
@@ -66,7 +70,7 @@ define print
 	@printf "$(green)$(1)$(reset) -> $(blue)$(2)$(reset)\n"
 endef
 
-${lake}: ${o_files}
+${lake}: ${o_files} ${iro_o_files}
 	$(v)${linker} $^ ${linker_flags} -o $@
 	@printf "$(blue)$@$(reset)\n"
 

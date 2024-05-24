@@ -1,0 +1,34 @@
+options := lake.getOptions()
+
+mode := options.mode or "debug"
+build_dir := "build/"..mode.."/"
+
+lake.mkdir(build_dir, {make_parents = true})
+
+lakeexe := lake.target(build_dir.."lake")
+
+iro_o_files := assert(options.iro_o_files)
+
+options.reportExecutable(lakeexe)
+
+crecipe := assert(options.compiler_recipe)
+lrecipe := assert(options.linker_recipe)
+drecipe := assert(options.dep_file_recipe)
+
+c_files := lake.find("src/**/*.cpp")
+o_files := {}
+
+for _,c_file in ipairs(c_files) do
+	o_file := c_file:gsub("(.-)%.cpp", build_dir.."%1.o")
+	d_file := o_file:gsub("(.-)%.o", "%1.d")
+	
+	o_files ..= o_file
+
+	lake.target(o_file):depends_on(c_file):recipe(crecipe(c_file, o_file))
+	lake.target(d_file):depends_on(d_file):recipe(drecipe(c_file, d_file))
+end
+
+o_files ..= iro_o_files
+
+lakeexe:depends_on(o_files):recipe(lrecipe(o_files, lakeexe))
+

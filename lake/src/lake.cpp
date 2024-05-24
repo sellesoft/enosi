@@ -844,8 +844,6 @@ int lua__importFile(lua_State* L)
 
 	int top = lua_gettop(L);
 
-	stack_dump(L);
-
 	INFO("Importing transformed lakefile from path '", path, "'\n"); 
 	if (luaL_loadbuffer(L, (char*)prog.buffer, prog.len, s)) 
 	{

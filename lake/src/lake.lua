@@ -106,7 +106,6 @@ ffi.cdef [[
 ]]
 local C = ffi.C
 local strtype = ffi.typeof("str")
-local ccptype = ffi.typeof("const char*")
 
 local make_str = function(s) return strtype(s, #s) end
 
@@ -203,6 +202,14 @@ end
 -- | 
 lake.getOptions = function()
 	return options_stack[#options_stack]
+end
+-- |
+-- * ----------------------------------------------------------------------------------------------
+
+-- * ---------------------------------------------------------------------------------------------- lake.cwd
+-- | 
+lake.cwd = function()
+	return lua__cwd()
 end
 -- |
 -- * ----------------------------------------------------------------------------------------------
@@ -565,8 +572,7 @@ end
 -- * ---------------------------------------------------------------------------------------------- Target.__tostring
 -- | Targets return their path in string contexts.
 Target.__tostring = function(self)
-	local s = C.lua__getTargetPath(self.handle)
-	return self.path -- ffi.string(s.s, s.len)
+	return self.path
 end
 -- |
 -- * ----------------------------------------------------------------------------------------------
@@ -640,8 +646,6 @@ Target.recipe = function(self, f)
 	if "function" ~= type(f) then
 		error("expected a lua function as the recipe of target '"..self.path.."', got: "..type(f), 2)
 	end
-	self.cwd = lua__cwd()
-	print(self.cwd)
 	local recipeidx = C.lua__targetSetRecipe(self.handle)
 	recipe_table[recipeidx] = co.create(f)
 	return self
