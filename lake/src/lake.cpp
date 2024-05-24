@@ -34,6 +34,9 @@ extern "C"
 #include "lua.h"
 #include "lualib.h"
 #include "lauxlib.h"
+
+int lua__importFile(lua_State* L);
+int lua__cwd(lua_State* L);
 }
 
 static Logger logger = Logger::create("lake"_str, 
@@ -71,40 +74,28 @@ b8 Lake::init(const char** argv_, int argc_, mem::Allocator* allocator)
 
 	lua_cli_args = LuaCLIArgList::create(allocator);
 	active_process_pool = Pool<ActiveProcess>::create(allocator);
+	cwd_stack = Array<fs::Path>::create(allocator);
 
-	str initfile_name = nil;
-	if (!process_argv(&initfile_name))
+	initpath = nil;
+	if (!process_argv(&initpath))
 		return false;
-	b8 resolved = resolve(initfile_name, "lakefile"_str);
+	b8 resolved = resolve(initpath, "lakefile"_str);
 
 	if (resolved)
-	{
-		DEBUG("no initial file specified on cli, searching for 'lakefile'\n");
-	}
+		DEBUG("no file specified on cli, searching for 'lakefile'\n");
 	else
-	{
-		DEBUG("file '", initfile_name, "' was specified as initial file on cli\n");
-	}
+		DEBUG("file '", initpath, "' was specified as file on cli\n");
 
 	using namespace fs;
 
-	initfile = File::from(initfile_name, OpenFlag::Read);
-	if (initfile == nil)
+	if (!fs::Path::exists(initpath))
 	{
 		if (resolved)
-		{
-			FATAL("no initial file was specified (-f) and no file with the default name 'lakefile' could be found\n");
-		}
+			FATAL("no file was specified (-f) and no file with the default name 'lakefile' could be found\n");
 		else
-		{
-			FATAL("failed to find specified file (-f) '", initfile_name, "'\n");
-		}
+			FATAL("failed to find specified file (-f) '", initpath, "'\n");
 		return false;
 	}
-
-	// TODO(sushi) try to remember why I was allocating this
-	parser = allocator->construct<Parser>();
-	parser->init(initfile_name, &initfile, allocator);
 
 	lua_cli_arg_iterator = lua_cli_args.head;
 
@@ -112,13 +103,20 @@ b8 Lake::init(const char** argv_, int argc_, mem::Allocator* allocator)
 
 	target_pool    = TargetPool::create(allocator);
 	build_queue    = TargetList::create(allocator);
-	product_list   = TargetList::create(allocator);
 	active_recipes = TargetList::create(allocator);
 
 	DEBUG("Loading lua state.\n");
 
 	L = lua_open();
 	luaL_openlibs(L);
+
+	// TODO(sushi) do this in a cleaner way later.
+	//             this function has to leave the result of the file on the 
+	//             stack and i dont think thats possible with a luajit ffi func.
+	lua_pushcfunction(L, lua__importFile);
+	lua_setglobal(L, "lua__importFile"); 
+	lua_pushcfunction(L, lua__cwd);
+	lua_setglobal(L, "lua__cwd"); 
 
 	return true;
 }
@@ -129,17 +127,41 @@ void Lake::deinit()
 {
 	lua_close(L);
 	active_recipes.destroy();
-	product_list.destroy();
 	build_queue.destroy();
 
 	for (Target& t : target_pool)
 		t.deinit();
 	target_pool.destroy();
 
-	parser->destroy();
-	initfile.close();
+	cwd_stack.destroy();
 	active_process_pool.destroy();
 	lua_cli_args.destroy();
+}
+
+/* ------------------------------------------------------------------------------------------------ Lake::parseFile
+ */
+b8 Lake::parseFile(str path, io::IO* io)
+{
+	auto f = fs::File::from(path, fs::OpenFlag::Read);
+	if (isnil(f))
+	{
+		ERROR("failed to open file at path '", path, "' for parsing\n");
+		return false;
+	}
+	defer { f.close(); };
+
+	Parser p = {};
+	if (!p.init(path, &f, &mem::stl_allocator))
+		return false;
+	defer { p.destroy(); };
+	
+	if (!p.run())
+		return false;
+	
+	if (!p.fin(io))
+		return false;
+
+	return true;
 }
 
 struct ArgIter
@@ -346,11 +368,13 @@ b8 Lake::run()
 
 	INFO("Starting parser on lakefile.\n");
 
-	parser->start();
-
 	// TODO(sushi) we can just load the program into lua by token 
 	//             using the loader callback thing in lua_load
-	io::Memory prog = parser->fin();
+	io::Memory prog;
+	prog.open();
+
+	if (!parseFile(initpath, &prog))
+		return false;
 
 	if (print_transformed)
 		printf("%.*s\n", prog.len, prog.buffer);
@@ -363,9 +387,8 @@ b8 Lake::run()
 		return false;
 	}
 
-	prog.close();
 
-	initfile.close();
+	prog.close();
 
 	INFO("Beginning build loop.\n");
 
@@ -477,7 +500,6 @@ Target* lua__createSingleTarget(str path)
 	Target* t = lake.target_pool.add();
 	t->init_single(path);
 	t->build_node = lake.build_queue.pushHead(t);
-	t->product_node = lake.product_list.pushHead(t);
 	INFO("Created target '", t->name(), "'.\n");
 	return t;
 }
@@ -496,13 +518,6 @@ void lua__makeDep(Target* target, Target* prereq)
 	}
 
 	prereq->dependents.insert(target);
-
-	if (prereq->product_node)
-	{
-		TRACE("Prereq is in product list, so it will be removed\n");
-		lake.product_list.destroy(prereq->product_node);
-		prereq->product_node = nullptr;
-	}
 
 	if (target->build_node)
 	{
@@ -525,12 +540,17 @@ s32 lua__targetSetRecipe(Target* target)
 	if (target->flags.test(Target::Flags::HasRecipe))
 	{
 		WARN("Target '", target->name(), "'s recipe is being set again.\n");
+		target->recipe_working_directory.destroy();
+		target->recipe_working_directory = fs::Path::cwd();
 		return target->lua_ref;
 	}	
 	else
 	{
 		TRACE("Target '", target->name(), "' is being marked as having a recipe.\n");
 		target->flags.set(Target::Flags::HasRecipe);
+		// TODO(sushi) targets that have their recipe set from the same directory should
+		//             use the same path
+		target->recipe_working_directory = fs::Path::cwd();
 
 		// get the next slot to fill and then set 'next' to whatever that slot points to
 		lua_pushlstring(L, "next", 4);
@@ -581,6 +601,7 @@ void lua__addTargetToGroup(Target* group, Target* target)
 	group->group.targets.insert(target);
 	target->single.group = group;
 
+
 	if (target->build_node)
 	{
 		TRACE("Target '", target->name(), "' is in the build queue so it will be removed.\n");
@@ -595,6 +616,15 @@ b8 lua__targetAlreadyInGroup(Target* target)
 {
 	assert_single(target);
 	return target->single.group != nullptr;
+}
+
+
+/* ------------------------------------------------------------------------------------------------ lua__getTargetPath
+ */
+str lua__getTargetPath(Target* target)
+{
+	assert_single(target);
+	return target->name();
 }
 
 /* ------------------------------------------------------------------------------------------------ lua__nextCliarg
@@ -672,7 +702,7 @@ ActiveProcess* lua__processSpawn(str* args, u32 args_count)
 
 	ActiveProcess* proc = active_process_pool.add();
 	Process::Stream streams[3] = {{}, {true, &proc->stdout}, {true, &proc->stderr}};
-	proc->process = Process::spawn(args[0], {args+1, args_count-1}, streams);
+	proc->process = Process::spawn(args[0], {args+1, args_count-1}, streams, nil);
 	if (isnil(proc->process))
 	{
 		ERROR("failed to spawn process using file '", args[0], "'\n");
@@ -721,7 +751,7 @@ b8 lua__processPoll(ActiveProcess* proc, s32* out_exit_code)
 void lua__processClose(ActiveProcess* proc)
 {
 	assert(proc);
-	DEBUG("closing proc ", (void*)proc, "\n");
+	TRACE("closing proc ", (void*)proc, "\n");
 
 	proc->stdout.close();
 	proc->stderr.close();
@@ -746,8 +776,7 @@ LuaGlobResult lua__globCreate(str pattern)
 		[&matches](fs::Path& p)
 		{
 			str match = p.buffer.asStr();
-			str* s = matches.push();
-			*s = match.allocateCopy();
+			*matches.push() = match.allocateCopy();
 			return true;
 		});
 	glob.destroy();
@@ -781,5 +810,81 @@ void lua__setMaxJobs(s32 n)
 	}
 }
 
+/* ------------------------------------------------------------------------------------------------ lua__importFile
+ */
+int lua__importFile(lua_State* L)
+{
+	using Path = fs::Path;
+
+	size_t len;
+	const char* s = lua_tolstring(L, -1, &len);
+	str path = {(u8*)s, len};
+
+	io::Memory prog;
+	prog.open();
+
+	if (!lake.parseFile(path, &prog))
+	{
+		prog.close();
+		return 0;
+	}
+
+	if (lake.print_transformed)
+		printf("%.*s\n", prog.len, prog.buffer);
+
+	auto cwd = Path::cwd();
+	defer { cwd.chdir(); cwd.destroy(); };
+
+	// so dumb 
+	auto nullTerminated = Path::from(Path::removeBasename(path));
+	defer { nullTerminated.destroy(); };
+
+	if (!Path::chdir(nullTerminated.buffer.asStr()))
+		return 0;
+
+	int top = lua_gettop(L);
+
+	stack_dump(L);
+
+	INFO("Importing transformed lakefile from path '", path, "'\n"); 
+	if (luaL_loadbuffer(L, (char*)prog.buffer, prog.len, s)) 
+	{
+		ERROR(lua_tostring(L, -1), "\n");
+		lua_pop(L, 1);
+		return 0;
+	}
+
+	lua_pushvalue(L, 1); // copy options table to top of stack so it can be used as an arg
+
+	// call the imported file
+	if (lua_pcall(L, 1, LUA_MULTRET, 0))
+	{
+		ERROR(lua_tostring(L, -1), "\n");
+		lua_pop(L, 1);
+		return 0;
+	}
+
+	// check how many thing the file returned
+	int nresults = lua_gettop(L) - top;
+
+	prog.close();
+
+	// return all the stuff the file returned
+	return nresults;
+}
+
+/* ------------------------------------------------------------------------------------------------ lua__cwd
+ */
+int lua__cwd(lua_State* L)
+{
+	auto cwd = fs::Path::cwd();
+	defer { cwd.destroy(); };
+
+	auto s = cwd.buffer.asStr();
+
+	lua_pushlstring(L, (char*)s.bytes, s.len);
+
+	return 1;
+}
 
 }

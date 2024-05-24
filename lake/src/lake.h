@@ -22,10 +22,6 @@ typedef SList<const char*> LuaCLIArgList;
 
 struct Lake
 {
-	str path;
-
-	Parser* parser;
-
 	lua_State* L;
 
 	// queue of targets that are ready to be built
@@ -33,11 +29,6 @@ struct Lake
 	// dont have prerequisites or have had all of 
 	// their prerequisites satified.
 	TargetList build_queue;
-
-	// list tracking targets that aren't prerequisites
-	// for any other targets, aka the final targets 
-	// we want to build.
-	TargetList product_list; 
 
 	TargetList active_recipes;
 	u32 active_recipe_count;
@@ -51,19 +42,23 @@ struct Lake
 	s32          argc;
 	const char** argv;
 
-	fs::File initfile = nil;
+	str initpath = nil;
 
 	u32 max_jobs; // --max-jobs <n> or -j <n>
 	b8 max_jobs_set_on_cli;
 
 	b8 print_transformed; // --print-transformed
 
+	Array<fs::Path> cwd_stack;
 
 	b8   init(const char** argv, int argc, mem::Allocator* allocator = &mem::stl_allocator);
 	void deinit();
 
+	b8 parseFile(str path, io::IO* io);
+
 	b8 process_argv(str* initfile);
 	b8 run();
+
 };
 
 extern Lake lake;

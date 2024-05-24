@@ -6,6 +6,9 @@
  *
  *  Also iirc the normal lua parser is a one-shot thing and getting it to do stuff
  *  similar to what lakefiles can do is apparently very hard (according to stack overflow people).
+ *
+ *  TODO(sushi) take in a longjmp so we can properly exit the parser on error w/o just closing 
+ *              the program.
  */
 
 #ifndef _lake_parser_h
@@ -35,13 +38,15 @@ struct Parser
 
 	using enum tok;
 
-	void init(str sourcename, io::IO* in, mem::Allocator* allocator);
+	b8   init(str sourcename, io::IO* in, mem::Allocator* allocator);
 	void destroy();
 
+	b8 run();
+
 	/* --------------------------------------------------------------------------------------------
-	 *  Get the final result as a dstr.
+	 *  Write the final result into the given io.
 	 */
-	Moved<io::Memory> fin();
+	b8 fin(io::IO* io);
 
 	/* --------------------------------------------------------------------------------------------
 	 *  Token stack
@@ -89,21 +94,8 @@ struct Parser
 		void printSrc(Parser* p);
 	} stack;
 
-	/* --------------------------------------------------------------------------------------------
-	 *  Parsing
-	 *
-	 *  This is almost completely modeled after Lua's own parser but interlaced with the syntax 
-	 *  sugar lakefiles support.
-	 *
-	 *  The point of all of this is to consume normal lua code while catching the syntax we 
-	 *  sprinkle onto it for lakefiles. All lakefile syntax is translated directly (hopefully)
-	 *  to pure lua.
-	 *
-	 *  I think it'd be nice to pull this out for lpp later on. Though in that case it should 
-	 *  definitely be optional as this adds a whole layer of stuff ontop of Lua.. but Lua 
-	 *  also supports feeding it chunks via a reader..
-	 */
-	void start();
+
+private:
 
 	/*  Lua parsing
 	 */
@@ -154,6 +146,8 @@ struct Parser
 	 */ 
 	b8 at(tok k);
 	b8 lookaheadAt(tok k);
+
+public:
 
 	/*  Report the error where 'curt' currently is and exit.
 	 */

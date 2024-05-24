@@ -30,7 +30,7 @@ void Target::common_init()
 {
 	prerequisites = TargetSet::create();
 	dependents = TargetSet::create();
-	build_node = product_node = nullptr;
+	build_node = nullptr;
 }
 
 /* ------------------------------------------------------------------------------------------------ TargetSingle::name
@@ -157,7 +157,6 @@ b8 Target::needs_built()
 				TRACE("Target '", single.path, "' needs built because it does not exist on disk.\n");
 				return true;
 			}
-
 		
 			SCOPED_INDENT;
 			for (Target& prereq : prerequisites)
@@ -171,14 +170,6 @@ b8 Target::needs_built()
 			}
 
 		} break;
-
-	//	case Kind::Group: 
-	//		for (auto& target : group.targets)
-	//		{
-	//			if (target.needs_built())
-	//				return true;
-	//		}
-	//		break;
 	}
 
 	return false;
@@ -201,6 +192,11 @@ Target::RecipeResult Target::resume_recipe(lua_State* L)
 		return RecipeResult::Error;
 	}
 
+	auto cwd = fs::Path::cwd(); // ugh man
+	defer { cwd.chdir(); cwd.destroy(); };
+
+	recipe_working_directory.chdir();
+
 	lua_getglobal(L, lake_recipe_table);
 	defer { lua_pop(L, 1); };
 
@@ -214,7 +210,7 @@ Target::RecipeResult Target::resume_recipe(lua_State* L)
 	// the first being co.resume reporting if everything went okay,
 	// the second either being nil, or not nil. 
 	// A recipe, for now, is expected to return nil when it is finished. Internally
-	// when we are asyncrocnously checking a process we return 'true' to indicate 
+	// when we are asyncronously checking a process we return 'true' to indicate 
 	// that the recipe is not yet finished, but we dont check for this explicitly.
 	if (lua_pcall(L, 1, 2, 0))
 	{

@@ -1,4 +1,4 @@
-/*
+/*kel
  *  Representation of a target, which is a file on disk that we would like to
  *  exist and be newer than its dependencies. All targets have some recipe,
  *  a lua function, used to build them.
@@ -76,6 +76,8 @@ struct Target
 	
 	// index of this target in the lua targets table
 	s32 lua_ref;
+	fs::Path recipe_working_directory; // the working directory to execute the recipe from
+	b8 recipe_started = false; // set if the target's recipe has been resumed at least once
 
 	// marks used when topologically sorting the graph
 	// TODO(sushi) these are not used currently as we do not sort the graph 
@@ -87,8 +89,9 @@ struct Target
 	// null if the target is not in the queue
 	TargetListNode* build_node;
 
-	TargetListNode* product_node; // this may no longer be useful
-
+	// TODO(sushi) remove this, its only used to remove when polling active
+	//             recipes but we already have the node there so this is 
+	//             redundant.
 	TargetListNode* active_recipe_node; // this needs a better name
 
 	// list of targets this one depends on

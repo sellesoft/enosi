@@ -71,7 +71,6 @@ ffi.cdef [[
 		s32 len;
 	} str;
 
-
 	void* lua__createSingleTarget(str path);
 	void  lua__makeDep(void* target, void* dependent);
 	s32   lua__targetSetRecipe(void* target);
@@ -102,6 +101,8 @@ ffi.cdef [[
 	void lua__globDestroy(LuaGlobResult x);
 
 	void lua__setMaxJobs(s32 n);
+
+	str lua__getTargetPath(void* handle);
 ]]
 local C = ffi.C
 local strtype = ffi.typeof("str")
@@ -184,12 +185,36 @@ end
 
 
 
+-- * ---------------------------------------------------------------------------------------------- lake.import
+-- | 
+local options_stack = {}
+lake.import = function(s)
+	return function(options)
+		table.insert(options_stack, options)
+		local results = {lua__importFile(options, s)}
+		table.remove(options_stack, #options_stack)
+		return table.unpack(results)
+	end
+end
+-- |
+-- * ----------------------------------------------------------------------------------------------
+
+-- * ---------------------------------------------------------------------------------------------- lake.getOptions
+-- | 
+lake.getOptions = function()
+	return options_stack[#options_stack]
+end
+-- |
+-- * ----------------------------------------------------------------------------------------------
+
 -- * ---------------------------------------------------------------------------------------------- lake.maxjobs
 -- | Attempt to set the max jobs lake will use to build targets. If this number is set on command
 -- | line, then this call is ignored.
 lake.maxjobs = function(n)
 	C.lua__setMaxJobs(n)
 end
+-- |
+-- * ----------------------------------------------------------------------------------------------
 
 -- * ---------------------------------------------------------------------------------------------- lake.mkdir
 -- | Creates a directory at 'path'. Optionally takes a table of 'options', which are:
@@ -540,7 +565,8 @@ end
 -- * ---------------------------------------------------------------------------------------------- Target.__tostring
 -- | Targets return their path in string contexts.
 Target.__tostring = function(self)
-	return self.path
+	local s = C.lua__getTargetPath(self.handle)
+	return self.path -- ffi.string(s.s, s.len)
 end
 -- |
 -- * ----------------------------------------------------------------------------------------------
@@ -614,6 +640,8 @@ Target.recipe = function(self, f)
 	if "function" ~= type(f) then
 		error("expected a lua function as the recipe of target '"..self.path.."', got: "..type(f), 2)
 	end
+	self.cwd = lua__cwd()
+	print(self.cwd)
 	local recipeidx = C.lua__targetSetRecipe(self.handle)
 	recipe_table[recipeidx] = co.create(f)
 	return self

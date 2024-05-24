@@ -212,32 +212,28 @@ void Parser::TokenStack::printSrc(Parser* p)
 
 /* ------------------------------------------------------------------------------------------------
  */
-Moved<io::Memory> Parser::fin()
+b8 Parser::fin(io::IO* out)
 {
-	io::Memory out;
-	out.open();
-
 	for (u32 i = 0; i < stack.arr.len(); i++)
 	{
 		TokenStack::Elem e = stack.arr[i];
 		if (e.is_virtual)
 		{
-			io::format(&out, e.virt.raw);
+			io::format(out, e.virt.raw);
 		}
 		else
 		{
 			if (e.real.kind == String)
 			{
-				io::formatv(&out, '"', lex.getRaw(e.real), '"');
+				io::formatv(out, '"', lex.getRaw(e.real), '"');
 			}
 			else
 			{
-				io::format(&out, lex.getRaw(e.real));
+				io::format(out, lex.getRaw(e.real));
 			}
 		}
 	}
-
-	return move(out);
+	return true;
 }
 
 /* ================================================================================================
@@ -248,11 +244,13 @@ Moved<io::Memory> Parser::fin()
 
 /* ------------------------------------------------------------------------------------------------
  */
-void Parser::init(str sourcename, io::IO* in, mem::Allocator* allocator)
+b8 Parser::init(str sourcename, io::IO* in, mem::Allocator* allocator)
 {
-	lex.init(sourcename, in);
+	if (!lex.init(sourcename, in))
+		return false;
 	stack.init(allocator);
 	curt = {};
+	return true;
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -322,12 +320,13 @@ b8 is_bop(Token t)
 
 /* ------------------------------------------------------------------------------------------------
  */
-void Parser::start()
+b8 Parser::run()
 {
 	PARSER_TRACE;
 	nextToken();
 	chunk();
 	stack.printSrc(this);
+	return true;
 }
 
 /* ------------------------------------------------------------------------------------------------

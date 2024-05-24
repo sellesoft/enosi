@@ -18,8 +18,22 @@ using namespace iro;
 
 DEFINE_GDB_PY_SCRIPT("lpp-gdb.py");
 
+struct f
+{
+	f (*self)(str);
+
+	f operator()(str s) { return self(s); }
+};
+
+f func(str s)
+{
+	return {func};
+}
+
 int main(const int argc, const char* argv[]) 
 {
+	func("hi"_str)("there!"_str)("hello!"_str);
+
 	if (!iro::log.init())
 		return 1;
 	defer { iro::log.deinit(); };
