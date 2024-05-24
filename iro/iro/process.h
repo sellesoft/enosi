@@ -37,7 +37,8 @@ struct Process
 	};
 	
 	// Spawns a new process from 'file', passing 'args' and optionally replacing
-	// its stdio streams with the Streams given.
+	// its stdio streams with the Streams given. If 'cwd' is not nil the child
+	// process will be spawned with it as its working directory.
 	//
 	// A File given in a Stream must be nil, and will be initialized according
 	// to its position in the 'streams' array. In position 0, the file will
@@ -48,7 +49,7 @@ struct Process
 	// non_blocking, reading or writing to the child process will be done 
 	// in an async manner (eg. if the child process does not have any buffered
 	// data on stdout, the parent process wont wait for data like it normally does)
-	static Process spawn(str file, Slice<str> args, Stream streams[3]);
+	static Process spawn(str file, Slice<str> args, Stream streams[3], str cwd);
 
 	// Checks the status of this process and sets 'terminated' and 'exit_code'
 	// if the process has finished.

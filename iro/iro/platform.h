@@ -123,16 +123,26 @@ b8 fileExists(str path);
 b8 makeDir(str path, b8 make_parents);
 
 /* ------------------------------------------------------------------------------------------------ processSpawn
- *  Creates a new process and writes its handle into 'out_handle'.
+ *  Creates a new process and writes its handle into 'out_handle'. If 'cwd' is not nil then the
+ *  child process will chdir into it before starting the actual process.
  */
-b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process::Stream streams[3]);
+b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process::Stream streams[3], str cwd);
 
 /* ------------------------------------------------------------------------------------------------ processCheck
  *  Performs a check on the process referred to by 'handle' and determines if it has existed or
- *  not. Returns true if it has and writes into 'out_exit_code' the returned code of the process,
- *  otherwise returns false.
+ *  not. If it has, the process's exit code is written into 'out_exit_code' and Exited is returned. 
+ *  Otherwise StillRunning is returned or Error if an error occurs.
+ *
+ *  Its probably safe to assume that if Error is returned, the process is terminated. BUT IDK!
  */
-b8 processCheck(Process::Handle handle, s32* out_exit_code);
+enum class ProcessCheckResult
+{
+	Error,
+	Exited,
+	StillRunning,
+};
+
+ProcessCheckResult processCheck(Process::Handle handle, s32* out_exit_code);
 
 /* ------------------------------------------------------------------------------------------------ realpath
  *	Converts the given path, that must exist, to a canonical path, that is with segments /./ and 

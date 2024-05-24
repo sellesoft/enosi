@@ -331,7 +331,7 @@ b8 makeDir(str path, b8 make_parents)
 
 /* ------------------------------------------------------------------------------------------------ processSpawn
  */
-b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process::Stream streams[3])
+b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process::Stream streams[3], str cwd)
 {
 	assert(out_handle);
 
@@ -419,6 +419,13 @@ b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process:
 	{
 		// child branch
 
+		if (notnil(cwd))
+		{
+			// this miiight cause problems if the string were given is destroyed
+			// before we reach this point somehow but hopefully that is very unlikely
+			chdir(cwd);
+		}
+
 		for (s32 i = 0; i < 3; i++)
 		{
 			if (!infos[i].f)
@@ -440,6 +447,8 @@ b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process:
 			}
 		}
 
+
+
 		if (-1 == execvp(argsc.arr[0], argsc.arr))
 		{
 			reportErrno("execvp failed to replace child process with file '", file, "': ", explain_execvp(argsc.arr[0], argsc.arr));
@@ -452,7 +461,7 @@ b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process:
 
 /* ------------------------------------------------------------------------------------------------ processCheck
  */
-b8 processCheck(Process::Handle handle, s32* out_exit_code)
+ProcessCheckResult processCheck(Process::Handle handle, s32* out_exit_code)
 {
 	assert(handle && out_exit_code);
 
@@ -461,7 +470,7 @@ b8 processCheck(Process::Handle handle, s32* out_exit_code)
 	if (-1 == r)
 	{
 		reportErrno("waitpid failed on process with handle ", handle, ": ", explain_waitpid((s64)handle, &status, WNOHANG));
-		return false;
+		return ProcessCheckResult::Error;
 	}
 
 	if (r)
@@ -469,11 +478,11 @@ b8 processCheck(Process::Handle handle, s32* out_exit_code)
 		if (WIFEXITED(status))
 		{
 			*out_exit_code = WEXITSTATUS(status);
-			return true;
+			return ProcessCheckResult::Exited;
 		}
 	}
 
-	return false;
+	return ProcessCheckResult::StillRunning;
 }
 
 /* ------------------------------------------------------------------------------------------------ realpath
