@@ -447,8 +447,6 @@ b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process:
 			}
 		}
 
-
-
 		if (-1 == execvp(argsc.arr[0], argsc.arr))
 		{
 			reportErrno("execvp failed to replace child process with file '", file, "': ", explain_execvp(argsc.arr[0], argsc.arr));
