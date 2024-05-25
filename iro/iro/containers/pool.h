@@ -14,6 +14,8 @@
 
 #include "../traits/container.h"
 
+#include "../logger.h"
+
 namespace iro
 {
 
@@ -37,7 +39,6 @@ struct Pool
 			T     element;
 			Slot* next_free_slot;
 		};
-		b8 used;
 	};
 
 	struct Chunk
@@ -98,7 +99,6 @@ struct Pool
 
 		free_slot = slot->next_free_slot;
 
-		slot->used = true;
 		return new (&slot->element) T;
 	}
 
@@ -114,7 +114,6 @@ struct Pool
 	{
 		Slot* slot = (Slot*)x;
 		slot->element.~T();
-		slot->used = false;
 		slot->next_free_slot = free_slot;
 		free_slot = slot;
 	}
@@ -134,59 +133,11 @@ private:
 		{
 			Slot& slot = chunk->slots[i];
 			slot.next_free_slot = (i == N_slots_per_chunk - 1 ? nullptr : &chunk->slots[i+1]);
-			slot.used = false;
 		}
 
 		chunk->next = current_chunk;
 		current_chunk = chunk;
 	}
-
-	// VERY inefficient helper for iterating over all elements 
-	// of this pool. This should only be used sparingly, like 
-	// for deinitializing things when you don't already have 
-	// a better list of them to work with.
-	//
-	// TODO(sushi) this is allll fucked up please clean it up !!!!
-	struct Iterator
-	{
-		Chunk* current;
-		s32 slotidx;
-
-		T* operator++()
-		{
-			for (;;)
-			{
-				if (slotidx == N_slots_per_chunk - 1)
-				{
-					current = current->next;
-					slotidx = 0;
-					if (!current)
-						return nullptr;
-				}
-				if (current->slots[slotidx].used)
-				{
-					slotidx += 1;
-					return &current->slots[slotidx - 1].element;
-				}
-				slotidx += 1;
-			}
-		}
-
-		b8 operator != (const Iterator& rhs)
-		{
-			return rhs.slotidx != slotidx || current != rhs.current;
-		}
-
-		T& operator*()
-		{
-			return current->slots[slotidx].element;
-		}
-	};
-
-public:
-
-	Iterator begin() { return {current_chunk, 0}; }
-	Iterator end()   { return {nullptr, 0}; }
 };
 
 }
