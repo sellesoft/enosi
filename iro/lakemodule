@@ -1,18 +1,18 @@
-options := lake.getOptions()
+local options = lake.getOptions()
 
-mode := options.mode or "debug"
-build_dir := lake.cwd().."/".."build/"..mode.."/"
+local mode = options.mode or "debug"
+local build_dir = lake.cwd().."/build/"..mode.."/"
 
 lake.mkdir(build_dir, {make_parents = true})
 
-report := assert(options.report)
-recipes := assert(options.recipes)
+local report = assert(options.report)
+local recipes = assert(options.recipes)
 
-c_files := lake.find("iro/**/*.cpp")
+local c_files = lake.find("iro/**/*.cpp")
 
 for _,c_file in ipairs(c_files) do
-	o_file := c_file:gsub("(.-)%.cpp", build_dir.."%1.o")
-	d_file := o_file:gsub("(.-)%.o", "%1.d")
+	local o_file = c_file:gsub("(.-)%.cpp", build_dir.."%1.o")
+	local d_file = o_file:gsub("(.-)%.o", "%1.d")
 
 	report.objFile(o_file)
 
