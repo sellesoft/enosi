@@ -94,6 +94,8 @@ Token Lexer::nextToken()
 { 
 	curt.kind = tok::Eof;
 	curt.offset = currentptr() - cache.buffer;
+	curt.line = line;
+	curt.column = column;
 
 	s32 len_offset = 0;
 

@@ -72,10 +72,10 @@ struct Target
 
 	Target() {}
 
-	u64 hash;
+	u64 hash = 0;
 	
 	// index of this target in the lua targets table
-	s32 lua_ref;
+	s32 lua_ref = -1;
 	fs::Path recipe_working_directory; // the working directory to execute the recipe from
 	b8 recipe_started = false; // set if the target's recipe has been resumed at least once
 
@@ -169,5 +169,10 @@ struct Target
 	// and adding them to the build queue
 	void update_dependents(TargetList& build_queue, b8 mark_just_built);
 };
+
+namespace iro::io
+{
+s64 format(io::IO* io, Target& t);
+}
 
 #endif

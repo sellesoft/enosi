@@ -44,7 +44,7 @@ int main(const int argc, const char* argv[])
 		using enum Log::Dest::Flag;
 		iro::log.newDestination("stdout"_str, &fs::stdout, 
 				AllowColor | 
-				ShowCategoryName |
+				// ShowCategoryName |
 				ShowVerbosity |
 				PadVerbosity |
 				TrackLongestName);

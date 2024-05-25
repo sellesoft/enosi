@@ -1,5 +1,5 @@
 mode ?= debug
-build_dir := build/${mode}
+build_dir := makebuild/${mode}
 
 lake := ${build_dir}/lake
 

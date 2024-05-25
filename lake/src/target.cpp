@@ -15,7 +15,7 @@ extern "C"
 #include "lauxlib.h"
 }
 
-static Logger logger = Logger::create("lake.target"_str, Logger::Verbosity::Error);
+static Logger logger = Logger::create("lake.target"_str, Logger::Verbosity::Warn);
 
 /* ------------------------------------------------------------------------------------------------ target_hash
  */
@@ -253,7 +253,11 @@ void Target::update_dependents(TargetList& build_queue, b8 mark_just_built)
 					dependent.unsatified_prereq_count = 0;
 				}
 				else if (dependent.unsatified_prereq_count != 0)
+				{
+					
 					dependent.unsatified_prereq_count -= 1;
+					TRACE("Target '", name(), "' has ", dependent.unsatified_prereq_count, " unsatisfied prereqs left.\n");
+				}
 			}
 		} break;
 
@@ -264,4 +268,35 @@ void Target::update_dependents(TargetList& build_queue, b8 mark_just_built)
 			}
 		} break;
 	}
+}
+
+
+s64 iro::io::format(io::IO* io, Target& t)
+{
+	switch (t.kind)
+	{
+	case Target::Kind::Unknown:
+		io->write("Unknown target"_str);
+		break;
+
+	default:
+		io::formatv(io, 
+				"Target '", t.name(), "':",
+				"\n     hash: ", t.hash,
+				"\n  lua_ref: ", t.lua_ref,
+				"\n unsatisf: ", t.unsatified_prereq_count,
+				"\n      cwd: ", t.recipe_working_directory,
+				"\n* prereqs:");
+
+		for (auto& p : t.prerequisites)
+			io::formatv(io, "\n    ", p.name());
+
+		io::formatv(io, "\n*   deps:");
+
+		for (auto& d : t.dependents)
+			io::formatv(io, "\n    ", d.name());
+		break;
+	}
+
+	return 0;
 }

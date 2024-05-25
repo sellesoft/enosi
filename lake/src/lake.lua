@@ -107,7 +107,12 @@ ffi.cdef [[
 local C = ffi.C
 local strtype = ffi.typeof("str")
 
-local make_str = function(s) return strtype(s, #s) end
+local make_str = function(s) 
+	if not s then
+		print(debug.traceback())
+	end
+	return strtype(s, #s) 
+end
 
 
 -- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
@@ -142,16 +147,22 @@ while true do
 end
 
 
+
 -- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
 --      
---      Internal helpers
+--      Lake util functions
+--
+--      Utility api provided to lake files for finding files, replacing strings, etc. as well
+--      as functions used to support lake's syntax sugar, such as 'concat' which is used 
+--      to support the '..=' operator.
 --
 -- * >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> -
 
 
--- * ---------------------------------------------------------------------------------------------- flatten_table
+
+-- * ---------------------------------------------------------------------------------------------- lake.flatten
 -- | Flattens nested array elements of the given table into a new one.
-local flatten_table = function(tbl)
+lake.flatten = function(tbl)
 	local out = {}
 
 	function recur(x)
@@ -170,30 +181,14 @@ end
 -- |
 -- * ----------------------------------------------------------------------------------------------
 
-
-
--- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
---      
---      Lake util functions
---
---      Utility api provided to lake files for finding files, replacing strings, etc. as well
---      as functions used to support lake's syntax sugar, such as 'concat' which is used 
---      to support the '..=' operator.
---
--- * >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> -
-
-
-
 -- * ---------------------------------------------------------------------------------------------- lake.import
 -- | 
 local options_stack = {}
-lake.import = function(s)
-	return function(options)
-		table.insert(options_stack, options)
-		local results = {lua__importFile(options, s)}
-		table.remove(options_stack, #options_stack)
-		return table.unpack(results)
-	end
+lake.import = function(s, options)
+	table.insert(options_stack, options)
+	local results = {lua__importFile(options, s)}
+	table.remove(options_stack, #options_stack)
+	return table.unpack(results)
 end
 -- |
 -- * ----------------------------------------------------------------------------------------------
@@ -622,8 +617,7 @@ Target.depends_on = function(self, x)
 		C.lua__makeDep(self.handle, lake.target(x).handle)
 		table.insert(self.depends_on_targets, x)
 	elseif "table" == x_type then
-		local flat = flatten_table(x)
-		for i,v in ipairs(flat) do
+		for i,v in ipairs(lake.flatten(x)) do
 			local v_type = type(v)
 			if "string" ~= v_type then
 				error("Element "..i.." of flattened table given to Target.depends_on is not a string, rather a "..v_type.." whose value is "..tostring(v)..".", 2)

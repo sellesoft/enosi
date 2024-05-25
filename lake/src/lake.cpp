@@ -342,7 +342,7 @@ b8 Lake::run()
 	INFO("Loading lake lua module.\n");
 
 #if LAKE_DEBUG
-	if (luaL_loadfile(L, "src/lake.lua") || lua_pcall(L, 0, 5, 0))
+	if (luaL_loadfile(L, "lake/src/lake.lua") || lua_pcall(L, 0, 5, 0))
 	{
 		printf("%s\n", lua_tostring(L, -1));
 		lua_pop(L, 1);
@@ -387,8 +387,10 @@ b8 Lake::run()
 		return false;
 	}
 
-
 	prog.close();
+
+	//for (auto& t : target_pool)
+	//	io::formatv(&fs::stdout, t, "\n\n");
 
 	INFO("Beginning build loop.\n");
 
