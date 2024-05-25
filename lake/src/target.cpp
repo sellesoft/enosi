@@ -84,6 +84,7 @@ void Target::deinit()
 		group.targets.destroy();
 	else
 		single.path.destroy();
+	recipe_working_directory.destroy();
 }
 
 /* ------------------------------------------------------------------------------------------------ TargetSingle::exists

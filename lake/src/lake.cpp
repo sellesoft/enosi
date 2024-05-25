@@ -4,9 +4,6 @@
 #include "assert.h"
 #include "ctype.h"
 
-#include "lexer.h"
-#include "parser.h"
-
 #include "target.h"
 
 #include "iro/logger.h"
@@ -37,6 +34,7 @@ extern "C"
 
 int lua__importFile(lua_State* L);
 int lua__cwd(lua_State* L);
+int lua__canonicalizePath(lua_State* L);
 }
 
 static Logger logger = Logger::create("lake"_str, 
@@ -105,6 +103,8 @@ b8 Lake::init(const char** argv_, int argc_, mem::Allocator* allocator)
 	build_queue    = TargetList::create(allocator);
 	active_recipes = TargetList::create(allocator);
 
+	targets = TargetList::create(allocator);
+
 	DEBUG("Loading lua state.\n");
 
 	L = lua_open();
@@ -117,6 +117,8 @@ b8 Lake::init(const char** argv_, int argc_, mem::Allocator* allocator)
 	lua_setglobal(L, "lua__importFile"); 
 	lua_pushcfunction(L, lua__cwd);
 	lua_setglobal(L, "lua__cwd"); 
+	lua_pushcfunction(L, lua__canonicalizePath);
+	lua_setglobal(L, "lua__canonicalizePath"); 
 
 	return true;
 }
@@ -335,34 +337,20 @@ b8 Lake::run()
 
 	INFO("Setting lua globals.\n");
 
+	lua_setglobal(L, lake_err_handler);
 	lua_setglobal(L, lake_coroutine_resume);
 	lua_setglobal(L, lake_recipe_table);
 	lua_setglobal(L, lake_targets_table);
-	lua_setglobal(L, lake_internal_table); 
 	lua_setglobal(L, "lake");
 
-	INFO("Starting parser on lakefile.\n");
-
-	// TODO(sushi) we can just load the program into lua by token 
-	//             using the loader callback thing in lua_load
-	io::Memory prog;
-	prog.open();
-
-	if (!parseFile(initpath, &prog))
-		return false;
-
-	if (print_transformed)
-		printf("%.*s\n", prog.len, prog.buffer);
-
-	INFO("Executing transformed lakefile.\n"); 
-	if (luaL_loadbuffer(L, (char*)prog.buffer, prog.len, "lakefile") || lua_pcall(L, 0, 0, 0))
+	lua_getglobal(L, lake_err_handler);
+	if (luaL_loadfile(L, (char*)initpath.bytes) || lua_pcall(L, 0, 0, 1))
 	{
 		printf("%s\n", lua_tostring(L, -1));
 		lua_pop(L, 1);
 		return false;
 	}
-
-	prog.close();
+	lua_pop(L, 1); // pop error handler
 
 	//for (auto& t : target_pool)
 	//	io::formatv(&fs::stdout, t, "\n\n");
@@ -433,9 +421,6 @@ b8 Lake::run()
 		}
 	}
 
-	lua_getglobal(L, lake_internal_table);
-	lua_pop(L, 2);
-
 	return true;
 }
 
@@ -477,6 +462,7 @@ Target* lua__createSingleTarget(str path)
 	Target* t = lake.target_pool.add();
 	t->init_single(path);
 	t->build_node = lake.build_queue.pushHead(t);
+	lake.targets.pushHead(t);
 	INFO("Created target '", t->name(), "'.\n");
 	return t;
 }
@@ -526,7 +512,8 @@ s32 lua__targetSetRecipe(Target* target)
 		TRACE("Target '", target->name(), "' is being marked as having a recipe.\n");
 		target->flags.set(Target::Flags::HasRecipe);
 		// TODO(sushi) targets that have their recipe set from the same directory should
-		//             use the same path
+		//             use the same Path?? Probably better to store a set (AVL) of cwd
+		//             Paths and just have the thing on Target be a str.
 		target->recipe_working_directory = fs::Path::cwd();
 
 		// get the next slot to fill and then set 'next' to whatever that slot points to
@@ -561,6 +548,7 @@ Target* lua__createGroupTarget()
 	Target* group = lake.target_pool.add();
 	group->init_group();
 	group->build_node = lake.build_queue.pushHead(group);
+	lake.targets.pushHead(group);
 	INFO("Created group '", (void*)group, "'.\n");
 	return group;
 }
@@ -667,13 +655,13 @@ ActiveProcess* lua__processSpawn(str* args, u32 args_count)
 	DEBUG("spawning process from file '", args[0], "'\n");
 	SCOPED_INDENT;
 
-	if (logger.verbosity == Logger::Verbosity::Trace)
+	if (logger.verbosity == Logger::Verbosity::Debug)
 	{
-		TRACE("with args:\n");
+		DEBUG("with args:\n");
 		SCOPED_INDENT;
 		for (s32 i = 0; i < args_count; i++)
 		{
-			TRACE(args[i], "\n");
+			DEBUG(args[i], "\n");
 		}
 	}	
 
@@ -797,42 +785,30 @@ int lua__importFile(lua_State* L)
 	const char* s = lua_tolstring(L, -1, &len);
 	str path = {(u8*)s, len};
 
-	io::Memory prog;
-	prog.open();
-
-	if (!lake.parseFile(path, &prog))
-	{
-		prog.close();
-		return 0;
-	}
-
-	if (lake.print_transformed)
-		printf("%.*s\n", prog.len, prog.buffer);
-
 	auto cwd = Path::cwd();
 	defer { cwd.chdir(); cwd.destroy(); };
 
-	// so dumb 
-	auto nullTerminated = Path::from(Path::removeBasename(path));
-	defer { nullTerminated.destroy(); };
+	lua_getglobal(L, lake_err_handler);
+	defer { lua_pop(L, 1); };
 
-	if (!Path::chdir(nullTerminated.buffer.asStr()))
-		return 0;
-
-	int top = lua_gettop(L);
-
-	INFO("Importing transformed lakefile from path '", path, "'\n"); 
-	if (luaL_loadbuffer(L, (char*)prog.buffer, prog.len, s)) 
+	if (luaL_loadfile(L, s)) 
 	{
 		ERROR(lua_tostring(L, -1), "\n");
 		lua_pop(L, 1);
 		return 0;
 	}
 
-	lua_pushvalue(L, 1); // copy options table to top of stack so it can be used as an arg
+	// so dumb 
+	auto null_terminated = Path::from(Path::removeBasename(path));
+	defer { null_terminated.destroy(); };
+
+	if (!Path::chdir(null_terminated.buffer.asStr()))
+		return 0;
 
 	// call the imported file
-	if (lua_pcall(L, 1, LUA_MULTRET, 0))
+	int top = lua_gettop(L) - 1;
+
+	if (lua_pcall(L, 0, LUA_MULTRET, 2))
 	{
 		ERROR(lua_tostring(L, -1), "\n");
 		lua_pop(L, 1);
@@ -841,8 +817,6 @@ int lua__importFile(lua_State* L)
 
 	// check how many thing the file returned
 	int nresults = lua_gettop(L) - top;
-
-	prog.close();
 
 	// return all the stuff the file returned
 	return nresults;
@@ -858,6 +832,29 @@ int lua__cwd(lua_State* L)
 	auto s = cwd.buffer.asStr();
 
 	lua_pushlstring(L, (char*)s.bytes, s.len);
+
+	return 1;
+}
+
+/* ------------------------------------------------------------------------------------------------ lua__canonicalizePath
+ */
+int lua__canonicalizePath(lua_State* L)
+{
+	size_t len;
+	const char* s = lua_tolstring(L, 1, &len);
+	str path = {(u8*)s, len};
+
+	auto canonicalized = fs::Path::from(path);
+	defer { canonicalized.destroy(); };
+
+	if (!canonicalized.makeAbsolute())
+	{
+		ERROR("failed to make path '", path, "' canonical\n");
+		return 0;
+	}
+
+
+	lua_pushlstring(L, (char*)canonicalized.buffer.buffer, canonicalized.buffer.len);
 
 	return 1;
 }

@@ -6,16 +6,25 @@
 --
 --
 
+local errhandler = function(message)
+	print(debug.traceback())
+	io.write("err: ", tostring(message), "\n")
+	return message
+end
+
+-- NOTE(sushi) hardcoded access to lua files defined in lake's source tree when im running 
+--             in debug from enosi's root. This shouldn't affect release builds since it 
+--             will be compiled in.
+package.path = package.path..";./lake/src/?.lua"
+
+local List = require "list"
+local Twine = require "twine"
+
 local lake = {}
-local lake_internal = {}
 
 -- internal target map
 local targets = {}
-
-local recipe_table =
-{
-	next = 1,
-}
+local recipe_table = { next = 1 }
 
 -- used for referencing things defined later in this file
 -- as i dont really know of any other good way to do it 
@@ -160,6 +169,15 @@ end
 
 
 
+-- * ---------------------------------------------------------------------------------------------- lake.canonicalizePath
+-- | Returns a canonical representation of the given path or nil if one cannot be made. This 
+-- | requires a path to an existing file.
+lake.canonicalizePath = function(path)
+	return lua__canonicalizePath(path)
+end
+-- |
+-- * ----------------------------------------------------------------------------------------------
+
 -- * ---------------------------------------------------------------------------------------------- lake.flatten
 -- | Flattens nested array elements of the given table into a new one.
 lake.flatten = function(tbl)
@@ -186,7 +204,7 @@ end
 local options_stack = {}
 lake.import = function(s, options)
 	table.insert(options_stack, options)
-	local results = {lua__importFile(options, s)}
+	local results = {lua__importFile(s)}
 	table.remove(options_stack, #options_stack)
 	return table.unpack(results)
 end
@@ -304,34 +322,41 @@ end
 -- | TODO(sushi) this has been made very ugly in a fit of trying to get stuff to work again
 -- |             please clean it up soon
 lake.cmd = function(...)
-	local args = {}
+	local args = List()
 
-	local argcount = 0
-	function recur(x)
+	local function recur(x)
 		for _,v in ipairs(x) do
 			local vtype = type(v)
 
 			if "string" == vtype then
-				table.insert(args, v)
+				args:push(v)
 			elseif "table" == vtype then
 				if forward.TargetGroup == getmetatable(v) then
-					return false, "flattened argument "..argcount.." given to lake.cmd resolves to a target group, which is not currently allowed. You must manually resolve this to a list of target paths."
+					return false, "flattened argument given to lake.cmd resolves to a target group, which is not currently allowed. You must manually resolve this to a list of target paths."
 				end
 
 				if forward.Target == getmetatable(v) then
-					table.insert(args, v.path)
+					args:push(v.path)
+				elseif List == getmetatable(v) then
+					for s in v:each() do
+						local success, message = recur(s)
+						if not success then
+							return false, message
+						end
+					end
+				elseif Twine == getmetatable(v) then
+					for s in v:each() do
+						args:push(s)
+					end
 				else
 					local success, message = recur(v)
 					if not success then
 						return false, message
 					end
-					goto skip_inc
 				end
 			else
-				return false, "flattened argument "..argcount.." given to lake.cmd was not resolvable to a string. Its value is "..tostring(v)
+				return false, "flattened argument given to lake.cmd was not resolvable to a string. Its value is "..tostring(v)
 			end
-			argcount = argcount + 1
-			::skip_inc::
 		end
 
 		return true
@@ -343,9 +368,9 @@ lake.cmd = function(...)
 		error(message, 2)
 	end
 
-	local argsarr = ffi.new("str["..(argcount+1).."]")
+	local argsarr = ffi.new("str["..(args:len()+1).."]")
 
-	for i,arg in ipairs(args) do
+	for arg,i in args:eachWithIndex() do
 		if "string" ~= type(arg) then
 			local errstr = "argument "..tostring(i).." in call to cmd was not a string, it was a "..type(arg)..". Arguments were:\n"
 
@@ -359,7 +384,7 @@ lake.cmd = function(...)
 		argsarr[i-1] = make_str(args[i])
 	end
 
-	local handle = C.lua__processSpawn(argsarr, argcount+1)
+	local handle = C.lua__processSpawn(argsarr, args:len()+1)
 
 	if not handle then
 		local argsstr = ""
@@ -439,7 +464,7 @@ end
 -- | 		...
 lake.replace = function(subject, search, repl)
 	if type(subject) == "table" then
-		local out = {}
+		local out = List()
 		for _,v in ipairs(subject) do
 			if type(v) ~= "string" then
 				error("element of table given to lake.replace is not a string!", 2)
@@ -447,7 +472,7 @@ lake.replace = function(subject, search, repl)
 
 			local res = v:gsub(search, repl)
 
-			table.insert(out, res)
+			out:insert(res)
 		end
 		return out
 	elseif type(subject) == "string" then
@@ -466,11 +491,11 @@ lake.concat = function(lhs, rhs)
 	if lhs_type == "table" then
 		if rhs_type == "table" then
 			for _,v in ipairs(rhs) do
-				table.insert(lhs, v)
+				lhs:insert(v)
 			end
 			return lhs
 		elseif rhs_type == "string" then
-			table.insert(lhs, rhs)
+			lhs:insert(rhs)
 			return lhs
 		else
 			error("unsupported type combination given to lake.concat: "..lhs_type..", "..rhs_type, 2)
@@ -537,15 +562,6 @@ local Target =
 
 	-- handle to lake's internal representation
 	handle = nil,
-
-	-- lua function used to build the target
-	recipe_fn = nil,
-
-	-- array of targets this target uses directly
-	uses_targets = nil,
-
-	-- array of targets this target depends on but does not use
-	depends_on_targets = nil,
 }
 Target.__index = Target
 forward.Target = Target
@@ -557,8 +573,6 @@ Target.new = function(path)
 	setmetatable(o, Target)
 	o.path = path
 	o.handle = C.lua__createSingleTarget(make_str(path))
-	o.uses_targets = {}
-	o.depends_on_targets = {}
 	return o
 end
 -- |
@@ -588,7 +602,6 @@ Target.uses = function(self, x)
 	local x_type = type(x)
 	if "string" == x_type then
 		C.lua__makeDep(self.handle, lake.target(x).handle)
-		table.insert(self.uses_targets, x)
 	elseif "table" == x_type then
 		local flat = flatten_table(x)
 		for i,v in ipairs(flat) do
@@ -597,7 +610,6 @@ Target.uses = function(self, x)
 				error("Element "..i.." of flattened table given to Target.uses is not a string, rather a "..v_type.." whose value is "..tostring(v)..".", 2)
 			end
 			C.lua__makeDep(self.handle, lake.target(v).handle)
-			table.insert(self.uses_targets, v)
 		end
 	else
 		error("Target.uses can take either a string or a table of strings, got: "..x_type..".", 2)
@@ -615,7 +627,6 @@ Target.depends_on = function(self, x)
 	local x_type = type(x)
 	if "string" == x_type then
 		C.lua__makeDep(self.handle, lake.target(x).handle)
-		table.insert(self.depends_on_targets, x)
 	elseif "table" == x_type then
 		for i,v in ipairs(lake.flatten(x)) do
 			local v_type = type(v)
@@ -623,7 +634,6 @@ Target.depends_on = function(self, x)
 				error("Element "..i.." of flattened table given to Target.depends_on is not a string, rather a "..v_type.." whose value is "..tostring(v)..".", 2)
 			end
 			C.lua__makeDep(self.handle, lake.target(v).handle)
-			table.insert(self.depends_on_targets, v)
 		end
 	else
 		error("Target.depends_on can take either a string or a table of strings, got: "..x_type..".", 2)
@@ -678,7 +688,7 @@ forward.TargetGroup = TargetGroup
 TargetGroup.new = function()
 	local o = {}
 	setmetatable(o, TargetGroup)
-	o.targets = {}
+	o.targets = List()
 	o.handle = C.lua__createGroupTarget()
 	return o
 end
@@ -687,12 +697,8 @@ end
 
 -- * ---------------------------------------------------------------------------------------------- TargetGroup:uses
 -- | Calls 'uses' for every target in this group.
--- |
--- | TODO(sushi) if for whatever reason there is an error in Target.uses it will report that it 
--- |             came from that function, not here, which could be confusing, so fix that 
--- |             eventually.
 TargetGroup.uses = function(self, x)
-	for _,target in ipairs(self.targets) do
+	for target in self.targets:each() do
 		target:uses(x)
 	end
 	return self
@@ -749,11 +755,11 @@ end
 -- | 'a' and 'b' refer to different groups, and the second call to 'targets' will throw an 
 -- | error, as no target may belong to two different groups!
 lake.targets = function(...)
-	local args = flatten_table{...}
+	local args = List{...}
 
 	local group = TargetGroup.new()
 
-	for i,arg in ipairs(args) do
+	for arg,i in args:eachWithIndex() do
 		if type(arg) ~= "string" then
 			error("flattened argument "..i.." given to lake.targets was not a string, rather a "..type(arg).." with value "..tostring(arg),2)
 		end
@@ -770,47 +776,10 @@ lake.targets = function(...)
 
 		C.lua__addTargetToGroup(group.handle, target.handle)
 
-		table.insert(group.targets, target)
+		group.targets:insert(target)
 	end
 
 	return group
 end
 
-
--- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
---      
---      Internal functions probably mostly called by C
---
--- * >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> -
-
-
--- * ---------------------------------------------------------------------------------------------- lake_internal.resume_recipe
--- | Given a single target, startsor resumes its recipe coroutine.
-lake_internal.resume_single_recipe = function(path)
-	local target = targets[path]
-
-	if not target then
-		error("no target associated with path '"..path.."'")
-	end
-
-	if not target.recipe_fn then
-		error("target '"..path.."' does not define a recipe")
-	end
-
-	-- TODO(sushi) restructure this stuff so that we dont have to pass these two args everytime we resume
-	local result = {co.resume(target.recipe_fn, target.uses_targets, target.path)}
-
-	if not result[1] then
-		error("encountered lua error while running recipe for target '"..path.."':\n"..result[2])
-	end
-
-	if result[2] == nil then
-		return true
-	end
-
-	return false
-end
--- |
--- * ----------------------------------------------------------------------------------------------
-
-return lake, lake_internal, targets, recipe_table, co.resume
+return lake, targets, recipe_table, co.resume, errhandler

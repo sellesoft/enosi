@@ -13,10 +13,10 @@ struct Parser;
 
 struct lua_State;
 
-static const char* lake_internal_table = "__lake__internal";
 static const char* lake_targets_table = "__lake__targets";
 static const char* lake_recipe_table = "__lake__recipe_table";
 static const char* lake_coroutine_resume = "__lake__coroutine_resume";
+static const char* lake_err_handler = "__lake__err_handler";
 
 typedef SList<const char*> LuaCLIArgList;
 
@@ -32,6 +32,8 @@ struct Lake
 
 	TargetList active_recipes;
 	u32 active_recipe_count;
+
+	TargetList targets;
 
 	Pool<Target> target_pool;
 
