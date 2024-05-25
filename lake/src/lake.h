@@ -54,8 +54,6 @@ struct Lake
 	b8   init(const char** argv, int argc, mem::Allocator* allocator = &mem::stl_allocator);
 	void deinit();
 
-	b8 parseFile(str path, io::IO* io);
-
 	b8 process_argv(str* initfile);
 	b8 run();
 

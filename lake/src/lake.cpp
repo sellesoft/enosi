@@ -129,39 +129,14 @@ void Lake::deinit()
 	active_recipes.destroy();
 	build_queue.destroy();
 
-	for (Target& t : target_pool)
+	for (auto& t : targets)
 		t.deinit();
+	targets.destroy();
 	target_pool.destroy();
 
 	cwd_stack.destroy();
 	active_process_pool.destroy();
 	lua_cli_args.destroy();
-}
-
-/* ------------------------------------------------------------------------------------------------ Lake::parseFile
- */
-b8 Lake::parseFile(str path, io::IO* io)
-{
-	auto f = fs::File::from(path, fs::OpenFlag::Read);
-	if (isnil(f))
-	{
-		ERROR("failed to open file at path '", path, "' for parsing\n");
-		return false;
-	}
-	defer { f.close(); };
-
-	Parser p = {};
-	if (!p.init(path, &f, &mem::stl_allocator))
-		return false;
-	defer { p.destroy(); };
-	
-	if (!p.run())
-		return false;
-	
-	if (!p.fin(io))
-		return false;
-
-	return true;
 }
 
 struct ArgIter
