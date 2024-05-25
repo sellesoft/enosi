@@ -116,7 +116,7 @@ struct Logger
 	b8 init(str name, Verbosity verbosity);
 
 	template<typename... T>
-	void log(Verbosity v, T... args)
+	void log(Verbosity v, T&&... args)
 	{
 		using enum Verbosity;
 
