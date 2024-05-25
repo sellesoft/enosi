@@ -463,7 +463,7 @@ ProcessCheckResult processCheck(Process::Handle handle, s32* out_exit_code)
 {
 	assert(handle && out_exit_code);
 
-	int status;
+	int status = 0;
 	int r = waitpid((s64)handle, &status, WNOHANG);
 	if (-1 == r)
 	{
@@ -515,7 +515,7 @@ fs::Path cwd(mem::Allocator* allocator)
 		return nil;
 
 	const u64 maxlen = PATH_MAX * 4;
-	u64 bufferlen = PATH_MAX;
+	u64 bufferlen = PATH_MAX / 16;
 
 	path.reserve(bufferlen);
 
