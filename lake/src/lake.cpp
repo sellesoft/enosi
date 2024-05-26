@@ -10,7 +10,7 @@
 #include "luahelpers.h"
 
 #include "generated/cliargparser.h"
-#include "generated/lakeluacompiled.h"
+// #include "generated/lakeluacompiled.h"
 
 #include "assert.h"
 
@@ -320,15 +320,16 @@ b8 Lake::run()
 	INFO("Loading lake lua module.\n");
 
 #if LAKE_DEBUG
-	if (luaL_loadfile(L, "lake/src/lake.lua") || lua_pcall(L, 0, 5, 0))
+	if (luaL_loadfile(L, "lake/src/lake.lua") || lua_pcall(L, 0, 1, 0))
 	{
 		printf("%s\n", lua_tostring(L, -1));
 		lua_pop(L, 1);
 		return false;
 	}
 #else
-	if (luaL_loadbuffer(L, (char*)luaJIT_BC_lake, luaJIT_BC_lake_SIZE, "lake.lua") ||
-		lua_pcall(L, 0, 5, 0))
+	lua_getglobal(L, "require");
+	lua_pushstring(L, "lake");
+	if (lua_pcall(L, 1, 1, 0))
 	{
 		ERROR(lua_tostring(L, -1));
 		lua_pop(L, 1);
@@ -338,14 +339,24 @@ b8 Lake::run()
 
 	INFO("Setting lua globals.\n");
 
-	lua_setglobal(L, lake_err_handler);
-	lua_setglobal(L, lake_coroutine_resume);
-	lua_setglobal(L, lake_recipe_table);
+	lua_getfield(L, 1, "__internal");
+
+	lua_getfield(L, 2, "targets");
 	lua_setglobal(L, lake_targets_table);
-	lua_setglobal(L, "lake");
+
+	lua_getfield(L, 2, "recipe_table");
+	lua_setglobal(L, lake_recipe_table);
+
+	lua_getfield(L, 2, "coresume");
+	lua_setglobal(L, lake_coroutine_resume);
+
+	lua_getfield(L, 2, "errhandler");
+	lua_setglobal(L, lake_err_handler);
+
+	lua_pop(L, 1);
 
 	lua_getglobal(L, lake_err_handler);
-	if (luaL_loadfile(L, (char*)initpath.bytes) || lua_pcall(L, 0, 0, 1))
+	if (luaL_loadfile(L, (char*)initpath.bytes) || lua_pcall(L, 0, 0, 2))
 	{
 		printf("%s\n", lua_tostring(L, -1));
 		lua_pop(L, 1);
