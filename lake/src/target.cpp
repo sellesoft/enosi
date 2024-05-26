@@ -228,6 +228,12 @@ Target::RecipeResult Target::resume_recipe(lua_State* L)
 		return RecipeResult::Error;
 	}
 
+	// this kiiinda sucks a little but i want to support a recipe managing cwd, so just save 
+	// the cwd everytime we resume. This is probably horribly inefficient and should be replaced
+	// with something that just reads cwd into the path obj already existing on the target
+	recipe_working_directory.destroy();
+	recipe_working_directory = fs::Path::cwd();
+
 	defer { lua_pop(L, 2); };
 
 	if (lua_isnil(L, -1))
