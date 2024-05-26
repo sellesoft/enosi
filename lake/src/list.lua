@@ -145,4 +145,19 @@ List.__concat = function(self, rhs)
 	return out
 end
 
+--- Apply function 'f' to each element of this List and return
+--- a new List containing the results.
+---
+--- TODO(sushi) implement lazy iterators and replace this 
+---
+---@param f function
+---@return List
+List.map = function(self, f)
+	local new = List()
+	for e in self:each() do
+		new:push(f(e))
+	end
+	return new
+end
+
 return List
