@@ -117,6 +117,46 @@ struct SList
 
 		return out;
 	}
+
+	/* -+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ RangeIterator 
+	 *  Iterator for compatibility with C++ ranged for loops 
+	 */
+	struct RangeIterator
+	{
+		Node* n;
+
+		Node* operator++()
+		{
+			n = n->next;
+			return n;
+		}
+
+		b8 operator !=(const RangeIterator& rhs)
+		{
+			return n != rhs.n;
+		}
+
+		T* operator->()
+		{
+			return n->data;
+		}
+
+		T& operator*()
+		{
+			return *n->data;
+		}
+	};
+
+
+	RangeIterator begin() 
+	{
+		return RangeIterator{head};
+	}
+
+	RangeIterator end() 
+	{
+		return RangeIterator{nullptr};
+	}
 };
 
 /* ================================================================================================ DList
