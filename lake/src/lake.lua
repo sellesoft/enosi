@@ -6,21 +6,19 @@
 --
 --
 
+-- NOTE(sushi) hardcoded access to lua files defined in lake's source tree when im running 
+--             in debug from enosi's root. This shouldn't affect release builds since it 
+--             will be compiled in.
+package.path = package.path..";./lake/src/?.lua"
+
 local co = require "coroutine"
 local List = require "list"
 local Twine = require "twine"
 
 local errhandler = function(message)
 	print(debug.traceback())
-	io.write("err: ", tostring(message), "\n")
 	return message
 end
-
--- NOTE(sushi) hardcoded access to lua files defined in lake's source tree when im running 
---             in debug from enosi's root. This shouldn't affect release builds since it 
---             will be compiled in.
-package.path = package.path..";./lake/src/?.lua"
-
 
 --- Global lake table used to report targets and dependencies between them
 --- and various helpers.
@@ -35,15 +33,14 @@ local recipe_table = { next = 1 }
 local Target,
 	  TargetGroup
 
-
 --- Table containing variables specified on command line. 
 --- For example if lake is invoked:
 ---
 --- ```shell
---- 	lake mode=debug
+--- 	lake mode=release
 ---	```
 ---
---- then this table will contain a key 'mode' equal to "debug".
+--- then this table will contain a key 'mode' equal to "release".
 --- This is useful for a quick way to change a lakefile's behavior from
 --- command line, an example of its use:
 ---
@@ -112,6 +109,12 @@ ffi.cdef [[
 	void lua__setMaxJobs(s32 n);
 
 	str lua__getTargetPath(void* handle);
+
+	b8 lua__copyFile(str dst, str src);
+
+	b8 lua__chdir(str path);
+
+	b8 lua__unlinkFile(str path);
 ]]
 local C = ffi.C
 local strtype = ffi.typeof("str")
@@ -429,8 +432,6 @@ lake.find = function(pattern)
 
 	return out
 end
--- |
--- * ----------------------------------------------------------------------------------------------
 
 -- * ---------------------------------------------------------------------------------------------- lake.cmd
 
@@ -668,8 +669,6 @@ Target.new = function(path)
 	o.handle = C.lua__createSingleTarget(make_str(path))
 	return o
 end
--- |
--- * ----------------------------------------------------------------------------------------------
 
 -- * ---------------------------------------------------------------------------------------------- Target.__tostring
 
@@ -684,7 +683,7 @@ end
 --- The target this one depends on
 ---@param x string | Target | List
 ---@return self
-Target.depends_on = function(self, x)
+Target.dependsOn = function(self, x)
 	local x_type = type(x)
 	if "string" == x_type then
 		C.lua__makeDep(self.handle, lake.target(x).handle)
@@ -739,6 +738,7 @@ end
 ---@param path string
 ---@return Target
 lake.target = function(path)
+	assert(type(path) == "string", "lake.target passed a non-string value")
 	local target = targets[path]
 	if target then
 		return target
@@ -746,8 +746,6 @@ lake.target = function(path)
 	targets[path] = Target.new(path)
 	return targets[path]
 end
--- |
--- * ----------------------------------------------------------------------------------------------
 
 -- A grouping of targets that are built from a single invocation of a common recipe.
 TargetGroup =
@@ -785,7 +783,7 @@ end
 
 -- * ---------------------------------------------------------------------------------------------- TargetGroup:depends_on
 -- | Calls 'depends_on' for every target in this group.
-TargetGroup.depends_on = function(self, x)
+TargetGroup.dependsOn = function(self, x)
 	local x_type = type(x)
 	if "string" == x_type then
 		C.lua__makeDep(self.handle, lake.target(x).handle)
@@ -855,4 +853,10 @@ lake.targets = function(...)
 	return group
 end
 
-return lake, targets, recipe_table, co.resume, errhandler
+lake.__internal = {}
+lake.__internal.targets = targets
+lake.__internal.recipe_table = recipe_table
+lake.__internal.coresume = co.resume
+lake.__internal.errhandler = errhandler
+
+return lake
