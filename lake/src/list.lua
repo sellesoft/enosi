@@ -93,17 +93,28 @@ List.remove = function(self, idx)
 end
 
 --- Returns an iterator function that gives each element of 
---- this List.
+--- this List or, if 'f' is provided, calls f with each 
+--- element of the list and returns self
 ---
----@return function
-List.each = function(self)
+---@param f function?
+---@return function | self
+List.each = function(self, f)
 	local i = 0
-	return function()
+	local iter = function()
 		i = i + 1
 		if i > self:len() then
 			return nil
 		end
 		return self[i]
+	end
+
+	if f then
+		for e in iter do
+			f(e)
+		end
+		return self
+	else
+		return iter
 	end
 end
 
