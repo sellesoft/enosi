@@ -12,6 +12,7 @@
 #include "sys/uio.h"
 #include "sys/stat.h"
 #include "sys/wait.h"
+#include "sys/sendfile.h"
 
 // Lib providing detailed explanations for various errors
 // that may occur using the std linux api. Idrk if I 
@@ -281,6 +282,57 @@ b8 fileExists(str path)
 	return access((char*)path.bytes, F_OK) == 0;
 }
 
+/* ------------------------------------------------------------------------------------------------ copyFile
+ *  This implementation will not work on Linux versions < 2.6.33 but I'm not sure if that'll ever
+ *  be a problem. sendfile is more efficient than simply read/writing because it doesnt require 
+ *  moving mem around in userspace.
+ */ 
+b8 copyFile(str dst, str src)
+{
+	assert(notnil(dst) and notnil(src) and not dst.isEmpty() and not src.isEmpty());
+
+	using namespace fs;
+
+	auto srcf = File::from(src, OpenFlag::Read);
+	if (isnil(srcf))
+	{
+		ERROR("copyFile(): failed to open src file '", src, "'\n");
+		return false;
+	}
+	defer { srcf.close(); };
+
+	auto dstf = File::from(dst, OpenFlag::Write | OpenFlag::Truncate | OpenFlag::Create);
+	if (isnil(dstf))
+	{
+		ERROR("copyFile(): failed to open dst file '", dst, "'\n");
+		return false;
+	}
+	defer { dstf.close(); };
+
+	off_t bytes_copied = 1;
+	auto srcinfo = srcf.getInfo();
+
+	while (bytes_copied > 0)
+	{
+		bytes_copied = sendfile((s64)dstf.handle, (s64)srcf.handle, nullptr, srcinfo.byte_size);
+		if (bytes_copied < 0)
+			return reportErrno("failed to copy '", src, "' to '", dst, "': ", strerror(errno));
+	}
+
+	return true;
+}
+
+/* ------------------------------------------------------------------------------------------------ unlinkFile
+ */
+b8 unlinkFile(str path)
+{
+	assert(notnil(path) and not path.isEmpty());
+
+	if (-1 == unlink((char*)path.bytes))
+		return reportErrno("failed to unlink file at path '", path, "': ", explain_unlink((char*)path.bytes));
+	return true;
+}
+
 /* ------------------------------------------------------------------------------------------------ makeDir
  */
 b8 makeDir(str path, b8 make_parents)
@@ -331,7 +383,12 @@ b8 makeDir(str path, b8 make_parents)
 
 /* ------------------------------------------------------------------------------------------------ processSpawn
  */
-b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process::Stream streams[3], str cwd)
+b8 processSpawn(
+		Process::Handle* out_handle, 
+		str file, 
+		Slice<str> args, 
+		Process::Stream streams[3], 
+		str cwd)
 {
 	assert(out_handle);
 

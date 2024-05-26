@@ -76,6 +76,9 @@ struct File : public io::IO
 	static File from(Path path, OpenFlags flags, mem::Allocator* allocator = &mem::stl_allocator);
 	static File from(Moved<Path> path, OpenFlags flags);
 
+	static b8 copy(str dst, str src);
+	static b8 unlink(str path);
+
 	[[deprecated("File cannot be opened without OpenFlags!")]]
 	b8 open() override { assert(!"File cannot be opened without OpenFlags!"); return false; }
 

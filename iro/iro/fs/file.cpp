@@ -36,6 +36,20 @@ File File::from(Moved<Path> path, OpenFlags flags)
 	return out;
 }
 
+/* ------------------------------------------------------------------------------------------------ File::copy
+ */
+b8 File::copy(str dst, str src)
+{
+	return platform::copyFile(dst, src);
+}
+
+/* ------------------------------------------------------------------------------------------------ File::unlink
+ */
+b8 File::unlink(str path)
+{
+	return platform::unlinkFile(path);
+}
+
 /* ------------------------------------------------------------------------------------------------ File::open
  */
 b8 File::open(Moved<Path> path, OpenFlags flags)
@@ -150,6 +164,13 @@ File File::fromFileDescriptor(u64 fd, Moved<Path> name, OpenFlags flags)
 	File out = fromFileDescriptor(fd, flags);
 	out.path = name;
 	return out;
+}
+
+/* ------------------------------------------------------------------------------------------------ FileInfo::of
+ */
+FileInfo File::getInfo()
+{
+	return FileInfo::of(*this);
 }
 
 /* ------------------------------------------------------------------------------------------------ FileInfo::of

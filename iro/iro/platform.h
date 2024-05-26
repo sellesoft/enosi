@@ -116,6 +116,20 @@ b8 stat(fs::FileInfo* out_info, str path);
  */
 b8 fileExists(str path);
 
+/* ------------------------------------------------------------------------------------------------ copyFile
+ *  Copies the file at path 'src' to the path 'dst'. At the moment this always overwrites the file
+ *  at 'dst' with 'src'. Maybe someone will add options later, maybe even me.
+ */
+b8 copyFile(str dst, str src);
+
+/* ------------------------------------------------------------------------------------------------ removeFile
+ *  Equivalent to 'unlink' on Linux. IDK how this will behave on Windows/Mac yet and so I'll put 
+ *  a better description here when I do.
+ *
+ *  NOTE that this works on any type of file! (eg. directories, fifo, symlinks, etc.)
+ */
+b8 unlinkFile(str path);
+
 /* ------------------------------------------------------------------------------------------------ makeDir
  *  Create the directory at 'path'. If make_parents is true, any missing parent directories will be
  *  created as well.
