@@ -176,6 +176,54 @@ end
 
 
 
+-- * ---------------------------------------------------------------------------------------------- lake.os
+
+--- Get a string specifying the current operating system.
+---
+--- Currently this just returns whatever luajit reports from its os() function.
+--- This could be one of: 
+--- 	Windows
+---     Linux
+---     OSX
+---     BSD
+---     POSIX
+---     Other
+---
+--- TODO(sushi) make this return the target operating system if I ever get around to supporting
+---             cross-compilation.
+---
+---@return string
+lake.os = function()
+	return jit.os
+end
+
+-- * ---------------------------------------------------------------------------------------------- lake.arch
+
+--- Get a string specifying the current architecture.
+---
+--- Currently this just returns whatever luajit reports from its arch() function.
+--- This could be one of:
+--- 	x86
+--- 	x64
+---		arm
+---		arm64
+---		arm64be
+---		ppc
+---		mips
+---		mipsel
+---		mips64
+---		mips64el
+---		mips64r6
+---		mips64r6el
+---
+--- TODO(sushi) make this return the target architecture if I ever get around to supporting 
+---             cross-compilation.
+---
+---@return string
+lake.arch = function()
+	return jit.arch
+end
+
 -- * ---------------------------------------------------------------------------------------------- lake.canonicalizePath
 
 --- Takes a path to a file and returns a canonicalized/absolute
@@ -272,6 +320,17 @@ lake.cwd = function()
 	return lua__cwd()
 end
 
+-- * ---------------------------------------------------------------------------------------------- lake.chdir
+
+--- Changes the current working directory to 'path'. Returns
+--- a bool determining success.
+---
+---@param path string
+---@return boolean
+lake.chdir = function(path)
+	return 0 ~= C.lua__chdir(make_str(path))
+end
+
 -- * ---------------------------------------------------------------------------------------------- lake.maxjobs
 
 --- Attempt to set the max jobs lake will use in building. If this 
@@ -281,6 +340,18 @@ end
 ---@param n number
 lake.maxjobs = function(n)
 	C.lua__setMaxJobs(n)
+end
+
+-- * ---------------------------------------------------------------------------------------------- lake.unlink
+
+--- Unlinks (deletes) the file at 'path'. NOTE that this works on any kind of file!
+--- 
+--- Returns a bool determining success.
+---
+---@param path string
+---@return boolean
+lake.unlink = function(path)
+	return 0 ~= C.lua__unlinkFile(make_str(path))
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.mkdir
@@ -311,8 +382,17 @@ lake.mkdir = function(path, options)
 
 	return true
 end
--- |
--- * ----------------------------------------------------------------------------------------------
+
+-- * ---------------------------------------------------------------------------------------------- lake.copy
+
+--- Copies the file at 'src' to 'dst'.
+---
+---@param src string
+---@param dst string
+---@return boolean
+lake.copy = function(dst, src)
+	return C.lua__copyFile(make_str(dst), make_str(src))
+end
 
 -- * ---------------------------------------------------------------------------------------------- lake.find
 

@@ -836,6 +836,13 @@ int lua__cwd(lua_State* L)
 	return 1;
 }
 
+/* ------------------------------------------------------------------------------------------------ lua__chdir
+ */
+b8 lua__chdir(str path)
+{
+	return fs::Path::chdir(path);
+}
+
 /* ------------------------------------------------------------------------------------------------ lua__canonicalizePath
  */
 int lua__canonicalizePath(lua_State* L)
@@ -857,6 +864,20 @@ int lua__canonicalizePath(lua_State* L)
 	lua_pushlstring(L, (char*)canonicalized.buffer.buffer, canonicalized.buffer.len);
 
 	return 1;
+}
+
+/* ------------------------------------------------------------------------------------------------ lua__copyFile
+ */
+b8 lua__copyFile(str dst, str src)
+{
+	return fs::File::copy(dst, src);
+}
+
+/* ------------------------------------------------------------------------------------------------ lua__unlinkFile
+ */
+b8 lua__unlinkFile(str path)
+{
+	return fs::File::unlink(path);
 }
 
 }
