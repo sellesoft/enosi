@@ -77,17 +77,17 @@ s64 format(IO* io, const WithUnits& x)
 	s64 n = 0;
 #define unit(f, u) \
 	n = floor(span.GLUE(to,f)()); \
-	if (n)                            \
-	{                                 \
+	if (n) \
+	{ \
 		if (units != 1) \
 			bytes_written += formatv(io, n, STRINGIZE(u) " "); \
 		else \
 			bytes_written += formatv(io, n, STRINGIZE(u)); \
-		units -= 1;                   \
-		if (!units)                   \
-			return bytes_written;     \
-		span.ns -= GLUE(TimeSpan::from, f)(n).ns;                      \
-	} \
+		units -= 1; \
+		if (!units) \
+			return bytes_written; \
+		span.ns -= GLUE(TimeSpan::from, f)(n).ns; \
+	} 
 
 	unit(Days,         days);
 	unit(Hours,        h);

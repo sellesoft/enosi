@@ -10,7 +10,7 @@ local recipes = assert(options.recipes)
 
 local c_files = lake.find("iro/**/*.cpp")
 
-for _,c_file in ipairs(c_files) do
+for c_file in c_files:each() do
 	local o_file = c_file:gsub("(.-)%.cpp", build_dir.."%1.o")
 	local d_file = o_file:gsub("(.-)%.o", "%1.d")
 
