@@ -311,7 +311,7 @@ end
 ---
 ---@return table?
 lake.getOptions = function()
-	return options_stack[#options_stack]
+	return options_stack[options_stack:len()]
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.cwd
@@ -788,8 +788,7 @@ TargetGroup.dependsOn = function(self, x)
 	if "string" == x_type then
 		C.lua__makeDep(self.handle, lake.target(x).handle)
 	elseif "table" == x_type then
-		local flat = flatten_table(x)
-		for i,v in ipairs(flat) do
+		for i,v in ipairs(lake.flatten(x)) do
 			local v_type = type(v)
 			if "string" ~= v_type then
 				error("Element "..i.." of flattened table given to TargetGroup.depends_on is not a string, rather a "..v_type.." whose value is "..tostring(v)..".", 2)
@@ -830,7 +829,7 @@ end
 -- | 'a' and 'b' refer to different groups, and the second call to 'targets' will throw an 
 -- | error, as no target may belong to two different groups!
 lake.targets = function(...)
-	local args = List{...}
+	local args = lake.flatten{...}
 
 	local group = TargetGroup.new()
 
