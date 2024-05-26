@@ -26,9 +26,8 @@ local lake = {}
 local targets = {}
 local recipe_table = { next = 1 }
 
--- used for referencing things defined later in this file
--- as i dont really know of any other good way to do it 
-local forward = {}
+local Target,
+	  TargetGroup
 
 -- table for storing vars specified on the command line
 -- to support the '?=' syntax. 
@@ -116,11 +115,12 @@ ffi.cdef [[
 local C = ffi.C
 local strtype = ffi.typeof("str")
 
-local make_str = function(s) 
+local make_str = function(s)
 	if not s then
 		print(debug.traceback())
+		os.exit(1)
 	end
-	return strtype(s, #s) 
+	return strtype(s, #s)
 end
 
 
@@ -181,15 +181,29 @@ end
 -- * ---------------------------------------------------------------------------------------------- lake.flatten
 -- | Flattens nested array elements of the given table into a new one.
 lake.flatten = function(tbl)
-	local out = {}
+	local out = List()
 
-	function recur(x)
-		for _,v in ipairs(x) do
-			if type(v) == "table" then
-				recur(v)
+	local function recur(x)
+		local xtype = type(x)
+
+		if xtype == "table" then
+			local xmt = getmetatable(x)
+
+			if List == xmt then
+				for e in x:each() do
+					recur(e)
+				end
+			elseif Twine == xmt then
+				for s in x:each() do
+					out:push(s)
+				end
 			else
-				table.insert(out, v)
+				for _,e in ipairs(x) do
+					recur(e)
+				end
 			end
+		else
+			out:push(x)
 		end
 	end
 
@@ -285,11 +299,11 @@ lake.find = function(pattern)
 		return {}
 	end
 
-	local out = {}
+	local out = List()
 
 	for i=0,tonumber(glob.paths_count-1) do
 		local s = glob.paths[i]
-		table.insert(out, ffi.string(s.s, s.len))
+		out:push(ffi.string(s.s, s.len))
 	end
 
 	C.lua__globDestroy(glob)
@@ -325,38 +339,40 @@ lake.cmd = function(...)
 	local args = List()
 
 	local function recur(x)
-		for _,v in ipairs(x) do
-			local vtype = type(v)
+		local xtype = type(x)
 
-			if "string" == vtype then
-				args:push(v)
-			elseif "table" == vtype then
-				if forward.TargetGroup == getmetatable(v) then
-					return false, "flattened argument given to lake.cmd resolves to a target group, which is not currently allowed. You must manually resolve this to a list of target paths."
-				end
+		if xtype == "string" then
+			args:push(x)
+		elseif xtype == "table" then
+			local xmt = getmetatable(x)
 
-				if forward.Target == getmetatable(v) then
-					args:push(v.path)
-				elseif List == getmetatable(v) then
-					for s in v:each() do
-						local success, message = recur(s)
-						if not success then
-							return false, message
-						end
-					end
-				elseif Twine == getmetatable(v) then
-					for s in v:each() do
-						args:push(s)
-					end
-				else
-					local success, message = recur(v)
+			if TargetGroup == xmt then
+				return false, "flattened argument given to lake.cmd resolves to a target group, which is not currently allowed. You must manually resolve this to a list of target paths."
+			end
+
+			if Target == xmt then
+				args:push(x.path)
+			elseif List == xmt then
+				for e in x:each() do
+					local success, message = recur(e)
 					if not success then
 						return false, message
 					end
 				end
+			elseif Twine == xmt then
+				for s in x:each() do
+					args:push(s)
+				end
 			else
-				return false, "flattened argument given to lake.cmd was not resolvable to a string. Its value is "..tostring(v)
+				for _,e in ipairs(x) do
+					local success, message = recur(e)
+					if not success then
+						return false, message
+					end
+				end
 			end
+		else
+			return false, "flattened argument given to lake.cmd was not resolvable to a string. Its value is "..tostring(x)
 		end
 
 		return true
@@ -556,7 +572,7 @@ end
 -- * >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> -
 
 
-local Target =
+Target =
 {
 	path = "** target with no path! **",
 
@@ -564,7 +580,6 @@ local Target =
 	handle = nil,
 }
 Target.__index = Target
-forward.Target = Target
 
 -- * ---------------------------------------------------------------------------------------------- Target.new
 -- | Create a new Target.
@@ -586,39 +601,6 @@ end
 -- |
 -- * ----------------------------------------------------------------------------------------------
 
--- * ---------------------------------------------------------------------------------------------- Target:uses
--- | Defines a target or targets that this target directly uses in its recipe. 
--- | All targets provided here will be passed to the 'inputs' argument of the targets recipe.
--- | May be a string or a table of strings.
--- |
--- | TODO(sushi) currently this assumes the same target wont be passed more than once, which 
--- |             we need to handle somehow. We could probably just generate an array of 
--- |             target paths this one depends on from the internal TargetSet just before
--- |             we run the target's recipe.
--- |             It also uses a name on the Target object itself which I would like to avoid.
--- |
--- | TODO(sushi) Make this variadic
-Target.uses = function(self, x)
-	local x_type = type(x)
-	if "string" == x_type then
-		C.lua__makeDep(self.handle, lake.target(x).handle)
-	elseif "table" == x_type then
-		local flat = flatten_table(x)
-		for i,v in ipairs(flat) do
-			local v_type = type(v)
-			if "string" ~= v_type then
-				error("Element "..i.." of flattened table given to Target.uses is not a string, rather a "..v_type.." whose value is "..tostring(v)..".", 2)
-			end
-			C.lua__makeDep(self.handle, lake.target(v).handle)
-		end
-	else
-		error("Target.uses can take either a string or a table of strings, got: "..x_type..".", 2)
-	end
-	return self
-end
--- |
--- * ----------------------------------------------------------------------------------------------
-
 -- * ---------------------------------------------------------------------------------------------- Target:depends_on
 -- | Defines a target that this target depends on, but does not use in its inputs.
 -- |
@@ -628,7 +610,7 @@ Target.depends_on = function(self, x)
 	if "string" == x_type then
 		C.lua__makeDep(self.handle, lake.target(x).handle)
 	elseif "table" == x_type then
-		for i,v in ipairs(lake.flatten(x)) do
+		for v,i in lake.flatten(x):eachWithIndex() do
 			local v_type = type(v)
 			if "string" ~= v_type then
 				error("Element "..i.." of flattened table given to Target.depends_on is not a string, rather a "..v_type.." whose value is "..tostring(v)..".", 2)
@@ -672,7 +654,7 @@ end
 -- * ----------------------------------------------------------------------------------------------
 
 -- A grouping of targets that are built from a single invocation of a common recipe.
-local TargetGroup =
+TargetGroup =
 {
 	-- array of targets belonging to this group
 	targets = nil,
@@ -681,7 +663,6 @@ local TargetGroup =
 	handle = nil,
 }
 TargetGroup.__index = TargetGroup
-forward.TargetGroup = TargetGroup
 
 -- * ---------------------------------------------------------------------------------------------- TargetGroup.new
 -- | Create a new TargetGroup.

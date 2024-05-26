@@ -352,7 +352,7 @@ b8 Lake::run()
 	}
 	lua_pop(L, 1); // pop error handler
 
-	//for (auto& t : target_pool)
+	// for (auto& t : targets)
 	//	io::formatv(&fs::stdout, t, "\n\n");
 
 	INFO("Beginning build loop.\n");
@@ -655,7 +655,7 @@ ActiveProcess* lua__processSpawn(str* args, u32 args_count)
 	DEBUG("spawning process from file '", args[0], "'\n");
 	SCOPED_INDENT;
 
-	if (logger.verbosity == Logger::Verbosity::Debug)
+	if (logger.verbosity <= Logger::Verbosity::Debug)
 	{
 		DEBUG("with args:\n");
 		SCOPED_INDENT;
