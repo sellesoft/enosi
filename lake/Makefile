@@ -19,6 +19,9 @@ iro_c_files := $(shell find ../iro/iro/ -type f -name '*.cpp')
 iro_o_files := $(foreach file,$(iro_c_files),${build_dir}/$(file:.cpp=.o))
 iro_d_files := $(iro_o_files:.o=.d)
 
+lua_files := src/lake.lua src/twine.lua src/list.lua
+lua_o_files := $(foreach file,$(lua_files),${build_dir}/$(file:.lua=.lua.o))
+
 # clean up stuff we output
 clean:
 	-rm -r build/*
@@ -70,7 +73,7 @@ define print
 	@printf "$(green)$(1)$(reset) -> $(blue)$(2)$(reset)\n"
 endef
 
-${lake}: ${o_files} ${iro_o_files}
+${lake}: ${o_files} ${iro_o_files} ${lua_o_files}
 	$(v)${linker} $^ ${linker_flags} -o $@
 	@printf "$(blue)$@$(reset)\n"
 
@@ -95,7 +98,11 @@ src/generated/cliargparser.h: src/cliargs.lua
 	${v}luajit $<
 	$(call print,$<,$@)
 
-src/generated/lakeluacompiled.h: src/lake.lua
+# src/generated/lakeluacompiled.o: src/lake.lua
+# 	${v}luajit -b -g $< $@
+# 	$(call print,$<,$@)
+
+${build_dir}/%.lua.o: %.lua
 	${v}luajit -b -g $< $@
 	$(call print,$<,$@)
 
