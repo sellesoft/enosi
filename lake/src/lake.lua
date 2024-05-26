@@ -6,6 +6,10 @@
 --
 --
 
+local co = require "coroutine"
+local List = require "list"
+local Twine = require "twine"
+
 local errhandler = function(message)
 	print(debug.traceback())
 	io.write("err: ", tostring(message), "\n")
@@ -17,10 +21,12 @@ end
 --             will be compiled in.
 package.path = package.path..";./lake/src/?.lua"
 
-local List = require "list"
-local Twine = require "twine"
 
-local lake = {}
+--- Global lake table used to report targets and dependencies between them
+--- and various helpers.
+---
+---@class lake
+lake = {}
 
 -- internal target map
 local targets = {}
@@ -29,27 +35,22 @@ local recipe_table = { next = 1 }
 local Target,
 	  TargetGroup
 
--- table for storing vars specified on the command line
--- to support the '?=' syntax. 
---   Ex. 
---      if in the lakefile we have
---
---   		mode ?= "debug"
---
---   	the line will be transformed into
---         
---          local mode = lake.cliargs.mode or "debug"
---
---      and if someone invokes lake as
---
---      	lake mode=release
---
---     mode will be "release".
---
-lake.clivars = {}
 
--- used for asyncronously running commands in recipes
-local co = require "coroutine"
+--- Table containing variables specified on command line. 
+--- For example if lake is invoked:
+---
+--- ```shell
+--- 	lake mode=debug
+---	```
+---
+--- then this table will contain a key 'mode' equal to "debug".
+--- This is useful for a quick way to change a lakefile's behavior from
+--- command line, an example of its use:
+---
+--- ```lua
+---     local mode = lake.clivars.mode or "debug"
+--- ```
+lake.clivars = {}
 
 
 -- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
@@ -115,6 +116,12 @@ ffi.cdef [[
 local C = ffi.C
 local strtype = ffi.typeof("str")
 
+---@class str
+---@field s cdata
+---@field len number
+
+---@param s string
+---@return str
 local make_str = function(s)
 	if not s then
 		print(debug.traceback())
@@ -170,16 +177,27 @@ end
 
 
 -- * ---------------------------------------------------------------------------------------------- lake.canonicalizePath
--- | Returns a canonical representation of the given path or nil if one cannot be made. This 
--- | requires a path to an existing file.
+
+--- Takes a path to a file and returns a canonicalized/absolute
+--- path to it. The file must exist!
+---
+---@param path string
+---@return string
 lake.canonicalizePath = function(path)
 	return lua__canonicalizePath(path)
 end
--- |
--- * ----------------------------------------------------------------------------------------------
 
 -- * ---------------------------------------------------------------------------------------------- lake.flatten
--- | Flattens nested array elements of the given table into a new one.
+
+--- Takes a table, List or Twine, and flattens all nested tables,
+--- Lists, Twines, etc. recursively and returns a new List of 
+--- all elements. 
+---
+--- Note that for tables this only takes array 
+--- elements, not key/values.
+---
+---@param x table|List|Twine
+---@return List
 lake.flatten = function(tbl)
 	local out = List()
 
@@ -210,53 +228,70 @@ lake.flatten = function(tbl)
 	recur(tbl)
 	return out
 end
--- |
--- * ----------------------------------------------------------------------------------------------
+
+local options_stack = List()
 
 -- * ---------------------------------------------------------------------------------------------- lake.import
--- | 
-local options_stack = {}
-lake.import = function(s, options)
-	table.insert(options_stack, options)
-	local results = {lua__importFile(s)}
-	table.remove(options_stack, #options_stack)
+
+--- Imports the lake module at 'path' and passes the table 'options'
+--- to it. 'options' may be retrieved in the module by calling 
+--- lake.getOptions().
+--- 
+--- This changes the cwd to the directory containing the given module
+--- and any target that has its recipe set inside the module is assumed
+--- to execute its recipe from that directory.
+--- 
+--- Returns anything the module file returns.
+---
+---@param path string
+---@param options table?
+---@return ...
+lake.import = function(path, options)
+	options_stack:push(options)
+	local results = {lua__importFile(path)}
+	options_stack:pop()
 	return table.unpack(results)
 end
--- |
--- * ----------------------------------------------------------------------------------------------
 
 -- * ---------------------------------------------------------------------------------------------- lake.getOptions
--- | 
+
+--- Gets the options set for the current module, or nil if not in a 
+--- a module or if no options were passed.
+---
+---@return table?
 lake.getOptions = function()
 	return options_stack[#options_stack]
 end
--- |
--- * ----------------------------------------------------------------------------------------------
 
 -- * ---------------------------------------------------------------------------------------------- lake.cwd
--- | 
+
+--- Returns the current working directory as a string
+---
+---@return string
 lake.cwd = function()
 	return lua__cwd()
 end
--- |
--- * ----------------------------------------------------------------------------------------------
 
 -- * ---------------------------------------------------------------------------------------------- lake.maxjobs
--- | Attempt to set the max jobs lake will use to build targets. If this number is set on command
--- | line, then this call is ignored.
+
+--- Attempt to set the max jobs lake will use in building. If this 
+--- is set on command line (--max-jobs <n> or -j <n>), this call
+--- is ignored.
+---
+---@param n number
 lake.maxjobs = function(n)
 	C.lua__setMaxJobs(n)
 end
--- |
--- * ----------------------------------------------------------------------------------------------
 
 -- * ---------------------------------------------------------------------------------------------- lake.mkdir
--- | Creates a directory at 'path'. Optionally takes a table of 'options', which are:
--- |   
--- |   make_parents: if true, then mkdir will also create any missing parent directories in the 
--- |                 given path.
--- |
--- | Returns true if the directory at the path was created.
+
+--- Creates the directory at the given path.
+--- 'options' is an optional table containing optional parameters
+---		* make_parents | bool = false
+---         Create any missing directories in the given path
+---
+---@param path string
+---@param options table?
 lake.mkdir = function(path, options)
 	if type(path) ~= "string" then
 		error("path given to lake.mkdir is not a string! it is "..type(path), 2)
@@ -280,14 +315,18 @@ end
 -- * ----------------------------------------------------------------------------------------------
 
 -- * ---------------------------------------------------------------------------------------------- lake.find
--- | Performs a shell glob using the given pattern and returns a list of resulting strings.
--- |
--- | Ex. 
--- | 	c_files := lake.find("src/*.cpp")
--- |
--- |	--> src/lake.cpp
--- |	    src/graph.cpp
--- |	    ...
+
+--- Globs from the current working directory and returns a List 
+--- of all files that match the given pattern.
+---
+--- The patterns supported are currently a subset of zsh globbing
+--- and the implementation is directly based on Crystal's.
+---
+--- *, **, and ? are supported. Character classes [] and braces
+--- {} are not, but might be in the future.
+---
+---@param pattern string
+---@return List 
 lake.find = function(pattern)
 	if type(pattern) ~= "string" then
 		error("pattern given to lake.find must be a string!", 2)
@@ -314,27 +353,24 @@ end
 -- * ----------------------------------------------------------------------------------------------
 
 -- * ---------------------------------------------------------------------------------------------- lake.cmd
--- | Takes a variable amount of arguments all of which are expected to be strings or arrays of 
--- | strings which will be flattened to form a command to run. The first string is the name of the
--- | process and what follows are arguments to be passed to the process.
--- |
--- | This can be used directly, but it meant to be what the command syntax sugar is transformed 
--- | into. For example:
--- |
--- |   result := `gcc -c main.c -o main.c`
--- | 
--- | is transformed into
--- | 
--- |   local result = lake.cmd("gcc", "-c", "main.c", "-o", "main.c")
--- | 
--- | Strings and targets may both be passed. If a target is passed it is resolved to its path. If 
--- | the target is a group an error is thrown for now as I am not sure yet how that should be 
--- | handled. Tables of both of these things may be passed and those tables may also contain 
--- | tables of all of these things recursively. It will be resolved into a flat array of strings
--- | internally.
--- |
--- | TODO(sushi) this has been made very ugly in a fit of trying to get stuff to work again
--- |             please clean it up soon
+
+--- Information about the result of a call to lake.cmd.
+---@class CmdResult
+---
+--- The exit code reported by the program on exit.
+---@field exit_code number
+---
+--- The captured stdout stream of the file.
+---@field stdout string
+---
+--- The captured stderr stream of the file.
+---@field stderr string
+
+--- Executes the program referred to by the first parameter
+--- and passes any following arguments as cli args.
+---
+---@param ... string
+---@return CmdResult
 lake.cmd = function(...)
 	local args = List()
 
@@ -460,24 +496,21 @@ lake.cmd = function(...)
 		end
 	end
 end
--- |
--- * ----------------------------------------------------------------------------------------------
 
 -- * ---------------------------------------------------------------------------------------------- lake.replace
--- | Performs a string replacement on the given 'subject', which may be a string or a table of 
--- | strings. When given a table of strings a new table will be returned with each result.
--- |
--- | This is really a wrapper over lua's gsub so we can support tables. For details on how to use
--- | lua's patterns see: 
--- | 	https://www.lua.org/manual/5.1/manual.html#pdf-string.gsub
--- |
--- | Ex. 
--- | 	c_files := lake.find("src/*.cpp")
--- | 	o_files := lake.replace(c_files, "src/(.-).cpp", "build/$1.o")
--- |
--- | 	--> build/lake.o
--- | 		build/graph.o
--- | 		...
+
+--- Performs a string replacement on 'subject', which may be a string
+--- or a table of strings, a List of strings, or a Twine. When a container is
+--- is given a new List of the resulting strings is returned.
+--- 
+--- This is really just a wrapper over lua's gsub so that we can support
+--- containers. See [this page](https://www.lua.org/manual/5.1/manual.html#pdf-string.gsub) 
+--- for information on how to use lua's patterns.
+---
+---@param subject string | string[] | Twine | List<string>
+---@param search string
+---@param repl string
+---@return List<string> | string
 lake.replace = function(subject, search, repl)
 	if type(subject) == "table" then
 		local out = List()
@@ -498,71 +531,25 @@ lake.replace = function(subject, search, repl)
 		error("unsupported type given as subject of lake.replace: '"..type(subject).."'", 2)
 	end
 end
--- |
--- * ----------------------------------------------------------------------------------------------
 
-lake.concat = function(lhs, rhs)
-	local lhs_type = type(lhs)
-	local rhs_type = type(rhs)
-	if lhs_type == "table" then
-		if rhs_type == "table" then
-			for _,v in ipairs(rhs) do
-				lhs:insert(v)
-			end
-			return lhs
-		elseif rhs_type == "string" then
-			lhs:insert(rhs)
-			return lhs
-		else
-			error("unsupported type combination given to lake.concat: "..lhs_type..", "..rhs_type, 2)
-		end
-	elseif lhs_type == "string" then
-		if rhs_type == "string" then
-			return rhs..lhs
-		else
-			error("unsupported type combination given to lake.concat: "..lhs_type..", "..rhs_type, 2)
-		end
-	else
-		error("unsupported type given as lhs of lake.concat: '"..lhs_type.."'", 2)
-	end
+-- * ---------------------------------------------------------------------------------------------- lake.getMonotonicClock
+
+--- Returns a timestamp in microseconds from the system's monotonic clock.
+---
+---@return number
+lake.getMonotonicClock = function()
+	return assert(tonumber(C.lua__getMonotonicClock()))
 end
 
-lake.zip = function(t1, t2)
-	if type(t1) ~= "table" then
-		error("first argument passed to lake.zip is not a table! it is "..type(t1), 2)
-	end
+-- * ---------------------------------------------------------------------------------------------- lake.getRealtimeClock
 
-	if type(t2) ~= "table" then
-		error("second argument passed to lake.zip is not a table! it is "..type(t2), 2)
-	end
-
-	local t1l = #t1
-	local t2l = #t2
-
-	if t1l ~= t2l then
-		error("lake.zip expected the given tables to be of the same length! Table 1 has "..t1l.." elements and table 2 has "..t2l.." elements", 2)
-	end
-
-	local i = 0
-
-	local iter = function()
-		i = i + 1
-		if i <= t1l then
-			return t1[i], t2[i]
-		end
-	end
-
-	return iter
+--- Returns a timestamp in microseconds from the system's realtime clock.
+---
+---@return number
+lake.getRealtimeClock = function()
+	assert(false, "implement realtime clock at some point :)")
+	return 0
 end
-
-
--- * ---------------------------------------------------------------------------------------------- lake.get_highres_clock
--- | Returns a highres clock in microseconds.
-lake.get_highres_clock = function()
-	return tonumber(C.lua__getMonotonicClock())
-end
--- |
--- * ----------------------------------------------------------------------------------------------
 
 
 -- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
@@ -572,17 +559,28 @@ end
 -- * >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> -
 
 
-Target =
-{
-	path = "** target with no path! **",
-
-	-- handle to lake's internal representation
-	handle = nil,
-}
+--- A file that the user wants built. Targets may depend on other Targets and 
+--- may define a recipe that is used to build them when they don't exist, or 
+--- when any of their prerequisites change.
+---
+--- A target is created or referenced by lake.target(<name>).
+---@class Target
+---
+--- The path used to create the target. This is literally the string passed 
+--- to lake.target.
+---@field path string
+---
+--- A handle to lake's internal representation of this Target.
+---@field handle userdata?
+Target = {}
 Target.__index = Target
 
 -- * ---------------------------------------------------------------------------------------------- Target.new
--- | Create a new Target.
+
+--- Creates a new target at 'path'.
+---
+---@param path string
+---@return Target
 Target.new = function(path)
 	local o = {}
 	setmetatable(o, Target)
@@ -594,17 +592,18 @@ end
 -- * ----------------------------------------------------------------------------------------------
 
 -- * ---------------------------------------------------------------------------------------------- Target.__tostring
--- | Targets return their path in string contexts.
+
 Target.__tostring = function(self)
 	return self.path
 end
--- |
--- * ----------------------------------------------------------------------------------------------
 
 -- * ---------------------------------------------------------------------------------------------- Target:depends_on
--- | Defines a target that this target depends on, but does not use in its inputs.
--- |
--- | TODO(sushi) Make this variadic
+
+--- Defines the given target as a prerequisite of this one.
+---
+--- The target this one depends on
+---@param x string | Target | List
+---@return self
 Target.depends_on = function(self, x)
 	local x_type = type(x)
 	if "string" == x_type then
@@ -622,12 +621,21 @@ Target.depends_on = function(self, x)
 	end
 	return self
 end
--- |
--- * ----------------------------------------------------------------------------------------------
 
 -- * ---------------------------------------------------------------------------------------------- Target:recipe
--- | Defines the recipe a target uses to create its file.
--- | Must be a lua function.
+
+--- Defines the recipe used to create this target in the event that it does not exist or if any 
+--- of its prerequisites are newer than it.
+---
+--- NOTE that this saves the cwd at the time the recipe is saved and the recipe is executed in 
+--- that directory!
+---
+--- Unlike make, a recipe does not have any implicit variables defined for it to know what its 
+--- inputs and outputs are. It is assumed that the function has all the information it needs 
+--- captured where it is defined.
+---
+---@param f function
+---@return self
 Target.recipe = function(self, f)
 	if "function" ~= type(f) then
 		error("expected a lua function as the recipe of target '"..self.path.."', got: "..type(f), 2)
@@ -636,12 +644,20 @@ Target.recipe = function(self, f)
 	recipe_table[recipeidx] = co.create(f)
 	return self
 end
--- |
--- * ----------------------------------------------------------------------------------------------
 
 -- * ---------------------------------------------------------------------------------------------- lake.target
--- | Get the Target object representing 'path'. If the target has not been registered it will be
--- | created, otherwise the already existing target is returned.
+
+--- Either creates the target at 'path' or returns it if it has already been created. Referring to
+--- the same target by two different lexical paths is currently undefined behavior! Eg. it is not 
+--- advisable to write something like: 
+---	```lua
+---   lake.target("./src/target.cpp")
+---   lake.target("src/target.cpp")
+--- ```
+--- and expect it to refer to the same file. This may be better defined in the future but for now...
+---
+---@param path string
+---@return Target
 lake.target = function(path)
 	local target = targets[path]
 	if target then
@@ -746,10 +762,6 @@ lake.targets = function(...)
 		end
 
 		local target = lake.target(arg)
-
-		if target.recipe_fn then
-			error("created target '"..target.path.."' for group, but this target already has a recipe!",2)
-		end
 
 		if C.lua__targetAlreadyInGroup(target.handle) ~= 0 then
 			error("target '"..target.path.."' is already in a group!",2)

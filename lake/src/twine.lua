@@ -9,6 +9,25 @@
 
 local List = require "list"
 
+--- A list of strings that provides a nice syntax for concatenating
+--- strings. For example, one can type:
+--- ```lua
+---		local t = Twine.new
+---			"hello!"
+---			"here"
+---			"are"
+---			"my"
+---			"strings!"
+--- ```
+--- and adding more strings after creation can be done using the 
+--- syntax:
+--- ```lua
+--- 	t "hello!" "here" "are" "more" "strings!"
+--- ```
+---@class Twine
+---
+--- The internal list of strings.
+---@field arr List<string>
 local Twine = {}
 Twine.__index = Twine
 
@@ -16,6 +35,10 @@ local assertstr = function(x)
 	return assert(x, "Twine may only store strings!")
 end
 
+--- Creates a new Twine.
+---
+---@param init string?
+---@return Twine
 Twine.new = function(init)
 	local o = {}
 	setmetatable(o, Twine)
