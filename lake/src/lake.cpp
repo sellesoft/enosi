@@ -74,13 +74,14 @@ b8 Lake::init(const char** argv_, int argc_, mem::Allocator* allocator)
 	active_process_pool = Pool<ActiveProcess>::create(allocator);
 	cwd_stack = Array<fs::Path>::create(allocator);
 
+	// TODO(sushi) also search for lakefile with no extension
 	initpath = nil;
 	if (!process_argv(&initpath))
 		return false;
-	b8 resolved = resolve(initpath, "lakefile"_str);
+	b8 resolved = resolve(initpath, "lakefile.lua"_str);
 
 	if (resolved)
-		DEBUG("no file specified on cli, searching for 'lakefile'\n");
+		DEBUG("no file specified on cli, searching for 'lakefile.lua'\n");
 	else
 		DEBUG("file '", initpath, "' was specified as file on cli\n");
 
@@ -89,7 +90,7 @@ b8 Lake::init(const char** argv_, int argc_, mem::Allocator* allocator)
 	if (!fs::Path::exists(initpath))
 	{
 		if (resolved)
-			FATAL("no file was specified (-f) and no file with the default name 'lakefile' could be found\n");
+			FATAL("no file was specified (-f) and no file with the default name 'lakefile.lua' could be found\n");
 		else
 			FATAL("failed to find specified file (-f) '", initpath, "'\n");
 		return false;
