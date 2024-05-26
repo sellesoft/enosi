@@ -1,7 +1,11 @@
-local options = lake.getOptions()
+local options = assert(lake.getOptions())
 
 local mode = options.mode or "debug"
 local build_dir = lake.cwd().."/build/"..mode.."/"
+
+options.registerCleaner(function()
+	lake.unlink(build_dir)
+end)
 
 lake.mkdir(build_dir, {make_parents = true})
 
@@ -25,17 +29,17 @@ for c_file in c_files:each() do
 	report.objFile(o_file)
 
 	lake.target(o_file)
-		:depends_on(c_file)
+		:dependsOn(c_file)
 		:recipe(recipes.compiler(c_file, o_file))
 
 	lake.target(d_file)
-		:depends_on(c_file)
+		:dependsOn(c_file)
 		:recipe(recipes.depfile(c_file, d_file, o_file))
 end
 
 local ofiles = lake.flatten {reports.lake.objFiles, reports.iro.objFiles}
 
 lakeexe
-	:depends_on(ofiles)
+	:dependsOn(ofiles)
 	:recipe(recipes.linker(ofiles, lakeexe))
 
