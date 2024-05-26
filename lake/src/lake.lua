@@ -450,9 +450,20 @@ end
 --- Executes the program referred to by the first parameter
 --- and passes any following arguments as cli args.
 ---
+--- TODO(sushi) add a way to pass callbacks for reading stdout/stderr while the process is 
+---             running and maybe even passing a stdin if it ever seems useful/necessary.
+---
 ---@param ... string
 ---@return CmdResult
 lake.cmd = function(...)
+	-- if we're in a coroutine assume were running inside a recipe
+	-- and do asyncronous stuff, otherwise this must have been called 
+	-- by a user in a lakefile or module or something. Make this 
+	-- more robust/explicit later by making this an explicit option or
+	-- something. If the user uses coroutines outside of recipes, then
+	-- this will cause odd behavior.
+	local in_coroutine = nil ~= co.running()
+
 	local args = List()
 
 	local function recur(x)
@@ -573,7 +584,13 @@ lake.cmd = function(...)
 				stderr = err_buf:get()
 			}
 		else
-			co.yield(false)
+			-- yield if were running in a coroutine, otherwise 
+			-- just keep blocking 
+			-- TODO(sushi) make the stdout/stderr pipes blocking 
+			--             if this is called outside of a coroutine/recipe
+			if in_coroutine then
+				co.yield(false)
+			end
 		end
 	end
 end
