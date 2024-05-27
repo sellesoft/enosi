@@ -627,5 +627,19 @@ b8 chdir(str path)
 	return true;
 }
 
+/* ------------------------------------------------------------------------------------------------ termSetNonCanonical
+ */
+b8 termSetNonCanonical()
+{
+	struct termios mode;
+
+	tcgetattr(STDIN_FILENO, &mode);
+	mode.c_lflag &= ~(ICANON|ECHO);
+	mode.c_cc[VMIN] = 1; // min characters needed for non-canonical read
+	mode.c_cc[VTIME] = 0; // timeout for read in non-canonical
+	tcsetattr(STDIN_FILENO, TCSAFLUSH, &mode);
+	return true;
+}
+
 }
 
