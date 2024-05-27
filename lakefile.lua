@@ -3,9 +3,11 @@ local mode = lake.clivars.mode or "debug"
 local List = require "list"
 local Twine = require "twine"
 
-lake.maxjobs(8)
+lake.setMaxJobs(8)
 
 lake.mkdir("bin")
+
+local os = lake.os()
 
 local compiler = "clang++"
 local linker = "clang++"
@@ -31,7 +33,7 @@ else
 end
 
 local linker_flags = Twine.new
-	"-Llib"
+	"-L../luajit/lib"
 	"-lluajit"
 	"-lexplain"
 	"-Wl,--export-dynamic"
@@ -40,6 +42,16 @@ local reset = "\027[0m"
 local green = "\027[0;32m"
 local blue  = "\027[0;34m"
 local red   = "\027[0;31m"
+
+-- converts a plain lib name to the operating system's name for the lib
+local getOSStaticLibName
+if os == "Linux" then
+	getOSStaticLibName = function(x)
+		return "lib"..x..".a"
+	end
+else
+	error("getOSStaticLibName() has not been implemented for this OS.")
+end
 
 local recipes = {}
 
@@ -51,37 +63,50 @@ recipes.linker = function(input, output)
         local dir = tostring(output):match("(.*)/")
         lake.mkdir(dir, {make_parents = true})
 
+		local cmdoutput = ""
+
         local start = lake.getMonotonicClock()
-        local result = lake.cmd(linker, input, linker_flags, "-o", output)
+        local result = lake.cmd({ linker, input, linker_flags, "-o", output },
+		{
+			onStdout = function(s) cmdoutput = cmdoutput..s end,
+			onStderr = function(s) cmdoutput = cmdoutput..s end,
+		})
+
         local time_took = (lake.getMonotonicClock() - start) / 1000000
 
-        if result.exit_code == 0 then
+        if result == 0 then
             io.write(blue, tostring(output), reset, " ", time_took, "s\n")
-			io.write(result.stdout)
+			io.write(cmdoutput)
         else
             io.write(red, "compiling ", blue, tostring(output), red, " failed", reset, ":\n")
-			io.write(result.stdout, result.stderr)
+			io.write(cmdoutput)
         end
     end
 end
 
-recipes.compiler = function(input, output)
+recipes.compiler = function(input, output, flags)
 	assert(input and output, "recipes.compiler passed a nil output or input")
 
     return function()
         local dir = tostring(output):match("(.*)/")
         lake.mkdir(dir, {make_parents = true})
 
+		local cmdoutput = ""
+
         local start = lake.getMonotonicClock()
-        local result = lake.cmd(compiler, "-c", compiler_flags, input, "-o", output)
+        local result = lake.cmd({ compiler, "-c", compiler_flags, input, "-o", output },
+		{
+			onStdout = function(s) cmdoutput = cmdoutput..s end,
+			onStderr = function(s) cmdoutput = cmdoutput..s end,
+		})
         local time_took = (lake.getMonotonicClock() - start) / 1000000
 
-        if result.exit_code == 0 then
+        if result == 0 then
             io.write(green, input, reset, " -> ", blue, output, reset, " ", time_took, "s\n")
-			io.write(result.stdout)
+			io.write(cmdoutput)
         else
             io.write(red, "compiling ", blue, output, red, " failed", reset, ":\n")
-			io.write(result.stdout, result.stderr)
+			io.write(cmdoutput)
         end
     end
 end
@@ -91,12 +116,12 @@ recipes.depfile = function(c_file, d_file, o_file)
 
 	-- attempt to load the depfile that may already exist
 	local file = io.open(d_file, "r")
-	lake.target(o_file):depends_on(d_file)
+	lake.target(o_file):dependsOn(d_file)
 
 	if file then
 		local str = file:read("*a")
 		for file in str:gmatch("%S+") do
-			lake.target(o_file):depends_on(file)
+			lake.target(o_file):dependsOn(file)
 		end
 	end
 
@@ -104,13 +129,19 @@ recipes.depfile = function(c_file, d_file, o_file)
 		local dir = tostring(d_file):match("(.*)/")
 		lake.mkdir(dir, {make_parents = true})
 
-		local result = lake.cmd("clang++", c_file, compiler_flags, "-MM", "-MG")
+		local cmdoutput = ""
 
-		if result.exit_code ~= 0 then
-			error("failed to create dep file '"..d_file.."':\n"..result.stdout..result.stderr)
+		local result = lake.cmd({ "clang++", c_file, compiler_flags, "-MM", "-MG" },
+		{
+			onStdout = function(s) cmdoutput = cmdoutput..s end,
+			onStderr = function(s) cmdoutput = cmdoutput..s end,
+		})
+
+		if result ~= 0 then
+			error("failed to create dep file '"..d_file.."':\n"..cmdoutput)
 		end
 
-		local result = assert(lake.replace(result.stdout, "\\\n", ""))
+		local result = assert(lake.replace(cmdoutput, "\\\n", ""))
 
 		local out = ""
 
@@ -139,6 +170,15 @@ end
 -- eg. reports.iro.objFiles
 local reports = {}
 
+-- helper that returns a list of targets referencing the libs that 
+-- a project outputs, so that dependencies may be created on them
+reports.getProjLibs = function(projname)
+	assert(reports[projname], "report.getProjLibs called on a project that has not been imported yet!")
+	return reports[projname].libs:map(function(e)
+		return reports[projname].libDir[1]..getOSStaticLibName(e)
+	end)
+end
+
 -- initialize a report object for 'projname'. 
 -- this is passed to a lakemodule to enable them reporting different
 -- kinds of outputs other projects may want to use.
@@ -148,16 +188,21 @@ local reports = {}
 local initReportObject = function(projname)
 	local initReportProjAndType = function(type)
 		reports[projname] = reports[projname] or {}
-		reports[projname][type] = reports[projname][type] or {}
+		reports[projname][type] = reports[projname][type] or List()
 		return reports[projname][type]
 	end
 
-	local createReportFunction = function(objtype)
+	local createReportFunction = function(objtype, require_absolute)
+		if require_absolute == nil then
+			require_absolute = true
+		end
 		local tbl = initReportProjAndType(objtype)
 		return function(output)
 			assert(type(output) == "string", "reported output is not a string")
-			assert(output:sub(1,1) == "/", "reported output is not an absolute path")
-			table.insert(tbl, output)
+			if require_absolute then
+				assert(output:sub(1,1) == "/", "reported output is not an absolute path")
+			end
+			tbl:push(output)
 		end
 	end
 
@@ -165,6 +210,18 @@ local initReportObject = function(projname)
 	{
 		objFile = createReportFunction "objFiles",
 		executable = createReportFunction "executables",
+		-- where a library project's include files are located.
+		-- eg. iro would specify its root directory 
+		includeDir = createReportFunction "includeDirs",
+
+		-- Directory where libs provided by this library are located.
+		-- A project must only report one lib directory!
+		libDir = createReportFunction "libDir",
+
+		-- Report libs that projects using this library should link against.
+		-- These should be plain names of the lib, eg. report 'luajit' not
+		-- 'libluajit.a'
+		lib = createReportFunction("libs", false)
 	}
 end
 
@@ -178,18 +235,28 @@ local initCleanReportFunction = function(projname)
 		if cleaners[projname] then
 			error("a cleaner has already been defined for "..projname, 2)
 		end
-		cleaners[projname] = f
+		cleaners[projname] = {lake.cwd(), f}
 	end
 end
 
+local imported_modules = {}
+
 local import = function(projname)
-	lake.import(projname.."/lakemodule",
+	if imported_modules[projname] then
+		error("attempt to import '"..projname.."' more than once.")
+	end
+
+	lake.import(projname.."/lakemodule.lua",
 	{
 		mode = mode,
 		recipes = recipes,
 		report = initReportObject(projname),
 		reports = reports,
 		registerCleaner = initCleanReportFunction(projname),
+		assertImported = function(name)
+			assert(imported_modules[projname], "project '"..projname.."' requires '"..name.."' to have been imported before it!")
+		end,
+		force_clean = true,
 	})
 
 	if not cleaners[projname] then
@@ -197,6 +264,7 @@ local import = function(projname)
 	end
 end
 
+import "luajit"
 import "iro"
 import "lake"
 import "lpp"
@@ -204,3 +272,32 @@ import "lpp"
 assert(reports.lake.executables[1], "lake's lakemodule did not report an executable")
 assert(reports.lpp.executables[1], "lpp's lakemodule did not report an executable")
 
+-- clean build files of internal projects only, eg. not luajit and certainly not llvm
+lake.action("clean", function()
+	List{"lpp", "iro", "lake"}:each(function(projname)
+		local cleaner = cleaners[projname]
+		if cleaner then
+			local cwd = lake.cwd()
+			lake.chdir(cleaner[1])
+			cleaner[2]()
+			lake.chdir(cwd)
+		end
+	end)
+end)
+
+-- clean build files of internal and external projects, excluding llvm
+lake.action("clean-all", function()
+	List{"lpp", "iro", "lake", "luajit"}:each(function(projname)
+		local cleaner = cleaners[projname]
+		if cleaner then
+			local cwd = lake.cwd()
+			lake.chdir(cleaner[1])
+			cleaner[2]()
+			lake.chdir(cwd)
+		end
+	end)
+end)
+
+lake.action("clean-llvm", function()
+
+end)
