@@ -397,4 +397,12 @@ struct DListIterator
 
 }
 
+template<typename T>
+struct NilValue<iro::SList<T>>
+{
+	static constexpr iro::SList<T> Value = {nil};
+
+	static inline bool isNil(const iro::SList<T>& x) { return isnil(x.pool); }
+};
+
 #endif
