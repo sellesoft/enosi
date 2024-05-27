@@ -126,9 +126,14 @@ b8 copyFile(str dst, str src);
  *  Equivalent to 'unlink' on Linux. IDK how this will behave on Windows/Mac yet and so I'll put 
  *  a better description here when I do.
  *
- *  NOTE that this works on any type of file! (eg. directories, fifo, symlinks, etc.)
+ *  This works on any kind of file except directories. Use 'rmdir' to delete those.
  */
 b8 unlinkFile(str path);
+
+/* ------------------------------------------------------------------------------------------------ removeDir
+ *  Equivalent to 'rmdir' on Linux. The directory must be empty to be deleted.
+ */
+b8 removeDir(str path);
 
 /* ------------------------------------------------------------------------------------------------ makeDir
  *  Create the directory at 'path'. If make_parents is true, any missing parent directories will be
@@ -181,6 +186,14 @@ fs::Path cwd(mem::Allocator* allocator = &mem::stl_allocator);
  *  Changes the working directory of the program to the one specified at 'path'.
  */
 b8 chdir(str path);
+
+/* ------------------------------------------------------------------------------------------------ termSetNonCanonical
+ *  Sets the terminal to be non-canonical, eg. disable buffering stdin until newlines.
+ *
+ *  Use this when implementing for windows.
+ *  https://gist.github.com/cloudwu/96ec4d6636d65b7974b633e01d97a1f9
+ */
+b8 termSetNonCanonical();
 
 } // namespace iro::platform
 

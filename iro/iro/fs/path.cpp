@@ -25,6 +25,20 @@ Path Path::cwd(mem::Allocator* allocator)
 	return platform::cwd(allocator);
 }
 
+/* ------------------------------------------------------------------------------------------------ Path::unlink
+ */
+b8 Path::unlink(str s)
+{
+	return platform::unlinkFile(s);
+}
+
+/* ------------------------------------------------------------------------------------------------ Path::removeDir
+ */
+b8 Path::rmdir(str s)
+{
+	return platform::removeDir(s);
+}
+
 /* ------------------------------------------------------------------------------------------------ Path::chdir
  */
 b8 Path::chdir(str s)

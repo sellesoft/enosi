@@ -9,6 +9,7 @@
 #include "unistd.h"
 #include "dirent.h"
 #include "string.h"
+#include "termios.h"
 #include "sys/uio.h"
 #include "sys/stat.h"
 #include "sys/wait.h"
@@ -330,6 +331,17 @@ b8 unlinkFile(str path)
 
 	if (-1 == unlink((char*)path.bytes))
 		return reportErrno("failed to unlink file at path '", path, "': ", explain_unlink((char*)path.bytes));
+	return true;
+}
+
+/* ------------------------------------------------------------------------------------------------ removeDir
+ */
+b8 removeDir(str path)
+{
+	assert(notnil(path) and not path.isEmpty());
+
+	if (-1 == rmdir((char*)path.bytes))
+		return reportErrno("failed to remove directory at path '", path, "': ", explain_rmdir((char*)path.bytes));
 	return true;
 }
 

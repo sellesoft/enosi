@@ -39,10 +39,15 @@ struct Path
 
 	static Path cwd(mem::Allocator* allocator = &mem::stl_allocator);
 
-	static b8 chdir(str s);
+	// Unlink a file. For directories use 'rmdir'.
+	static b8 unlink(str path);
 
+	// Remove a directory.
+	static b8 rmdir(str path);
+
+	// Change the current working directory into the one at 'path'.
+	static b8 chdir(str path);
 	static b8 matches(str name, str pattern);
-
 	static b8 exists(str path);
 	static b8 isRegularFile(str path);
 	static b8 isDirectory(str path);
@@ -53,6 +58,9 @@ struct Path
 	b8   init(mem::Allocator* allocator = &mem::stl_allocator) { return init({}, allocator); }
 	b8   init(str s, mem::Allocator* allocator = &mem::stl_allocator);
 	void destroy();
+
+	b8 unlink() { return unlink(buffer.asStr()); }
+	b8 rmdir() { return rmdir(buffer.asStr()); }
 
 	Path copy();
 
