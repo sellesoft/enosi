@@ -103,6 +103,8 @@ struct File : public io::IO
 };
 
 static File stdout = File::stdout();
+static File stderr = File::stderr();
+static File stdin = File::stdin();
 
 /* ================================================================================================ fs::FileInfo
  */
