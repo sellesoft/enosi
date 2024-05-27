@@ -9,14 +9,16 @@
 --             or maybe it wouldn't make much of a difference, but it should be 
 --             attempted eventually.
 --
+-- TODO(sushi) this FUCKING SUCKS especially with how im trying to have Twine just be a 
+--             wrapper over it PLEASE fix it soon
+--
 --
 
 --- A wrapper around Lua's table mostly just cause I don't like using 
 --- Lua's table as an array.
 ---
----@generic T
 ---@class List
----@field arr `T`[]
+---@field arr any[]?
 local List = {}
 
 List.__index = function(self, n)
@@ -36,7 +38,7 @@ local isList = function(x) return getmetatable(x) == List end
 --- Otherwise the list will be returned empty.
 ---
 ---@generic T
----@param init table | List<T>
+---@param init table | List
 List.new = function(init)
 	if init then
 		assert(type(init) == "table" or isList(init))
@@ -105,7 +107,7 @@ List.each = function(self, f)
 		if i > self:len() then
 			return nil
 		end
-		return self[i]
+		return self.arr[i]
 	end
 
 	if f then

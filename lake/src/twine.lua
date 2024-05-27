@@ -27,9 +27,9 @@ local List = require "list"
 ---@class Twine
 ---
 --- The internal list of strings.
----@field arr List<string>
+---@field arr List
 local Twine = {}
-Twine.__index = Twine
+Twine.__index = List
 
 local assertstr = function(x)
 	return assert(x, "Twine may only store strings!")
@@ -42,24 +42,22 @@ end
 Twine.new = function(init)
 	local o = {}
 	setmetatable(o, Twine)
-	o.arr = List()
+	o.arr = {}
 
 	if init then
 		assertstr(init)
-		o.arr:push(init)
+		List.push(o, init)
 	end
 
 	return o
 end
 
+--@param x string
+--@return Twine
 Twine.__call = function(self, x)
 	assertstr(x)
-	self.arr:push(x)
+	List.push(self, x)
 	return self
-end
-
-Twine.each = function(self)
-	return self.arr:each()
 end
 
 return Twine
