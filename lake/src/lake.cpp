@@ -21,8 +21,11 @@
 #include "iro/process.h"
 #include "iro/fs/glob.h"
 
+#include "iro/platform.h"
+
 #undef stdout
 #undef stderr
+#undef stdin
 
 using namespace iro;
 
@@ -42,7 +45,7 @@ static Logger logger = Logger::create("lake"_str,
 #if LAKE_DEBUG
 		Logger::Verbosity::Debug);
 #else
-		Logger::Verbosity::Warn);
+		Logger::Verbosity::Notice);
 #endif
 
 Lake lake; // global for now, maybe not later 
@@ -101,10 +104,11 @@ b8 Lake::init(const char** argv_, int argc_, mem::Allocator* allocator)
 	DEBUG("Creating target pool and target lists.\n");
 
 	target_pool    = TargetPool::create(allocator);
+	targets        = TargetList::create(allocator);
 	build_queue    = TargetList::create(allocator);
 	active_recipes = TargetList::create(allocator);
-
-	targets = TargetList::create(allocator);
+	action_pool    = Pool<str>::create(allocator);
+	action_queue   = DList<str>::create(allocator);
 
 	DEBUG("Loading lua state.\n");
 
@@ -120,6 +124,8 @@ b8 Lake::init(const char** argv_, int argc_, mem::Allocator* allocator)
 	lua_setglobal(L, "lua__cwd"); 
 	lua_pushcfunction(L, lua__canonicalizePath);
 	lua_setglobal(L, "lua__canonicalizePath"); 
+
+	platform::termSetNonCanonical();
 
 	return true;
 }
@@ -140,6 +146,8 @@ void Lake::deinit()
 	cwd_stack.destroy();
 	active_process_pool.destroy();
 	lua_cli_args.destroy();
+	action_pool.destroy();
+	action_queue.destroy();
 }
 
 struct ArgIter
@@ -304,7 +312,7 @@ b8 Lake::process_argv(str* initfile)
 		}
 		else
 		{
-			lua_cli_args.push(argv + iter.idx);
+			lua_cli_args.push(argv + iter.idx - 1);
 			DEBUG("Encountered unknown cli arg '", arg, "' so it has been added to the lua cli args list.\n");
 		}
 	}
@@ -353,6 +361,9 @@ b8 Lake::run()
 	lua_getfield(L, 2, "errhandler");
 	lua_setglobal(L, lake_err_handler);
 
+	lua_getfield(L, 2, "tryAction");
+	lua_setglobal(L, lake_tryAction);
+
 	lua_pop(L, 1);
 
 	lua_getglobal(L, lake_err_handler);
@@ -364,10 +375,33 @@ b8 Lake::run()
 	}
 	lua_pop(L, 1); // pop error handler
 
-	// for (auto& t : targets)
-	//	io::formatv(&fs::stdout, t, "\n\n");
+	// if any actions were specified on cli, execute them and exit
+	if (!action_queue.isEmpty())	
+	{
+		lua_getglobal(L, lake_err_handler);
+		defer { lua_pop(L, 1); };
+
+		for (str& name : action_queue)
+		{
+			lua_getglobal(L, lake_tryAction);
+			lua_pushlstring(L, (char*)name.bytes, name.len);
+
+			if (lua_pcall(L, 1, 0, 2))
+			{
+				ERROR(lua_tostring(L, -1), "\n");
+				lua_pop(L, 1);
+				return false;
+			}
+		}
+		
+		return true;
+	}
 
 	INFO("Beginning build loop.\n");
+
+	// as of rn i think the only code that will run from here on is recipe callbacks
+	// but i could be wrong idk
+	lake.in_recipe = true;
 
 	for (u64 build_pass = 0;;)
 	{
@@ -787,6 +821,13 @@ void lua__setMaxJobs(s32 n)
 	}
 }
 
+/* ------------------------------------------------------------------------------------------------ lua__getMaxJobs
+ */
+s32 lua__getMaxJobs()
+{
+	return lake.max_jobs;
+}
+
 /* ------------------------------------------------------------------------------------------------ lua__importFile
  */
 int lua__importFile(lua_State* L)
@@ -885,11 +926,141 @@ b8 lua__copyFile(str dst, str src)
 	return fs::File::copy(dst, src);
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__unlinkFile
+/* ------------------------------------------------------------------------------------------------ lua__rm
  */
-b8 lua__unlinkFile(str path)
+b8 lua__rm(str path, b8 recursive, b8 force)
 {
-	return fs::File::unlink(path);
+	using namespace fs;
+
+	if (!Path::isDirectory(path))
+		return File::unlink(path);
+
+	if (recursive)
+	{
+		mem::Bump bump;
+		bump.init();
+		defer { bump.deinit(); };
+
+		u64 file_count = 0;
+
+		struct DirEntry 
+		{ 
+			Dir dir; 
+			Path* path; 
+			SList<Path> files; 
+
+			DirEntry() : dir(nil), path(nil), files(nil) {} 
+			DirEntry(Dir&& dir, Path* path, mem::Bump* bump) : dir(dir), path(path) { files = SList<Path>::create(bump); }
+		};
+
+		auto pathpool = DLinkedPool<Path>::create(&bump);
+		auto dirpool = DLinkedPool<DirEntry>::create(&bump);
+		auto dirstack = DList<DirEntry>::create(&bump);
+		auto dirqueue = DList<DirEntry>::create(&bump);
+
+		defer 
+		{ 
+			for (auto& path : pathpool.list)
+				path.destroy();
+
+			for (auto& dir : dirpool.list)
+				dir.files.destroy();
+			// NOTE(sushi) the rest of the mem SHOULD be handled by bump.deinit
+		};
+
+		pathpool.pushHead(Path::from(path));
+		dirpool.pushHead(DirEntry(Dir::open(path), &pathpool.head(), &bump));
+		dirstack.pushHead(&dirpool.head());
+
+		while (!dirstack.isEmpty())
+		{
+			auto* direntry_node = dirstack.tail;
+			DirEntry* direntry = direntry_node->data;
+
+			StackArray<u8, 255> dirent;
+
+			dirent.len = direntry->dir.next({dirent.arr, dirent.capacity()});
+			if (dirent.len < 0)
+				return false;
+
+			if (dirent.len == 0)
+			{
+				direntry->dir.close();
+				dirstack.remove(direntry_node);
+				dirqueue.pushTail(direntry);
+
+				if (dirstack.isEmpty())
+					break;
+
+				continue;
+			}
+
+			str s = str::from(dirent.asSlice());
+			if (s == "."_str || s == ".."_str)
+				continue;
+
+			Path* full = pathpool.pushHead()->data;
+			full->init(direntry->path->buffer.asStr());
+			full->makeDir().append(s);
+
+			if (full->isDirectory())
+			{
+				dirpool.pushHead(DirEntry(Dir::open(full->buffer.asStr()), full, &bump));
+				dirstack.pushTail(&dirpool.head());
+			}
+			else
+			{
+				file_count += 1;
+				direntry->files.push(full);
+			}
+		}
+
+		if (!force && file_count)
+		{
+			io::formatv(&fs::stdout, "Are you sure you want to delete all ", file_count, " files in '", path, "'? [y/N] ");
+			u8 c;
+			fs::stdin.read({&c, 1});
+			io::format(&fs::stdout, "\n");
+			if (c != 'y')
+				return true;
+		}
+
+		for (auto& de : dirqueue)
+		{
+			for (auto& f : de.files)
+			{
+				NOTICE("Deleting file: ", f, "\n");
+				f.unlink();
+			}
+
+			NOTICE("Deleting dir: ", *de.path, "\n");
+			de.path->rmdir();
+		}
+	}
+	else
+	{
+		ERROR("cannot rm path '", path, "' because either its a directory and recursive was not specified\n");
+		return false;
+	}
+
+	return true;
 }
+
+/* ------------------------------------------------------------------------------------------------ lua__queueAction
+ */
+void lua__queueAction(str name)
+{
+	str* s = lake.action_pool.add();
+	*s = name.allocateCopy();
+	lake.action_queue.pushTail(s);
+}
+
+/* ------------------------------------------------------------------------------------------------ lua__inRecipe
+ */
+b8 lua__inRecipe()
+{
+	return lake.in_recipe;
+}
+
 
 }

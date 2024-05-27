@@ -29,6 +29,7 @@ lake = {}
 -- internal target map
 local targets = {}
 local recipe_table = { next = 1 }
+local actions = {}
 
 local Target,
 	  TargetGroup
@@ -115,6 +116,14 @@ ffi.cdef [[
 	b8 lua__chdir(str path);
 
 	b8 lua__unlinkFile(str path);
+
+	void lua__queueAction(str name);
+
+	b8 lua__rm(str path, b8, b8);
+
+	b8 lua__inRecipe();
+
+	s32 lua__getMaxJobs();
 ]]
 local C = ffi.C
 local strtype = ffi.typeof("str")
@@ -155,14 +164,15 @@ while true do
 	local var, value = arg:match("(%w+)=(%w+)")
 
 	if not var then
-		-- this is assumed to be a target the user wants to make specifically.
-		-- currently i do not support this because i dont have a usecase for it yet 
-		-- and im not sure how i would integrate that functionality wih how the 
-		-- build system currently works, so we'll throw an error about it for now
-		error("arg '"..arg.."' is not a variable assignment nor a known option. It is assumed that this is a specific target you want to be made (eg. the same behavior as make), but this is not currently supported!")
+		C.lua__queueAction(make_str(arg))
+	else
+		lake.clivars[var] = value
 	end
+end
 
-	lake.clivars[var] = value
+local tryAction = function(name)
+	assert(actions[name], "attempt to run unknown action "..name..". If you've to specified a target you want to specifically build (as you can in make), lake does not support this at the moment!")
+	actions[name]()
 end
 
 
@@ -247,9 +257,10 @@ end
 --- Note that for tables this only takes array 
 --- elements, not key/values.
 ---
----@param x table|List|Twine
+---@param tbl table|List|Twine
+---@param handleUnknownType function?
 ---@return List
-lake.flatten = function(tbl)
+lake.flatten = function(tbl, handleUnknownType)
 	local out = List()
 
 	local function recur(x)
@@ -263,10 +274,16 @@ lake.flatten = function(tbl)
 					recur(e)
 				end
 			elseif Twine == xmt then
-				for s in x:each() do
-					out:push(s)
-				end
+				x:each(function(s) out:push(s) end)
 			else
+				if handleUnknownType then
+					local res = handleUnknownType(x, xmt)
+					if res then
+						out:push(res)
+						return
+					end
+				end
+
 				for _,e in ipairs(x) do
 					recur(e)
 				end
@@ -278,6 +295,27 @@ lake.flatten = function(tbl)
 
 	recur(tbl)
 	return out
+end
+
+-- * ---------------------------------------------------------------------------------------------- lake.action
+
+--- Define an 'action', which is a function that can be specified to run from the command line.
+--- This is intended to replace make's concept of 'phony' targets. If an action is specified on
+--- cli then normal building will not occur and only actions specified will be run.
+--- 
+--- Multiple actions may be specified on cli and they will be executed in the order given.
+---
+--- The name of the action as it would be referred to on cli.
+---@param name string
+---
+--- The function to execute when this action is specified.
+---@param f function
+lake.action = function(name, f)
+	if actions[name] then
+		error("attempt to specify an action twice", 2)
+	end
+
+	actions[name] = f
 end
 
 local options_stack = List()
@@ -334,27 +372,43 @@ lake.chdir = function(path)
 	return 0 ~= C.lua__chdir(make_str(path))
 end
 
--- * ---------------------------------------------------------------------------------------------- lake.maxjobs
+-- * ---------------------------------------------------------------------------------------------- lake.setMaxJobs
 
 --- Attempt to set the max jobs lake will use in building. If this 
 --- is set on command line (--max-jobs <n> or -j <n>), this call
 --- is ignored.
 ---
 ---@param n number
-lake.maxjobs = function(n)
+lake.setMaxJobs = function(n)
 	C.lua__setMaxJobs(n)
 end
 
--- * ---------------------------------------------------------------------------------------------- lake.unlink
+-- * ---------------------------------------------------------------------------------------------- lake.getMaxJobs
 
---- Unlinks (deletes) the file at 'path'. NOTE that this works on any kind of file!
+--- Get the current setting for max jobs.
+---
+---@return number
+lake.getMaxJobs = function()
+	return C.lua__getMaxJobs()
+end
+
+-- * ---------------------------------------------------------------------------------------------- lake.rm
+
+--- Remove a file or an empty directory.
+--- 'options' is an optional table of optional params:
+---     * recursive = false
+---         Recursively iterate the given path if it is a directory and delete all files.
+---     * force = false
+---         Suppress asking the user if each file should be removed.
 --- 
 --- Returns a bool determining success.
 ---
 ---@param path string
+---@param options table?
 ---@return boolean
-lake.unlink = function(path)
-	return 0 ~= C.lua__unlinkFile(make_str(path))
+lake.rm = function(path, options)
+	options = options or {recursive = false, force = false}
+	return 0 ~= C.lua__rm(make_str(path), options.recursive or false, options.force or false)
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.mkdir
@@ -435,82 +489,32 @@ end
 
 -- * ---------------------------------------------------------------------------------------------- lake.cmd
 
---- Information about the result of a call to lake.cmd.
----@class CmdResult
----
---- The exit code reported by the program on exit.
----@field exit_code number
----
---- The captured stdout stream of the file.
----@field stdout string
----
---- The captured stderr stream of the file.
----@field stderr string
-
 --- Executes the program referred to by the first parameter
 --- and passes any following arguments as cli args.
 ---
 --- TODO(sushi) add a way to pass callbacks for reading stdout/stderr while the process is 
 ---             running and maybe even passing a stdin if it ever seems useful/necessary.
 ---
----@param ... string
----@return CmdResult
-lake.cmd = function(...)
-	-- if we're in a coroutine assume were running inside a recipe
-	-- and do asyncronous stuff, otherwise this must have been called 
-	-- by a user in a lakefile or module or something. Make this 
-	-- more robust/explicit later by making this an explicit option or
-	-- something. If the user uses coroutines outside of recipes, then
-	-- this will cause odd behavior.
-	local in_coroutine = nil ~= co.running()
+---@param args string[]
+---@param options table?
+---@return number
+lake.cmd = function(args, options)
+	-- check if were in a recipe and yield the coroutine 
+	-- if so.
+	local in_recipe = 0 ~= C.lua__inRecipe()
 
-	local args = List()
-
-	local function recur(x)
-		local xtype = type(x)
-
-		if xtype == "string" then
-			args:push(x)
-		elseif xtype == "table" then
-			local xmt = getmetatable(x)
-
-			if TargetGroup == xmt then
-				return false, "flattened argument given to lake.cmd resolves to a target group, which is not currently allowed. You must manually resolve this to a list of target paths."
-			end
-
-			if Target == xmt then
-				args:push(x.path)
-			elseif List == xmt then
-				for e in x:each() do
-					local success, message = recur(e)
-					if not success then
-						return false, message
-					end
-				end
-			elseif Twine == xmt then
-				for s in x:each() do
-					args:push(s)
-				end
-			else
-				for _,e in ipairs(x) do
-					local success, message = recur(e)
-					if not success then
-						return false, message
-					end
-				end
-			end
-		else
-			return false, "flattened argument given to lake.cmd was not resolvable to a string. Its value is "..tostring(x)
+	args = lake.flatten(args, function(x, mt)
+		if mt == Target then
+			return x.path
+		elseif mt == TargetGroup then
+			error("flattened cmd argument resolved to a TargetGroup, which cannot be stringized!")
 		end
+	end)
 
-		return true
-	end
+	options = options or {}
 
-	local success, message = recur{...}
-
-	if not success then
-		error(message, 2)
-	end
+	local onStdout = options.onStdout
+	local onStderr = options.onStderr
 
 	local argsarr = ffi.new("str["..(args:len()+1).."]")
 
@@ -562,6 +566,14 @@ lake.cmd = function(...)
 		out_buf:commit(out_read[0])
 		err_buf:commit(err_read[0])
 
+		if onStdout and out_read[0] ~= 0 then
+			onStdout(ffi.string(out_ptr, out_read[0]))
+		end
+
+		if onStderr and err_read[0] ~= 0 then
+			onStderr(ffi.string(err_ptr, err_read[0]))
+		end
+
 		return out_read[0] + err_read[0]
 	end
 
@@ -577,18 +589,13 @@ lake.cmd = function(...)
 
 			C.lua__processClose(handle)
 
-			return
-			{
-				exit_code = exit_code[0],
-				stdout = out_buf:get(),
-				stderr = err_buf:get()
-			}
+			return assert(tonumber(exit_code[0]))
 		else
 			-- yield if were running in a coroutine, otherwise 
 			-- just keep blocking 
 			-- TODO(sushi) make the stdout/stderr pipes blocking 
 			--             if this is called outside of a coroutine/recipe
-			if in_coroutine then
+			if in_recipe then
 				co.yield(false)
 			end
 		end
@@ -605,10 +612,10 @@ end
 --- containers. See [this page](https://www.lua.org/manual/5.1/manual.html#pdf-string.gsub) 
 --- for information on how to use lua's patterns.
 ---
----@param subject string | string[] | Twine | List<string>
+---@param subject string | string[] | Twine | List
 ---@param search string
 ---@param repl string
----@return List<string> | string
+---@return List | string
 lake.replace = function(subject, search, repl)
 	if type(subject) == "table" then
 		local out = List()
@@ -874,5 +881,6 @@ lake.__internal.targets = targets
 lake.__internal.recipe_table = recipe_table
 lake.__internal.coresume = co.resume
 lake.__internal.errhandler = errhandler
+lake.__internal.tryAction = tryAction
 
 return lake
