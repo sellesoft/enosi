@@ -4,7 +4,7 @@ local mode = options.mode or "debug"
 local build_dir = lake.cwd().."/build/"..mode.."/"
 
 options.registerCleaner(function()
-	lake.unlink(build_dir)
+	lake.rm(build_dir, {recursive = true, force = options.force_clean})
 end)
 
 lake.mkdir(build_dir, {make_parents = true})
@@ -43,3 +43,6 @@ lakeexe
 	:dependsOn(ofiles)
 	:recipe(recipes.linker(ofiles, lakeexe))
 
+reports.getProjLibs("luajit"):each(function(e)
+	lakeexe:dependsOn(e)
+end)
