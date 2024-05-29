@@ -626,4 +626,11 @@ public:
 
 }
 
+template<typename T, u64 (*GetKey)(const T*)>
+struct NilValue<iro::AVL<T, GetKey>>
+{
+	constexpr static iro::AVL<T, GetKey> Value = {};
+	inline static bool isNil(const iro::AVL<T, GetKey>& x) { return isnil(x.pool); }
+};
+
 #endif
