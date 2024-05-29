@@ -76,29 +76,29 @@ struct Target
 	
 	// index of this target in the lua targets table
 	s32 lua_ref = -1;
-	fs::Path recipe_working_directory; // the working directory to execute the recipe from
+	fs::Path recipe_working_directory = nil; // the working directory to execute the recipe from
 	b8 recipe_started = false; // set if the target's recipe has been resumed at least once
 
 	// marks used when topologically sorting the graph
 	// TODO(sushi) these are not used currently as we do not sort the graph 
 	//             which also means if a lakefile specifies an loop we wont 
 	//             handle it gracefully!
-	b8 perm_mark, temp_mark;
+	b8 perm_mark = false, temp_mark = false;
 
 	// this target's node in the target queue
 	// null if the target is not in the queue
-	TargetListNode* build_node;
+	TargetListNode* build_node = nullptr;
 
 	// TODO(sushi) remove this, its only used to remove when polling active
 	//             recipes but we already have the node there so this is 
 	//             redundant.
-	TargetListNode* active_recipe_node; // this needs a better name
+	TargetListNode* active_recipe_node = nullptr; // this needs a better name
 
 	// list of targets this one depends on
-	TargetSet prerequisites;
+	TargetSet prerequisites = nil;
 
 	// list of targets that depend on this one
-	TargetSet dependents;
+	TargetSet dependents = nil;
 
 	// A count of how many prerequisites of this target we have not 
 	// 'satisfied' yet. This is decremented as prerequisites of this
@@ -118,7 +118,7 @@ struct Target
 
 	typedef ::Flags<Flags> TargetFlags;
 
-	TargetFlags flags;
+	TargetFlags flags = {};
 
 
 	/* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
