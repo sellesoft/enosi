@@ -37,7 +37,7 @@ struct Pool
 		union
 		{
 			T     element;
-			Slot* next_free_slot;
+			Slot* next_free_slot = nullptr;
 		};
 	};
 
