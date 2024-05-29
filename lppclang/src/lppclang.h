@@ -6,8 +6,8 @@
 #ifndef _lppclang_lppclang_h
 #define _lppclang_lppclang_h
 
-#include "common.h"
-#include "unicode.h"
+#include "iro/common.h"
+#include "iro/unicode.h"
 
 using namespace iro;
 

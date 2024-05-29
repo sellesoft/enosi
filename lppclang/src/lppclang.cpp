@@ -1,13 +1,12 @@
 #include "lppclang.h"
-#include "containers/pool.h"
-#include "containers/list.h"
 
-#include "memory/bump.h"
+#include "iro/logger.h"
+#include "iro/memory/bump.h"
+#include "iro/containers/pool.h"
+#include "iro/containers/list.h"
 
 #include "clang/Tooling/Tooling.h"
 #include "clang/AST/Decl.h"
-
-#include "logger.h"
 
 #include "assert.h"
 
@@ -181,7 +180,7 @@ b8 createASTFromString(Context* ctx, str s)
 			std::vector<std::string>(),
 			"lppclang-string.cc",
 			"lppclang",
-			std::move(std::make_shared<clang::PCHContainerOperations>()),
+			std::make_shared<clang::PCHContainerOperations>(),
 			clang::tooling::getClangStripDependencyFileAdjuster(),
 			clang::tooling::FileContentMappings(),
 			&suppressor);

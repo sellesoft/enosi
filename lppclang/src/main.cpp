@@ -1,8 +1,8 @@
-#include "common.h"
-#include "io/io.h"
-#include "fs/fs.h"
-#include "time/time.h"
-#include "logger.h"
+#include "iro/common.h"
+#include "iro/io/io.h"
+#include "iro/fs/fs.h"
+#include "iro/time/time.h"
+#include "iro/logger.h"
 
 #include "lppclang.h"
 
@@ -78,48 +78,20 @@ int main()
 		return 1;
 	defer { log.deinit(); };
 
-	fs::File out = fs::File::fromStdout();	
-	defer { out.close(); };
-
 	{
 		using enum Log::Dest::Flag;
 
-		log.newDestination("stdout"_str, &out, 
+		log.newDestination("stdout"_str, &fs::stdout, 
 				Log::Dest::Flags::from(
 					ShowCategoryName, 
 					ShowVerbosity, 
 					AllowColor));
 	}
 
-	{
-		using namespace fs;
-		auto dirs = Array<fs::Path>::create();
-		walk("src/"_str, 
-			[&dirs] (MayMove<Path>& path)
-			{
-				if (Path::matches(path.basename(), "*.cpp"_str))
-				{
-					dirs.push(path.move());
-					return DirWalkResult::Next;
-				}
-				
-				return (path.isDirectory()? DirWalkResult::StepInto : DirWalkResult::Next);
-			});
-
-		for (Path& p : dirs)
-		{
-			io::formatv(&out, p.buffer.asStr(), "\n");
-			p.destroy();
-		}
-
-		dirs.destroy();
-	}
-
 	auto testfile = fs::File::from("src/test.cpp"_str, fs::OpenFlag::Read);
-	if (testfile == nil)
+	if (isnil(testfile))
 		return 1;
 	defer { testfile.close(); };
-
 
 	io::Memory buffer;
 	buffer.open();
