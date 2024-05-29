@@ -25,6 +25,9 @@ int main(const int argc, const char* argv[])
 	defer { iro::log.deinit(); };
 
 	auto f = fs::File::from("temp/log"_str, fs::OpenFlag::Create | fs::OpenFlag::Truncate | fs::OpenFlag::Write);
+	if (isnil(f))
+		return 1;
+	defer { f.close(); };
 
 	{
 		using enum Log::Dest::Flag;
