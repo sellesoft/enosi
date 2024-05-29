@@ -1,5 +1,7 @@
 local options = assert(lake.getOptions())
 
+local List = require "list"
+
 local mode = options.mode or "debug"
 local build_dir = lake.cwd().."/build/"..mode.."/"
 
@@ -20,6 +22,23 @@ local recipes = assert(options.recipes)
 
 report.executable(tostring(lakeexe))
 
+local cflags = List
+{
+	"-Isrc",
+	options.getProjIncludeDirFlags "iro"
+}
+
+if mode == "debug" then
+	cflags:push { "-O0", "-ggdb0", "-DLAKE_DEBUG=1" }
+else
+	cflags:push "-O2"
+end
+
+local lflags = List
+{
+	options.getProjLibs "luajit"
+}
+
 local c_files = lake.find("src/**/*.cpp")
 
 for c_file in c_files:each() do
@@ -30,19 +49,19 @@ for c_file in c_files:each() do
 
 	lake.target(o_file)
 		:dependsOn(c_file)
-		:recipe(recipes.compiler(c_file, o_file))
+		:recipe(recipes.compiler(c_file, o_file, cflags))
 
 	lake.target(d_file)
 		:dependsOn(c_file)
-		:recipe(recipes.depfile(c_file, d_file, o_file))
+		:recipe(recipes.depfile(c_file, d_file, o_file, cflags))
 end
 
 local ofiles = lake.flatten {reports.lake.objFiles, reports.iro.objFiles}
 
 lakeexe
 	:dependsOn(ofiles)
-	:recipe(recipes.linker(ofiles, lakeexe))
+	:recipe(recipes.linker(ofiles, lakeexe, lflags))
 
-reports.getProjLibs("luajit"):each(function(e)
+options.getProjLibs("luajit"):each(function(e)
 	lakeexe:dependsOn(e)
 end)
