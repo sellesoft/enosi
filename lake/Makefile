@@ -59,7 +59,7 @@ else ifeq ($(mode),release)
 endif
 
 linker_flags := \
-	-Llib       \
+	-L../luajit/lib       \
 	-lluajit    \
 	-lexplain   \
 	-lm         \
