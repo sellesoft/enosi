@@ -146,6 +146,8 @@ void Lake::deinit()
 	cwd_stack.destroy();
 	active_process_pool.destroy();
 	lua_cli_args.destroy();
+	for (auto& action : action_queue)
+		mem::stl_allocator.free(action.bytes);
 	action_pool.destroy();
 	action_queue.destroy();
 }

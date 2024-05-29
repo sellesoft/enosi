@@ -532,6 +532,8 @@ lake.cmd = function(args, options)
 		argsarr[i-1] = make_str(args[i])
 	end
 
+	-- args:each(print)
+
 	local handle = C.lua__processSpawn(argsarr, args:len()+1)
 
 	if not handle then
