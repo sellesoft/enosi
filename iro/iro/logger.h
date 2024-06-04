@@ -70,7 +70,6 @@ struct Log
 	};
 
 	u64 indentation;
-
 	u64 max_name_len;
 
 	Array<Dest> destinations;

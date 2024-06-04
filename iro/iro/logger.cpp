@@ -11,6 +11,10 @@ Log log;
  */
 b8 Log::init()
 {
+	// make sure we're not already initialized 
+	if (notnil(destinations))
+		return true;
+
     destinations = Array<Dest>::create(4);
     return true;
 }

@@ -1,3 +1,8 @@
+/*
+ *  Primitive typedefs and defines that are used throughout all projects.
+ *  This is literally included everywhere so try not to bloat it!
+ */
+
 #ifndef _iro_common_h
 #define _iro_common_h
 
@@ -19,6 +24,7 @@ typedef float    f32;
 typedef double   f64;
 typedef u8       b8; // booean type
 
+// TODO(sushi) move these string things elsewhere
 consteval s64 constevalStrlen(const char* s) {
     s64 i = 0;
     while(s[i])
@@ -42,13 +48,18 @@ consteval u64 operator ""_hashed (const char* s, size_t len)
 	return staticStringHash(s, len);
 }
 
+// Nice sugar for matching a single value against any of 'args'.
+template<typename V, typename... T>
+inline b8 matchAny(V v, T... args)
+{
+	return ((v == args) || ...);
+}
+
 // Useful to be able to call normally-inlined functions from a debugger
-// TODO(sushi) make this debug inline when i actually make it so iro has 
-//             a debug define in its lakemodule
-#if IRO_RELEASE
-#define release_inline inline
-#else
+#if IRO_DEBUG
 #define release_inline 
+#else
+#define release_inline inline
 #endif
 
 #ifndef defer
