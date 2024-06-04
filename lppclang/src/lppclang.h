@@ -13,7 +13,7 @@ using namespace iro;
 
 //!ffiapi start
 
-typedef enum DeclKind
+typedef enum
 {
 	DeclKind_Invalid,
 
@@ -59,27 +59,36 @@ static const str declkind_strs[] =
 	"Enum"_str,
 };
 
-enum TypeClass
+//!ffiapi start
+
+typedef enum
 {
-	TypeClass_Invalid,
-	TypeClass_Unknown,
-	TypeClass_Builtin,
-	TypeClass_Structure,
-	TypeClass_Enum,
-	TypeClass_Union,
-	TypeClass_Class,
-	TypeClass_Typedef,
+	// NOTE(sushi) we only really care about tokens that could take on any form.
+	//             all others (punc, keywords, etc.) can be handled by string 
+	//             comparing in lua.
+	TK_EndOfFile,
 
-	TypeClass_Dependent,
+	TK_Unhandled,
 
-	TypeClass_Elaborated,
-};
+	TK_Comment,
+	TK_Whitespace,
+
+	TK_Identifier,
+
+	TK_NumericConstant,
+	TK_CharConstant,
+	TK_StringLiteral,
+} TokenKind;
+
+//!ffiapi end
 
 extern "C"
 {
 
 //!ffiapi start
 
+typedef struct Lexer Lexer;
+typedef struct Token Token;
 typedef struct Context Context;
 typedef struct Decl Decl;
 typedef struct Type Type;
@@ -88,12 +97,34 @@ typedef struct ParamIter ParamIter;
 typedef struct FieldIter FieldIter;
 typedef struct EnumIter EnumIter;
 
+Decl* testIncParse(str s);
+
 /* ------------------------------------------------------------------------------------------------ create/destroyContext
  |  Create/destroy an lppclang context. This keeps track of clang's ASTUnit and also various things
  |  that we must dynamically allocate.
  */
 Context* createContext();
 void     destroyContext(Context*);
+
+/* ------------------------------------------------------------------------------------------------ createLexer
+ |  Create a lexer over the given string.
+ */
+Lexer* createLexer(Context* ctx, str s);
+
+/* ------------------------------------------------------------------------------------------------ lexerNextToken
+ |  Returns a pointer to the next token in the string or nullptr if none are left.
+ */
+Token* lexerNextToken(Lexer* l);
+
+/* ------------------------------------------------------------------------------------------------ tokenGetRaw
+ |  Returns a str representing the raw text the given token spans.
+ */ 
+str tokenGetRaw(Context* ctx, Lexer* l, Token* t);
+
+/* ------------------------------------------------------------------------------------------------ tokenGetKind
+ |  Get the kind of a token.
+ */
+TokenKind tokenGetKind(Token* t);
 
 /* ------------------------------------------------------------------------------------------------ createASTFromString
  |  Create an AST from the given string for the given Context.
@@ -135,6 +166,12 @@ Type* getDeclType(Decl* decl);
 // This does not give the type of the declaraion!!
 Type* getTypeDeclType(Context* ctx, Decl* decl);
 
+/* ------------------------------------------------------------------------------------------------ getDeclBegin/End
+ |  Gets the offset into the provided string where the given declaration begins and ends.
+ */
+u64 getDeclBegin(Context* ctx, Decl* decl);
+u64 getDeclEnd(Context* ctx, Decl* decl);
+
 /* ------------------------------------------------------------------------------------------------ getFunctionReturnType
  |  If the given decl is a function declaration, retrieve its return type. Otherwise nullptr
  |  is returned.
@@ -156,6 +193,14 @@ u32 getFunctionBodyEnd(Decl* decl);
 b8  tagHasBody(Decl* decl);
 u32 getTagBodyBegin(Decl* decl);
 u32 getTagBodyEnd(Decl* decl);
+
+/* ------------------------------------------------------------------------------------------------ tagIsEmbeddedInDeclarator
+ |  Determine if this tag declaration (a struct, class, enum, etc.) is embedded in a declarator.
+ |  Eg. is this tag being defined for the first time in the syntax of a declarator:
+ |  
+ |  struct Apple {...} apple;
+ */
+b8 tagIsEmbeddedInDeclarator(Decl* decl);
 
 /* ------------------------------------------------------------------------------------------------ createParamIter/getNextParam
  |  Given that decl is a function declaration, create and return an iterator over its parameters

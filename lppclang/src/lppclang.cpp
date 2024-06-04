@@ -1,16 +1,55 @@
 #include "lppclang.h"
 
+#include "iro/io/io.h"
+#include "iro/fs/file.h"
 #include "iro/logger.h"
 #include "iro/memory/bump.h"
 #include "iro/containers/pool.h"
 #include "iro/containers/list.h"
+#include "iro/containers/linked_pool.h"
 
 #include "clang/Tooling/Tooling.h"
 #include "clang/AST/Decl.h"
+#include "clang/Frontend/CompilerInstance.h"
+#include "clang/Frontend/CompilerInvocation.h"
+#include "clang/Frontend/TextDiagnosticPrinter.h"
+#include "clang/Parse/ParseAST.h"
+#include "clang/Lex/Lexer.h"
+#include "clang/Basic/SourceManager.h"
+#include "llvm/Support/raw_ostream.h"
 
 #include "assert.h"
 
+#undef stdout
+
+template<typename T>
+using Rc = llvm::IntrusiveRefCntPtr<T>;
+
+template<typename T>
+using Up = std::unique_ptr<T>;
+
+template<typename T>
+using Sp = std::shared_ptr<T>;
+
 Logger logger = Logger::create("lppclang"_str, Logger::Verbosity::Trace);
+
+// implement a llvm raw ostream to capture output from clang/llvm stuff
+struct LLVMIO : llvm::raw_ostream
+{
+	io::IO* io;
+
+	LLVMIO(io::IO* io) : io(io) {}
+
+	void write_impl(const char* ptr, size_t size) override
+	{
+		io->write({(u8*)ptr, size});
+	}
+
+	uint64_t current_pos() const override 
+	{
+		return 0;
+	}
+};
 
 // TODO(sushi) maybe make adjustable later
 auto lang_options = clang::LangOptions();
@@ -89,26 +128,82 @@ struct ParamIterator
 using ClangTypeClass = clang::Type::TypeClass;
 using ClangNestedNameSpecifierKind = clang::NestedNameSpecifier::SpecifierKind;
 
+struct Lexer;
+
+typedef DLinkedPool<Lexer> LexerPool;
+
+struct Lexer
+{
+	LexerPool::Node* node;
+	clang::FileID fileid;
+	clang::Lexer* lexer;
+	clang::Token token;
+	b8 at_end;
+};
+
 struct Context
 {
-
 	ASTUnitPtr ast_unit;
+
+	LLVMIO* io;
+
+	// diagnositics handling
+	// TODO(sushi) could make a way later to communicate diags to 
+	//             stuff using lppclang, but it probably wouldn't be very useful
+	clang::DiagnosticOptions diagopts;
+	clang::TextDiagnosticPrinter* diagprinter;
+	Rc<clang::DiagnosticsEngine> diagengine;
+
+	// fake filesystem to load strings into clang/llvm stuff
+	Rc<llvm::vfs::OverlayFileSystem> overlayfs;
+	Rc<llvm::vfs::InMemoryFileSystem> inmemfs;
+
+	Rc<clang::FileManager> filemgr;
+
+	clang::SourceManager* srcmgr;
+
+	LexerPool lexers;
 
 	// Allocate things into a bump allocator to avoid burdening
 	// the user with the responsibility of cleaning stuff up.
 	// Later on the api might be redesigned to allow the user 
 	// to perform cleanup but I don't want to deal with that right now.
+	// TODO(sushi) because this api is intended to be used via lua, this 
+	//             should probably be changed to a conventional allocator
+	//             and resources can be properly tracked via luajit's finalizers.
 	mem::Bump allocator;
 
 	b8 init()
 	{
 		if (!allocator.init())
 			return false;
+
+		lexers.init(&allocator);
+
+		io = new LLVMIO(&fs::stdout);
+		diagprinter = new clang::TextDiagnosticPrinter(*io, &diagopts);
+		diagengine = clang::CompilerInstance::createDiagnostics(&diagopts, diagprinter, false);
+
+		// not sure if putting this stuff into the bump allocator is ok
+		overlayfs = new llvm::vfs::OverlayFileSystem(llvm::vfs::getRealFileSystem());
+		inmemfs = new llvm::vfs::InMemoryFileSystem;
+		overlayfs->pushOverlay(inmemfs);
+
+		filemgr = new clang::FileManager({}, overlayfs);
+
+		srcmgr = new clang::SourceManager(*diagengine, *filemgr);
+		diagengine->setSourceManager(srcmgr);
+
 		return true;
 	}
 
 	void deinit()
 	{
+		delete io;
+		delete srcmgr;
+		delete diagprinter;
+		for (auto& l : lexers)
+			delete l.lexer;
 		allocator.deinit();
 	}
 
@@ -159,6 +254,105 @@ static clang::Decl* getClangDecl(Decl* decl)
 static clang::QualType getClangType(Type* type)
 {
 	return clang::QualType::getFromOpaquePtr(type);
+}
+
+/* ------------------------------------------------------------------------------------------------ createLexer
+ */
+Lexer* createLexer(Context* ctx, str s)
+{
+	assert(ctx);
+
+	auto lexer_node = ctx->lexers.pushHead();
+	auto lexer = lexer_node->data;
+	lexer->node = lexer_node;
+
+	lexer->fileid = // TODO(sushi) this could prob be cleaned up when the lexer is destroyed
+		ctx->srcmgr->createFileID(
+			llvm::MemoryBuffer::getMemBuffer(llvm::StringRef((char*)s.bytes, s.len)));
+
+	lexer->lexer =
+		new clang::Lexer(
+			lexer->fileid, 
+			ctx->srcmgr->getBufferOrFake(lexer->fileid), 
+			*ctx->srcmgr, 
+			lang_options);
+
+	lexer->lexer->SetCommentRetentionState(true);
+	lexer->lexer->SetKeepWhitespaceMode(true);
+
+	return lexer; // TODO(sushi) could just pass the node but causes weird typing
+}
+
+/* ------------------------------------------------------------------------------------------------ destroyLexer
+ */
+void destroyLexer(Context* ctx, Lexer* lexer)
+{
+	assert(ctx and lexer);
+
+	delete lexer->lexer;
+	ctx->lexers.remove(lexer->node);
+}
+
+/* ------------------------------------------------------------------------------------------------ lexerNextToken
+ */
+Token* lexerNextToken(Lexer* lexer)
+{
+	assert(lexer);
+
+	if (lexer->at_end)
+		return nullptr;
+	
+	if (lexer->lexer->LexFromRawLexer(lexer->token))
+		lexer->at_end = true;
+
+	return (Token*)&lexer->token;
+}
+
+/* ------------------------------------------------------------------------------------------------ tokenGetRaw
+ */
+str tokenGetRaw(Context* ctx, Lexer* l, Token* t)
+{
+	assert(t);
+
+	auto tok = (clang::Token*)t;
+
+	auto beginoffset = ctx->srcmgr->getDecomposedLoc(tok->getLocation()).second;
+	auto endoffset = ctx->srcmgr->getDecomposedLoc(tok->getEndLoc()).second;
+	auto membuf = ctx->srcmgr->getBufferOrFake(l->fileid);
+	auto buf = membuf.getBuffer().substr(beginoffset, endoffset-beginoffset);
+	return {(u8*)buf.data(), buf.size()};
+}
+
+/* ------------------------------------------------------------------------------------------------ tokenGetKind
+ */
+TokenKind tokenGetKind(Token* t)
+{
+	assert(t);
+
+	using CTK = clang::tok::TokenKind;
+
+	auto kind = ((clang::Token*)t)->getKind();
+
+	switch (kind)
+	{
+#define map(x, y) case CTK::x: return GLUE(TK_,y)
+
+	map(eof, EndOfFile);
+	map(comment, Comment);
+	map(identifier, Identifier);
+	map(raw_identifier, Identifier);
+	map(numeric_constant, NumericConstant);
+	map(char_constant, CharConstant);
+	map(string_literal, StringLiteral);
+	map(unknown, Whitespace); // just assume this is whitespace, kinda stupid its marked this way
+							  // if this causes problems then maybe confirm it's whitespace by 
+							  // searching the raw later
+	// TODO(sushi) MAYBE implement the rest of these, but not really neccessary cause for punc
+	//             and keyword we can just string compare in lua.
+
+#undef map
+	}
+	return TK_Unhandled;
 }
 
 /* ------------------------------------------------------------------------------------------------ createASTFromString
@@ -323,6 +517,22 @@ Type* getTypeDeclType(Context* ctx, Decl* decl)
 	return (Type*)ctx->getASTContext()->getTypeDeclType(tdecl).getAsOpaquePtr();
 }
 
+/* ------------------------------------------------------------------------------------------------ getDeclBegin
+ */
+u64 getDeclBegin(Context* ctx, Decl* decl)
+{
+	auto [_, offset] = ctx->getASTContext()->getSourceManager().getDecomposedSpellingLoc(getClangDecl(decl)->getBeginLoc());
+	return offset;
+}
+
+/* ------------------------------------------------------------------------------------------------ getDeclEnd
+ */
+u64 getDeclEnd(Context* ctx, Decl* decl)
+{
+	auto [_, offset] = ctx->getASTContext()->getSourceManager().getDecomposedSpellingLoc(getClangDecl(decl)->getEndLoc());
+	return offset;
+}
+
 /* ------------------------------------------------------------------------------------------------ getFunctionReturnType
  */
 Type* getFunctionReturnType(Decl* decl)
@@ -394,6 +604,16 @@ u32 getTagBodyEnd(Decl* decl)
 		return (u32)-1;
 	auto tdecl = (clang::TagDecl*)getClangDecl(decl);
 	return tdecl->getBraceRange().getEnd().getRawEncoding();
+}
+
+/* ------------------------------------------------------------------------------------------------ tagIsEmbeddedInDeclarator
+ */
+b8 tagIsEmbeddedInDeclarator(Decl* decl)
+{
+	auto cdecl = getClangDecl(decl);
+	if (!clang::TagDecl::classof(cdecl))
+		return false;
+	return ((clang::TagDecl*)cdecl)->isEmbeddedInDeclarator();
 }
 
 /* ------------------------------------------------------------------------------------------------ createParamIter
@@ -472,31 +692,6 @@ Type* getUnqualifiedCanonicalType(Type* type)
 {
 	assert(type);
 	return getUnqualifiedType(getCanonicalType(type));
-}
-
-/* ------------------------------------------------------------------------------------------------ getTypeClass
- */
-TypeClass getTypeClass(Type* type)
-{
-	assert(type);
-
-	auto ctype = getClangType(type);
-	auto tc = ctype->getTypeClass();
-	switch (tc)
-	{
-#define classcase(x) case clang::Type::TypeClass::x
-
-	classcase(Elaborated):    return TypeClass_Elaborated;
-	classcase(DependentName): return TypeClass_Dependent;
-	classcase(Typedef):       return TypeClass_Typedef;	
-	classcase(Builtin):       return TypeClass_Builtin;
-	classcase(Record):        return TypeClass_Structure;
-	classcase(Enum):          return TypeClass_Enum;
-
-#undef classcase
-	}
-
-	return TypeClass_Unknown;
 }
 
 /* ------------------------------------------------------------------------------------------------ getQualTypeName
@@ -638,4 +833,41 @@ Decl* getNextEnum(EnumIter* iter)
 {
 	assert(iter);
 	return (Decl*)((EnumIterator*)iter)->next();
+}
+
+
+Decl* testIncParse(str s)
+{
+	using namespace clang;
+	using namespace llvm;
+
+	// output to stdout for now
+	LLVMIO io(&fs::stdout);
+
+	// setup diagnostics engine
+	DiagnosticOptions diag_options;
+	TextDiagnosticPrinter diag_printer(io, &diag_options);
+	Rc<DiagnosticsEngine> diag_engine = 
+		CompilerInstance::createDiagnostics(&diag_options, &diag_printer, false);
+
+	// setup a fake file system to trick clang with
+	Rc<vfs::OverlayFileSystem> overlayfs = new vfs::OverlayFileSystem(vfs::getRealFileSystem());
+	Rc<vfs::InMemoryFileSystem> inmemfs = new vfs::InMemoryFileSystem;
+	overlayfs->pushOverlay(inmemfs);
+	Rc<FileManager> file_mgr = new FileManager({}, overlayfs);
+
+	SourceManager src_mgr(*diag_engine, *file_mgr);
+	diag_engine->setSourceManager(&src_mgr);
+
+	// create a new compiler invocation and instance
+	Sp<CompilerInvocation> invocation(new CompilerInvocation);
+	Up<CompilerInstance> compiler(new CompilerInstance);
+	compiler->setInvocation(invocation);
+	compiler->setFileManager(&*file_mgr);
+	compiler->setDiagnostics(&*diag_engine);
+	compiler->setSourceManager(&src_mgr);
+	compiler->createPreprocessor(TU_Prefix);
+	compiler->createSema(TU_Prefix, nullptr);
+	ParseAST(compiler->getSema(), false, false);
+	return nullptr;
 }

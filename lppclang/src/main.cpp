@@ -71,23 +71,8 @@ void printRecord(Context* ctx, Decl* decl)
 	}
 }
 
-int main()
+int testContext()
 {
-
-	if (!log.init())
-		return 1;
-	defer { log.deinit(); };
-
-	{
-		using enum Log::Dest::Flag;
-
-		log.newDestination("stdout"_str, &fs::stdout, 
-				Log::Dest::Flags::from(
-					ShowCategoryName, 
-					ShowVerbosity, 
-					AllowColor));
-	}
-
 	auto testfile = fs::File::from("src/test.cpp"_str, fs::OpenFlag::Read);
 	if (isnil(testfile))
 		return 1;
@@ -105,6 +90,7 @@ int main()
 			break;
 		buffer.commit(bytes_read);
 	}
+
 
 	Context* ctx = createContext();
 	defer { destroyContext(ctx); };
@@ -159,8 +145,67 @@ int main()
 			}
 			break;
 
+		case DeclKind_Variable:
+			{
+				INFO("variable: ", getDeclName(d), "\n");
+				SCOPED_INDENT;
+			}
+			break;
 		}
 	}
+
 	return 0;
+}
+
+int testLexer()
+{
+	
+	Context* ctx = createContext();
+	if (!ctx)
+		return 1;
+	defer { destroyContext(ctx); };
+
+	Lexer* lexer = createLexer(ctx, R"cpp(
+		int main()
+		{
+			enum class State 
+			{
+				Walking,
+				Running,
+			} state;
+		}
+	)cpp"_str);
+	
+	
+	while (Token* t = lexerNextToken(lexer))
+	{
+		INFO(tokenGetRaw(ctx, lexer, t), "\n");
+		tokenGetKind(t);
+	}
+
+	return 0;
+}
+
+int main()
+{
+
+	if (!log.init())
+		return 1;
+	defer { log.deinit(); };
+
+	{
+		using enum Log::Dest::Flag;
+
+		log.newDestination("stdout"_str, &fs::stdout, 
+				Log::Dest::Flags::from(
+					ShowCategoryName, 
+					ShowVerbosity, 
+					AllowColor));
+	}
+
+
+	// return testContext();
+
+	return testLexer();
 }
 
