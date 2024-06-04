@@ -59,6 +59,8 @@ struct ActiveProcess
 
 Pool<ActiveProcess> active_process_pool = {};
 
+platform::TermSettings saved_term_settings;
+
 /* ------------------------------------------------------------------------------------------------ Lake::init
  */
 b8 Lake::init(const char** argv_, int argc_, mem::Allocator* allocator)
@@ -125,7 +127,7 @@ b8 Lake::init(const char** argv_, int argc_, mem::Allocator* allocator)
 	lua_pushcfunction(L, lua__canonicalizePath);
 	lua_setglobal(L, "lua__canonicalizePath"); 
 
-	platform::termSetNonCanonical();
+	saved_term_settings = platform::termSetNonCanonical();
 
 	return true;
 }
@@ -150,6 +152,8 @@ void Lake::deinit()
 		mem::stl_allocator.free(action.bytes);
 	action_pool.destroy();
 	action_queue.destroy();
+
+	platform::termRestoreSettings(saved_term_settings);
 }
 
 struct ArgIter
@@ -466,6 +470,25 @@ b8 Lake::run()
 
 				} break;
 			}
+
+			// Very naive way to try and prevent lake from constantly contesting for a thread 
+			// when running a recipe that spawns several processes itself. Eg. when building 
+			// llvm the recipe leaves it up to the generated build system stuff to run multiple 
+			// jobs. During this lake will be constantly polling the process for output/termination
+			// which wastes an entire thread of execution that whatever is building llvm could be 
+			// using.
+			//
+			// This is a really silly way to handle it and ideally later on should be 
+			// adjusted based on how long something is taking. Like, we can time how long the 
+			// current recipes have been running for and scale how often we poll based on that.
+			// This would work well to avoid my primary concern with rate limiting the polling: 
+			// accurately (sorta) tracking how long it takes for a recipe to complete. As long 
+			// as we scale this number to be negligible compared to the total time the recipe has 
+			// been running for, it shouldn't matter. 
+			//
+			// So,
+			// TODO(sushi) setup internal target recipe timers and then fix this issue
+			platform::sleep(TimeSpan::fromMicroseconds(3));
 		}
 	}
 
