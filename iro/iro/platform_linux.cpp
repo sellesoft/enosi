@@ -38,6 +38,13 @@ b8 reportErrno(T... args)
 	return false;
 }
 
+/* ------------------------------------------------------------------------------------------------ sleep
+ */
+void sleep(TimeSpan time)
+{
+	usleep((int)time.toMicroseconds());
+}
+
 /* ------------------------------------------------------------------------------------------------ open
  */
 b8 open(fs::File::Handle* out_handle, str path, fs::OpenFlags flags)
@@ -629,16 +636,26 @@ b8 chdir(str path)
 
 /* ------------------------------------------------------------------------------------------------ termSetNonCanonical
  */
-b8 termSetNonCanonical()
+TermSettings termSetNonCanonical(mem::Allocator* allocator)
 {
-	struct termios mode;
+	struct termios* mode = (struct termios*)allocator->allocate(sizeof(struct termios));
 
-	tcgetattr(STDIN_FILENO, &mode);
-	mode.c_lflag &= ~(ICANON|ECHO);
-	mode.c_cc[VMIN] = 1; // min characters needed for non-canonical read
-	mode.c_cc[VTIME] = 0; // timeout for read in non-canonical
-	tcsetattr(STDIN_FILENO, TCSAFLUSH, &mode);
-	return true;
+	tcgetattr(STDIN_FILENO, mode);
+
+	struct termios newmode = *mode;
+	newmode.c_lflag &= ~(ICANON|ECHO);
+	newmode.c_cc[VMIN] = 1; // min characters needed for non-canonical read
+	newmode.c_cc[VTIME] = 0; // timeout for read in non-canonical
+	tcsetattr(STDIN_FILENO, TCSAFLUSH, &newmode);
+	return (TermSettings)mode;
+}
+
+/* ------------------------------------------------------------------------------------------------ termRestoreSettings
+ */
+void termRestoreSettings(TermSettings settings, mem::Allocator* allocator)
+{
+	tcsetattr(STDIN_FILENO, TCSANOW, (struct termios*)settings);
+	allocator->free(settings);
 }
 
 }

@@ -22,6 +22,14 @@
 namespace iro::platform
 {
 
+/* ------------------------------------------------------------------------------------------------ sleep
+ *  Puts the calling thread to sleep for the given TimeSpan.
+ *
+ *  On Linux this uses 'usleep' which has a precision of microseconds. I believe on Windows it will
+ *  be the same.
+ */
+void sleep(TimeSpan time);
+
 /* ------------------------------------------------------------------------------------------------ open
  *  Open a file with the behavior defined by 'flags'. A platform specific handle is written to
  *  'out_handle'.
@@ -189,11 +197,20 @@ b8 chdir(str path);
 
 /* ------------------------------------------------------------------------------------------------ termSetNonCanonical
  *  Sets the terminal to be non-canonical, eg. disable buffering stdin until newlines.
+ *  Returns an opaque pointer to saved terminal settings that must be restored when the program
+ *  closes. If you don't do this it will leave the terminal in a bad state!!
  *
  *  Use this when implementing for windows.
  *  https://gist.github.com/cloudwu/96ec4d6636d65b7974b633e01d97a1f9
  */
-b8 termSetNonCanonical();
+typedef void* TermSettings;
+
+TermSettings termSetNonCanonical(mem::Allocator* allocator = &mem::stl_allocator);
+
+/* ------------------------------------------------------------------------------------------------ termRestoreSettings
+ *  Restores the settings given by a previous call to termSetNonCanonical.
+ */
+void termRestoreSettings(TermSettings settings, mem::Allocator* allocator = &mem::stl_allocator);
 
 } // namespace iro::platform
 
