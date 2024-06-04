@@ -23,12 +23,18 @@ local c_files = lake.find("src/**/*.cpp")
 local cflags = List
 {
 	options.getProjIncludeDirFlags("llvm", "iro"),
+	"-fno-rtti",
 }
 
-local lflags = List
+local lflags_lib = List
 {
-	"-static",
+	"-fuse-ld=mold",
+	"-shared",
 	options.getProjLibDirFlags "llvm",
+	options.getProjLibDirFlags "luajit",
+	options.getProjLibFlags "luajit",
+
+	"-lc",
 
 	-- TODO(sushi) get rid of this group stuff and just figure out the proper link ordering
 	"-Wl,--start-group",
@@ -36,10 +42,21 @@ local lflags = List
 	"-Wl,--end-group"
 }
 
-local lib = lake.target(build_dir.."liblppclang.a")
+local lflags_exe = List
+{
+	"-fuse-ld=mold",
+	options.getProjLibDirFlags "llvm",
+	options.getProjLibDirFlags "luajit",
+	options.getProjLibFlags "luajit",
 
-report.libDir(build_dir)
-report.lib("lppclang")
+	-- TODO(sushi) get rid of this group stuff and just figure out the proper link ordering
+	"-Wl,--start-group",
+	options.getProjLibFlags "llvm",
+	"-Wl,--end-group"
+}
+
+local lib = lake.target(build_dir.."liblppclang.so")
+local exe = lake.target(build_dir.."lppclang")
 
 c_files:each(function(c_file)
 	local o_file = c_file:gsub("(.-)%.cpp", build_dir.."%1.o")
@@ -48,6 +65,7 @@ c_files:each(function(c_file)
 	report.objFile(o_file)
 
 	lib:dependsOn(o_file)
+	exe:dependsOn(o_file)
 
 	lake.target(o_file)
 		:dependsOn(c_file)
@@ -58,4 +76,5 @@ c_files:each(function(c_file)
 		:recipe(recipes.depfile(c_file, d_file, o_file, cflags))
 end)
 
-lib:recipe(recipes.staticLib(reports.lppclang.objFiles, lib))
+lib:recipe(recipes.linker({reports.lppclang.objFiles, reports.iro.objFiles}, lib, lflags_lib))
+exe:recipe(recipes.linker({reports.lppclang.objFiles, reports.iro.objFiles}, exe, lflags_exe))
