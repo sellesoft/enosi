@@ -4,7 +4,7 @@
 --
 --
 
-local header_path = "src/lppclang.h"
+local header_path = "lppclang/src/lppclang.h"
 
 local header = io.open(header_path, "r")
 
