@@ -16,7 +16,44 @@
 namespace iro
 {
 
+// NOT finished cause i started adding it for something then realized that i needed
+// DLinkedPool instead sooooo
+template<typename T>
+struct SLinkedPool
+{
+	Pool<T> pool;
+	SList<T> list;
 
+	typedef SList<T>::Node Node;
+
+	b8 init(mem::Allocator* allocator = &mem::stl_allocator)
+	{
+		pool = Pool<T>::create(allocator);
+		list = SList<T>::create(allocator);
+		return true;
+	}
+
+	void deinit()
+	{
+		pool.destroy();
+		list.destroy();
+	}
+
+	b8 isEmpty()
+	{
+		return list.isEmpty();
+	}
+
+	Node* push()
+	{
+		return list.push(pool.add());
+	}
+
+	SList<T>::RangeIterator begin() { return list.begin(); }
+	SList<T>::RangeIterator end() { return list.end(); }
+};
+
+// TODO(sushi) update to init/deinit
 template<typename T>
 struct DLinkedPool
 {
@@ -28,12 +65,18 @@ struct DLinkedPool
 	static DLinkedPool<T> create(mem::Allocator* allocator = &mem::stl_allocator)
 	{
 		DLinkedPool<T> out;
-		out.pool = Pool<T>::create(allocator);
-		out.list = DList<T>::create(allocator);
+		out.init(allocator);
 		return out;
 	}
 
-	void destroy()
+	b8 init(mem::Allocator* allocator = &mem::stl_allocator)
+	{
+		pool = Pool<T>::create(allocator);
+		list = DList<T>::create(allocator);
+		return true;
+	}
+
+	void deinit()
 	{
 		pool.destroy();
 		list.destroy();
@@ -112,7 +155,10 @@ struct DLinkedPool
 	{
 		assert(not isEmpty());
 		return list.tail;
-	}	
+	}
+
+	DList<T>::RangeIterator begin() { return list.begin(); }
+	DList<T>::RangeIterator end() { return list.end(); }
 };
 
 }
