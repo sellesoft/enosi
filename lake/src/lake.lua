@@ -339,7 +339,7 @@ lake.import = function(path, options)
 	options_stack:push(options)
 	local results = {lua__importFile(path)}
 	options_stack:pop()
-	return table.unpack(results)
+	return unpack(results)
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.getOptions
