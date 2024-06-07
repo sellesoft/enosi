@@ -97,7 +97,11 @@ typedef struct ParamIter ParamIter;
 typedef struct FieldIter FieldIter;
 typedef struct EnumIter EnumIter;
 
+// **** EXPERIMENTAL ****
 Decl* testIncParse(str s);
+void addIncludeDir(Context* ctx, str s);
+// **** EXPERIMENTAL ****
+
 
 /* ------------------------------------------------------------------------------------------------ create/destroyContext
  |  Create/destroy an lppclang context. This keeps track of clang's ASTUnit and also various things

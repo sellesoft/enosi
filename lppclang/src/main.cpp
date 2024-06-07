@@ -186,6 +186,23 @@ int testLexer()
 	return 0;
 }
 
+int testMultipleParses()
+{
+	Context* ctx = createContext();
+	if (!ctx)
+		return 1;
+	defer { destroyContext(ctx); };
+
+	Decl* d = testIncParse(R"(
+		int main()
+		{
+
+		}
+	)"_str);
+
+	return 0;
+}
+
 int main()
 {
 
@@ -205,7 +222,7 @@ int main()
 
 
 	// return testContext();
-
-	return testLexer();
+	// return testLexer();
+	return testMultipleParses();
 }
 

@@ -10,13 +10,20 @@
 
 #include "clang/Tooling/Tooling.h"
 #include "clang/AST/Decl.h"
+#include "clang/AST/DeclGroup.h"
+#include "clang/Sema/Sema.h"
+#include "clang/CodeGen/ObjectFilePCHContainerOperations.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/CompilerInvocation.h"
 #include "clang/Frontend/TextDiagnosticPrinter.h"
-#include "clang/Parse/ParseAST.h"
+#include "clang/Parse/Parser.h"
 #include "clang/Lex/Lexer.h"
+#include "clang/Lex/PreprocessorOptions.h"
+#include "clang/Driver/Driver.h"
+#include "clang/Driver/Compilation.h"
 #include "clang/Basic/SourceManager.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/TargetParser/Host.h"
 
 #include "assert.h"
 
@@ -164,6 +171,8 @@ struct Context
 
 	LexerPool lexers;
 
+	DLinkedPool<str> include_dirs;
+
 	// Allocate things into a bump allocator to avoid burdening
 	// the user with the responsibility of cleaning stuff up.
 	// Later on the api might be redesigned to allow the user 
@@ -193,6 +202,8 @@ struct Context
 
 		srcmgr = new clang::SourceManager(*diagengine, *filemgr);
 		diagengine->setSourceManager(srcmgr);
+
+		include_dirs.init(&allocator);
 
 		return true;
 	}
@@ -368,16 +379,25 @@ b8 createASTFromString(Context* ctx, str s)
 	};
 	SuppressDiagnostics suppressor;
 
+	std::vector<std::string> args;
+
+	for (auto& d : ctx->include_dirs)
+	{
+		std::string arg = "-I";
+		arg += std::string((char*)d.bytes, d.len);
+		args.push_back(arg);
+	}
+
 	ASTUnitPtr unit = 
 		clang::tooling::buildASTFromCodeWithArgs(
 			llvm::StringRef((char*)s.bytes, s.len), 
-			std::vector<std::string>(),
+			args,
 			"lppclang-string.cc",
 			"lppclang",
 			std::make_shared<clang::PCHContainerOperations>(),
 			clang::tooling::getClangStripDependencyFileAdjuster(),
 			clang::tooling::FileContentMappings(),
-			&suppressor);
+			nullptr);
 
 	if (!unit)
 		return false;
@@ -861,13 +881,110 @@ Decl* testIncParse(str s)
 
 	// create a new compiler invocation and instance
 	Sp<CompilerInvocation> invocation(new CompilerInvocation);
+
+	// construct arguments for the driver
+	
+	std::vector<const char*> driver_args;
+
+	std::string main_exe_name = 
+		llvm::sys::fs::getMainExecutable(nullptr, nullptr);
+
+	driver_args.push_back(main_exe_name.c_str());
+
+	driver_args.push_back("-xc++");
+	driver_args.push_back("-Xclang");
+	driver_args.push_back("-fincremental-extensions"); // allows processing statements in global scope
+	driver_args.push_back("-c");
+
+	// a dummy input, idk exactly why this is done yet.
+	driver_args.push_back("<<< inputs >>>");
+
+	clang::driver::Driver driver(driver_args[0], llvm::sys::getProcessTriple(), *diag_engine);
+	driver.setCheckInputsExist(false); // stuff doesnt actually exist on fs
+	auto rf = llvm::ArrayRef(driver_args);
+	Up<clang::driver::Compilation> compilation(driver.BuildCompilation(rf));
+
+	auto& jobs = compilation->getJobs();
+
+	auto cmd = llvm::cast<clang::driver::Command>(&(*jobs.begin()));
+
+	auto cc1args = &cmd->getArguments();
+
 	Up<CompilerInstance> compiler(new CompilerInstance);
-	compiler->setInvocation(invocation);
-	compiler->setFileManager(&*file_mgr);
+
+	auto pchops = compiler->getPCHContainerOperations();
+	pchops->registerWriter(std::make_unique<ObjectFilePCHContainerWriter>());
+	pchops->registerReader(std::make_unique<ObjectFilePCHContainerReader>());
+
 	compiler->setDiagnostics(&*diag_engine);
-	compiler->setSourceManager(&src_mgr);
-	compiler->createPreprocessor(TU_Prefix);
+
+	b8 success = 
+		CompilerInvocation::CreateFromArgs(
+			compiler->getInvocation(), 
+			llvm::ArrayRef(cc1args->begin(), cc1args->size()), 
+			*diag_engine);
+	
+	if (!success)
+		return nullptr;
+
+	if (compiler->getHeaderSearchOpts().UseBuiltinIncludes &&
+		compiler->getHeaderSearchOpts().ResourceDir.empty())
+	{
+		compiler->getHeaderSearchOpts().ResourceDir = 
+			CompilerInvocation::GetResourcesPath(driver_args[0], nullptr);
+	}
+
+	Up<llvm::MemoryBuffer> mb(llvm::WritableMemoryBuffer::getNewUninitMemBuffer(s.len, (char*)s.bytes));
+	compiler->getPreprocessorOpts().addRemappedFile("<<< inputs >>>", mb.get());
+
+	compiler->setTarget(
+		TargetInfo::CreateTargetInfo(
+			compiler->getDiagnostics(),
+			compiler->getInvocation().TargetOpts));
+
+	if (!compiler->hasTarget())
+		return nullptr;
+
+	compiler->getTarget().adjust(compiler->getDiagnostics(), compiler->getLangOpts());
+	compiler->getCodeGenOpts().ClearASTBeforeBackend = false;
+	compiler->getFrontendOpts().DisableFree = false;
+	compiler->getCodeGenOpts().DisableFree = false;
+
+	compiler->LoadRequestedPlugins();
+	
 	compiler->createSema(TU_Prefix, nullptr);
-	ParseAST(compiler->getSema(), false, false);
+
+
+	Preprocessor* pp = &compiler->getPreprocessor();
+
+	SourceLocation new_loc = src_mgr.getLocForStartOfFile(src_mgr.getMainFileID());
+
+	FileID fid = src_mgr.createFileID(std::move(mb), SrcMgr::C_User, 0, 0, new_loc);
+
+	if (pp->EnterSourceFile(fid, nullptr, new_loc))
+		return nullptr;
+
+	Sema* sema = &compiler->getSema();
+
+	ASTContext* astctx = &sema->getASTContext();
+
+	astctx->addTranslationUnitDecl();
+
+	Up<Parser> parser(new Parser(compiler->getPreprocessor(), *sema, false));
+	parser->Initialize();
+
+	Parser::DeclGroupPtrTy decl;
+	Sema::ModuleImportState import_state;
+	
+	parser->ParseFirstTopLevelDecl(decl, import_state);
+
+	decl.get().getSingleDecl()->dump();
+
 	return nullptr;
+}
+
+void addIncludeDir(Context* ctx, str s)
+{
+	assert(ctx);
+	ctx->include_dirs.pushHead(s.allocateCopy(&ctx->allocator));
 }
