@@ -1,6 +1,8 @@
 #include "io.h"
 #include "format.h"
 
+#include "../containers/stackarray.h"
+
 #include "stdlib.h"
 #include "stdio.h"
 
@@ -104,7 +106,22 @@ s64 format(IO* io, const char* x)
 
 s64 format(IO* io, const SanitizeControlCharacters& x)
 {
+	StackArray<u8, 255> buffer;
+	
+	auto flush = [&buffer, io]() { io->write(buffer.asSlice()); buffer.len = 0; };
+
 	s64 bytes_written = 0;
+	auto write = [&buffer, &bytes_written, flush](str s)
+	{
+		if (buffer.len + s.len > buffer.capacity())
+			flush();
+
+		for (u64 i = 0; i < s.len; ++i)
+			*buffer.push() = s.bytes[i];
+		
+		bytes_written += s.len;
+	};
+
 	str s = x.x;
 	while (!s.isEmpty())
 	{
@@ -112,21 +129,25 @@ s64 format(IO* io, const SanitizeControlCharacters& x)
 
 		switch (c.codepoint)
 		{
-			case '\a': bytes_written += io->write("\\a"_str); break;
-			case '\b': bytes_written += io->write("\\b"_str); break;
-			case '\e': bytes_written += io->write("\\e"_str); break;
-			case '\f': bytes_written += io->write("\\f"_str); break;
-			case '\n': bytes_written += io->write("\\n"_str); break;
-			case '\r': bytes_written += io->write("\\r"_str); break;
-			case '\t': bytes_written += io->write("\\t"_str); break;
-			case '\v': bytes_written += io->write("\\v"_str); break;
+			case '\a': write("\\a"_str); break;
+			case '\b': write("\\b"_str); break;
+			case '\e': write("\\e"_str); break;
+			case '\f': write("\\f"_str); break;
+			case '\n': write("\\n"_str); break;
+			case '\r': write("\\r"_str); break;
+			case '\t': write("\\t"_str); break;
+			case '\v': write("\\v"_str); break;
 			default: {
 				// lol
 				utf8::Char ch = utf8::encodeCharacter(c.codepoint);
-				bytes_written += io->write({ch.bytes, ch.count});
+				write({ch.bytes, ch.count});
 			} break;
 		}
 	}
+
+	if (buffer.len)
+		flush();
+
 	return bytes_written;
 }
 
