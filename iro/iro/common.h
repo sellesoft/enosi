@@ -32,6 +32,20 @@ consteval s64 constevalStrlen(const char* s) {
     return i;
 }
 
+// hashes a null terminated string
+// TODO(sushi) really gotta move this hashing stuff elsewhere
+static u64 cStrHash(const char* s)
+{
+	u64 seed = 14695981039;
+	while (*s)
+	{
+		seed ^= *s;
+		seed *= 1099511628211;
+		s += 1;
+	}
+	return seed;
+}
+
 consteval u64 staticStringHash(const char* s, size_t len)
 {
 	u64 seed = 14695981039;
