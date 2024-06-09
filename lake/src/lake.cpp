@@ -9,9 +9,6 @@
 #include "iro/logger.h"
 #include "luahelpers.h"
 
-#include "generated/cliargparser.h"
-// #include "generated/lakeluacompiled.h"
-
 #include "assert.h"
 
 #include "string.h"
