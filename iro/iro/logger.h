@@ -84,6 +84,8 @@ DefineFlagsOrOp(Log::Dest::Flags, Log::Dest::Flag);
 
 extern Log log;
 
+
+
 /* ================================================================================================ Logger
  *  A logger, which is a named thing that logs stuff to the log. Each logger has its own verbosity 
  *  setting so we can be selective about what we want to see in a log.
@@ -114,56 +116,87 @@ struct Logger
 
 	b8 init(str name, Verbosity verbosity);
 
-	template<typename... T>
-	void log(Verbosity v, T&&... args)
-	{
-		using enum Verbosity;
+	// this language is so fucking dumb man
+	// This works for now, so I'm going to leave it be, but this should 
+	// really be replaced later on.
+	// The reason why this has to be put in a struct is because (at least on clang)
+	// trying to pass an integer literal to a non-type template parameter in 
+	// logSingle causes a compiler error.
+	// This could probably be pulled into log.
+	struct u32Range { u32 start, end; }; 
 
+	template<io::Formattable... T>
+	void log(Verbosity v, T&... args)
+	{
 		if (isnil(iro::log.destinations))
 			return;
+
 
 		for (Log::Dest& destination : iro::log.destinations)
 		{
 			writePrefix(v, destination);
-			io::formatv(destination.io, args...);
+
+			if (destination.flags.test(Log::Dest::Flag::PrefixNewlines))
+				logSingle<u32Range{0, sizeof...(args)-1}, T...>(*this, v, destination, args...);
+			else
+				io::formatv(destination.io, args...);
 		}
 	}
 
+	template<io::Formattable... T>
+	void log(Verbosity v, T&&... args) { log(v, args...); }
+
 private:
 
-	// special case where we need to handle prefixing new lines, so we need to intercept 
-	// the formatting. I need a better way to do this.
-	// TODO(sushi) make a str specialization since we dont need to format it 
-	// this is wrong and not working and i dont feel like fixing it atm
-	//
-	// it would probably be easier if i moved towards things emitting formatting 
-	// via an iterator so i could stream each char and just check for newlines 
-	// but that would make the whole formatting stuff so much more complex i think
-//	template<typename T>
-//	void log_single(Verbosity v, T arg, Log::Dest& dest, b8 last)
-//	{
-//		io::Memory m;
-//		m.open();
-//		io::format(&m, arg);
-//
-//		s64 linelen = 0;
-//		for (s64 i = 0; i < m.len; i++)
-//		{
-//			if (m.buffer[i] == '\n')
-//			{
-//				dest.io->write({m.buffer + i - linelen, linelen+1});
-//				if (i != m.len || !last)
-//				{
-//					write_prefix(v, dest);
-//				}
-//				linelen = 0;
-//			}
-//			else
-//				linelen += 1;
-//		}
-//
-//		m.close();
-//	}
+	template<u32Range Range, io::Formattable T, io::Formattable... Rest>
+	static void logSingle(Logger& logger, Verbosity v, Log::Dest& dest, T& arg, Rest&... rest)
+	{
+
+		struct Intercept : public io::IO
+		{
+			Log::Dest& dest;
+			Logger& logger;
+			Verbosity v;
+
+			Intercept(Log::Dest& dest, Logger& logger, Verbosity v) : 
+				dest(dest), logger(logger), v(v) {}
+
+			s64 write(Bytes slice) override
+			{
+				u64 linelen = 0;
+				for (u64 i = 0; i < slice.len; ++i)
+				{
+					if (slice.ptr[i] == '\n')
+					{
+						dest.io->write({slice.ptr + i - linelen, linelen + 1});
+						if constexpr (Range.start == Range.end)
+						{
+							if (i != slice.len - 1)
+								logger.writePrefix(v, dest);
+						}
+						else
+							logger.writePrefix(v, dest);
+						linelen = 0;
+					}
+					else
+						linelen += 1;
+				}
+				if (linelen)
+					dest.io->write({slice.ptr+slice.len-linelen,linelen});
+				return slice.len;
+			}
+
+			s64 read(Bytes slice) override { return 0; }
+		};
+
+		auto intercept = Intercept(dest, logger, v);
+		io::formatv(&intercept, arg);
+
+		if constexpr (Range.start != Range.end)
+		{
+			logSingle<u32Range{Range.start+1, Range.end}, Rest...>(logger, v, dest, rest...);
+		}
+	}
 
 	void writePrefix(Verbosity v, Log::Dest& destination);
 
