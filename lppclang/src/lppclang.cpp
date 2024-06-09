@@ -63,6 +63,11 @@ struct LLVMIO : llvm::raw_ostream
 	}
 };
 
+inline llvm::StringRef strRef(str s)
+{
+	return llvm::StringRef((char*)s.bytes, s.len);
+}
+
 // TODO(sushi) maybe make adjustable later
 auto lang_options = clang::LangOptions();
 auto printing_policy = clang::PrintingPolicy(lang_options);
@@ -341,8 +346,6 @@ struct Context
 		action = makeUnique<IncrementalAction>(clang);
 
 		clang.ExecuteAction(*action);
-
-		// clang.getPreprocessor().EnterMainSourceFile();
 
 		parser = makeUnique<Parser>(clang.getPreprocessor(), clang.getSema(), false);
 		parser->Initialize();
@@ -1073,8 +1076,21 @@ Decl* getNextEnum(EnumIter* iter)
 	return (Decl*)((EnumIterator*)iter)->next();
 }
 
+
+// I dont really care for doing this but I dont feel like figuring out their
+// error thing right now so whatever.
+llvm::ExitOnError exit_on_error;
 void addIncludeDir(Context* ctx, str s)
 {
 	assert(ctx);
-	ctx->include_dirs.pushHead(s.allocateCopy(&ctx->allocator));
+	using namespace clang;
+	CompilerInstance& clang = *ctx->clang;
+	Preprocessor&     preprocessor = clang.getPreprocessor();
+	HeaderSearch&     header_search = preprocessor.getHeaderSearchInfo();
+	FileManager&      file_manager = clang.getFileManager();
+
+	auto dirent = exit_on_error(file_manager.getDirectoryRef(strRef(s)));
+
+	DirectoryLookup dirlu(dirent, SrcMgr::C_User, false);
+	header_search.AddSearchPath(dirlu, false);
 }
