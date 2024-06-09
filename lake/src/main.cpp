@@ -25,9 +25,7 @@ int main(const int argc, const char* argv[])
 	defer { iro::log.deinit(); };
 
 	auto f = fs::File::from("temp/log"_str, fs::OpenFlag::Create | fs::OpenFlag::Truncate | fs::OpenFlag::Write);
-	if (isnil(f))
-		return 1;
-	defer { f.close(); };
+	defer { if (notnil(f)) f.close(); };
 
 	{
 		using enum Log::Dest::Flag;
@@ -37,7 +35,9 @@ int main(const int argc, const char* argv[])
 				ShowVerbosity |
 				PadVerbosity |
 				TrackLongestName);
-		iro::log.newDestination("templog"_str, &f, {});
+
+		if (notnil(f))
+			iro::log.newDestination("templog"_str, &f, {});
 	}
 
 	if (!lake.init(argv, argc))
