@@ -17,6 +17,7 @@
 #include "clang/Frontend/CompilerInvocation.h"
 #include "clang/Frontend/TextDiagnosticPrinter.h"
 #include "clang/Frontend/TextDiagnosticBuffer.h"
+#include "clang/Frontend/FrontendActions.h"
 #include "clang/FrontendTool/Utils.h"
 #include "clang/Parse/Parser.h"
 #include "clang/Lex/Lexer.h"
@@ -204,7 +205,7 @@ struct Context
 
 		IncrementalAction(clang::CompilerInstance& clang) : 
 			clang::WrapperFrontendAction(
-				clang::CreateFrontendAction(clang)) {}
+				makeUnique<clang::SyntaxOnlyAction>()) {}
 
 		clang::TranslationUnitKind getTranslationUnitKind() override { return clang::TU_Incremental; }
 
@@ -335,6 +336,8 @@ struct Context
 
 		clang.LoadRequestedPlugins();
 
+		// Old manual setup stuff that sorta half worked. If we ever decide to 
+		// stop using the FrontendAction stuff, continue getting this to work.
 		//clang.createFileManager(overlayfs);
 		//clang.createSourceManager(clang.getFileManager());
 		//clang.getDiagnostics().setSourceManager(&clang.getSourceManager());
