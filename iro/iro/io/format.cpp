@@ -96,14 +96,10 @@ s64 format(IO* io, void* x)
 
 s64 format(IO* io, const char* x)
 {
-	s64 n = 0;
-	while (x[n])
-	{
-		if (!format(io, x[n]))
-			break;
-		n += 1;
-	}
-	return n;
+	Bytes slice = {(u8*)x, 0};
+	while (x[slice.len])
+		slice.len += 1;
+	return io->write(slice);
 }
 
 s64 format(IO* io, const SanitizeControlCharacters& x)
