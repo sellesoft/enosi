@@ -71,6 +71,64 @@ void printRecord(Context* ctx, Decl* decl)
 	}
 }
 
+void printTranslationUnitDecls(Context* ctx, DeclIter* iter)
+{
+	while (Decl* d = getNextDecl(iter))
+	{
+		switch (getDeclKind(d))
+		{
+
+			case DeclKind_Record:
+				printRecord(ctx, d);
+				break;
+
+			case DeclKind_Function:
+				{
+					INFO("func: ", getDeclName(d), "\n");
+					SCOPED_INDENT;
+					INFO("return type: ", getTypeName(ctx, getFunctionReturnType(d)), "\n");
+					if (ParamIter* iter = createParamIter(ctx, d))
+					{
+						INFO("params: \n");
+						SCOPED_INDENT;
+						while (Decl* param = getNextParam(iter))
+						{
+							INFO(getDeclName(param), ": ", getTypeName(ctx, getDeclType(param)), "\n");
+						}
+					}
+
+					if (functionHasBody(d))
+					{
+						INFO("defined from ", getFunctionBodyBegin(d), " to ", getFunctionBodyEnd(d), "\n");
+					}
+				}
+				break;
+
+			case DeclKind_Enum:
+				{
+					INFO("enum: ", getDeclName(d), "\n");
+					SCOPED_INDENT;
+					INFO("elements:\n");
+					SCOPED_INDENT;
+					EnumIter* iter = createEnumIter(ctx, d);
+					while (Decl* e = getNextEnum(iter))
+					{
+						INFO(getDeclName(e), "\n");
+					}
+				}
+				break;
+
+			case DeclKind_Variable:
+				{
+					INFO("variable: ", getDeclName(d), "\n");
+					SCOPED_INDENT;
+				}
+				break;
+		}
+	}
+
+}
+
 int testContext()
 {
 	auto testfile = fs::File::from("src/test.cpp"_str, fs::OpenFlag::Read);
@@ -100,66 +158,13 @@ int testContext()
 
 	Decl* tu = getTranslationUnitDecl(ctx);
 	DeclIter* toplevel = createDeclIter(ctx, tu);
-	while (Decl* d = getNextDecl(toplevel))
-	{
-		switch (getDeclKind(d))
-		{
-
-		case DeclKind_Record:
-			printRecord(ctx, d);
-			break;
-
-		case DeclKind_Function:
-			{
-				INFO("func: ", getDeclName(d), "\n");
-				SCOPED_INDENT;
-				INFO("return type: ", getTypeName(ctx, getFunctionReturnType(d)), "\n");
-				if (ParamIter* iter = createParamIter(ctx, d))
-				{
-					INFO("params: \n");
-					SCOPED_INDENT;
-					while (Decl* param = getNextParam(iter))
-					{
-						INFO(getDeclName(param), ": ", getTypeName(ctx, getDeclType(param)), "\n");
-					}
-				}
-
-				if (functionHasBody(d))
-				{
-					INFO("defined from ", getFunctionBodyBegin(d), " to ", getFunctionBodyEnd(d), "\n");
-				}
-			}
-			break;
-
-		case DeclKind_Enum:
-			{
-				INFO("enum: ", getDeclName(d), "\n");
-				SCOPED_INDENT;
-				INFO("elements:\n");
-				SCOPED_INDENT;
-				EnumIter* iter = createEnumIter(ctx, d);
-				while (Decl* e = getNextEnum(iter))
-				{
-					INFO(getDeclName(e), "\n");
-				}
-			}
-			break;
-
-		case DeclKind_Variable:
-			{
-				INFO("variable: ", getDeclName(d), "\n");
-				SCOPED_INDENT;
-			}
-			break;
-		}
-	}
+	printTranslationUnitDecls(ctx, toplevel);
 
 	return 0;
 }
 
 int testLexer()
 {
-	
 	Context* ctx = createContext();
 	if (!ctx)
 		return 1;
@@ -175,7 +180,6 @@ int testLexer()
 			} state;
 		}
 	)cpp"_str);
-	
 	
 	while (Token* t = lexerNextToken(lexer))
 	{
@@ -193,12 +197,42 @@ int testMultipleParses()
 		return 1;
 	defer { destroyContext(ctx); };
 
-	Decl* d = testIncParse(R"(
+	Decl* d;
+
+	d = parseString(ctx, R"(
+		#define DEBUG false
+
+
+		struct Movement
+		{
+			float pos[3];
+			float vel[3];
+		};
+
+		struct Player
+		{
+			Movement movement;
+			int health;
+		};
+	)"_str);
+
+	dumpDecl(d);
+
+	d = parseString(ctx, R"(
 		int main()
 		{
-
+			#if DEBUG
+			Player p;
+			p.movement.pos[0] = 1.f;
+			p.movement.pos[1] = 2.f;
+			p.movement.pos[2] = 3.f;
+			p.movement.vel = {};
+			p.health = 100;
+			#endif
 		}
 	)"_str);
+
+	dumpDecl(d);
 
 	return 0;
 }

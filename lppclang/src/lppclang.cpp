@@ -16,6 +16,8 @@
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/CompilerInvocation.h"
 #include "clang/Frontend/TextDiagnosticPrinter.h"
+#include "clang/Frontend/TextDiagnosticBuffer.h"
+#include "clang/FrontendTool/Utils.h"
 #include "clang/Parse/Parser.h"
 #include "clang/Lex/Lexer.h"
 #include "clang/Lex/PreprocessorOptions.h"
@@ -34,6 +36,9 @@ using Rc = llvm::IntrusiveRefCntPtr<T>;
 
 template<typename T>
 using Up = std::unique_ptr<T>;
+
+template<typename T, typename... Args>
+inline Up<T> makeUnique(Args&&... args) { return std::make_unique<T>(args...); }
 
 template<typename T>
 using Sp = std::shared_ptr<T>;
@@ -157,21 +162,20 @@ struct Context
 	// diagnositics handling
 	// TODO(sushi) could make a way later to communicate diags to 
 	//             stuff using lppclang, but it probably wouldn't be very useful
-	clang::DiagnosticOptions diagopts;
+	Rc<clang::DiagnosticOptions> diagopts;
 	clang::TextDiagnosticPrinter* diagprinter;
-	Rc<clang::DiagnosticsEngine> diagengine;
 
 	// fake filesystem to load strings into clang/llvm stuff
 	Rc<llvm::vfs::OverlayFileSystem> overlayfs;
 	Rc<llvm::vfs::InMemoryFileSystem> inmemfs;
 
-	Rc<clang::FileManager> filemgr;
-
-	clang::SourceManager* srcmgr;
-
 	LexerPool lexers;
 
 	DLinkedPool<str> include_dirs;
+
+	Up<clang::CompilerInstance> clang;
+
+	Up<clang::Parser> parser;
 
 	// Allocate things into a bump allocator to avoid burdening
 	// the user with the responsibility of cleaning stuff up.
@@ -182,36 +186,190 @@ struct Context
 	//             and resources can be properly tracked via luajit's finalizers.
 	mem::Bump allocator;
 
+	// NOTE(sushi) This is pretty much copied directly from the clang-repl thing
+	//             and i originally added it cause i thought it would solve a 
+	//             problem i was having, but it wound up not being the fix. This
+	//             might be desirable to have has it helps properly manage 
+	//             different ways of using clang (such as outputting to LLVM, .obj, 
+	//             etc. or just parsing syntax to make an AST and such) so I'm gonna
+	//             keep it for now, but it is really not necessary.
+	struct IncrementalAction : public clang::WrapperFrontendAction
+	{
+		b8 terminating = false;
+
+		IncrementalAction(clang::CompilerInstance& clang) : 
+			clang::WrapperFrontendAction(
+				clang::CreateFrontendAction(clang)) {}
+
+		clang::TranslationUnitKind getTranslationUnitKind() override { return clang::TU_Incremental; }
+
+		void ExecuteAction() override
+		{
+			using namespace clang; 
+
+			CompilerInstance& clang = getCompilerInstance();
+			
+			clang.getPreprocessor().EnterMainSourceFile();
+			if (!clang.hasSema())
+				clang.createSema(getTranslationUnitKind(), nullptr);
+		}
+
+		void EndSourceFile() override
+		{
+			if (terminating && WrappedAction.get())
+				clang::WrapperFrontendAction::EndSourceFile();
+		}
+
+		void FinalizeAction()
+		{
+			assert(!terminating && "already finalized");
+			terminating = true;
+			EndSourceFile();
+		}
+	};
+
+	Up<IncrementalAction> action;
+
 	b8 init()
 	{
+		using namespace clang;
+
 		if (!allocator.init())
 			return false;
 
 		lexers.init(&allocator);
-
-		io = new LLVMIO(&fs::stdout);
-		diagprinter = new clang::TextDiagnosticPrinter(*io, &diagopts);
-		diagengine = clang::CompilerInstance::createDiagnostics(&diagopts, diagprinter, false);
 
 		// not sure if putting this stuff into the bump allocator is ok
 		overlayfs = new llvm::vfs::OverlayFileSystem(llvm::vfs::getRealFileSystem());
 		inmemfs = new llvm::vfs::InMemoryFileSystem;
 		overlayfs->pushOverlay(inmemfs);
 
-		filemgr = new clang::FileManager({}, overlayfs);
-
-		srcmgr = new clang::SourceManager(*diagengine, *filemgr);
-		diagengine->setSourceManager(srcmgr);
-
 		include_dirs.init(&allocator);
+
+		std::vector<const char*> driver_args;
+
+		std::string main_exe_name = 
+			llvm::sys::fs::getMainExecutable(nullptr, nullptr);
+
+		driver_args.push_back(main_exe_name.c_str());
+		driver_args.push_back("-xc++");
+		driver_args.push_back("-Xclang");
+		driver_args.push_back("-fincremental-extensions");
+		driver_args.push_back("-c");
+		driver_args.push_back("lppclang-inputs");
+
+		// Temp diags buffer to properly catch anything that might go wrong in the 
+		// driver. Probaby not very useful atm, but if user args are ever supported
+		// this may become more important.
+		Rc<DiagnosticIDs> diagids(new DiagnosticIDs);
+		diagopts = CreateAndPopulateDiagOpts(driver_args);
+		TextDiagnosticBuffer* diagbuffer = new TextDiagnosticBuffer;
+		DiagnosticsEngine diags(diagids, &*diagopts, diagbuffer);
+
+		driver::Driver driver(driver_args[0], llvm::sys::getProcessTriple(), diags);
+		driver.setCheckInputsExist(false);
+		Up<clang::driver::Compilation> compilation(
+				driver.BuildCompilation(llvm::ArrayRef(driver_args)));
+
+		auto& jobs = compilation->getJobs();
+		auto cmd = llvm::cast<driver::Command>(&*jobs.begin());
+		auto cc1args = &cmd->getArguments();
+
+		clang = makeUnique<CompilerInstance>();
+
+		io = new LLVMIO(&fs::stdout);
+		diagprinter = new TextDiagnosticPrinter(*io, diagopts.get());
+
+		auto& clang = *this->clang.get();
+		clang.createDiagnostics(diagprinter, false);
+
+		clang.getPCHContainerOperations()->registerWriter(
+				makeUnique<clang::ObjectFilePCHContainerWriter>());
+		clang.getPCHContainerOperations()->registerReader(
+				makeUnique<clang::ObjectFilePCHContainerReader>());
+		
+		if (!CompilerInvocation::CreateFromArgs(
+				clang.getInvocation(),
+				llvm::ArrayRef(cc1args->begin(), cc1args->size()),
+				clang.getDiagnostics()))
+		{
+			ERROR("failed to create compiler invocation\n");
+			return false;
+		}
+
+		CompilerInvocation& invocation = clang.getInvocation();
+
+		if (clang.getHeaderSearchOpts().UseBuiltinIncludes &&
+			clang.getHeaderSearchOpts().ResourceDir.empty())
+		{
+			clang.getHeaderSearchOpts().ResourceDir =
+				clang::CompilerInvocation::GetResourcesPath(
+					driver_args[0], nullptr);
+		}
+
+		clang.setTarget(
+			TargetInfo::CreateTargetInfo(
+				clang.getDiagnostics(),
+				invocation.TargetOpts));
+
+		if (!clang.hasTarget())
+		{
+			ERROR("Failed to set compiler target\n");
+			return false;
+		}
+
+		clang.getTarget().adjust(clang.getDiagnostics(), clang.getLangOpts());
+
+		// add an initially empty file 
+		auto mb = llvm::MemoryBuffer::getMemBuffer("").release();
+		clang.getPreprocessorOpts().addRemappedFile("lppclang-inputs", mb);
+
+		clang.getCodeGenOpts().ClearASTBeforeBackend = false;
+		clang.getFrontendOpts().DisableFree = false;
+		clang.getCodeGenOpts().DisableFree = false;
+
+		clang.LoadRequestedPlugins();
+
+		//clang.createFileManager(overlayfs);
+		//clang.createSourceManager(clang.getFileManager());
+		//clang.getDiagnostics().setSourceManager(&clang.getSourceManager());
+		//clang.createPreprocessor(clang::TU_Incremental);
+		//clang.setASTConsumer(makeUnique<clang::ASTConsumer>());
+		//clang.createASTContext();
+		//clang.createSema(clang::TU_Incremental, nullptr);
+
+		action = makeUnique<IncrementalAction>(clang);
+
+		clang.ExecuteAction(*action);
+
+		// clang.getPreprocessor().EnterMainSourceFile();
+
+		parser = makeUnique<Parser>(clang.getPreprocessor(), clang.getSema(), false);
+		parser->Initialize();
 
 		return true;
 	}
 
 	void deinit()
 	{
+		diagprinter->EndSourceFile();
+
+		parser.reset();
+
+		if (clang->hasPreprocessor())
+			clang->getPreprocessor().EndSourceFile();
+
+		clang->setSema(nullptr);
+		clang->setASTContext(nullptr);
+		clang->setASTConsumer(nullptr);
+
+		clang->clearOutputFiles(false);
+
+		clang->setPreprocessor(nullptr);
+		clang->setSourceManager(nullptr);
+		clang->setFileManager(nullptr);
+
 		delete io;
-		delete srcmgr;
 		delete diagprinter;
 		for (auto& l : lexers)
 			delete l.lexer;
@@ -271,27 +429,29 @@ static clang::QualType getClangType(Type* type)
  */
 Lexer* createLexer(Context* ctx, str s)
 {
+	assert(false);
+	return nullptr;
 	assert(ctx);
-
-	auto lexer_node = ctx->lexers.pushHead();
-	auto lexer = lexer_node->data;
-	lexer->node = lexer_node;
-
-	lexer->fileid = // TODO(sushi) this could prob be cleaned up when the lexer is destroyed
-		ctx->srcmgr->createFileID(
-			llvm::MemoryBuffer::getMemBuffer(llvm::StringRef((char*)s.bytes, s.len)));
-
-	lexer->lexer =
-		new clang::Lexer(
-			lexer->fileid, 
-			ctx->srcmgr->getBufferOrFake(lexer->fileid), 
-			*ctx->srcmgr, 
-			lang_options);
-
-	lexer->lexer->SetCommentRetentionState(true);
-	lexer->lexer->SetKeepWhitespaceMode(true);
-
-	return lexer; // TODO(sushi) could just pass the node but causes weird typing
+//
+//	auto lexer_node = ctx->lexers.pushHead();
+//	auto lexer = lexer_node->data;
+//	lexer->node = lexer_node;
+//
+//	lexer->fileid = // TODO(sushi) this could prob be cleaned up when the lexer is destroyed
+//		ctx->srcmgr->createFileID(
+//			llvm::MemoryBuffer::getMemBuffer(llvm::StringRef((char*)s.bytes, s.len)));
+//
+//	lexer->lexer =
+//		new clang::Lexer(
+//			lexer->fileid, 
+//			ctx->srcmgr->getBufferOrFake(lexer->fileid), 
+//			*ctx->srcmgr, 
+//			lang_options);
+//
+//	lexer->lexer->SetCommentRetentionState(true);
+//	lexer->lexer->SetKeepWhitespaceMode(true);
+//
+//	return lexer; // TODO(sushi) could just pass the node but causes weird typing
 }
 
 /* ------------------------------------------------------------------------------------------------ destroyLexer
@@ -323,15 +483,16 @@ Token* lexerNextToken(Lexer* lexer)
  */
 str tokenGetRaw(Context* ctx, Lexer* l, Token* t)
 {
-	assert(t);
-
-	auto tok = (clang::Token*)t;
-
-	auto beginoffset = ctx->srcmgr->getDecomposedLoc(tok->getLocation()).second;
-	auto endoffset = ctx->srcmgr->getDecomposedLoc(tok->getEndLoc()).second;
-	auto membuf = ctx->srcmgr->getBufferOrFake(l->fileid);
-	auto buf = membuf.getBuffer().substr(beginoffset, endoffset-beginoffset);
-	return {(u8*)buf.data(), buf.size()};
+	assert(false);
+//	assert(t);
+//
+//	auto tok = (clang::Token*)t;
+//
+//	auto beginoffset = ctx->srcmgr->getDecomposedLoc(tok->getLocation()).second;
+//	auto endoffset = ctx->srcmgr->getDecomposedLoc(tok->getEndLoc()).second;
+//	auto membuf = ctx->srcmgr->getBufferOrFake(l->fileid);
+//	auto buf = membuf.getBuffer().substr(beginoffset, endoffset-beginoffset);
+//	return {(u8*)buf.data(), buf.size()};
 }
 
 /* ------------------------------------------------------------------------------------------------ tokenGetKind
@@ -358,6 +519,8 @@ TokenKind tokenGetKind(Token* t)
 	map(unknown, Whitespace); // just assume this is whitespace, kinda stupid its marked this way
 							  // if this causes problems then maybe confirm it's whitespace by 
 							  // searching the raw later
+							  // TODO(sushi) if i actually do wind up forking clang so i can have local patches
+							  //             maybe make this an explicit token
 	// TODO(sushi) MAYBE implement the rest of these, but not really neccessary cause for punc
 	//             and keyword we can just string compare in lua.
 
@@ -405,6 +568,63 @@ b8 createASTFromString(Context* ctx, str s)
 	ctx->takeAST(unit);
 
 	return true;
+}
+
+/* ------------------------------------------------------------------------------------------------ parseString
+ */
+Decl* parseString(Context* ctx, str s)
+{
+	assert(ctx);
+
+	using namespace clang;
+
+	CompilerInstance& clang = *ctx->clang;
+	Parser&           parser = *ctx->parser;
+	SourceManager&    srcmgr = clang.getSourceManager();
+	Preprocessor&     preprocessor = clang.getPreprocessor();
+	Sema&             sema = clang.getSema();
+	ASTContext&       astctx = sema.getASTContext();
+
+	SourceLocation new_loc = srcmgr.getLocForStartOfFile(srcmgr.getMainFileID());
+
+	FileID fileid = 
+		srcmgr.createFileID(
+			std::move(llvm::MemoryBuffer::getMemBuffer(llvm::StringRef((char*)s.bytes, s.len))),
+			SrcMgr::C_User, 
+			0, 0, new_loc);
+			
+	if (preprocessor.EnterSourceFile(fileid, nullptr, new_loc))
+		return nullptr;
+
+	astctx.addTranslationUnitDecl();
+
+	if (parser.getCurToken().is(tok::annot_repl_input_end))
+	{
+		// reset parser from last incremental parse
+		parser.ConsumeAnyToken();
+		parser.ExitScope();
+		sema.CurContext = nullptr;
+		parser.EnterScope(Scope::DeclScope);
+		sema.ActOnTranslationUnitScope(parser.getCurScope());
+	}
+
+	Parser::DeclGroupPtrTy decl_group;
+	Sema::ModuleImportState import_state;
+
+	for (b8 at_eof = parser.ParseFirstTopLevelDecl(decl_group, import_state);
+		 !at_eof;
+		 at_eof = parser.ParseTopLevelDecl(decl_group, import_state))
+	{/* dont do anything idk yet */}
+
+	return (::Decl*)astctx.getTranslationUnitDecl();
+}
+
+/* ------------------------------------------------------------------------------------------------ dumpDecl
+ */
+void dumpDecl(Decl* decl)
+{
+	assert(decl);
+	getClangDecl(decl)->dump();
 }
 
 /* ------------------------------------------------------------------------------------------------ dumpAST
@@ -688,8 +908,6 @@ b8 isUnqualifiedAndCanonical(Type* type)
 	return isUnqualified(type) && isCanonical(type);
 }
 
-b8 isUnqualifiedAndCanonical(Type* type);
-
 /* ------------------------------------------------------------------------------------------------ getCanonicalType
  */
 Type* getCanonicalType(Type* type)
@@ -853,134 +1071,6 @@ Decl* getNextEnum(EnumIter* iter)
 {
 	assert(iter);
 	return (Decl*)((EnumIterator*)iter)->next();
-}
-
-
-Decl* testIncParse(str s)
-{
-	using namespace clang;
-	using namespace llvm;
-
-	// output to stdout for now
-	LLVMIO io(&fs::stdout);
-
-	// setup diagnostics engine
-	DiagnosticOptions diag_options;
-	TextDiagnosticPrinter diag_printer(io, &diag_options);
-	Rc<DiagnosticsEngine> diag_engine = 
-		CompilerInstance::createDiagnostics(&diag_options, &diag_printer, false);
-
-	// setup a fake file system to trick clang with
-	Rc<vfs::OverlayFileSystem> overlayfs = new vfs::OverlayFileSystem(vfs::getRealFileSystem());
-	Rc<vfs::InMemoryFileSystem> inmemfs = new vfs::InMemoryFileSystem;
-	overlayfs->pushOverlay(inmemfs);
-	Rc<FileManager> file_mgr = new FileManager({}, overlayfs);
-
-	SourceManager src_mgr(*diag_engine, *file_mgr);
-	diag_engine->setSourceManager(&src_mgr);
-
-	// create a new compiler invocation and instance
-	Sp<CompilerInvocation> invocation(new CompilerInvocation);
-
-	// construct arguments for the driver
-	
-	std::vector<const char*> driver_args;
-
-	std::string main_exe_name = 
-		llvm::sys::fs::getMainExecutable(nullptr, nullptr);
-
-	driver_args.push_back(main_exe_name.c_str());
-
-	driver_args.push_back("-xc++");
-	driver_args.push_back("-Xclang");
-	driver_args.push_back("-fincremental-extensions"); // allows processing statements in global scope
-	driver_args.push_back("-c");
-
-	// a dummy input, idk exactly why this is done yet.
-	driver_args.push_back("<<< inputs >>>");
-
-	clang::driver::Driver driver(driver_args[0], llvm::sys::getProcessTriple(), *diag_engine);
-	driver.setCheckInputsExist(false); // stuff doesnt actually exist on fs
-	auto rf = llvm::ArrayRef(driver_args);
-	Up<clang::driver::Compilation> compilation(driver.BuildCompilation(rf));
-
-	auto& jobs = compilation->getJobs();
-
-	auto cmd = llvm::cast<clang::driver::Command>(&(*jobs.begin()));
-
-	auto cc1args = &cmd->getArguments();
-
-	Up<CompilerInstance> compiler(new CompilerInstance);
-
-	auto pchops = compiler->getPCHContainerOperations();
-	pchops->registerWriter(std::make_unique<ObjectFilePCHContainerWriter>());
-	pchops->registerReader(std::make_unique<ObjectFilePCHContainerReader>());
-
-	compiler->setDiagnostics(&*diag_engine);
-
-	b8 success = 
-		CompilerInvocation::CreateFromArgs(
-			compiler->getInvocation(), 
-			llvm::ArrayRef(cc1args->begin(), cc1args->size()), 
-			*diag_engine);
-	
-	if (!success)
-		return nullptr;
-
-	if (compiler->getHeaderSearchOpts().UseBuiltinIncludes &&
-		compiler->getHeaderSearchOpts().ResourceDir.empty())
-	{
-		compiler->getHeaderSearchOpts().ResourceDir = 
-			CompilerInvocation::GetResourcesPath(driver_args[0], nullptr);
-	}
-
-	Up<llvm::MemoryBuffer> mb(llvm::WritableMemoryBuffer::getNewUninitMemBuffer(s.len, (char*)s.bytes));
-	compiler->getPreprocessorOpts().addRemappedFile("<<< inputs >>>", mb.get());
-
-	compiler->setTarget(
-		TargetInfo::CreateTargetInfo(
-			compiler->getDiagnostics(),
-			compiler->getInvocation().TargetOpts));
-
-	if (!compiler->hasTarget())
-		return nullptr;
-
-	compiler->getTarget().adjust(compiler->getDiagnostics(), compiler->getLangOpts());
-	compiler->getCodeGenOpts().ClearASTBeforeBackend = false;
-	compiler->getFrontendOpts().DisableFree = false;
-	compiler->getCodeGenOpts().DisableFree = false;
-
-	compiler->LoadRequestedPlugins();
-	
-	compiler->createSema(TU_Prefix, nullptr);
-
-
-	Preprocessor* pp = &compiler->getPreprocessor();
-
-	SourceLocation new_loc = src_mgr.getLocForStartOfFile(src_mgr.getMainFileID());
-
-	FileID fid = src_mgr.createFileID(std::move(mb), SrcMgr::C_User, 0, 0, new_loc);
-
-	if (pp->EnterSourceFile(fid, nullptr, new_loc))
-		return nullptr;
-
-	Sema* sema = &compiler->getSema();
-
-	ASTContext* astctx = &sema->getASTContext();
-
-	astctx->addTranslationUnitDecl();
-
-	Up<Parser> parser(new Parser(compiler->getPreprocessor(), *sema, false));
-	parser->Initialize();
-
-	Parser::DeclGroupPtrTy decl;
-	Sema::ModuleImportState import_state;
-	
-	parser->ParseFirstTopLevelDecl(decl, import_state);
-
-	decl.get().getSingleDecl()->dump();
-
-	return nullptr;
 }
 
 void addIncludeDir(Context* ctx, str s)

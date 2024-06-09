@@ -24,6 +24,7 @@ local cflags = List
 {
 	options.getProjIncludeDirFlags("llvm", "iro"),
 	"-fno-rtti",
+	"-ftime-trace",
 }
 
 local lflags_lib = List

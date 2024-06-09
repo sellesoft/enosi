@@ -135,6 +135,15 @@ TokenKind tokenGetKind(Token* t);
  */ 
 b8 createASTFromString(Context* ctx, str s);
 
+/* ------------------------------------------------------------------------------------------------ parseString
+ */
+Decl* parseString(Context* ctx, str s);
+
+/* ------------------------------------------------------------------------------------------------ dumpDecl
+ |  Prints clang's textual representation of the given decl to stdout
+ */ 
+void dumpDecl(Decl* decl);
+
 /* ------------------------------------------------------------------------------------------------ getTranslationUnitDecl
  |  Retrieves the toplevel declaration of the given context.
  */
