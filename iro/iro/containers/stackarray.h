@@ -8,6 +8,8 @@
 #include "../common.h"
 #include "slice.h"
 
+#include <new>
+
 namespace iro
 {
 
