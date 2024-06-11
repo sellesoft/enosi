@@ -110,7 +110,7 @@ void Globber::run(GlobberCallback auto callback)
 {
 	using enum Part::Kind;
 
-	Logger logger = Logger::create("globber.run"_str, Logger::Verbosity::Error);
+	Logger logger = Logger::create("globber.run"_str, Logger::Verbosity::Warn);
 
 	PartList::Node* curn = part_list.head;
 	if (!curn)

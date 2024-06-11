@@ -4,6 +4,11 @@
  *  We handle logging by creating a 'Logger' for various things (usually individual objects that need
  *  to report things, like a parser) which is named 'logger'. The macros just below here are used to
  *  guard calling the log function based on the logger's verbosity. 
+ *
+ *  TODOs
+ *
+ *    Get it so that in PrefixNewlines mode we only prefix a newline WHEN one is found
+ *    so that parts of a line can be spread among multiple calls to a log function.
  */
 
 #ifndef _iro_logger_h
@@ -59,7 +64,6 @@ struct Log
 			// track the longest category name and indent all other names so that they stay aligned
 			TrackLongestName,
 			// if a logger logs a message that spans multiple lines, prefix each line with the enabled information above
-			// TODO(sushi) implement this eventually its not that important
 			PrefixNewlines,
 		};
 		typedef iro::Flags<Flag> Flags;
@@ -151,7 +155,6 @@ private:
 	template<u32Range Range, io::Formattable T, io::Formattable... Rest>
 	static void logSingle(Logger& logger, Verbosity v, Log::Dest& dest, T& arg, Rest&... rest)
 	{
-
 		struct Intercept : public io::IO
 		{
 			Log::Dest& dest;

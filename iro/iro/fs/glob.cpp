@@ -65,7 +65,7 @@ void Globber::compilePattern()
 				if (last_part->kind == ConstantEntry ||
 					last_part->kind == ConstantDirectory)
 				{
-					last_part->raw.len += len;
+					last_part->raw.len += last_part->raw.bytes - start;
 					last_part->raw.bytes = start;
 					return;
 				}
