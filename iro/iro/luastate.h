@@ -11,7 +11,6 @@
 
 struct lua_State;
 
-
 namespace iro
 {
 
@@ -33,9 +32,10 @@ struct LuaState
 	void deinit();
 
 	void pop(s32 count = 1);
+	void insert(s32 idx);
 
-	s32 gettop();
-
+	s32  gettop();
+	void settop(s32 idx);
 
 	void newtable();
 	void settable(s32 idx);
@@ -75,10 +75,50 @@ struct LuaState
 	b8 next(s32 idx);
 
 	b8 isnil(s32 idx = -1);
+	b8 isstring(s32 idx = -1);
 
 	b8 dump(io::IO* dest);
 
-	void stackDump(io::IO* dest, u32 max_depth = -1);
+	
+	/* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+	 |  Helper API
+	 |  Following this are functions that are not a part of the lua api.
+	 =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
+
+
+	// Call Lua's (or whatever require is available..) require to import 'modname'.
+	// Leaves the return values of the module at the top of the stack.
+	// If 'nret' is given, the number of values returned will be written to it.
+	b8 require(str modname, u32* out_nret = nullptr);
+
+	void stackDump(u32 max_depth = 1);
+	void stackDump(io::IO* out, u32 max_depth = 1);
+
+	// currently-experimental debug hook installer 
+	// that im gonna play with for a bit before deciding
+	// what i wanna do with it, if anything
+	void installDebugHook();
+
+	// iterate over the key-value pairs using 'callback'
+	template<typename F>
+	void pairs(s32 idx, F callback)
+	{
+		s32 bottom = gettop();
+		defer { settop(bottom); };
+
+		pushvalue(idx);
+		pushnil();
+
+		while (next(-2))
+		{
+			s32 bottom_pre = gettop();
+			if (!callback())
+				return;
+			assert(bottom_pre == gettop() && 
+				"the callback must return the stack to the state it was in on entry!");
+			pop();
+		}
+	}
 };
 
 }
