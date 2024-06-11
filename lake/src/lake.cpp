@@ -957,6 +957,8 @@ b8 lua__rm(str path, b8 recursive, b8 force)
 	if (!Path::isDirectory(path))
 		return File::unlink(path);
 
+	// TODO(sushi) uhh apparently i forgot to implement the non-recursive part of this
+	//             so do that when i actually use it :P
 	if (recursive)
 	{
 		mem::Bump bump;

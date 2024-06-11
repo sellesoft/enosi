@@ -65,3 +65,4 @@ lakeexe
 options.getProjLibs("luajit"):each(function(e)
 	lakeexe:dependsOn(e)
 end)
+
