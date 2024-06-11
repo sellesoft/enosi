@@ -9,7 +9,7 @@
 namespace iro::utf8
 {
 
-Logger logger = Logger::create("utf8"_str, Logger::Verbosity::Warn);
+Logger logger = Logger::create("utf8"_str, Logger::Verbosity::Notice);
 
 /* ------------------------------------------------------------------------------------------------ utf8::bytesNeededToEncodeCharacter
  */
@@ -81,11 +81,15 @@ Codepoint decodeCharacter(u8* s, s32 slen)
 {
 	assert(s);
 
-	if (slen == 0)
-		return nil;
-
 #define FERROR(...) ERROR("utf8::decodeCharacter(): "_str, __VA_ARGS__)
 #define FWARN(...)  WARN("utf8::decodeCharacter(): "_str, __VA_ARGS__)
+
+	if (slen == 0)
+	{
+		FWARN("passed an empty string\n");
+		return nil;
+	}
+
 
 	if (s[0] < 0x80)
 	{
