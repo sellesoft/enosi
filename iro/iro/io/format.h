@@ -46,6 +46,7 @@ s64 format(IO* io, b8  x);
 s64 format(IO* io, str x);
 s64 format(IO* io, char x);
 s64 format(IO* io, void* x);
+s64 format(IO* io, const void* x);
 s64 format(IO* io, const char* x);
 
 /* ------------------------------------------------------------------------------------------------ Generic variadic formatting

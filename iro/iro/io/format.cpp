@@ -96,6 +96,13 @@ s64 format(IO* io, void* x)
 	return io->write({buffer, len});
 }
 
+s64 format(IO* io, const void* x)
+{
+	u8 buffer[32];
+	u64 len = snprintf((char*)buffer, 32, "%p", x);
+	return io->write({buffer, len});
+}
+
 s64 format(IO* io, const char* x)
 {
 	Bytes slice = {(u8*)x, 0};
