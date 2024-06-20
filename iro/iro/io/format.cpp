@@ -144,6 +144,7 @@ s64 format(IO* io, const SanitizeControlCharacters& x)
 			case '\r': write("\\r"_str); break;
 			case '\t': write("\\t"_str); break;
 			case '\v': write("\\v"_str); break;
+			case '\0': write("\\0"_str); break;
 			default: {
 				// lol
 				utf8::Char ch = utf8::encodeCharacter(c.codepoint);
