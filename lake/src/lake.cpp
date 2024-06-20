@@ -756,7 +756,6 @@ void lua__processRead(
 		proc &&
 		stdout_ptr && stdout_len && out_stdout_bytes_read &&
 		stderr_ptr && stderr_len && out_stderr_bytes_read);
-	TRACE("reading ", (void*)proc, "\n");
 
 	*out_stdout_bytes_read = proc->stdout.read({(u8*)stdout_ptr, stdout_len});
 	*out_stderr_bytes_read = proc->stderr.read({(u8*)stderr_ptr, stderr_len});
@@ -767,7 +766,6 @@ void lua__processRead(
 b8 lua__processPoll(ActiveProcess* proc, s32* out_exit_code)
 {
 	assert(proc && out_exit_code);
-	TRACE("polling ", (void*)proc, "\n");
 
 	proc->process.checkStatus();
 
@@ -827,7 +825,6 @@ void lua__globDestroy(LuaGlobResult x)
 
 	arr.destroy();
 }
-
 
 /* ------------------------------------------------------------------------------------------------ lua__setMaxJobs
  */
@@ -1086,5 +1083,11 @@ b8 lua__inRecipe()
 	return lake.in_recipe;
 }
 
+/* ------------------------------------------------------------------------------------------------ lua__touch
+ */
+b8 lua__touch(str path)
+{
+	return platform::touchFile(path);
+}
 
 }

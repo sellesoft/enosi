@@ -124,6 +124,8 @@ ffi.cdef [[
 	b8 lua__inRecipe();
 
 	s32 lua__getMaxJobs();
+
+	b8 lua__touch(str path);
 ]]
 local C = ffi.C
 local strtype = ffi.typeof("str")
@@ -246,6 +248,16 @@ end
 ---@return string
 lake.canonicalizePath = function(path)
 	return lua__canonicalizePath(path)
+end
+
+-- * ---------------------------------------------------------------------------------------------- lake.touch
+
+--- Touch the file at 'path', updating its modified time to the current time.
+--- This does not create a new file.
+---
+---@param path string
+lake.touch = function(path)
+	C.lua__touch(make_str(path))
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.flatten

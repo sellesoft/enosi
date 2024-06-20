@@ -15,7 +15,7 @@ extern "C"
 #include "lauxlib.h"
 }
 
-static Logger logger = Logger::create("lake.target"_str, Logger::Verbosity::Warn);
+static Logger logger = Logger::create("lake.target"_str, Logger::Verbosity::Notice);
 
 /* ------------------------------------------------------------------------------------------------ target_hash
  */
