@@ -24,7 +24,8 @@ struct SLinkedPool
 	Pool<T> pool;
 	SList<T> list;
 
-	typedef SList<T>::Node Node;
+	typedef SList<T> List;
+	typedef List::Node Node;
 
 	b8 init(mem::Allocator* allocator = &mem::stl_allocator)
 	{
@@ -49,8 +50,28 @@ struct SLinkedPool
 		return list.push(pool.add());
 	}
 
-	SList<T>::RangeIterator begin() { return list.begin(); }
-	SList<T>::RangeIterator end() { return list.end(); }
+	T pop()
+	{
+		Node* n = list.head;
+		T* ptr = list.pop();
+		T out = *ptr;
+		pool.remove(ptr);
+		return out;
+	}
+
+	T& head()
+	{
+		assert(not isEmpty());
+		return *list.head->data;
+	}
+
+	Node* headNode()
+	{
+		return list.head;
+	}
+
+	List::RangeIterator begin() { return list.begin(); }
+	List::RangeIterator end() { return list.end(); }
 };
 
 // TODO(sushi) update to init/deinit
@@ -60,7 +81,8 @@ struct DLinkedPool
 	Pool<T> pool;
 	DList<T> list;
 
-	typedef DList<T>::Node Node;
+	typedef DList<T> List;
+	typedef List::Node Node;
 
 	static DLinkedPool<T> create(mem::Allocator* allocator = &mem::stl_allocator)
 	{
@@ -147,18 +169,16 @@ struct DLinkedPool
 
 	Node* headNode()
 	{
-		assert(not isEmpty());
 		return list.head;
 	}
 
 	Node* tailNode()
 	{
-		assert(not isEmpty());
 		return list.tail;
 	}
 
-	DList<T>::RangeIterator begin() { return list.begin(); }
-	DList<T>::RangeIterator end() { return list.end(); }
+	List::RangeIterator begin() { return list.begin(); }
+	List::RangeIterator end() { return list.end(); }
 };
 
 }
