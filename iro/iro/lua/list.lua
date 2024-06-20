@@ -103,7 +103,7 @@ end
 --- element of the list and returns self
 ---
 ---@param f function?
----@return function(x: any) | self
+---@return function | self
 List.each = function(self, f)
 	local i = 0
 	local iter = function()
@@ -127,15 +127,25 @@ end
 --- The same as each, but returns as a second value the
 --- index of the element.
 ---
----@return function
-List.eachWithIndex = function(self)
+---@param f function?
+---@return function | self
+List.eachWithIndex = function(self, f)
 	local i = 0
-	return function()
+	local iter = function()
 		i = i + 1
 		if i > self:len() then
 			return nil
 		end
 		return self[i], i
+	end
+
+	if f then
+		for e,i in iter do
+			f(e, i)
+		end
+		return self
+	else
+		return iter
 	end
 end
 
