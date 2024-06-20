@@ -9,6 +9,13 @@
  *
  *    Get it so that in PrefixNewlines mode we only prefix a newline WHEN one is found
  *    so that parts of a line can be spread among multiple calls to a log function.
+ *
+ *    The amount of disgusting shit done to get this stuff to work right is horrible.
+ *    I see now why people like using string format style logging instead of typed 
+ *    formatting. IDEALLY lpp works well enough that I can replace all of this 
+ *    insane templating with it.
+ *    In fact this is so horrible that now clang is begging me to submit a bug report
+ *    when it tries to compile it.
  */
 
 #ifndef _iro_logger_h
@@ -89,6 +96,126 @@ DefineFlagsOrOp(Log::Dest::Flags, Log::Dest::Flag);
 extern Log log;
 
 
+// Goofy color formatting via types. This allows using 
+// color::<color name> to start a colored region which may be 
+// reset by color::reset.
+//
+// All colors can also wrap another formattable thing such that
+// only that thing is colored, eg.
+// 	color::red("hello")
+// 	color::blue(1)
+// 	color::green(io::SanitizeControlCharacters("hello"))
+namespace color
+{
+
+enum class Color
+{
+    Reset,
+    Black,
+    Red,
+    Green,
+    Yellow,
+    Blue,
+    Magenta,
+    Cyan,
+    White,
+};
+
+/* ------------------------------------------------------------------------------------------------
+ */
+static str getColor(color::Color col)
+{
+#define x(c, n) \
+	case color::Color::c: return "\e[" n "m"_str;
+
+    switch (col)
+    {
+	x(Reset,   "0");
+	x(Black,   "30");
+	x(Red,     "31");
+	x(Green,   "32");
+	x(Yellow,  "33");
+	x(Blue,    "34");
+	x(Magenta, "35");
+	x(Cyan,    "36");
+	x(White,   "37");
+    }
+
+#undef x
+}
+
+template<typename T>
+struct Colored
+{
+	Color color;
+	b8 enabled;
+	T& x;
+	Colored(Color color, T& x) : color(color), x(x), enabled(true) {}
+};
+
+template<typename T>
+T& sanitizeColored(T& x, Log::Dest& dest) { return x; }
+
+template<typename T>
+Colored<T>& sanitizeColored(Colored<T>& x, Log::Dest& dest) 
+{
+	if (!dest.flags.test(Log::Dest::Flag::AllowColor))
+		x.enabled = false;
+	return x;
+}
+
+struct Colorer
+{
+	b8 enabled;
+	Color color;
+	Colorer(Color color) : color(color), enabled(true) {}
+
+	template<typename T>
+	Colored<T> operator()(T&& x) { return Colored<T>(color, x); }
+};
+
+static const Colorer sanitizeColored(Colorer x, Log::Dest& dest)
+{
+	if (!dest.flags.test(Log::Dest::Flag::AllowColor))
+		x.enabled = false;
+	return x;
+}
+
+#define colorer(fname, cname) static Colorer fname(Color::cname);
+
+colorer(black, Black);
+colorer(red, Red);
+colorer(green, Green);
+colorer(yellow, Yellow);
+colorer(blue, Blue);
+colorer(magenta, Magenta);
+colorer(cyan, Cyan);
+colorer(white, White);
+colorer(reset, Reset);
+
+#undef colorfunc
+
+}
+
+namespace io
+{
+static s64 format(io::IO* out, const color::Colorer& x)
+{
+	if (!x.enabled)
+		return 0;
+	return io::format(out, color::getColor(x.color));
+}
+
+template<typename T>
+s64 format(io::IO* out, color::Colored<T>& x)
+{
+	if (!x.enabled)
+		return io::format(out, x.x);
+
+	return io::formatv(out, getColor(x.color), x.x, getColor(color::Color::Reset));
+}
+}
+
 
 /* ================================================================================================ Logger
  *  A logger, which is a named thing that logs stuff to the log. Each logger has its own verbosity 
@@ -141,9 +268,11 @@ struct Logger
 			writePrefix(v, destination);
 
 			if (destination.flags.test(Log::Dest::Flag::PrefixNewlines))
-				logSingle<u32Range{0, sizeof...(args)-1}, T...>(*this, v, destination, args...);
+				logSingle<u32Range{0, sizeof...(args)-1}>(
+					*this, v, destination, 
+					color::sanitizeColored(args, destination)...);
 			else
-				io::formatv(destination.io, args...);
+				io::formatv(destination.io, color::sanitizeColored(args, destination)...);
 		}
 	}
 
@@ -152,6 +281,7 @@ struct Logger
 
 private:
 
+	// Incredibly horrible mess that really needs to be cleaned up.
 	template<u32Range Range, io::Formattable T, io::Formattable... Rest>
 	static void logSingle(Logger& logger, Verbosity v, Log::Dest& dest, T& arg, Rest&... rest)
 	{

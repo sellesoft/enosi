@@ -7,7 +7,7 @@ namespace iro
 
 Log log;
 
-/* ------------------------------------------------------------------------------------------------ Log::init
+/* ------------------------------------------------------------------------------------------------
  */
 b8 Log::init()
 {
@@ -19,21 +19,21 @@ b8 Log::init()
     return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ Log::deinit
+/* ------------------------------------------------------------------------------------------------
  */
 void Log::deinit()
 {
     destinations.destroy();
 }
 
-/* ------------------------------------------------------------------------------------------------ Log::new_destination
+/* ------------------------------------------------------------------------------------------------
  */
 void Log::newDestination(str name, io::IO* d, Dest::Flags flags)
 {
     destinations.push({name, flags, d});
 }
 
-/* ------------------------------------------------------------------------------------------------ Logger::init
+/* ------------------------------------------------------------------------------------------------
  */
 b8 Logger::init(str name_, Verbosity verbosity_)
 {
@@ -42,46 +42,18 @@ b8 Logger::init(str name_, Verbosity verbosity_)
     return true;
 }
 
-enum class Color
-{
-    Reset,
-    Black,
-    Red,
-    Green,
-    Yellow,
-    Blue,
-    Magenta,
-    Cyan,
-    White,
-};
 
-/* ------------------------------------------------------------------------------------------------ tryColor
+/* ------------------------------------------------------------------------------------------------
  */
-str tryColor(Log::Dest& d, Color col)
+str tryColor(Log::Dest& dest, color::Color color)
 {
-    if (!d.flags.test(Log::Dest::Flag::AllowColor))
-        return ""_str;
+	if (!dest.flags.test(Log::Dest::Flag::AllowColor))
+		return ""_str;
 
-#define x(c, n) \
-    case Color::c: return "\e[" n "m"_str;
-
-    switch (col)
-    {
-        x(Reset,   "0");
-        x(Black,   "30");
-        x(Red,     "31");
-        x(Green,   "32");
-        x(Yellow,  "33");
-        x(Blue,    "34");
-        x(Magenta, "35");
-        x(Cyan,    "36");
-        x(White,   "37");
-    }
-
-#undef x
+	return color::getColor(color);
 }
 
-/* ------------------------------------------------------------------------------------------------ Logger::writePreamble
+/* ------------------------------------------------------------------------------------------------
  */
 void Logger::writePrefix(Verbosity v, Log::Dest& d)
 {
@@ -112,7 +84,7 @@ void Logger::writePrefix(Verbosity v, Log::Dest& d)
     if (d.flags.test(ShowVerbosity))
     {
         using enum Verbosity;
-        using enum Color;
+        using enum color::Color;
 
         if (d.flags.test(PadVerbosity))
         {
