@@ -97,11 +97,17 @@ typedef struct ParamIter ParamIter;
 typedef struct FieldIter FieldIter;
 typedef struct EnumIter EnumIter;
 
-// **** EXPERIMENTAL ****
-Decl* testIncParse(str s);
-void addIncludeDir(Context* ctx, str s);
-// **** EXPERIMENTAL ****
+typedef struct
+{
+	str raw;
+	u64 start_offset;
+	u64 end_offset;
+} TokenRawAndLoc;
 
+// **** EXPERIMENTAL ****
+void addIncludeDir(Context* ctx, str s); // TODO(sushi) move to normal api
+Type* lookupType(Context* ctx, str name);
+// **** EXPERIMENTAL ****
 
 /* ------------------------------------------------------------------------------------------------ create/destroyContext
  |  Create/destroy an lppclang context. This keeps track of clang's ASTUnit and also various things

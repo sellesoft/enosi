@@ -435,29 +435,31 @@ static clang::QualType getClangType(Type* type)
  */
 Lexer* createLexer(Context* ctx, str s)
 {
-	assert(false);
-	return nullptr;
 	assert(ctx);
-//
-//	auto lexer_node = ctx->lexers.pushHead();
-//	auto lexer = lexer_node->data;
-//	lexer->node = lexer_node;
-//
-//	lexer->fileid = // TODO(sushi) this could prob be cleaned up when the lexer is destroyed
-//		ctx->srcmgr->createFileID(
-//			llvm::MemoryBuffer::getMemBuffer(llvm::StringRef((char*)s.bytes, s.len)));
-//
-//	lexer->lexer =
-//		new clang::Lexer(
-//			lexer->fileid, 
-//			ctx->srcmgr->getBufferOrFake(lexer->fileid), 
-//			*ctx->srcmgr, 
-//			lang_options);
-//
-//	lexer->lexer->SetCommentRetentionState(true);
-//	lexer->lexer->SetKeepWhitespaceMode(true);
-//
-//	return lexer; // TODO(sushi) could just pass the node but causes weird typing
+
+	auto lexer_node = ctx->lexers.pushHead();
+	auto lexer = lexer_node->data;
+
+	using namespace clang;
+
+	CompilerInstance& clang = *ctx->clang;
+	SourceManager&    srcmgr = clang.getSourceManager();
+
+	lexer->fileid = 
+		srcmgr.createFileID(
+			llvm::MemoryBuffer::getMemBuffer(strRef(s)));
+
+	lexer->lexer =
+		new clang::Lexer(
+			lexer->fileid,
+			srcmgr.getBufferOrFake(lexer->fileid),
+			srcmgr,
+			lang_options);
+
+	lexer->lexer->SetCommentRetentionState(true);
+	lexer->lexer->SetKeepWhitespaceMode(true);
+
+	return lexer;
 }
 
 /* ------------------------------------------------------------------------------------------------ destroyLexer
@@ -489,16 +491,32 @@ Token* lexerNextToken(Lexer* lexer)
  */
 str tokenGetRaw(Context* ctx, Lexer* l, Token* t)
 {
-	assert(false);
-//	assert(t);
-//
-//	auto tok = (clang::Token*)t;
-//
-//	auto beginoffset = ctx->srcmgr->getDecomposedLoc(tok->getLocation()).second;
-//	auto endoffset = ctx->srcmgr->getDecomposedLoc(tok->getEndLoc()).second;
-//	auto membuf = ctx->srcmgr->getBufferOrFake(l->fileid);
-//	auto buf = membuf.getBuffer().substr(beginoffset, endoffset-beginoffset);
-//	return {(u8*)buf.data(), buf.size()};
+	assert(ctx and l and t);
+
+	clang::SourceManager& srcmgr = ctx->clang->getSourceManager();
+	auto tok = (clang::Token*)t;
+
+	auto beginoffset = srcmgr.getDecomposedLoc(tok->getLocation()).second;
+	auto endoffset = srcmgr.getDecomposedLoc(tok->getEndLoc()).second;
+	auto membuf = srcmgr.getBufferOrFake(l->fileid);
+	auto buf = membuf.getBuffer().substr(beginoffset, endoffset-beginoffset);
+	return {(u8*)buf.data(), buf.size()};
+}
+
+/* ------------------------------------------------------------------------------------------------ tokenGetRawAndLoc
+ */
+TokenRawAndLoc tokenGetRawAndLoc(Context* ctx, Lexer* l, Token* t)
+{
+	assert(ctx and l and t);
+
+	clang::SourceManager& srcmgr = ctx->clang->getSourceManager();
+	auto tok = (clang::Token*)t;
+
+	auto beginoffset = srcmgr.getDecomposedLoc(tok->getLocation()).second;
+	auto endoffset = srcmgr.getDecomposedLoc(tok->getEndLoc()).second;
+	auto membuf = srcmgr.getBufferOrFake(l->fileid);
+	auto buf = membuf.getBuffer().substr(beginoffset, endoffset-beginoffset);
+	return {{(u8*)buf.data(), buf.size()}, beginoffset, endoffset};
 }
 
 /* ------------------------------------------------------------------------------------------------ tokenGetKind
@@ -1079,6 +1097,29 @@ Decl* getNextEnum(EnumIter* iter)
 	return (Decl*)((EnumIterator*)iter)->next();
 }
 
+/* ------------------------------------------------------------------------------------------------ 
+ */
+Type* lookupType(Context* ctx, str name)
+{
+	using namespace clang;
+
+	CompilerInstance& clang = *ctx->clang;
+	Parser&           parser = *ctx->parser;
+	Sema&             sema = clang.getSema();
+	Preprocessor&     preprocessor = clang.getPreprocessor();
+
+	IdentifierInfo* idinfo = clang.getPreprocessor().getIdentifierInfo(strRef(name));
+
+	DeclarationName dname(idinfo);
+	DeclContextLookupResult result = sema.CurContext->lookup(dname);
+
+	for (auto r : result)
+	{
+		r->dump();	
+	}
+
+	return nullptr;
+}
 
 // I dont really care for doing this but I dont feel like figuring out their
 // error thing right now so whatever.

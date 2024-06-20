@@ -190,6 +190,34 @@ int testLexer()
 	return 0;
 }
 
+int testLookup()
+{
+	Context* ctx = createContext();
+	if (!ctx)
+		return 1;
+	defer { destroyContext(ctx); };
+
+	parseString(ctx, R"(
+		struct Apple
+		{
+			int leaves;
+			float nutrients;
+		};
+
+		int main() 
+		{
+			int a;
+		
+	)"_str);
+
+	
+	Type* type = lookupType(ctx, "a"_str);
+
+	INFO(getTypeName(ctx, type));
+	
+	return 0;
+}
+
 int testMultipleParses()
 {
 	Context* ctx = createContext();
@@ -257,6 +285,7 @@ int main()
 
 	// return testContext();
 	// return testLexer();
-	return testMultipleParses();
+	return testLookup();
+	// return testMultipleParses();
 }
 
