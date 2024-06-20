@@ -139,7 +139,10 @@ b8 LuaState::loadbuffer(Bytes buffer, const char* name)
 	auto loader = [](lua_State* L, void* data, size_t* size) -> const char* 
 	{
 		str* buffer = (str*)data;
+		if (buffer->isEmpty())
+			return nullptr;
 		*size = buffer->len;
+		buffer->len = 0;
 		return (char*)buffer->bytes;
 	};
 
@@ -199,7 +202,6 @@ b8 LuaState::pcall(s32 nargs, s32 nresults, s32 errfunc)
 {
 	if (lua_pcall(L, nargs, nresults, errfunc))
 	{
-		stackDump();
 		ERROR(tostring(), "\n");
 		pop();
 		return false;
