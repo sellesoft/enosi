@@ -212,6 +212,15 @@ TermSettings termSetNonCanonical(mem::Allocator* allocator = &mem::stl_allocator
  */
 void termRestoreSettings(TermSettings settings, mem::Allocator* allocator = &mem::stl_allocator);
 
+
+/* ------------------------------------------------------------------------------------------------ touchFile
+ *  Update the modification time of the file at the given path to the current time.
+ *  This does not create the file.
+ *
+ *  Returns false on failure.
+ */
+b8 touchFile(str path);
+
 } // namespace iro::platform
 
 #endif

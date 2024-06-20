@@ -5,6 +5,7 @@
 #include "containers/stackarray.h"
 
 #include "fcntl.h"
+#include "utime.h"
 #include "errno.h"
 #include "unistd.h"
 #include "dirent.h"
@@ -656,6 +657,24 @@ void termRestoreSettings(TermSettings settings, mem::Allocator* allocator)
 {
 	tcsetattr(STDIN_FILENO, TCSANOW, (struct termios*)settings);
 	allocator->free(settings);
+}
+
+/* ------------------------------------------------------------------------------------------------ touchFile
+ */
+b8 touchFile(str path)
+{
+	struct stat info;
+	if (-1 == stat((char*)path.bytes, &info))
+		return reportErrno(explain_stat((char*)path.bytes, &info));
+
+	struct utimbuf newtimes;
+	newtimes.modtime = time(0);
+	newtimes.actime = info.st_atime;
+
+	if (-1 == utime((char*)path.bytes, &newtimes))
+		return reportErrno(explain_utime((char*)path.bytes, &newtimes));
+
+	return true;
 }
 
 }
