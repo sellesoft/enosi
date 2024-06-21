@@ -62,7 +62,7 @@ local red   = "\027[0;31m"
 --             category so that projects that dont 
 --             need lua stuff dont link them
 lake.find("iro/lua/*.lua"):each(function(lua_file)
-	local o_file = lua_file:gsub("(.-)%.lua", build_dir.."%1.o")
+	local o_file = lua_file:gsub("(.-)%.lua", build_dir.."%1.lua.o")
 	report.objFile(o_file)
 
 	lake.target(o_file)
