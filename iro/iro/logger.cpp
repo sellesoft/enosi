@@ -35,10 +35,11 @@ void Log::newDestination(str name, io::IO* d, Dest::Flags flags)
 
 /* ------------------------------------------------------------------------------------------------
  */
-b8 Logger::init(str name_, Verbosity verbosity_)
+b8 Logger::init(str name, Verbosity verbosity)
 {
-    name = name_;
-    verbosity = verbosity_;
+    this->name = name;
+    this->verbosity = verbosity;
+	need_prefix = true;
     return true;
 }
 
@@ -118,6 +119,56 @@ void Logger::writePrefix(Verbosity v, Log::Dest& d)
 
     for (s32 i = 0; i < iro::log.indentation; i++)
         d.io->write(" "_str);
+}
+
+}
+
+/* ================================================================================================
+ *  C interface for use by logger.lua
+ */
+extern "C"
+{
+using namespace iro;
+
+/* ------------------------------------------------------------------------------------------------
+ *  Report the size of a logger so that lua may allocate space for it internally 
+ *  rather than us try and figure that out here.
+ */
+EXPORT_DYNAMIC
+u64 iro_loggerSize() { return sizeof(Logger); }
+
+/* ------------------------------------------------------------------------------------------------
+ *  Fill out the allocated logger.
+ */
+EXPORT_DYNAMIC
+void iro_initLogger(Logger* logger, str name, u32 verbosity)
+{
+	logger->init(name, Logger::Verbosity(verbosity));
+}
+
+/* ------------------------------------------------------------------------------------------------
+ *  Test if this logger can output anything with its set verbosity and log the first 
+ *  part if so.
+ */
+EXPORT_DYNAMIC
+b8 iro_logFirst(Logger* logger, u32 verbosity, str s)
+{
+	if ((u32)logger->verbosity > verbosity)
+		return false;
+
+	logger->log(Logger::Verbosity(verbosity), s);
+
+	return true;
+}
+
+/* ------------------------------------------------------------------------------------------------
+ *  Log the remaining parts, if any.
+ */
+EXPORT_DYNAMIC
+void iro_logTrail(Logger* logger, u32 verbosity, str s)
+{
+	// no check for verbosity as the call to logFirst tells us if we should continue
+	logger->log(Logger::Verbosity(verbosity), s);
 }
 
 }
