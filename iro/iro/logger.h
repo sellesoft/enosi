@@ -216,7 +216,6 @@ s64 format(io::IO* out, color::Colored<T>& x)
 }
 }
 
-
 /* ================================================================================================ Logger
  *  A logger, which is a named thing that logs stuff to the log. Each logger has its own verbosity 
  *  setting so we can be selective about what we want to see in a log.
@@ -238,6 +237,8 @@ struct Logger
 
 	Verbosity verbosity;
 
+	b8 need_prefix;
+
 	static Logger create(str name, Verbosity verbosity)
 	{
 		Logger out = {};
@@ -247,32 +248,63 @@ struct Logger
 
 	b8 init(str name, Verbosity verbosity);
 
-	// this language is so fucking dumb man
-	// This works for now, so I'm going to leave it be, but this should 
-	// really be replaced later on.
-	// The reason why this has to be put in a struct is because (at least on clang)
-	// trying to pass an integer literal to a non-type template parameter in 
-	// logSingle causes a compiler error.
-	// This could probably be pulled into log.
-	struct u32Range { u32 start, end; }; 
-
 	template<io::Formattable... T>
 	void log(Verbosity v, T&... args)
 	{
 		if (isnil(iro::log.destinations))
 			return;
 
-
 		for (Log::Dest& destination : iro::log.destinations)
 		{
-			writePrefix(v, destination);
-
 			if (destination.flags.test(Log::Dest::Flag::PrefixNewlines))
-				logSingle<u32Range{0, sizeof...(args)-1}>(
-					*this, v, destination, 
-					color::sanitizeColored(args, destination)...);
+			{
+				struct Intercept : io::IO
+				{
+					Log::Dest& dest;
+					Logger& logger;
+					Verbosity v;
+
+					Intercept(Log::Dest& dest, Logger& logger, Verbosity v) : 
+						dest(dest), logger(logger), v(v) {}
+
+					s64 write(Bytes slice) override
+					{
+						u64 linelen = 0;
+						for (u64 i = 0; i < slice.len; ++i)
+						{
+							if (logger.need_prefix)
+							{
+								logger.writePrefix(v, dest);
+								logger.need_prefix = false;
+							}
+
+							if (slice.ptr[i] == '\n')
+							{
+								dest.io->write({slice.ptr+i-linelen,linelen+1});
+								logger.need_prefix = true;
+								linelen = 0;
+							}
+							else
+								linelen += 1;
+
+						}
+
+						if (linelen)
+							dest.io->write({slice.ptr+slice.len-linelen,linelen});
+						return slice.len;
+					}
+
+					s64 read(Bytes bytes) override { return 0; }
+				};
+
+				auto intercept = Intercept(destination, *this, v);
+				io::formatv(&intercept, args...);
+			}
 			else
+			{
+				writePrefix(v, destination);
 				io::formatv(destination.io, color::sanitizeColored(args, destination)...);
+			}
 		}
 	}
 
@@ -280,56 +312,6 @@ struct Logger
 	void log(Verbosity v, T&&... args) { log(v, args...); }
 
 private:
-
-	// Incredibly horrible mess that really needs to be cleaned up.
-	template<u32Range Range, io::Formattable T, io::Formattable... Rest>
-	static void logSingle(Logger& logger, Verbosity v, Log::Dest& dest, T& arg, Rest&... rest)
-	{
-		struct Intercept : public io::IO
-		{
-			Log::Dest& dest;
-			Logger& logger;
-			Verbosity v;
-
-			Intercept(Log::Dest& dest, Logger& logger, Verbosity v) : 
-				dest(dest), logger(logger), v(v) {}
-
-			s64 write(Bytes slice) override
-			{
-				u64 linelen = 0;
-				for (u64 i = 0; i < slice.len; ++i)
-				{
-					if (slice.ptr[i] == '\n')
-					{
-						dest.io->write({slice.ptr + i - linelen, linelen + 1});
-						if constexpr (Range.start == Range.end)
-						{
-							if (i != slice.len - 1)
-								logger.writePrefix(v, dest);
-						}
-						else
-							logger.writePrefix(v, dest);
-						linelen = 0;
-					}
-					else
-						linelen += 1;
-				}
-				if (linelen)
-					dest.io->write({slice.ptr+slice.len-linelen,linelen});
-				return slice.len;
-			}
-
-			s64 read(Bytes slice) override { return 0; }
-		};
-
-		auto intercept = Intercept(dest, logger, v);
-		io::formatv(&intercept, arg);
-
-		if constexpr (Range.start != Range.end)
-		{
-			logSingle<u32Range{Range.start+1, Range.end}, Rest...>(logger, v, dest, rest...);
-		}
-	}
 
 	void writePrefix(Verbosity v, Log::Dest& destination);
 
