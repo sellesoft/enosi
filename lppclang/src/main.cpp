@@ -271,6 +271,31 @@ int testMultipleParses()
   return 0;
 }
 
+int testParseStmt()
+{
+  Context* ctx = createContext();
+  if (!ctx)
+    return 1;
+  defer { destroyContext(ctx); };
+
+  INFO("\n\nparsing statement\n");
+  parseStatement(ctx, R"cpp(
+    int a = 1 + 2;
+  )cpp"_str);
+
+  INFO("\n\nparsing statement\n");
+  parseStatement(ctx, R"cpp(
+    int b = 3 + 
+  )cpp"_str);
+
+  INFO("\n\nparsing statement\n");
+  parseStatement(ctx, R"cpp(
+    int b = 3 + 4;
+  )cpp"_str);
+
+  return 0;
+}
+
 int main()
 {
 
@@ -288,10 +313,12 @@ int main()
           AllowColor));
   }
 
+  playground();
 
   // return testContext();
   // return testLexer();
-  return testLookup();
+  // return testLookup();
   // return testMultipleParses();
+  // return testParseStmt();
 }
 

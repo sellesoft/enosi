@@ -69,6 +69,14 @@ inline llvm::StringRef strRef(str s)
   return llvm::StringRef((char*)s.bytes, s.len);
 }
 
+template<typename To, typename From>
+inline To* tryAs(From* ptr)
+{
+  if (!llvm::isa<To>(ptr))
+    return nullptr;
+  return llvm::cast<To>(ptr);
+}
+
 // TODO(sushi) maybe make adjustable later
 auto lang_options = clang::LangOptions();
 auto printing_policy = clang::PrintingPolicy(lang_options);
@@ -162,13 +170,60 @@ struct Lexer
 namespace clang{
 class LppParser
 {
+public:
+  CompilerInstance& clang;
   Parser& parser;
 
-  LppParser(Parser& parser) : parser(parser) {}
+  LppParser(
+        CompilerInstance& clang,
+        Parser& parser)
+    : clang(clang),
+      parser(parser) {}
 
-  void test()
+  void parseStatement()
   {
-    parser.PP.EnterMainSourceFile();
+    DiagnosticsEngine& diags = clang.getDiagnostics();
+    diags.Reset(true);
+
+    s32 errcount = diags.getNumErrors();
+
+    StmtResult result = parser.ParseStatement();
+    if (!result.isUsable())
+      return;
+
+    Stmt* stmt = result.get();
+
+    if (!diags.hasErrorOccurred())
+    {
+      stmt->dump();
+      return;
+    }
+
+    if (auto declstmt = tryAs<DeclStmt>(stmt))
+    {
+      // Remove the decl from the decl context so that we can try 
+      // to declare it again.
+      parser.getCurScope()->getEntity()->
+        removeDecl(declstmt->getSingleDecl());
+    }
+  }
+
+  str consumeIdentifier()
+  {
+    if (parser.expectIdentifier())
+      return nil;
+
+    const Token& tok = parser.getCurToken();
+    SourceManager& srcmgr = clang.getSourceManager();
+    FileID fileid = srcmgr.getFileID(tok.getLocation());
+
+    // TODO(sushi) surely there is a better way to do this.
+    auto beginoffset = srcmgr.getDecomposedLoc(tok.getLocation()).second;
+    auto endoffset = srcmgr.getDecomposedLoc(tok.getEndLoc()).second;
+    auto membuf = srcmgr.getBufferOrFake(fileid);
+    auto buf = membuf.getBuffer().substr(beginoffset, endoffset-beginoffset);
+    parser.ConsumeToken();
+    return {(u8*)buf.data(), buf.size()};
   }
 };
 }
@@ -210,9 +265,9 @@ struct Context
   //             and i originally added it cause i thought it would solve a 
   //             problem i was having, but it wound up not being the fix. This
   //             might be desirable to have has it helps properly manage 
-  //             different ways of using clang (such as outputting to LLVM, .obj, 
-  //             etc. or just parsing syntax to make an AST and such) so I'm gonna
-  //             keep it for now, but it is really not necessary.
+  //             different ways of using clang (such as outputting to LLVM, 
+  //             .obj, etc. or just parsing syntax to make an AST and such) 
+  //             so I'm gonna keep it for now, but it is really not necessary.
   struct IncrementalAction : public clang::WrapperFrontendAction
   {
     b8 terminating = false;
@@ -221,7 +276,8 @@ struct Context
       clang::WrapperFrontendAction(
         makeUnique<clang::SyntaxOnlyAction>()) {}
 
-    clang::TranslationUnitKind getTranslationUnitKind() override { return clang::TU_Incremental; }
+    clang::TranslationUnitKind getTranslationUnitKind() override 
+      { return clang::TU_Incremental; }
 
     void ExecuteAction() override
     {
@@ -253,17 +309,26 @@ struct Context
   struct DiagConsumer : public clang::DiagnosticConsumer
   {
     clang::Parser& parser;
+    clang::TextDiagnosticPrinter* printer;
 
-    DiagConsumer(clang::Parser& parser) : parser(parser) {}
+    DiagConsumer(
+          clang::Parser& parser,
+          clang::TextDiagnosticPrinter* printer)
+      : parser(parser), 
+        printer(printer) {}
 
     void HandleDiagnostic(
         clang::DiagnosticsEngine::Level diag_level, 
         const clang::Diagnostic& info)
     {
-      INFO("~~~~~  in diag ~~~~~~\n");
-      INFO(parser.getCurToken().getName(), "\n");
-      parser.getCurScope()->getEntity()->dumpDeclContext();
-      INFO("~~~~~ out diag ~~~~~~\n");
+      // TODO(sushi) it would be nice to intercept these but trying to use 
+      //             a TextDiagnosticPrinter to perform the actual printing 
+      //             crashes for some reason idk try this again later
+
+      // INFO("~~~~~  in diag ~~~~~~\n");
+      // INFO(parser.getCurToken().getName(), "\n");
+      // parser.getCurScope()->getEntity()->dumpDeclContext();
+      // INFO("~~~~~ out diag ~~~~~~\n");
     }
   };
 
@@ -305,8 +370,10 @@ struct Context
     TextDiagnosticBuffer* diagbuffer = new TextDiagnosticBuffer;
     DiagnosticsEngine diags(diagids, &*diagopts, diagbuffer);
 
-    driver::Driver driver(driver_args[0], llvm::sys::getProcessTriple(), diags);
+    driver::Driver driver(
+        driver_args[0], llvm::sys::getProcessTriple(), diags);
     driver.setCheckInputsExist(false);
+
     Up<clang::driver::Compilation> compilation(
         driver.BuildCompilation(llvm::ArrayRef(driver_args)));
 
@@ -316,11 +383,15 @@ struct Context
 
     clang = makeUnique<CompilerInstance>();
 
+    auto& clang = *this->clang.get();
+
     io = new LLVMIO(&fs::stdout);
     diagprinter = new TextDiagnosticPrinter(*io, diagopts.get());
+    diag_consumer = makeUnique<DiagConsumer>( *parser, diagprinter);
 
-    auto& clang = *this->clang.get();
     clang.createDiagnostics(diagprinter, false);
+    // clang.createDiagnostics();
+    clang.getDiagnostics().setShowColors(true);
 
     clang.getPCHContainerOperations()->registerWriter(
         makeUnique<clang::ObjectFilePCHContainerWriter>());
@@ -328,9 +399,9 @@ struct Context
         makeUnique<clang::ObjectFilePCHContainerReader>());
     
     if (!CompilerInvocation::CreateFromArgs(
-        clang.getInvocation(),
-        llvm::ArrayRef(cc1args->begin(), cc1args->size()),
-        clang.getDiagnostics()))
+          clang.getInvocation(),
+          llvm::ArrayRef(cc1args->begin(), cc1args->size()),
+          clang.getDiagnostics()))
     {
       ERROR("failed to create compiler invocation\n");
       return false;
@@ -367,7 +438,6 @@ struct Context
     clang.getFrontendOpts().DisableFree = false;
     clang.getCodeGenOpts().DisableFree = false;
 
-
     clang.LoadRequestedPlugins();
 
     // Old manual setup stuff that sorta half worked. If we ever decide to 
@@ -384,13 +454,9 @@ struct Context
 
     clang.ExecuteAction(*action);
 
-    parser = makeUnique<Parser>(clang.getPreprocessor(), clang.getSema(), false);
+    parser = makeUnique<Parser>(
+        clang.getPreprocessor(), clang.getSema(), false);
     parser->Initialize();
-
-    diag_consumer = makeUnique<DiagConsumer>(*parser);
-
-    clang.getDiagnostics().setShowColors(true);
-    clang.getDiagnostics().setClient(&*diag_consumer);
 
     return true;
   }
@@ -438,7 +504,7 @@ struct Context
   }
 };
 
-/* ------------------------------------------------------------------------------------------------ createContext
+/* ----------------------------------------------------------------------------
  */
 Context* createContext()
 {
@@ -448,7 +514,7 @@ Context* createContext()
   return ctx;
 }
 
-/* ------------------------------------------------------------------------------------------------ destroyContext
+/* ----------------------------------------------------------------------------
  */
 void destroyContext(Context* ctx)
 {
@@ -456,21 +522,21 @@ void destroyContext(Context* ctx)
   delete ctx;
 }
 
-/* ------------------------------------------------------------------------------------------------ getClangDecl
+/* ----------------------------------------------------------------------------
  */
 static clang::Decl* getClangDecl(Decl* decl)
 {
   return (clang::Decl*)decl;
 }
 
-/* ------------------------------------------------------------------------------------------------ getClangType
+/* ----------------------------------------------------------------------------
  */
 static clang::QualType getClangType(Type* type)
 {
   return clang::QualType::getFromOpaquePtr(type);
 }
 
-/* ------------------------------------------------------------------------------------------------ createLexer
+/* ----------------------------------------------------------------------------
  */
 Lexer* createLexer(Context* ctx, str s)
 {
@@ -501,7 +567,7 @@ Lexer* createLexer(Context* ctx, str s)
   return lexer;
 }
 
-/* ------------------------------------------------------------------------------------------------ destroyLexer
+/* ----------------------------------------------------------------------------
  */
 void destroyLexer(Context* ctx, Lexer* lexer)
 {
@@ -511,7 +577,7 @@ void destroyLexer(Context* ctx, Lexer* lexer)
   ctx->lexers.remove(lexer->node);
 }
 
-/* ------------------------------------------------------------------------------------------------ lexerNextToken
+/* ----------------------------------------------------------------------------
  */
 Token* lexerNextToken(Lexer* lexer)
 {
@@ -526,7 +592,7 @@ Token* lexerNextToken(Lexer* lexer)
   return (Token*)&lexer->token;
 }
 
-/* ------------------------------------------------------------------------------------------------ tokenGetRaw
+/* ----------------------------------------------------------------------------
  */
 str tokenGetRaw(Context* ctx, Lexer* l, Token* t)
 {
@@ -544,7 +610,7 @@ str tokenGetRaw(Context* ctx, Lexer* l, Token* t)
   return {(u8*)buf.data(), buf.size()};
 }
 
-/* ------------------------------------------------------------------------------------------------ tokenGetRawAndLoc
+/* ----------------------------------------------------------------------------
  */
 TokenRawAndLoc tokenGetRawAndLoc(Context* ctx, Lexer* l, Token* t)
 {
@@ -560,7 +626,7 @@ TokenRawAndLoc tokenGetRawAndLoc(Context* ctx, Lexer* l, Token* t)
   return {{(u8*)buf.data(), buf.size()}, beginoffset, endoffset};
 }
 
-/* ------------------------------------------------------------------------------------------------ tokenGetKind
+/* ----------------------------------------------------------------------------
  */
 TokenKind tokenGetKind(Token* t)
 {
@@ -594,7 +660,7 @@ TokenKind tokenGetKind(Token* t)
   return TK_Unhandled;
 }
 
-/* ------------------------------------------------------------------------------------------------ createASTFromString
+/* ----------------------------------------------------------------------------
  */
 b8 createASTFromString(Context* ctx, str s)
 { 
@@ -603,7 +669,9 @@ b8 createASTFromString(Context* ctx, str s)
   struct SuppressDiagnostics : clang::DiagnosticConsumer
   {
     // suppress diags being output to stdout
-    void HandleDiagnostic(clang::DiagnosticsEngine::Level DiagLevel, const clang::Diagnostic &Info) {}
+    void HandleDiagnostic(
+        clang::DiagnosticsEngine::Level DiagLevel, 
+        const clang::Diagnostic &Info) {}
   };
   SuppressDiagnostics suppressor;
 
@@ -635,7 +703,49 @@ b8 createASTFromString(Context* ctx, str s)
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ parseString
+/* ----------------------------------------------------------------------------
+ */
+static b8 startNewBuffer(
+    clang::SourceManager& srcmgr, 
+    clang::Preprocessor& preprocessor,
+    str s)
+{
+  using namespace clang;
+
+  SourceLocation new_loc = srcmgr.getLocForStartOfFile(srcmgr.getMainFileID());
+
+  FileID fileid = 
+    srcmgr.createFileID(
+      std::move(
+        llvm::MemoryBuffer::getMemBuffer(
+          llvm::StringRef((char*)s.bytes, s.len))),
+      SrcMgr::C_User, 
+      0, 0, new_loc);
+
+  if (preprocessor.EnterSourceFile(fileid, nullptr, new_loc))
+    return false;
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static void maybeResetParser(
+    clang::Parser& parser,
+    clang::Sema& sema)
+{
+  using namespace clang;
+  if (parser.getCurToken().is(tok::annot_repl_input_end))
+  {
+    // reset parser from last incremental parse
+    parser.ConsumeAnyToken();
+    parser.ExitScope();
+    sema.CurContext = nullptr;
+    parser.EnterScope(Scope::DeclScope);
+    sema.ActOnTranslationUnitScope(parser.getCurScope());
+  }
+}
+
+/* ----------------------------------------------------------------------------
  */
 Decl* parseString(Context* ctx, str s)
 {
@@ -650,15 +760,7 @@ Decl* parseString(Context* ctx, str s)
   Sema&             sema = clang.getSema();
   ASTContext&       astctx = sema.getASTContext();
 
-  SourceLocation new_loc = srcmgr.getLocForStartOfFile(srcmgr.getMainFileID());
-
-  FileID fileid = 
-    srcmgr.createFileID(
-      std::move(llvm::MemoryBuffer::getMemBuffer(llvm::StringRef((char*)s.bytes, s.len))),
-      SrcMgr::C_User, 
-      0, 0, new_loc);
-      
-  if (preprocessor.EnterSourceFile(fileid, nullptr, new_loc))
+  if (!startNewBuffer(srcmgr, preprocessor, s))
     return nullptr;
 
   astctx.addTranslationUnitDecl();
@@ -684,7 +786,39 @@ Decl* parseString(Context* ctx, str s)
   return (::Decl*)astctx.getTranslationUnitDecl();
 }
 
-/* ------------------------------------------------------------------------------------------------ dumpDecl
+/* ----------------------------------------------------------------------------
+ */
+void parseStatement(Context* ctx, str s)
+{
+  assert(ctx);
+
+  using namespace clang;
+
+  CompilerInstance& clang = *ctx->clang;
+  Parser&           parser = *ctx->parser;
+  SourceManager&    srcmgr = clang.getSourceManager();
+  Preprocessor&     preprocessor = clang.getPreprocessor();
+  Sema&             sema = clang.getSema();
+  ASTContext&       astctx = sema.getASTContext();
+
+  if (!startNewBuffer(srcmgr, preprocessor, s))
+    return;
+
+  if (parser.getCurToken().is(tok::annot_repl_input_end))
+  {
+    // reset parser from last incremental parse
+    parser.ConsumeAnyToken();
+    parser.ExitScope();
+    sema.CurContext = nullptr;
+    parser.EnterScope(Scope::DeclScope);
+    sema.ActOnTranslationUnitScope(parser.getCurScope());
+  }
+
+  clang::LppParser lppparser(clang, parser);
+  lppparser.parseStatement();
+}
+
+/* ----------------------------------------------------------------------------
  */
 void dumpDecl(Decl* decl)
 {
@@ -692,7 +826,7 @@ void dumpDecl(Decl* decl)
   getClangDecl(decl)->dump();
 }
 
-/* ------------------------------------------------------------------------------------------------ dumpAST
+/* ----------------------------------------------------------------------------
  */
 void dumpAST(Context* ctx)
 {
@@ -700,14 +834,14 @@ void dumpAST(Context* ctx)
   getClangDecl(getTranslationUnitDecl(ctx))->dumpColor();
 }
 
-/* ------------------------------------------------------------------------------------------------ getTranslationUnitDecl
+/* ----------------------------------------------------------------------------
  */
 Decl* getTranslationUnitDecl(Context* ctx)
 {
   return (Decl*)ctx->getASTContext()->getTranslationUnitDecl();
 }
 
-/* ------------------------------------------------------------------------------------------------ createASTDeclIter
+/* ----------------------------------------------------------------------------
  */
 DeclIter* createDeclIter(Context* ctx, Decl* decl)
 {
@@ -727,7 +861,7 @@ DeclIter* createDeclIter(Context* ctx, Decl* decl)
   return (DeclIter*)range;
 }
 
-/* ------------------------------------------------------------------------------------------------ getNextDecl
+/* ----------------------------------------------------------------------------
  */
 Decl* getNextDecl(DeclIter* iter)
 {
@@ -741,7 +875,7 @@ Decl* getNextDecl(DeclIter* iter)
   return (Decl*)out;
 }
 
-/* ------------------------------------------------------------------------------------------------ getDeclKind
+/* ----------------------------------------------------------------------------
  */
 DeclKind getDeclKind(Decl* decl)
 {
@@ -771,7 +905,7 @@ DeclKind getDeclKind(Decl* decl)
   return DeclKind_Unknown;
 }
 
-/* ------------------------------------------------------------------------------------------------ getDeclName
+/* ----------------------------------------------------------------------------
  */
 str getDeclName(Decl* decl)
 {
@@ -786,7 +920,7 @@ str getDeclName(Decl* decl)
   return {(u8*)name.data(), name.size()};
 }
 
-/* ------------------------------------------------------------------------------------------------ getDeclType
+/* ----------------------------------------------------------------------------
  */
 Type* getDeclType(Decl* decl)
 {
@@ -799,7 +933,7 @@ Type* getDeclType(Decl* decl)
   return (Type*)vdecl->getType().getAsOpaquePtr();
 }
 
-/* ------------------------------------------------------------------------------------------------ getClangDeclSpelling
+/* ----------------------------------------------------------------------------
  */
 str getClangDeclSpelling(Decl* decl)
 {
@@ -808,7 +942,7 @@ str getClangDeclSpelling(Decl* decl)
   return {(u8*)s, strlen(s)};
 }
 
-/* ------------------------------------------------------------------------------------------------ getTypeDeclType
+/* ----------------------------------------------------------------------------
  */
 Type* getTypeDeclType(Context* ctx, Decl* decl)
 {
@@ -822,23 +956,33 @@ Type* getTypeDeclType(Context* ctx, Decl* decl)
   return (Type*)ctx->getASTContext()->getTypeDeclType(tdecl).getAsOpaquePtr();
 }
 
-/* ------------------------------------------------------------------------------------------------ getDeclBegin
+/* ----------------------------------------------------------------------------
  */
 u64 getDeclBegin(Context* ctx, Decl* decl)
 {
-  auto [_, offset] = ctx->getASTContext()->getSourceManager().getDecomposedSpellingLoc(getClangDecl(decl)->getBeginLoc());
+  auto [_, offset] = 
+    ctx->
+    getASTContext()->
+    getSourceManager().
+    getDecomposedSpellingLoc(
+        getClangDecl(decl)->getBeginLoc());
   return offset;
 }
 
-/* ------------------------------------------------------------------------------------------------ getDeclEnd
+/* ----------------------------------------------------------------------------
  */
 u64 getDeclEnd(Context* ctx, Decl* decl)
 {
-  auto [_, offset] = ctx->getASTContext()->getSourceManager().getDecomposedSpellingLoc(getClangDecl(decl)->getEndLoc());
+  auto [_, offset] = 
+    ctx->
+    getASTContext()->
+    getSourceManager().
+      getDecomposedSpellingLoc(
+          getClangDecl(decl)->getEndLoc());
   return offset;
 }
 
-/* ------------------------------------------------------------------------------------------------ getFunctionReturnType
+/* ----------------------------------------------------------------------------
  */
 Type* getFunctionReturnType(Decl* decl)
 {
@@ -851,7 +995,7 @@ Type* getFunctionReturnType(Decl* decl)
   return (Type*)cdecl->getAsFunction()->getReturnType().getAsOpaquePtr();
 }
 
-/* ------------------------------------------------------------------------------------------------ functionHasBody
+/* ----------------------------------------------------------------------------
  */
 b8 functionHasBody(Decl* decl)
 {
@@ -859,7 +1003,7 @@ b8 functionHasBody(Decl* decl)
   return getClangDecl(decl)->hasBody();
 }
 
-/* ------------------------------------------------------------------------------------------------ getFunctionBodyBegin
+/* ----------------------------------------------------------------------------
  */
 u32 getFunctionBodyBegin(Decl* decl)
 {
@@ -868,7 +1012,7 @@ u32 getFunctionBodyBegin(Decl* decl)
   return getClangDecl(decl)->getBody()->getBeginLoc().getRawEncoding();
 }
 
-/* ------------------------------------------------------------------------------------------------ getFunctionBodyEnd
+/* ----------------------------------------------------------------------------
  */
 u32 getFunctionBodyEnd(Decl* decl)
 {
@@ -877,7 +1021,7 @@ u32 getFunctionBodyEnd(Decl* decl)
   return getClangDecl(decl)->getBody()->getEndLoc().getRawEncoding();
 }
 
-/* ------------------------------------------------------------------------------------------------ tagHasBody
+/* ----------------------------------------------------------------------------
  */
 b8 tagHasBody(Decl* decl)
 {
@@ -891,7 +1035,7 @@ b8 tagHasBody(Decl* decl)
   return tdecl->isThisDeclarationADefinition();
 }
 
-/* ------------------------------------------------------------------------------------------------ getTagBodyBegin
+/* ----------------------------------------------------------------------------
  */
 u32 getTagBodyBegin(Decl* decl)
 {
@@ -901,7 +1045,7 @@ u32 getTagBodyBegin(Decl* decl)
   return tdecl->getBraceRange().getBegin().getRawEncoding();
 }
 
-/* ------------------------------------------------------------------------------------------------ getTagBodyEnd
+/* ----------------------------------------------------------------------------
  */
 u32 getTagBodyEnd(Decl* decl)
 {
@@ -911,7 +1055,7 @@ u32 getTagBodyEnd(Decl* decl)
   return tdecl->getBraceRange().getEnd().getRawEncoding();
 }
 
-/* ------------------------------------------------------------------------------------------------ tagIsEmbeddedInDeclarator
+/* ----------------------------------------------------------------------------
  */
 b8 tagIsEmbeddedInDeclarator(Decl* decl)
 {
@@ -921,7 +1065,7 @@ b8 tagIsEmbeddedInDeclarator(Decl* decl)
   return ((clang::TagDecl*)cdecl)->isEmbeddedInDeclarator();
 }
 
-/* ------------------------------------------------------------------------------------------------ createParamIter
+/* ----------------------------------------------------------------------------
  */
 ParamIter* createParamIter(Context* ctx, Decl* decl)
 {
@@ -944,7 +1088,7 @@ ParamIter* createParamIter(Context* ctx, Decl* decl)
   return (ParamIter*)iter;
 }
 
-/* ------------------------------------------------------------------------------------------------ getNextParam
+/* ----------------------------------------------------------------------------
  */
 Decl* getNextParam(ParamIter* iter)
 {
@@ -952,28 +1096,28 @@ Decl* getNextParam(ParamIter* iter)
   return (Decl*)((ParamIterator*)iter)->next();
 }
 
-/* ------------------------------------------------------------------------------------------------ isCanonical
+/* ----------------------------------------------------------------------------
  */
 b8 isCanonical(Type* type)
 {
   return getClangType(type).isCanonical();
 }
 
-/* ------------------------------------------------------------------------------------------------ isUnqualified
+/* ----------------------------------------------------------------------------
  */
 b8 isUnqualified(Type* type)
 {
   return !getClangType(type).hasQualifiers();
 }
 
-/* ------------------------------------------------------------------------------------------------ isUnqualifiedAndCanonical
+/* ----------------------------------------------------------------------------
  */
 b8 isUnqualifiedAndCanonical(Type* type)
 {
   return isUnqualified(type) && isCanonical(type);
 }
 
-/* ------------------------------------------------------------------------------------------------ getCanonicalType
+/* ----------------------------------------------------------------------------
  */
 Type* getCanonicalType(Type* type)
 {
@@ -981,7 +1125,7 @@ Type* getCanonicalType(Type* type)
   return (Type*)getClangType(type).getCanonicalType().getAsOpaquePtr();
 }
 
-/* ------------------------------------------------------------------------------------------------ getUnqualifiedType
+/* ----------------------------------------------------------------------------
  */
 Type* getUnqualifiedType(Type* type)
 {
@@ -989,7 +1133,7 @@ Type* getUnqualifiedType(Type* type)
   return (Type*)getClangType(type).getUnqualifiedType().getAsOpaquePtr();
 }
 
-/* ------------------------------------------------------------------------------------------------ getUnqualifiedCanonicalType
+/* ----------------------------------------------------------------------------
  */
 Type* getUnqualifiedCanonicalType(Type* type)
 {
@@ -997,7 +1141,7 @@ Type* getUnqualifiedCanonicalType(Type* type)
   return getUnqualifiedType(getCanonicalType(type));
 }
 
-/* ------------------------------------------------------------------------------------------------ getQualTypeName
+/* ----------------------------------------------------------------------------
  */
 str getTypeName(Context* ctx, Type* type)
 {
@@ -1020,7 +1164,7 @@ str getTypeName(Context* ctx, Type* type)
   return m.asStr();
 }
 
-/* ------------------------------------------------------------------------------------------------ getCanonicalTypeName
+/* ----------------------------------------------------------------------------
  */
 str getCanonicalTypeName(Context* ctx, Type* type)
 {
@@ -1028,7 +1172,7 @@ str getCanonicalTypeName(Context* ctx, Type* type)
   return getTypeName(ctx, getCanonicalType(type));
 }
 
-/* ------------------------------------------------------------------------------------------------ getUnqualifiedTypeName
+/* ----------------------------------------------------------------------------
  */
 str getUnqualifiedTypeName(Context* ctx, Type* type)
 {
@@ -1036,7 +1180,7 @@ str getUnqualifiedTypeName(Context* ctx, Type* type)
   return getTypeName(ctx, getUnqualifiedType(type));
 }
 
-/* ------------------------------------------------------------------------------------------------ getUnqualifiedCanonicalTypeName
+/* ----------------------------------------------------------------------------
  */
 str getUnqualifiedCanonicalTypeName(Context* ctx, Type* type)
 {
@@ -1044,7 +1188,7 @@ str getUnqualifiedCanonicalTypeName(Context* ctx, Type* type)
   return getTypeName(ctx, getUnqualifiedCanonicalType(type));
 }
 
-/* ------------------------------------------------------------------------------------------------ getTypeSize
+/* ----------------------------------------------------------------------------
  */
 u64 getTypeSize(Context* ctx, Type* type)
 {
@@ -1052,7 +1196,7 @@ u64 getTypeSize(Context* ctx, Type* type)
   return ctx->getASTContext()->getTypeInfo(getClangType(type)).Width;
 }
 
-/* ------------------------------------------------------------------------------------------------ typeIsBuiltin
+/* ----------------------------------------------------------------------------
  */
 b8 typeIsBuiltin(Type* type)
 {
@@ -1060,20 +1204,21 @@ b8 typeIsBuiltin(Type* type)
   return getClangType(type)->getTypeClass() == ClangTypeClass::Builtin;
 }
 
-/* ------------------------------------------------------------------------------------------------ getTypeDecl
+/* ----------------------------------------------------------------------------
  */
 Decl* getTypeDecl(Type* type)
 {
   assert(type);
 
   auto ctype = getClangType(type);
-  if (!clang::TagType::classof(ctype.getTypePtr())) // TODO(sushi) not sure if any other types have decls
+  // TODO(sushi) not sure if any other types have decls
+  if (!clang::TagType::classof(ctype.getTypePtr())) 
     return nullptr;
 
   return (Decl*)ctype->getAsTagDecl();
 }
 
-/* ------------------------------------------------------------------------------------------------ createFieldIter
+/* ----------------------------------------------------------------------------
  */
 FieldIter* createFieldIter(Context* ctx, Decl* decl)
 {
@@ -1091,7 +1236,7 @@ FieldIter* createFieldIter(Context* ctx, Decl* decl)
   return (FieldIter*)iter;
 }
 
-/* ------------------------------------------------------------------------------------------------ getNextField
+/* ----------------------------------------------------------------------------
  */
 Decl* getNextField(FieldIter* iter)
 {
@@ -1099,7 +1244,7 @@ Decl* getNextField(FieldIter* iter)
   return (Decl*)((FieldIterator*)iter)->next();
 }
 
-/* ------------------------------------------------------------------------------------------------ getFieldOffset
+/* ----------------------------------------------------------------------------
  */
 u64 getFieldOffset(Context* ctx, Decl* field)
 {
@@ -1114,7 +1259,7 @@ u64 getFieldOffset(Context* ctx, Decl* field)
   return ctx->getASTContext()->getFieldOffset(vdecl);
 }
 
-/* ------------------------------------------------------------------------------------------------ createEnumIter
+/* ----------------------------------------------------------------------------
  */
 EnumIter* createEnumIter(Context* ctx, Decl* decl)
 {
@@ -1132,7 +1277,7 @@ EnumIter* createEnumIter(Context* ctx, Decl* decl)
   return (EnumIter*)iter;
 }
 
-/* ------------------------------------------------------------------------------------------------ getNextEnum
+/* ----------------------------------------------------------------------------
  */
 Decl* getNextEnum(EnumIter* iter)
 {
@@ -1140,7 +1285,7 @@ Decl* getNextEnum(EnumIter* iter)
   return (Decl*)((EnumIterator*)iter)->next();
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 Type* lookupType(Context* ctx, str name)
 {
@@ -1157,7 +1302,9 @@ Type* lookupType(Context* ctx, str name)
 
   FileID fileid = 
     srcmgr.createFileID(
-      std::move(llvm::MemoryBuffer::getMemBuffer(llvm::StringRef((char*)name.bytes, name.len))),
+      std::move(
+        llvm::MemoryBuffer::getMemBuffer(
+          llvm::StringRef((char*)name.bytes, name.len))),
       SrcMgr::C_User, 
       0, 0, new_loc);
       
@@ -1189,31 +1336,10 @@ Type* lookupType(Context* ctx, str name)
   T.getCanonicalType().dump();
 
   return nullptr;
-
-  //Parser::DeclGroupPtrTy decl_group;
-  //Sema::ModuleImportState import_state;
-
-  //for (b8 at_eof = parser.ParseFirstTopLevelDecl(decl_group, import_state);
-  //   !at_eof;
-  //   at_eof = parser.ParseTopLevelDecl(decl_group, import_state))
-  //{/* dont do anything idk yet */}
-
-  //return (::Decl*)astctx.getTranslationUnitDecl();
-
-
-  IdentifierInfo* idinfo = clang.getPreprocessor().getIdentifierInfo(strRef(name));
-
-  DeclarationName dname(idinfo);
-  DeclContextLookupResult result = sema.CurContext->lookup(dname);
-
-  for (auto r : result)
-  {
-    r->dump();  
-  }
-
-  return nullptr;
 }
 
+/* ----------------------------------------------------------------------------
+ */
 // I dont really care for doing this but I dont feel like figuring out their
 // error thing right now so whatever.
 llvm::ExitOnError exit_on_error;
@@ -1231,3 +1357,33 @@ void addIncludeDir(Context* ctx, str s)
   DirectoryLookup dirlu(dirent, SrcMgr::C_User, false);
   header_search.AddSearchPath(dirlu, false);
 }
+
+/* ----------------------------------------------------------------------------
+ *  Miscellaneous experimenting with clang directly.
+ */
+void playground()
+{
+  using namespace clang;
+
+  auto ctx = createContext();
+
+  CompilerInstance& clang = *ctx->clang;
+  Parser&           parser = *ctx->parser;
+  Sema&             sema = clang.getSema();
+  SourceManager&    srcmgr = clang.getSourceManager();
+  Preprocessor&     preprocessor = clang.getPreprocessor();
+
+  LppParser lppparser(clang, parser);
+
+  startNewBuffer(srcmgr, preprocessor, R"cpp(
+    hello there
+  )cpp"_str);
+
+  maybeResetParser(parser, sema);
+
+  for (s32 i = 0; i < 3; ++i)
+  {
+    INFO("id: ", lppparser.consumeIdentifier(), "\n");
+  }
+}
+

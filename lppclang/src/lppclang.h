@@ -1,6 +1,6 @@
 /*
- *  Extension for lpp that interfaces to the clang api for semantic manipulation of 
- *  C/C++ code via lpp.
+ *  Extension for lpp that interfaces to the clang api for semantic 
+ *  manipulation of C/C++ code via lpp.
  */
 
 #ifndef _lppclang_lppclang_h
@@ -107,77 +107,82 @@ typedef struct
 // **** EXPERIMENTAL ****
 void addIncludeDir(Context* ctx, str s); // TODO(sushi) move to normal api
 Type* lookupType(Context* ctx, str name);
+void parseStatement(Context* ctx, str s);
 // **** EXPERIMENTAL ****
 
-/* ------------------------------------------------------------------------------------------------ create/destroyContext
- |  Create/destroy an lppclang context. This keeps track of clang's ASTUnit and also various things
- |  that we must dynamically allocate.
+/* ----------------------------------------------------------------------------
+ |  Create/destroy an lppclang context. This keeps track of clang's ASTUnit and 
+ |  also various things that we must dynamically allocate.
  */
 Context* createContext();
 void     destroyContext(Context*);
 
-/* ------------------------------------------------------------------------------------------------ createLexer
+/* ----------------------------------------------------------------------------
  |  Create a lexer over the given string.
  */
 Lexer* createLexer(Context* ctx, str s);
 
-/* ------------------------------------------------------------------------------------------------ lexerNextToken
- |  Returns a pointer to the next token in the string or nullptr if none are left.
+/* ----------------------------------------------------------------------------
+ |  Returns a pointer to the next token in the string or nullptr if none are 
+ |  left.
  */
 Token* lexerNextToken(Lexer* l);
 
-/* ------------------------------------------------------------------------------------------------ tokenGetRaw
+/* ----------------------------------------------------------------------------
  |  Returns a str representing the raw text the given token spans.
  */ 
 str tokenGetRaw(Context* ctx, Lexer* l, Token* t);
 
-/* ------------------------------------------------------------------------------------------------ tokenGetKind
+/* ----------------------------------------------------------------------------
  |  Get the kind of a token.
  */
 TokenKind tokenGetKind(Token* t);
 
-/* ------------------------------------------------------------------------------------------------ createASTFromString
+/* ----------------------------------------------------------------------------
  |  Create an AST from the given string for the given Context.
  */ 
 b8 createASTFromString(Context* ctx, str s);
 
-/* ------------------------------------------------------------------------------------------------ parseString
+/* ----------------------------------------------------------------------------
  */
 Decl* parseString(Context* ctx, str s);
 
-/* ------------------------------------------------------------------------------------------------ dumpDecl
+/* ----------------------------------------------------------------------------
  |  Prints clang's textual representation of the given decl to stdout
  */ 
 void dumpDecl(Decl* decl);
 
-/* ------------------------------------------------------------------------------------------------ getTranslationUnitDecl
+/* ----------------------------------------------------------------------------
  |  Retrieves the toplevel declaration of the given context.
  */
 Decl* getTranslationUnitDecl(Context* ctx);
 
-/* ------------------------------------------------------------------------------------------------ createDeclIter/getNextDecl
- |  Given that 'decl' is also a declaration context, creates and returns an iterator over each of 
- |  its interior declarations. This works for things like structures, namespaces, the translation
- |  unit retrieved via getTranslationUnitDecl(), etc.
+/* ----------------------------------------------------------------------------
+ |  Given that 'decl' is also a declaration context, creates and returns an 
+ |  iterator over each of its interior declarations. This works for things 
+ |  like structures, namespaces, the translation unit retrieved via 
+ |  getTranslationUnitDecl(), etc.
  |
- |  If the given decl is not a declaration context or is empty, nullptr is returned.
+ |  If the given decl is not a declaration context or is empty, nullptr is 
+ |  returned.
  */
 DeclIter* createDeclIter(Context* ctx, Decl* decl);
 Decl*     getNextDecl(DeclIter* iter);
 
-/* ------------------------------------------------------------------------------------------------ getDeclKind
- |  Returns the kind of declaration 'decl' represents, if it is known to this api.
+/* ----------------------------------------------------------------------------
+ |  Returns the kind of declaration 'decl' represents, if it is known to this 
+ |  api.
  */
 DeclKind getDeclKind(Decl* decl);
 
-/* ------------------------------------------------------------------------------------------------ getDeclName
+/* ----------------------------------------------------------------------------
  |  Assuming 'decl' is a named declaration, retrieve its name
  */ 
 str getDeclName(Decl* decl);
 
-/* ------------------------------------------------------------------------------------------------ getDeclType
- |  Assuming 'decl' is a value declaration (eg. a declaration with an underlying type), retrieve 
- |  its type.
+/* ----------------------------------------------------------------------------
+ |  Assuming 'decl' is a value declaration (eg. a declaration with an 
+ |  underlying type), retrieve its type.
  */ 
 Type* getDeclType(Decl* decl);
 
@@ -185,50 +190,52 @@ Type* getDeclType(Decl* decl);
 // This does not give the type of the declaraion!!
 Type* getTypeDeclType(Context* ctx, Decl* decl);
 
-/* ------------------------------------------------------------------------------------------------ getDeclBegin/End
- |  Gets the offset into the provided string where the given declaration begins and ends.
+/* ----------------------------------------------------------------------------
+ |  Gets the offset into the provided string where the given declaration 
+ |  begins and ends.
  */
 u64 getDeclBegin(Context* ctx, Decl* decl);
 u64 getDeclEnd(Context* ctx, Decl* decl);
 
-/* ------------------------------------------------------------------------------------------------ getFunctionReturnType
- |  If the given decl is a function declaration, retrieve its return type. Otherwise nullptr
- |  is returned.
+/* ----------------------------------------------------------------------------
+ |  If the given decl is a function declaration, retrieve its return type. 
+ |  Otherwise nullptr is returned.
  */
 Type* getFunctionReturnType(Decl* decl);
 
-/* ------------------------------------------------------------------------------------------------ functionHasBody/getFunctionBodyBegin/End
- |  Helpers for determining if the given function or method has a body and where that body 
- |  begins and ends.
+/* ----------------------------------------------------------------------------
+ |  Helpers for determining if the given function or method has a body and 
+ |  where that body begins and ends.
  */
 b8  functionHasBody(Decl* decl);
 u32 getFunctionBodyBegin(Decl* decl);
 u32 getFunctionBodyEnd(Decl* decl);
 
-/* ------------------------------------------------------------------------------------------------ tagHasBody/getTagBodyBegin/End
- |  Helpers for determining if the given tag declaration (a struct, class, enum, etc.) has a body
- |  and where that body begins and ends.
+/* ----------------------------------------------------------------------------
+ |  Helpers for determining if the given tag declaration (a struct, class, 
+ |  enum, etc.) has a body and where that body begins and ends.
  */
 b8  tagHasBody(Decl* decl);
 u32 getTagBodyBegin(Decl* decl);
 u32 getTagBodyEnd(Decl* decl);
 
-/* ------------------------------------------------------------------------------------------------ tagIsEmbeddedInDeclarator
- |  Determine if this tag declaration (a struct, class, enum, etc.) is embedded in a declarator.
- |  Eg. is this tag being defined for the first time in the syntax of a declarator:
+/* ----------------------------------------------------------------------------
+ |  Determine if this tag declaration (a struct, class, enum, etc.) is embedded 
+ |  in a declarator. Eg. is this tag being defined for the first time in the 
+ |  syntax of a declarator:
  |  
  |  struct Apple {...} apple;
  */
 b8 tagIsEmbeddedInDeclarator(Decl* decl);
 
-/* ------------------------------------------------------------------------------------------------ createParamIter/getNextParam
- |  Given that decl is a function declaration, create and return an iterator over its parameters
- |  via getNextParam().
+/* ----------------------------------------------------------------------------
+ |  Given that decl is a function declaration, create and return an iterator 
+ |  over its parameters via getNextParam().
  */
 ParamIter* createParamIter(Context* ctx, Decl* decl);
 Decl*      getNextParam(ParamIter* iter);
 
-/* ------------------------------------------------------------------------------------------------ isCanonical/Unqualified
+/* ----------------------------------------------------------------------------
  |  Helpers for determining if the given type is canonical/unqualified.
  */
 b8 isCanonical(Type* type);
@@ -237,29 +244,30 @@ b8 isUnqualifiedAndCanonical(Type* type);
 
 b8 isConst(Type* type);
 
-/* ------------------------------------------------------------------------------------------------ getCanonicalType
- |  Retrieves the canonical type of the given type, eg. the underlying type with syntax sugar 
- |  removed. This will still have type qualifiers (such as 'const').
+/* ----------------------------------------------------------------------------
+ |  Retrieves the canonical type of the given type, eg. the underlying type 
+ |  with syntax sugar removed. This will still have type qualifiers (such as 
+ |  'const').
  */
 Type* getCanonicalType(Type* type);
 
-/* ------------------------------------------------------------------------------------------------ getUnqualifiedType
+/* ----------------------------------------------------------------------------
  |  Retrieves the type with qualifiers removed.
  */
 Type* getUnqualifiedType(Type* type);
 
-/* ------------------------------------------------------------------------------------------------ getUnqualifiedCanonicalType
+/* ----------------------------------------------------------------------------
  |  Combination of getCanonicalType and getUnqualifiedType.
  */
 Type* getUnqualifiedCanonicalType(Type* type);
 
-/* ------------------------------------------------------------------------------------------------ getTypeName
- |  Returns a string representing the name of the given type. What is returned depends on the 
- |  sugar and qualifications present on the type. 
+/* ----------------------------------------------------------------------------
+ |  Returns a string representing the name of the given type. What is returned 
+ |  depends on the sugar and qualifications present on the type. 
  */
 str getTypeName(Context* ctx, Type* type);
 
-/* ------------------------------------------------------------------------------------------------ getCanonicalTypeName
+/* ----------------------------------------------------------------------------
  |  Returns a string containing the 'canonical' spelling of 
  |  the type's name. Eg. no matter the sugar that the given type 
  |  has this will always return the same name for the underlying type. 
@@ -286,7 +294,7 @@ str getTypeName(Context* ctx, Type* type);
  */
 str getCanonicalTypeName(Context* ctx, Type* type);
 
-/* ------------------------------------------------------------------------------------------------ getUnqualifiedCanonicalTypeName
+/* ----------------------------------------------------------------------------
  |  Same as getCanonicalTypeName but with qualifiers removed.
  */
 str getUnqualifiedCanonicalTypeName(Context* ctx, Type* type);
@@ -309,18 +317,20 @@ u64 getFieldOffset(Context* ctx, Decl* field);
 EnumIter* createEnumIter(Context* ctx, Decl* decl);
 Decl*     getNextEnum(EnumIter* iter);
 
-/* ------------------------------------------------------------------------------------------------ dumpAST
+/* ----------------------------------------------------------------------------
  |  Asks clang to dump the loaded ast to stdout for debug purposes.
  */
 void dumpAST(Context* ctx);
 
-/* ------------------------------------------------------------------------------------------------ getClangDeclSpelling
- |  Retrieves clang's internal naming of the given decl for debugging decl kinds unknown to the 
- |  api.
+/* ----------------------------------------------------------------------------
+ |  Retrieves clang's internal naming of the given decl for debugging decl 
+ |  kinds unknown to the api.
  */
 str getClangDeclSpelling(Decl* decl);
 
 //!ffiapi end
+
+void playground();
 
 }
 

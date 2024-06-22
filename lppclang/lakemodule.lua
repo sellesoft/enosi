@@ -37,7 +37,8 @@ local lflags_lib = List
 
   "-lc",
 
-  -- TODO(sushi) get rid of this group stuff and just figure out the proper link ordering
+  -- TODO(sushi) get rid of this group stuff and just figure out the proper 
+  --             link ordering
   "-Wl,--start-group",
   options.getProjLibFlags "llvm",
   "-Wl,--end-group"
@@ -50,7 +51,8 @@ local lflags_exe = List
   options.getProjLibDirFlags "luajit",
   options.getProjLibFlags "luajit",
 
-  -- TODO(sushi) get rid of this group stuff and just figure out the proper link ordering
+  -- TODO(sushi) get rid of this group stuff and just figure out the proper 
+  --             link ordering
   "-Wl,--start-group",
   options.getProjLibFlags "llvm",
   "-Wl,--end-group"
