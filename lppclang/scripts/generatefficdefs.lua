@@ -9,30 +9,30 @@ local header_path = "lppclang/src/lppclang.h"
 local header = io.open(header_path, "r")
 
 if not header then
-	error("failed to open '"..header_path.."' for reading")
+  error("failed to open '"..header_path.."' for reading")
 end
 
 local api = ""
 local take = false
 
 while true do
-	local line = header:read("L")
+  local line = header:read("L")
 
-	if not line then
-		break
-	end
+  if not line then
+    break
+  end
 
-	if line:match("//!ffiapi end") then
-		take = false
-	end
+  if line:match("//!ffiapi end") then
+    take = false
+  end
 
-	if take then
-		api = api..line
-	end
+  if take then
+    api = api..line
+  end
 
-	if line:match("//!ffiapi start") then
-		take = true
-	end
+  if line:match("//!ffiapi start") then
+    take = true
+  end
 end
 
 -- preprocess with cpp
@@ -42,14 +42,14 @@ end
 local tmpname = os.tmpname()
 local tmpfile = io.open(tmpname, "w")
 if not tmpfile then
-	error("failed to open tempfile '"..tmpname.."' for writing")
+  error("failed to open tempfile '"..tmpname.."' for writing")
 end
 tmpfile:write(api)
 tmpfile:close()
 
 local result = io.popen("cpp -P "..tmpname, "r")
 if not result then
-	error("failed to open cpp process")
+  error("failed to open cpp process")
 end
 
 local cdef = result:read("*a")

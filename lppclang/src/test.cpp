@@ -1,20 +1,20 @@
 // hi
 struct Apple
 {
-	struct Leaf
-	{
-		float size;
-	};
+  struct Leaf
+  {
+    float size;
+  };
 
-	enum class Kind : short
-	{
-		Red,
-		Green,
-	};
+  enum class Kind : short
+  {
+    Red,
+    Green,
+  };
 
-	Kind kind;
-	int leaves;
-	float nutrients;
+  Kind kind;
+  int leaves;
+  float nutrients;
 };
 
 namespace thing
@@ -22,19 +22,19 @@ namespace thing
 
 struct Thing
 {
-	struct Subthing
-	{
-		int a = 1;
-		
-		struct Node
-		{
-			void* data;
-		};
-	};
+  struct Subthing
+  {
+    int a = 1;
+    
+    struct Node
+    {
+      void* data;
+    };
+  };
 
-	const int a = 0;
-	int b = 1;
-	Apple apple;
+  const int a = 0;
+  int b = 1;
+  Apple apple;
 };
 
 }
@@ -45,20 +45,20 @@ using namespace thing;
 
 Thing hi(Apple apple0, const Apple apple1, Apple::Leaf leaf, Apple::Kind kind)
 { 
-	return {};
+  return {};
 }
 
 thing::Thing hey()
 {
-	return {};
+  return {};
 }
 
 MyThing hello()
 {
-	return {};
+  return {};
 }
 
 void umm()
 {
-	
+  
 }

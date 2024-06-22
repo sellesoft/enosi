@@ -79,7 +79,7 @@ local lppclang
 -- helpers
 local strtype = ffi.typeof("str")
 local make_str = function(s)
-	return strtype(s, #s)
+  return strtype(s, #s)
 end
 
 -- api used by lpp user
@@ -87,12 +87,12 @@ local clang = {}
 
 local AST,
       Decl,
-	  Type,
-	  Function,
-	  DeclIter,
-	  ParamIter,
-	  FieldIter,
-	  EnumIter
+    Type,
+    Function,
+    DeclIter,
+    ParamIter,
+    FieldIter,
+    EnumIter
 
 -- Wrapper around a Context* that provides access to its functions via
 -- lua methods as well as some helper methods.
@@ -100,88 +100,88 @@ AST = {}
 AST.__index = AST
 
 AST.new = function(ctx)
-	assert(ctx, "AST.new called without a context")
+  assert(ctx, "AST.new called without a context")
 
-	local o = {}
-	setmetatable(o, AST)
-	o.ctx = ctx
-	return o
+  local o = {}
+  setmetatable(o, AST)
+  o.ctx = ctx
+  return o
 end
 
 
 AST.getTranslationUnitDecl = function(self) 
-	local tu = lppclang.getTranslationUnitDecl(self.ctx)
-	return Decl.new(self, tu)
+  local tu = lppclang.getTranslationUnitDecl(self.ctx)
+  return Decl.new(self, tu)
 end
 
 Decl = {}
 Decl.__index = Decl
 
 Decl.new = function(ast, d)
-	assert(d, "Decl.new called without a decl pointer")
+  assert(d, "Decl.new called without a decl pointer")
 
-	local o = {}
-	setmetatable(o, Decl)
-	o.ast = ast
-	o.decl = d
-	return o
+  local o = {}
+  setmetatable(o, Decl)
+  o.ast = ast
+  o.decl = d
+  return o
 end
 
 Decl.getDeclIter = function(self)
-	local iter = lppclang.createDeclIter(self.ast.ctx, self.d)
-	if iter == nil then
-		return false
-	end
+  local iter = lppclang.createDeclIter(self.ast.ctx, self.d)
+  if iter == nil then
+    return false
+  end
 
-	return DeclIter.new(iter)
+  return DeclIter.new(iter)
 end
 
 Decl.name = function(self)
-	local n = lppclang.getDeclName(self.decl)
-	return ffi.string(n.s, n.len)
+  local n = lppclang.getDeclName(self.decl)
+  return ffi.string(n.s, n.len)
 end
 
 Decl.type = function(self)
-	local t = lppclang.getDeclType(self.decl)
-	return Type.new(self.ast, t)
+  local t = lppclang.getDeclType(self.decl)
+  return Type.new(self.ast, t)
 end
 
 Decl.asFunction = function(self)
-	if lppclang.getDeclType(self.decl) == lppclang.DeclKind_Function then
-		return Function.new(self.ast, self.decl)
-	end
+  if lppclang.getDeclType(self.decl) == lppclang.DeclKind_Function then
+    return Function.new(self.ast, self.decl)
+  end
 end
 
 
 clang.parseString = function(str)
-	local ctx = lppclang.createContext()
-	
-	if ctx == nil then
-		error("failed to create lppclang context", 2)
-	end
+  local ctx = lppclang.createContext()
+  
+  if ctx == nil then
+    error("failed to create lppclang context", 2)
+  end
 
-	ffi.gc(ctx, function(self) -- clean up context when no more references to it remain
-		lppclang.destroyContext(self)
-	end)
+  ffi.gc(ctx, function(self) -- clean up context when no more references to it remain
+    lppclang.destroyContext(self)
+  end)
 
-	if lppclang.createASTFromString(ctx, make_str(str)) == 0 then
-		error("failed to create AST from string", 2)
-	end
+  if lppclang.createASTFromString(ctx, make_str(str)) == 0 then
+    error("failed to create AST from string", 2)
+  end
 
-	return ctx
+  return ctx
 end
 
 
 return {
 
-	init = function(lpp_in, libpath)
-		lpp = lpp_in
-		lppclang = ffi.load(libpath)
+  init = function(lpp_in, libpath)
+    lpp = lpp_in
+    lppclang = ffi.load(libpath)
 
-		-- patch lpp with the clang module
-		lpp.clang = clang
+    -- patch lpp with the clang module
+    lpp.clang = clang
 
-		return true
-	end
+    return true
+  end
 
 }

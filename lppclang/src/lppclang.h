@@ -15,69 +15,69 @@ using namespace iro;
 
 typedef enum
 {
-	DeclKind_Invalid,
+  DeclKind_Invalid,
 
-	// Not handled yet by this api
-	DeclKind_Unknown,
+  // Not handled yet by this api
+  DeclKind_Unknown,
 
-	// A top level function
-	DeclKind_Function,
+  // A top level function
+  DeclKind_Function,
 
-	// A function on a structure
-	DeclKind_Method,
+  // A function on a structure
+  DeclKind_Method,
 
-	// A parameter of a method or function
-	DeclKind_Parameter,
+  // A parameter of a method or function
+  DeclKind_Parameter,
 
-	// A local or global variable
-	DeclKind_Variable,
+  // A local or global variable
+  DeclKind_Variable,
 
-	// A variable member of a structure
-	DeclKind_Field,
+  // A variable member of a structure
+  DeclKind_Field,
 
-	DeclKind_Typedef,
+  DeclKind_Typedef,
 
-	// struct/union/class
-	DeclKind_Record,
+  // struct/union/class
+  DeclKind_Record,
 
-	DeclKind_Enum,
+  DeclKind_Enum,
 } DeclKind;
 
 //!ffiapi end
 
 static const str declkind_strs[] =
 {
-	"Invalid"_str,
-	"Unknown"_str,
-	"Function"_str,
-	"Method"_str,
-	"Parameter"_str,
-	"Variable"_str,
-	"Field"_str,
-	"Typedef"_str,
-	"Record"_str,
-	"Enum"_str,
+  "Invalid"_str,
+  "Unknown"_str,
+  "Function"_str,
+  "Method"_str,
+  "Parameter"_str,
+  "Variable"_str,
+  "Field"_str,
+  "Typedef"_str,
+  "Record"_str,
+  "Enum"_str,
 };
 
 //!ffiapi start
 
 typedef enum
 {
-	// NOTE(sushi) we only really care about tokens that could take on any form.
-	//             all others (punc, keywords, etc.) can be handled by string 
-	//             comparing in lua.
-	TK_EndOfFile,
+  // NOTE(sushi) we only really care about tokens that could take on any form.
+  //             all others (punc, keywords, etc.) can be handled by string 
+  //             comparing in lua.
+  TK_EndOfFile,
 
-	TK_Unhandled,
+  TK_Unhandled,
 
-	TK_Comment,
-	TK_Whitespace,
+  TK_Comment,
+  TK_Whitespace,
 
-	TK_Identifier,
+  TK_Identifier,
 
-	TK_NumericConstant,
-	TK_CharConstant,
-	TK_StringLiteral,
+  TK_NumericConstant,
+  TK_CharConstant,
+  TK_StringLiteral,
 } TokenKind;
 
 //!ffiapi end
@@ -99,9 +99,9 @@ typedef struct EnumIter EnumIter;
 
 typedef struct
 {
-	str raw;
-	u64 start_offset;
-	u64 end_offset;
+  str raw;
+  u64 start_offset;
+  u64 end_offset;
 } TokenRawAndLoc;
 
 // **** EXPERIMENTAL ****
@@ -201,7 +201,7 @@ Type* getFunctionReturnType(Decl* decl);
  |  Helpers for determining if the given function or method has a body and where that body 
  |  begins and ends.
  */
-b8 	functionHasBody(Decl* decl);
+b8  functionHasBody(Decl* decl);
 u32 getFunctionBodyBegin(Decl* decl);
 u32 getFunctionBodyEnd(Decl* decl);
 
