@@ -82,6 +82,7 @@ struct LuaState
 
   b8 isnil(s32 idx = -1);
   b8 isstring(s32 idx = -1);
+  b8 isboolean(s32 idx = -1);
 
   b8 dump(io::IO* dest);
 

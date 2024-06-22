@@ -19,10 +19,10 @@ namespace iro::io
 
 struct IO;
 
-/* ------------------------------------------------------------------------------------------------ Formattable
- *  Defines the interface for 'format' functions, which take an IO* to write to and a variable
- *  of some type and is expected to write some formatted output to the given IO* then return
- *  the number of bytes written.
+/* ----------------------------------------------------------------------------
+ *  Defines the interface for 'format' functions, which take an IO* to write to 
+ *  and a variable of some type and is expected to write some formatted output 
+ *  to the given IO* then return the number of bytes written.
  */
 template<typename T>
 concept Formattable = requires(IO* io, T x)
@@ -30,7 +30,7 @@ concept Formattable = requires(IO* io, T x)
   { format(io, x) } -> std::same_as<s64>;
 };
 
-/* ------------------------------------------------------------------------------------------------ Primitive formatting
+/* ----------------------------------------------------------------------------
  */
 s64 format(IO* io, u8  x);
 s64 format(IO* io, u16 x);
@@ -49,7 +49,7 @@ s64 format(IO* io, void* x);
 s64 format(IO* io, const void* x);
 s64 format(IO* io, const char* x);
 
-/* ------------------------------------------------------------------------------------------------ Generic variadic formatting
+/* ----------------------------------------------------------------------------
  */
 s64 formatv(IO* io, Formattable auto&&... args)
 {
@@ -58,13 +58,14 @@ s64 formatv(IO* io, Formattable auto&&... args)
   return accumulator;
 }
 
-/* ------------------------------------------------------------------------------------------------ Formatting wrappers
- *  Types that wrap other formattable types and perform extra formatting on top of them.
+/* ----------------------------------------------------------------------------
+ *  Types that wrap other formattable types and perform extra formatting on 
+ *  top of them.
  *
  *  TODO(sushi) build up a larger library of formatters later
  */
 
-/* ================================================================================================ SanitizeControlCharacters
+/* ============================================================================
  */ 
 struct SanitizeControlCharacters
 {

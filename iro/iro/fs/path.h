@@ -35,7 +35,9 @@ struct Path
   io::Memory buffer; // dynamic buffer for now, maybe make static later
 
   // Makes a new Path from the given string.
-  static Path from(str s = {}, mem::Allocator* allocator = &mem::stl_allocator);
+  static Path from(
+      str s = {}, 
+      mem::Allocator* allocator = &mem::stl_allocator);
 
   static Path cwd(mem::Allocator* allocator = &mem::stl_allocator);
 
@@ -55,7 +57,8 @@ struct Path
   static str basename(str path);
   static str removeBasename(str path);
 
-  b8   init(mem::Allocator* allocator = &mem::stl_allocator) { return init({}, allocator); }
+  b8   init(mem::Allocator* allocator = &mem::stl_allocator) 
+    { return init({}, allocator); }
   b8   init(str s, mem::Allocator* allocator = &mem::stl_allocator);
   void destroy();
 
@@ -67,8 +70,10 @@ struct Path
   void clear();
 
   Path& appendDir(str dir) { append("/"_str, dir); return *this; }
-  Path& appendDir(Slice<u8> dir) { append("/"_str, str{dir.ptr, dir.len}); return *this; }
-  Path& append(io::Formattable auto... args) { io::formatv(&buffer, args...); return *this; }
+  Path& appendDir(Slice<u8> dir) 
+    { append("/"_str, str{dir.ptr, dir.len}); return *this; }
+  Path& append(io::Formattable auto... args) 
+    { io::formatv(&buffer, args...); return *this; }
 
   Bytes reserve(s32 space) { return buffer.reserve(space); }
   void  commit(s32 space) { buffer.commit(space); }
@@ -78,7 +83,11 @@ struct Path
   // TODO(sushi) rename cause this can be confused with actually creating the 
   //             directory at this path
   Path& makeDir() 
-    { if (buffer.len != 0 && buffer.buffer[buffer.len-1] != '/') append('/'); return *this; }
+  { 
+    if (buffer.len != 0 && buffer.buffer[buffer.len-1] != '/') 
+      append('/'); 
+    return *this; 
+  }
 
   b8 chdir() { return chdir(buffer.asStr()); }
 

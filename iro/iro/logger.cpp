@@ -91,26 +91,26 @@ namespace iro
       {
         switch (v)
         {
-          case Trace:  io::formatv(d.io, color::   cyan(" trace"_str)); break;
-          case Debug:  io::formatv(d.io, color::  green(" debug"_str)); break;
-          case Info:   io::formatv(d.io, color::   blue("  info"_str)); break;
-          case Notice: io::formatv(d.io, color::magenta("notice"_str)); break;
-          case Warn:   io::formatv(d.io, color:: yellow("  warn"_str)); break;
-          case Error:  io::formatv(d.io, color::    red(" error"_str)); break;
-          case Fatal:  io::formatv(d.io, color::    red(" fatal"_str)); break;
+        case Trace:  io::formatv(d.io, color::   cyan(" trace"_str)); break;
+        case Debug:  io::formatv(d.io, color::  green(" debug"_str)); break;
+        case Info:   io::formatv(d.io, color::   blue("  info"_str)); break;
+        case Notice: io::formatv(d.io, color::magenta("notice"_str)); break;
+        case Warn:   io::formatv(d.io, color:: yellow("  warn"_str)); break;
+        case Error:  io::formatv(d.io, color::    red(" error"_str)); break;
+        case Fatal:  io::formatv(d.io, color::    red(" fatal"_str)); break;
         }
       }
       else
       {
         switch (v)
         {
-          case Trace:  io::formatv(d.io, color::   cyan("trace"_str));  break;
-          case Debug:  io::formatv(d.io, color::  green("debug"_str));  break;
-          case Info:   io::formatv(d.io, color::   blue("info"_str));   break;
-          case Notice: io::formatv(d.io, color::magenta("notice"_str)); break;
-          case Warn:   io::formatv(d.io, color:: yellow("warn"_str));   break;
-          case Error:  io::formatv(d.io, color::    red("error"_str));  break;
-          case Fatal:  io::formatv(d.io, color::    red("fatal"_str));  break;
+        case Trace:  io::formatv(d.io, color::   cyan("trace"_str));  break;
+        case Debug:  io::formatv(d.io, color::  green("debug"_str));  break;
+        case Info:   io::formatv(d.io, color::   blue("info"_str));   break;
+        case Notice: io::formatv(d.io, color::magenta("notice"_str)); break;
+        case Warn:   io::formatv(d.io, color:: yellow("warn"_str));   break;
+        case Error:  io::formatv(d.io, color::    red("error"_str));  break;
+        case Fatal:  io::formatv(d.io, color::    red("fatal"_str));  break;
         }
       }
 

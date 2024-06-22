@@ -32,24 +32,26 @@ enum class Flag
 
 typedef iro::Flags<Flag> Flags; 
 
-/* ================================================================================================ io::IO
+/* ============================================================================
  *  Base interface for input/output
  *
- *  TODO(sushi) try to make a trait that handles this behavior so we don't have to use vtables to 
- *              support this. Though I guess then we lose dynamic dispatch? I dunno, maybe traits
- *            could do something with virtual stuff to move the vtables off of the actual 
- *            structures implementing the behavior? I just dont like how this makes me need 
- *            to use 'new' but there's probably no escaping that.
+ *  TODO(sushi) try to make a trait that handles this behavior so we don't have 
+ *              to use vtables to support this. Though I guess then we lose 
+ *              dynamic dispatch? I dunno, maybe traits could do something with 
+ *              virtual stuff to move the vtables off of the actual structures 
+ *              implementing the behavior? I just dont like how this makes me 
+ *              need to use 'new' but there's probably no escaping that.
  */
 struct IO
 {
   Flags flags = {};
 
-  // Writes the contents of 'slice' into this IO and returns the number of bytes written.
+  // Writes the contents of 'slice' into this IO and returns the number of 
+  // bytes written.
   virtual s64 write(Bytes slice) = 0;
 
-  // Reads the contents of this IO into the buffer at 'buffer.bytes' up to 'buffer.len' and 
-  // returns the number of bytes read.
+  // Reads the contents of this IO into the buffer at 'buffer.bytes' up to 
+  // 'buffer.len' and returns the number of bytes read.
   virtual s64 read(Bytes buffer) = 0;
 
   virtual b8   open()  { flags.set(Flag::Open); return true; }
@@ -66,8 +68,8 @@ struct IO
 
 protected:
 
-  // helpers for use internally, especially for things that define their own 'flags' 
-  // like FileDescriptor
+  // Helpers for use internally, especially for things that define their own 
+  // 'flags' like FileDescriptor.
   void setOpen()     { flags.set(Flag::Open); }
   void setWritable() { flags.set(Flag::Writable); }
   void setReadable() { flags.set(Flag::Readable); }
@@ -77,7 +79,7 @@ protected:
   void unsetReadable() { flags.unset(Flag::Readable); }
 };
 
-/* ================================================================================================ io::Memory
+/* ============================================================================
  *  IO around a memory buffer that may grow.
  */
 struct Memory : public IO
@@ -121,12 +123,13 @@ struct Memory : public IO
 
   s64 readFrom(s64 pos, Bytes slice) override;
 
-  /* ============================================================================================ io::Memory::Rollback
-   *  Helper for saving a position in the memory to rollback to if the user changes their mind 
-   *  about writing something to the buffer. Note that this also calls rewind() on commit.
+  /* ==========================================================================
+   *  Helper for saving a position in the memory to rollback to if the user 
+   *  changes their mind about writing something to the buffer. Note that 
+   *  this also calls rewind() on commit.
    *
-   *  Obviously this is not necessary to have an api for, but I like its explicitness in what's
-   *  going on.
+   *  Obviously this is not necessary to have an api for, but I like its 
+   *  explicitness in what's going on.
    */
   typedef s64 Rollback;
 
@@ -141,13 +144,14 @@ private:
 
 };
 
-/* ================================================================================================ io::StaticBuffer
+/* ============================================================================
  *  IO around a statically sized buffer.
- *  This ensures that the buffer can always be null-terminated, so it makes room for N+1 bytes 
- *  and on every write sets the byte after the write_pos to 0.
+ *  This ensures that the buffer can always be null-terminated, so it makes 
+ *  room for N+1 bytes and on every write sets the byte after the write_pos 
+ *  to 0.
  *
- *  TODO(sushi) this sucks and ive found it to be useless in most cases. Either get rid of this
- *              or fix it so its not so useless.
+ *  TODO(sushi) this sucks and ive found it to be useless in most cases. 
+ *              Either get rid of this or fix it so its not so useless.
  */ 
 template<size_t N>
 struct StaticBuffer : public IO
@@ -174,7 +178,8 @@ struct StaticBuffer : public IO
 
 }
 
-DefineMove(iro::io::Memory, { iro::mem::copy(&to, &from, sizeof(iro::io::Memory)); });
+DefineMove(iro::io::Memory, 
+    { iro::mem::copy(&to, &from, sizeof(iro::io::Memory)); });
 DefineNilValue(iro::io::Memory, {}, { return x.buffer == nullptr; });
 
 #endif // _iro_io_h

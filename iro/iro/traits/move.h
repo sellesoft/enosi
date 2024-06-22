@@ -27,12 +27,14 @@ concept Movable = Nillable<T> && requires(T& from, T& to)
     inline static void doMove(T& from, T& to) F \
   } 
 
-/* ================================================================================================ Moved
- *  Contains a value that has been moved. Eg. if this is the type of a function parameter, the 
- *  object passed into that function is the new owner of whatever data that type owns.
+/* ============================================================================
+ *  Contains a value that has been moved. Eg. if this is the type of a function 
+ *  parameter, the object passed into that function is the new owner of 
+ *  whatever data that type owns.
  *
- *  Moving an object means to transfer ownership of data that it owns to some other object.
- *  The original owner is then nil'd to indicate that it no longer owns anything.
+ *  Moving an object means to transfer ownership of data that it owns to some 
+ *  other object. The original owner is then nil'd to indicate that it no 
+ *  longer owns anything.
  */
 template<Movable T>
 struct Moved : public T {};
@@ -54,8 +56,8 @@ inline Moved<T> move(T& from)
 }
 
 template<Movable T>
-inline Moved<T> move(T&& from) // NOTE(sushi) this allows moving temp values, like move(Path::from("hi"_str))
-{
+inline Moved<T> move(T&& from) // NOTE(sushi) this allows moving temp values, 
+{                              // like move(Path::from("hi"_str))
   return move((T&)from);
 }
 
@@ -67,7 +69,7 @@ struct NilValue<Moved<T>>
   inline static bool isNil(const Moved<T>& x) { return NilValue<T>::isNil(x); }
 };
 
-/* ================================================================================================ MayMove
+/* ============================================================================
  *  Wraps an object that may be moved by someone. 
  */
 template<Movable T>
@@ -81,7 +83,8 @@ struct MayMove
   // Use to set this with the value of something that may be moved.
   MayMove<T>(const T& x) { *this = x; };
 
-  MayMove<T>& operator =(const T& x) { assert(wasMoved()); this->x = x; return *this; }
+  MayMove<T>& operator =(const T& x) 
+    { assert(wasMoved()); this->x = x; return *this; }
 
   // Doesn't make sense to copy this, because the value its wrapping.
   // may be moved.
@@ -98,7 +101,8 @@ template<Movable T>
 struct NilValue<MayMove<T>>
 {
   constexpr static const T Value = NilValue<T>::Value;
-  inline static bool isNil(const MayMove<T>& x) { return NilValue<T>::isNil((const T&)x); }
+  inline static bool isNil(const MayMove<T>& x) 
+    { return NilValue<T>::isNil((const T&)x); }
 };
 
 #endif

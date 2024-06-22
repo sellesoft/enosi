@@ -41,7 +41,8 @@ template<typename T>
 struct NilValue<Scoped<T>>
 {
   constexpr static const T Value = NilValue<T>::Value;
-  inline static bool isNil(const Scoped<T>& x) { return NilValue<T>::isNil(x); }
+  inline static bool isNil(const Scoped<T>& x) 
+    { return NilValue<T>::isNil(x); }
 };
 
 #endif // _iro_scoped_h

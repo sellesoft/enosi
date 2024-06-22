@@ -22,7 +22,12 @@ struct Flags
   FlagType flags = 0;
   
   static Flags<T> none() { return {}; }
-  static Flags<T> all()  { Flags<T> out; out.flags = (FlagType)-1; return out; }
+  static Flags<T> all()  
+  { 
+    Flags<T> out; 
+    out.flags = (FlagType)-1; 
+    return out; 
+  }
 
   constexpr Flags<T>() {}
 
@@ -87,13 +92,13 @@ struct Flags
   { \
     return FlagsT::from(lhs, rhs); \
   } \
-      \
+  \
   static FlagsT& operator | (FlagsT&& lhs, EnumT rhs) \
   { \
     lhs.set(rhs); \
     return lhs; \
   } \
-    \
+  \
   static FlagsT operator | (FlagsT& lhs, EnumT rhs) \
   { \
     lhs.set(rhs); \

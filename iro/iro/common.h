@@ -69,6 +69,20 @@ inline b8 matchAny(V v, T... args)
   return ((v == args) || ...);
 }
 
+template<typename V, typename... T>
+inline b8 matchSeq(V* v, T... args)
+{
+  s32 accum = -1;
+  return ((accum += 1, v[accum] == args) && ...);
+}
+
+template<typename V, typename... T>
+inline b8 matchSeqRev(V* v, T... args)
+{
+  s32 accum = sizeof...(T) + 1;
+  return ((accum -= 1, v[-accum] == args) && ...);
+}
+
 // Useful to be able to call normally-inlined functions from a debugger
 #if IRO_DEBUG
 #define release_inline 

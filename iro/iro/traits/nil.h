@@ -1,14 +1,15 @@
 /*
- *  Nil value trait declaration and a helper for defining a NilValue for a given type.
+ *  Nil value trait declaration and a helper for defining a NilValue for a 
+ *  given type.
  *
- *  This allows us to use the value 'nil' anywhere we want to indicate an invalid 
- *  value of a type that implements NilValue.
+ *  This allows us to use the value 'nil' anywhere we want to indicate an 
+ *  invalid value of a type that implements NilValue.
  *
- *  When an object is 'nil' it is in some state where it is useless and, most importantly,
- *  in a state where it does not own resources.
+ *  When an object is 'nil' it is in some state where it is useless and, most 
+ *  importantly, in a state where it does not own resources.
  *  
- *  This is currently not defined in the iro namespace because I feel my use of it 
- *  will be common, but I'm not sure if this is a good idea yet.
+ *  This is currently not defined in the iro namespace because I feel my use of 
+ *  it will be common, but I'm not sure if this is a good idea yet.
  */
 
 #ifndef _iro_nil_h
@@ -16,7 +17,7 @@
 
 #include "../common.h"
 
-/* ================================================================================================ NilValue
+/* ============================================================================
  *  Template for types that define a nil value. 
  *  
  *  Types implementing this are expected to define two things:
@@ -27,14 +28,14 @@
  *    static b8 isNil(const T& x);
  *      A function used to check if 'x' is nil.
  *
- *  The helper DefineNilValue helps wrap up the boilerplate needed to actually define
- *  these things.
+ *  The helper DefineNilValue helps wrap up the boilerplate needed to actually 
+ *  define these things.
  *
  */
 template<typename T>
 struct NilValue {};
 
-/* ------------------------------------------------------------------------------------------------ DefineNilValue
+/* ----------------------------------------------------------------------------
  *  Defines value 'V" as the NilValue for the type 'T'
  *  and defines 'F' as the function to check if an instance 
  *  of 'T' is nil.
@@ -47,9 +48,9 @@ struct NilValue {};
     inline static b8 isNil(const T& x) F \
   }                                        \
 
-/* ------------------------------------------------------------------------------------------------ Nillable
- *  Concept used to require a type to have implemented NilValue and so compiler errors aren't 
- *  so horrible.
+/* ----------------------------------------------------------------------------
+ *  Concept used to require a type to have implemented NilValue and so compiler 
+ *  errors aren't so horrible.
  */
 template<typename T>
 concept Nillable = requires(const T& x)
@@ -58,8 +59,9 @@ concept Nillable = requires(const T& x)
   NilValue<T>::isNil(x);
 };
 
-/* ------------------------------------------------------------------------------------------------ Nil
- *  The Nil type which implicitly converts to any type as long as it implements NilValue.
+/* ----------------------------------------------------------------------------
+ *  The Nil type which implicitly converts to any type as long as it implements 
+ *  NilValue.
  */
 struct Nil
 {
@@ -91,12 +93,12 @@ inline b8 resolve(T& x, T v)
   return false;
 }
 
-/* ------------------------------------------------------------------------------------------------ nil
+/* ----------------------------------------------------------------------------
  *  And finally, *the* nil value.
  */
 constexpr Nil nil = Nil();
 
-/* ------------------------------------------------------------------------------------------------ NilOr
+/* ----------------------------------------------------------------------------
  *  Type that indicates a value may either be nil or a non-nil value of type T.
  */
 // This was an attempt at getting usage of things that can be nil to be more explicit, but C++ seems
@@ -125,11 +127,12 @@ constexpr Nil nil = Nil();
 //  inline static bool isNil(const NilOr<T>& x) { return NilValue<T>::isNil(x); }
 // };
 
-/* ------------------------------------------------------------------------------------------------ Common nil value definitions
+/* ----------------------------------------------------------------------------
  *  Some nil value definitions for the common types.
  */
 
-#define DefineTrivialNilValue(T, V) DefineNilValue(T, V, { return x == Value; })
+#define DefineTrivialNilValue(T, V) \
+  DefineNilValue(T, V, { return x == Value; })
 
 DefineTrivialNilValue(u8,   0);
 DefineTrivialNilValue(u16,  0);

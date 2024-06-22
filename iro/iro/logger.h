@@ -1,21 +1,16 @@
 /*
  *  Logging api.
  *
- *  We handle logging by creating a 'Logger' for various things (usually individual objects that need
- *  to report things, like a parser) which is named 'logger'. The macros just below here are used to
- *  guard calling the log function based on the logger's verbosity. 
+ *  We handle logging by creating a 'Logger' for various things (usually 
+ *  individual objects that need to report things, like a parser) which is 
+ *  named 'logger'. The macros just below here are used to guard calling the 
+ *  log function based on the logger's verbosity. 
  *
  *  TODOs
  *
- *    Get it so that in PrefixNewlines mode we only prefix a newline WHEN one is found
- *    so that parts of a line can be spread among multiple calls to a log function.
- *
- *    The amount of disgusting shit done to get this stuff to work right is horrible.
- *    I see now why people like using string format style logging instead of typed 
- *    formatting. IDEALLY lpp works well enough that I can replace all of this 
- *    insane templating with it.
- *    In fact this is so horrible that now clang is begging me to submit a bug report
- *    when it tries to compile it.
+ *    Add a message length limit and word wrapping.
+ *    And maybe be a little fancy and wrap to the same indentation as the 
+ *    current line and stsuff yeah.
  */
 
 #ifndef _iro_logger_h
@@ -27,7 +22,9 @@
 #include "io/io.h"
 #include "io/format.h"
 
-#define __HELPER(v, ...) (((u32)logger.verbosity <= (u32)Logger::Verbosity::v) && (logger.log(Logger::Verbosity::v, __VA_ARGS__), true))
+#define __HELPER(v, ...) \
+  (((u32)logger.verbosity <= (u32)Logger::Verbosity::v) && \
+   (logger.log(Logger::Verbosity::v, __VA_ARGS__), true))
 
 #define TRACE(...) __HELPER(Trace, __VA_ARGS__)
 #define DEBUG(...) __HELPER(Debug, __VA_ARGS__)
@@ -46,9 +43,9 @@
 namespace iro
 {
 
-/* ================================================================================================ Log
- *  Central log object that keeps track of destinations, which are named io targets that have 
- *  some settings to customize their output.
+/* ============================================================================
+ *  Central log object that keeps track of destinations, which are io 
+ *  targets that have some settings to customize their output.
  */
 struct Log
 {
@@ -64,16 +61,16 @@ struct Log
       ShowCategoryName,
       // show the verbosity level before the message
       ShowVerbosity,
-      // pad the verbosity level to the right so that messages printed at different 
-      // levels stay aligned
+      // pad the verbosity level to the right so that messages printed at 
+      // different levels stay aligned
       PadVerbosity,
       // allow color
       AllowColor,
-      // track the longest category name and indent all other names so that they 
-      // stay aligned
+      // track the longest category name and indent all other names so that 
+      // they stay aligned
       TrackLongestName,
-      // if a logger logs a message that spans multiple lines, prefix each line 
-      // with the enabled information above
+      // if a logger logs a message that spans multiple lines, prefix each 
+      // line with the enabled information above
       PrefixNewlines,
     };
     typedef iro::Flags<Flag> Flags;
@@ -124,7 +121,7 @@ enum class Color
     White,
 };
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 static str getColor(color::Color col)
 {
@@ -133,15 +130,15 @@ static str getColor(color::Color col)
 
     switch (col)
     {
-  x(Reset,   "0");
-  x(Black,   "30");
-  x(Red,     "31");
-  x(Green,   "32");
-  x(Yellow,  "33");
-  x(Blue,    "34");
-  x(Magenta, "35");
-  x(Cyan,    "36");
-  x(White,   "37");
+    x(Reset,   "0");
+    x(Black,   "30");
+    x(Red,     "31");
+    x(Green,   "32");
+    x(Yellow,  "33");
+    x(Blue,    "34");
+    x(Magenta, "35");
+    x(Cyan,    "36");
+    x(White,   "37");
     }
 
 #undef x
@@ -215,13 +212,15 @@ s64 format(io::IO* out, color::Colored<T>& x)
   if (!x.enabled)
     return io::format(out, x.x);
 
-  return io::formatv(out, getColor(x.color), x.x, getColor(color::Color::Reset));
+  return io::formatv(out, 
+      getColor(x.color), x.x, getColor(color::Color::Reset));
 }
 }
 
-/* ================================================================================================ Logger
- *  A logger, which is a named thing that logs stuff to the log. Each logger has its own verbosity 
- *  setting so we can be selective about what we want to see in a log.
+/* ============================================================================
+ *  A logger, which is a named thing that logs stuff to the log. Each logger 
+ *  has its own verbosity setting so we can be selective about what we want to 
+ *  see in a log.
  */
 struct Logger
 {
@@ -306,7 +305,8 @@ struct Logger
       else
       {
         writePrefix(v, destination);
-        io::formatv(destination.io, color::sanitizeColored(args, destination)...);
+        io::formatv(destination.io, 
+            color::sanitizeColored(args, destination)...);
       }
     }
   }
