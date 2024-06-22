@@ -33,6 +33,12 @@
 					nelua
 
 					notcurses
+          libunistring
+          libdeflate
+          doctest
+          ncurses
+
+					ccache
 
 					# stuff needed to build llvm
 					cmake
