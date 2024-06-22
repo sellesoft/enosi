@@ -40,481 +40,462 @@ int lua__canonicalizePath(lua_State* L);
 static Logger logger = Logger::create("lake"_str, 
 
 #if LAKE_DEBUG
-		Logger::Verbosity::Debug);
+    Logger::Verbosity::Debug);
 #else
-		Logger::Verbosity::Notice);
+    Logger::Verbosity::Notice);
 #endif
 
 Lake lake; // global for now, maybe not later 
 
 struct ActiveProcess
 {
-	Process process;
-	fs::File stdout;
-	fs::File stderr;
+  Process process;
+  fs::File stdout;
+  fs::File stderr;
 };
 
 Pool<ActiveProcess> active_process_pool = {};
 
 platform::TermSettings saved_term_settings;
 
-/* ------------------------------------------------------------------------------------------------ Lake::init
+/* ------------------------------------------------------------------------------------------------
  */
 b8 Lake::init(const char** argv_, int argc_, mem::Allocator* allocator)
 {
-	assert(argv_ && allocator);
+  assert(argv_ && allocator);
 
-	INFO("Initializing Lake.\n");
-	SCOPED_INDENT;
+  INFO("Initializing Lake.\n");
+  SCOPED_INDENT;
 
-	max_jobs = 1;
+  max_jobs = 1;
 
-	argc = argc_;
-	argv = argv_;
+  argc = argc_;
+  argv = argv_;
 
-	lua_cli_args = LuaCLIArgList::create(allocator);
-	active_process_pool = Pool<ActiveProcess>::create(allocator);
-	cwd_stack = Array<fs::Path>::create(allocator);
+  lua_cli_args = LuaCLIArgList::create(allocator);
+  active_process_pool = Pool<ActiveProcess>::create(allocator);
+  cwd_stack = Array<fs::Path>::create(allocator);
 
-	// TODO(sushi) also search for lakefile with no extension
-	initpath = nil;
-	if (!process_argv(&initpath))
-		return false;
-	b8 resolved = resolve(initpath, "lakefile.lua"_str);
+  // TODO(sushi) also search for lakefile with no extension
+  initpath = nil;
+  if (!processArgv(&initpath))
+    return false;
+  b8 resolved = resolve(initpath, "lakefile.lua"_str);
 
-	if (resolved)
-		DEBUG("no file specified on cli, searching for 'lakefile.lua'\n");
-	else
-		DEBUG("file '", initpath, "' was specified as file on cli\n");
+  if (resolved)
+    DEBUG("no file specified on cli, searching for 'lakefile.lua'\n");
+  else
+    DEBUG("file '", initpath, "' was specified as file on cli\n");
 
-	using namespace fs;
+  using namespace fs;
 
-	if (!fs::Path::exists(initpath))
-	{
-		if (resolved)
-			FATAL("no file was specified (-f) and no file with the default name 'lakefile.lua' could be found\n");
-		else
-			FATAL("failed to find specified file (-f) '", initpath, "'\n");
-		return false;
-	}
+  if (!fs::Path::exists(initpath))
+  {
+    if (resolved)
+      FATAL("no file was specified (-f) and no file with the default name 'lakefile.lua' could be found\n");
+    else
+      FATAL("failed to find specified file (-f) '", initpath, "'\n");
+    return false;
+  }
 
-	lua_cli_arg_iterator = lua_cli_args.head;
+  lua_cli_arg_iterator = lua_cli_args.head;
 
-	DEBUG("Creating target pool and target lists.\n");
+  DEBUG("Creating target pool and target lists.\n");
 
-	target_pool    = TargetPool::create(allocator);
-	targets        = TargetList::create(allocator);
-	build_queue    = TargetList::create(allocator);
-	active_recipes = TargetList::create(allocator);
-	action_pool    = Pool<str>::create(allocator);
-	action_queue   = DList<str>::create(allocator);
+  target_pool    = TargetPool::create(allocator);
+  targets        = TargetList::create(allocator);
+  build_queue    = TargetList::create(allocator);
+  active_recipes = TargetList::create(allocator);
+  action_pool    = Pool<str>::create(allocator);
+  action_queue   = DList<str>::create(allocator);
 
-	DEBUG("Loading lua state.\n");
+  DEBUG("Loading lua state.\n");
 
-	L = lua_open();
-	luaL_openlibs(L);
+  if (!lua.init())
+  {
+    ERROR("failed to load luaa state\n");
+    return false;
+  }
 
-	// TODO(sushi) do this in a cleaner way later.
-	//             this function has to leave the result of the file on the 
-	//             stack and i dont think thats possible with a luajit ffi func.
-	lua_pushcfunction(L, lua__importFile);
-	lua_setglobal(L, "lua__importFile"); 
-	lua_pushcfunction(L, lua__cwd);
-	lua_setglobal(L, "lua__cwd"); 
-	lua_pushcfunction(L, lua__canonicalizePath);
-	lua_setglobal(L, "lua__canonicalizePath"); 
+#define addGlobalCFunc(name) \
+  lua.pushcfunction(name); \
+  lua.setglobal(STRINGIZE(name));
 
-	saved_term_settings = platform::termSetNonCanonical();
+  addGlobalCFunc(lua__importFile);
+  addGlobalCFunc(lua__cwd);
+  addGlobalCFunc(lua__canonicalizePath);
 
-	return true;
+#undef addGlobalCFunc
+
+  saved_term_settings = platform::termSetNonCanonical();
+
+  return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ Lake::deinit
+/* ------------------------------------------------------------------------------------------------
  */
 void Lake::deinit()
 {
-	lua_close(L);
-	active_recipes.destroy();
-	build_queue.destroy();
+  lua.deinit();
+  active_recipes.destroy();
+  build_queue.destroy();
 
-	for (auto& t : targets)
-		t.deinit();
-	targets.destroy();
-	target_pool.destroy();
+  for (auto& t : targets)
+    t.deinit();
+  targets.destroy();
+  target_pool.destroy();
 
-	cwd_stack.destroy();
-	active_process_pool.destroy();
-	lua_cli_args.destroy();
-	for (auto& action : action_queue)
-		mem::stl_allocator.free(action.bytes);
-	action_pool.destroy();
-	action_queue.destroy();
+  cwd_stack.destroy();
+  active_process_pool.destroy();
+  lua_cli_args.destroy();
+  for (auto& action : action_queue)
+    mem::stl_allocator.free(action.bytes);
+  action_pool.destroy();
+  action_queue.destroy();
 
-	platform::termRestoreSettings(saved_term_settings);
+  platform::termRestoreSettings(saved_term_settings);
 }
 
 struct ArgIter
 {
-	const char** argv = nullptr;
-	u64 argc = 0;
-	u64 idx = 0;
+  const char** argv = nullptr;
+  u64 argc = 0;
+  u64 idx = 0;
 
-	str current = nil;
+  str current = nil;
 
-	ArgIter(const char** argv, u32 argc) : argv(argv), argc(argc) 
-	{  
-		idx = 1;
-		next();
-	}
+  ArgIter(const char** argv, u32 argc) : argv(argv), argc(argc) 
+  {  
+    idx = 1;
+    next();
+  }
 
-	void next()
-	{
-		if (idx == argc)
-		{
-			current = nil;
-			return;
-		}
+  void next()
+  {
+    if (idx == argc)
+    {
+      current = nil;
+      return;
+    }
 
-		current = { (u8*)argv[idx++] };
-		current.len = strlen((char*)current.bytes);
-	}
+    current = { (u8*)argv[idx++] };
+    current.len = strlen((char*)current.bytes);
+  }
 };
 
-/* ------------------------------------------------------------------------------------------------ process_max_jobs_arg
+/* ------------------------------------------------------------------------------------------------
  */
-b8 process_max_jobs_arg(Lake* lake, ArgIter* iter)
+b8 processMaxJobsArg(Lake* lake, ArgIter* iter)
 {
-	str mjarg = iter->current;
+  str mjarg = iter->current;
 
-	iter->next();
-	if (isnil(iter->current))
-	{
-		FATAL("expected a number after '--max-jobs'\n");
-		return false;
-	}
+  iter->next();
+  if (isnil(iter->current))
+  {
+    FATAL("expected a number after '--max-jobs'\n");
+    return false;
+  }
 
-	str arg = iter->current;
+  str arg = iter->current;
 
-	u8* scan = arg.bytes;
+  u8* scan = arg.bytes;
 
-	while (*scan)
-	{
-		if (!isdigit(*scan))
-		{
-			FATAL("given argument '", arg, "' after '", mjarg, "' must be a number\n");
-			return false;
-		}
+  while (*scan)
+  {
+    if (!isdigit(*scan))
+    {
+      FATAL("given argument '", arg, "' after '", mjarg, "' must be a number\n");
+      return false;
+    }
 
-		scan += 1;
-	}
+    scan += 1;
+  }
 
-	lake->max_jobs = atoi((char*)arg.bytes);
+  lake->max_jobs = atoi((char*)arg.bytes);
 
-	DEBUG("max_jobs set to ", lake->max_jobs, " via command line argument\n");
+  DEBUG("max_jobs set to ", lake->max_jobs, " via command line argument\n");
 
-	lake->max_jobs_set_on_cli = true;
+  lake->max_jobs_set_on_cli = true;
 
-	return true;
+  return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ process_arg_double_dash
+/* ------------------------------------------------------------------------------------------------
  */
-b8 process_arg_double_dash(Lake* lake, str arg, str* initfile, ArgIter* iter)
+b8 processArgDoubleDash(Lake* lake, str arg, str* initfile, ArgIter* iter)
 {
-	switch (arg.hash())
-	{
-	case "verbosity"_hashed:
-		{
-			iter->next();
-			if (isnil(iter->current))
-			{
-				FATAL("expected a verbosity level after '--verbosity'\n");
-				return false;
-			}
+  switch (arg.hash())
+  {
+  case "verbosity"_hashed:
+    {
+      iter->next();
+      if (isnil(iter->current))
+      {
+        FATAL("expected a verbosity level after '--verbosity'\n");
+        return false;
+      }
 
-			switch (iter->current.hash())
-			{
+      switch (iter->current.hash())
+      {
 
 #define verbmap(s, level) \
-			case GLUE(s, _hashed): \
-				DEBUG("Logger verbosity level set to " STRINGIZE(level) " via command line argument.\n"); \
-				logger.verbosity = Logger::Verbosity::level;\
-				break;
-			
-			verbmap("trace", Trace);
-			verbmap("debug", Debug);
-			verbmap("info", Info);
-			verbmap("notice", Notice);
-			verbmap("warn", Warn);
-			verbmap("error", Error);
-			verbmap("fatal", Fatal);
-			default:
-				FATAL("expected a verbosity level after '--verbosity'\n");
-				return false;
+      case GLUE(s, _hashed): \
+        DEBUG("Logger verbosity level set to " STRINGIZE(level) \
+            " via command line argument.\n"); \
+        logger.verbosity = Logger::Verbosity::level;\
+        break;
+      
+      verbmap("trace", Trace);
+      verbmap("debug", Debug);
+      verbmap("info", Info);
+      verbmap("notice", Notice);
+      verbmap("warn", Warn);
+      verbmap("error", Error);
+      verbmap("fatal", Fatal);
+      default:
+        FATAL("expected a verbosity level after '--verbosity'\n");
+        return false;
 #undef verbmap
 
-			}
-		}
-		break;
+      }
+    }
+    break;
 
-	case "print-transformed"_hashed:
-		lake->print_transformed = true;
-		break;
+  case "print-transformed"_hashed:
+    lake->print_transformed = true;
+    break;
 
-	case "max-jobs"_hashed:
-		if (!process_max_jobs_arg(lake, iter))
-			return false;
-		break;
-	}
+  case "max-jobs"_hashed:
+    if (!processMaxJobsArg(lake, iter))
+      return false;
+    break;
+  }
 
-	return true;
+  return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ process_arg_single_dash
+/* ------------------------------------------------------------------------------------------------
  */
-b8 process_arg_single_dash(Lake* lake, str arg, str* initfile, ArgIter* iter)
+b8 processArgSingleDash(Lake* lake, str arg, str* initfile, ArgIter* iter)
 {
-	switch (arg.hash())
-	{
-	case "v"_hashed:
-		logger.verbosity = Logger::Verbosity::Debug;
-		DEBUG("Logger verbosity set to Debug via command line argument.\n");
-		break;
+  switch (arg.hash())
+  {
+  case "v"_hashed:
+    logger.verbosity = Logger::Verbosity::Debug;
+    DEBUG("Logger verbosity set to Debug via command line argument.\n");
+    break;
 
-	case "j"_hashed:
-		if (!process_max_jobs_arg(lake, iter))
-			return false;
-		break;
-	}
+  case "j"_hashed:
+    if (!processMaxJobsArg(lake, iter))
+      return false;
+    break;
+  }
 
-	return true;
+  return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ Lake::process_argv
+/* ------------------------------------------------------------------------------------------------
  */
-b8 Lake::process_argv(str* initfile)
+b8 Lake::processArgv(str* initfile)
 {
-	INFO("Processing cli args.\n");
-	SCOPED_INDENT;
+  INFO("Processing cli args.\n");
+  SCOPED_INDENT;
 
-	for (ArgIter iter(argv, argc); notnil(iter.current); iter.next())
-	{
-		str arg = iter.current;
-		if (arg.len > 1 && arg.bytes[0] == '-')
-		{
-			if (arg.len > 2 && arg.bytes[1] == '-')
-			{
-				if (!process_arg_double_dash(this, arg.sub(2), initfile, &iter))
-					return false;
-			}
-			else
-			{
-				if (!process_arg_single_dash(this, arg.sub(1), initfile, &iter))
-					return false;
-			}
-		}
-		else
-		{
-			lua_cli_args.push(argv + iter.idx - 1);
-			DEBUG("Encountered unknown cli arg '", arg, "' so it has been added to the lua cli args list.\n");
-		}
-	}
+  for (ArgIter iter(argv, argc); notnil(iter.current); iter.next())
+  {
+    str arg = iter.current;
+    if (arg.len > 1 && arg.bytes[0] == '-')
+    {
+      if (arg.len > 2 && arg.bytes[1] == '-')
+      {
+        if (!processArgDoubleDash(this, arg.sub(2), initfile, &iter))
+          return false;
+      }
+      else
+      {
+        if (!processArgSingleDash(this, arg.sub(1), initfile, &iter))
+          return false;
+      }
+    }
+    else
+    {
+      lua_cli_args.push(argv + iter.idx - 1);
+      DEBUG("Encountered unknown cli arg '", arg, 
+          "' so it has been added to the lua cli args list.\n");
+    }
+  }
 
-	return true;
+  return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ Lake::run
+/* ------------------------------------------------------------------------------------------------
  */
 b8 Lake::run()
 {
 
-	INFO("Loading lake lua module.\n");
+  INFO("Loading lake lua module.\n");
 
 #if LAKE_DEBUG
-	if (luaL_loadfile(L, "lake/src/lake.lua") || lua_pcall(L, 0, 1, 0))
-	{
-		printf("%s\n", lua_tostring(L, -1));
-		lua_pop(L, 1);
-		return false;
-	}
+  if (!lua.loadfile("lake/src/lake.lua") || !lua.pcall(0, 1))
+  {
+    ERROR("failed to run lake.lua: ", lua.tostring(), "\n");
+    lua.pop();
+    return false;
+  }
 #else
-	lua_getglobal(L, "require");
-	lua_pushstring(L, "lake");
-	if (lua_pcall(L, 1, 1, 0))
-	{
-		ERROR(lua_tostring(L, -1));
-		lua_pop(L, 1);
-		return false;
-	}
+  if (!lua.require("lake"_str))
+  {
+    ERROR("failed to load lake module: ", lua.tostring(), "\n");
+    lua.pop();
+    return false;
+  }
 #endif
 
-	INFO("Setting lua globals.\n");
+  INFO("Setting lua globals.\n");
 
-	lua_getfield(L, 1, "__internal");
+  // TODO(sushi) this can probably be removed in favor of just tracking where on the 
+  //             stack these are when returned by the lake module.
+  lua.getfield(1, "__internal");
 
-	lua_getfield(L, 2, "targets");
-	lua_setglobal(L, lake_targets_table);
+#define setGlobal(name, var) \
+    lua.getfield(2, name); \
+    lua.setglobal(var);
 
-	lua_getfield(L, 2, "recipe_table");
-	lua_setglobal(L, lake_recipe_table);
+  setGlobal("targets", lake_targets_table);
+  setGlobal("recipe_table", lake_recipe_table);
+  setGlobal("coresume", lake_coroutine_resume);
+  setGlobal("errhandler", lake_err_handler);
+  setGlobal("tryAction", lake_tryAction);
 
-	lua_getfield(L, 2, "coresume");
-	lua_setglobal(L, lake_coroutine_resume);
+#undef setGlobal
 
-	lua_getfield(L, 2, "errhandler");
-	lua_setglobal(L, lake_err_handler);
+  lua.pop();
 
-	lua_getfield(L, 2, "tryAction");
-	lua_setglobal(L, lake_tryAction);
+  lua.getglobal(lake_err_handler);
+  if (!lua.loadfile((char*)initpath.bytes) || !lua.pcall(0,0,2))
+  {
+    ERROR("failed to run ", initpath, ": ", lua.tostring(), "\n");
+    lua.pop();
+    return false;
+  }
+  lua.pop();
 
-	lua_pop(L, 1);
+  INFO("Beginning build loop.\n");
 
-	lua_getglobal(L, lake_err_handler);
-	if (luaL_loadfile(L, (char*)initpath.bytes) || lua_pcall(L, 0, 0, 2))
-	{
-		printf("%s\n", lua_tostring(L, -1));
-		lua_pop(L, 1);
-		return false;
-	}
-	lua_pop(L, 1); // pop error handler
+  // as of rn i think the only code that will run from here on is recipe callbacks
+  // but i could be wrong idk
+  lake.in_recipe = true;
 
-	// if any actions were specified on cli, execute them and exit
-	if (!action_queue.isEmpty())	
-	{
-		lua_getglobal(L, lake_err_handler);
-		defer { lua_pop(L, 1); };
+  for (u64 build_pass = 0;;)
+  {
+    if (!build_queue.isEmpty() && max_jobs - active_recipe_count)
+    {
+      build_pass += 1;
 
-		for (str& name : action_queue)
-		{
-			lua_getglobal(L, lake_tryAction);
-			lua_pushlstring(L, (char*)name.bytes, name.len);
+      INFO("Entering build pass ", build_pass, "\n");
+      SCOPED_INDENT;
 
-			if (lua_pcall(L, 1, 0, 2))
-			{
-				ERROR(lua_tostring(L, -1), "\n");
-				lua_pop(L, 1);
-				return false;
-			}
-		}
-		
-		return true;
-	}
+      while (!build_queue.isEmpty() && max_jobs - active_recipe_count)
+      {
+        Target* target = build_queue.front();
 
-	INFO("Beginning build loop.\n");
+        INFO("Checking target '", target->name(), "' from build queue.\n"); 
+        SCOPED_INDENT;
 
-	// as of rn i think the only code that will run from here on is recipe callbacks
-	// but i could be wrong idk
-	lake.in_recipe = true;
+        if (target->needsBuilt())
+        {
+          INFO("Target needs built, adding to active recipes list\n");
+          target->active_recipe_node = active_recipes.pushHead(target);
+          active_recipe_count += 1;
+          build_queue.remove(target->build_node);
+        }
+        else
+        {
+          INFO("Target does not need built, removing from build queue and "
+              "decrementing all dependents unsatified prereq counts.\n");
+          SCOPED_INDENT;
+          build_queue.remove(target->build_node);
+          target->updateDependents(build_queue, false);
+        }
+      }
+    }
+    
+    if (active_recipes.isEmpty() && build_queue.isEmpty())
+    {
+      INFO("Active recipe list and build queue are empty, we must be finished.\n");
+      break;
+    }
 
-	for (u64 build_pass = 0;;)
-	{
-		if (!build_queue.isEmpty() && max_jobs - active_recipe_count)
-		{
-			build_pass += 1;
+    for (auto& t : active_recipes)
+    {
+      switch (t.resumeRecipe(lua))
+      {
+        case Target::RecipeResult::Finished: 
+          {
+            TRACE("Target '", t.name(), "'s recipe has finished.\n");
+            SCOPED_INDENT;
 
-			INFO("Entering build pass ", build_pass, "\n");
-			SCOPED_INDENT;
+            active_recipes.remove(t.active_recipe_node);
+            t.updateDependents(build_queue, true);
+            active_recipe_count -= 1;
+          } 
+          break;
 
-			while (!build_queue.isEmpty() && max_jobs - active_recipe_count)
-			{
-				Target* target = build_queue.front();
+        case Target::RecipeResult::Error:
+          ERROR("recipe error\n");
+          return false;
 
-				INFO("Checking target '", target->name(), "' from build queue.\n"); 
-				SCOPED_INDENT;
+        case Target::RecipeResult::InProgress:
+          ;
+      }
 
-				if (target->needs_built())
-				{
-					INFO("Target needs built, adding to active recipes list\n");
-					target->active_recipe_node = active_recipes.pushHead(target);
-					active_recipe_count += 1;
-					build_queue.remove(target->build_node);
-				}
-				else
-				{
-					INFO("Target does not need built, removing from build queue and decrementing all dependents unsatified prereq counts.\n");
-					SCOPED_INDENT;
-					build_queue.remove(target->build_node);
-					target->update_dependents(build_queue, false);
-				}
-			}
-		}
-		
-		if (active_recipes.isEmpty() && build_queue.isEmpty())
-		{
-			INFO("Active recipe list and build queue are empty, we must be finished.\n");
-			break;
-		}
+      // Very naive way to try and prevent lake from constantly contesting for a thread 
+      // when running a recipe that spawns several processes itself. Eg. when building 
+      // llvm the recipe leaves it up to the generated build system stuff to run multiple 
+      // jobs. During this lake will be constantly polling the process for output/termination
+      // which wastes an entire thread of execution that whatever is building llvm could be 
+      // using.
+      //
+      // This is a really silly way to handle it and ideally later on should be 
+      // adjusted based on how long something is taking. Like, we can time how long the 
+      // current recipes have been running for and scale how often we poll based on that.
+      // This would work well to avoid my primary concern with rate limiting the polling: 
+      // accurately (sorta) tracking how long it takes for a recipe to complete. As long 
+      // as we scale this number to be negligible compared to the total time the recipe has 
+      // been running for, it shouldn't matter. 
+      //
+      // So,
+      // TODO(sushi) setup internal target recipe timers and then fix this issue
+      platform::sleep(TimeSpan::fromMicroseconds(3));
+    }
+  }
 
-		for (auto& t : active_recipes)
-		{
-			switch (t.resume_recipe(L))
-			{
-				case Target::RecipeResult::Finished: {
-					TRACE("Target '", t.name(), "'s recipe has finished.\n");
-					SCOPED_INDENT;
-
-					active_recipes.remove(t.active_recipe_node);
-					t.update_dependents(build_queue, true);
-					active_recipe_count -= 1;
-				} break;
-
-				case Target::RecipeResult::Error: {
-					ERROR("recipe error\n");
-					return false;
-				} break;
-
-				case Target::RecipeResult::InProgress: {
-
-				} break;
-			}
-
-			// Very naive way to try and prevent lake from constantly contesting for a thread 
-			// when running a recipe that spawns several processes itself. Eg. when building 
-			// llvm the recipe leaves it up to the generated build system stuff to run multiple 
-			// jobs. During this lake will be constantly polling the process for output/termination
-			// which wastes an entire thread of execution that whatever is building llvm could be 
-			// using.
-			//
-			// This is a really silly way to handle it and ideally later on should be 
-			// adjusted based on how long something is taking. Like, we can time how long the 
-			// current recipes have been running for and scale how often we poll based on that.
-			// This would work well to avoid my primary concern with rate limiting the polling: 
-			// accurately (sorta) tracking how long it takes for a recipe to complete. As long 
-			// as we scale this number to be negligible compared to the total time the recipe has 
-			// been running for, it shouldn't matter. 
-			//
-			// So,
-			// TODO(sushi) setup internal target recipe timers and then fix this issue
-			platform::sleep(TimeSpan::fromMicroseconds(3));
-		}
-	}
-
-	return true;
+  return true;
 }
 
 #if LAKE_DEBUG
 
-void assert_group(Target* target)
+void assertGroup(Target* target)
 {
-	if (target->kind != Target::Kind::Group)
-	{
-		FATAL("Target '", (void*)target, "' failed group assertion\n");
-		exit(1);
-	}
+  if (target->kind != Target::Kind::Group)
+  {
+    FATAL("Target '", (void*)target, "' failed group assertion\n");
+    exit(1);
+  }
 }
 
-void assert_single(Target* target)
+void assertSingle(Target* target)
 {
-	if (target->kind != Target::Kind::Single)
-	{
-		FATAL("Target '", (void*)target, "' failed single assertion\n");
-		exit(1);
-	}
+  if (target->kind != Target::Kind::Single)
+  {
+    FATAL("Target '", (void*)target, "' failed single assertion\n");
+    exit(1);
+  }
 }
 
 #else
-void assert_group(Target*){}
-void assert_single(Target*){}
+void assertGroup(Target*){}
+void assertSingle(Target*){}
 #endif
 
 /* ================================================================================================ Lua API
@@ -523,156 +504,157 @@ void assert_single(Target*){}
 extern "C"
 {
 
-/* ------------------------------------------------------------------------------------------------ lua__createSingleTarget
+/* ------------------------------------------------------------------------------------------------
  */
 Target* lua__createSingleTarget(str path)
 {
-	Target* t = lake.target_pool.add();
-	t->init_single(path);
-	t->build_node = lake.build_queue.pushHead(t);
-	lake.targets.pushHead(t);
-	INFO("Created target '", t->name(), "'.\n");
-	return t;
+  Target* t = lake.target_pool.add();
+  t->initSingle(path);
+  t->build_node = lake.build_queue.pushHead(t);
+  lake.targets.pushHead(t);
+  INFO("Created target '", t->name(), "'.\n");
+  return t;
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__makeDep
+/* ------------------------------------------------------------------------------------------------
  */
 void lua__makeDep(Target* target, Target* prereq)
 {
-	INFO("Making '", prereq->name(), "' a prerequisite of target '", target->name(), "'.\n");
-	SCOPED_INDENT;
+  INFO("Making '", prereq->name(), "' a prerequisite of target '", target->name(), "'.\n");
+  SCOPED_INDENT;
 
-	if (!target->prerequisites.has(prereq))
-	{
-		target->prerequisites.insert(prereq);
-		target->unsatified_prereq_count += 1;
-	}
+  if (!target->prerequisites.has(prereq))
+  {
+    target->prerequisites.insert(prereq);
+    target->unsatified_prereq_count += 1;
+  }
 
-	prereq->dependents.insert(target);
+  prereq->dependents.insert(target);
 
-	if (target->build_node)
-	{
-		TRACE("Target is in build queue, so it will be removed\n");
-		lake.build_queue.destroy(target->build_node);
-		target->build_node = nullptr;
-	}
+  if (target->build_node)
+  {
+    TRACE("Target is in build queue, so it will be removed\n");
+    lake.build_queue.destroy(target->build_node);
+    target->build_node = nullptr;
+  }
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__targetSetRecipe
+/* ------------------------------------------------------------------------------------------------
  *  Sets the target as having a recipe and returns an index into the recipe table that the calling
  *  function is expected to use to set the recipe appropriately.
  */
 s32 lua__targetSetRecipe(Target* target)
 {
-	lua_State* L = lake.L;
-	lua_getglobal(L, lake_recipe_table);
-	defer { lua_pop(L, 1); };
+  LuaState& lua = lake.lua;
 
-	if (target->flags.test(Target::Flags::HasRecipe))
-	{
-		WARN("Target '", target->name(), "'s recipe is being set again.\n");
-		target->recipe_working_directory.destroy();
-		target->recipe_working_directory = fs::Path::cwd();
-		return target->lua_ref;
-	}	
-	else
-	{
-		TRACE("Target '", target->name(), "' is being marked as having a recipe.\n");
-		target->flags.set(Target::Flags::HasRecipe);
-		// TODO(sushi) targets that have their recipe set from the same directory should
-		//             use the same Path?? Probably better to store a set (AVL) of cwd
-		//             Paths and just have the thing on Target be a str.
-		target->recipe_working_directory = fs::Path::cwd();
+  lua.getglobal(lake_recipe_table);
+  defer { lua.pop(); };
 
-		// get the next slot to fill and then set 'next' to whatever that slot points to
-		lua_pushlstring(L, "next", 4);
-		lua_gettable(L, -2);
+  if (target->flags.test(Target::Flags::HasRecipe))
+  {
+    WARN("Target '", target->name(), "'s recipe is being set again.\n");
+    target->recipe_working_directory.destroy();
+    target->recipe_working_directory = fs::Path::cwd();
+    return target->lua_ref;
+  } 
+  else
+  {
+    TRACE("Target '", target->name(), "' is being marked as having a recipe.\n");
+    target->flags.set(Target::Flags::HasRecipe);
+    // TODO(sushi) targets that have their recipe set from the same directory should
+    //             use the same Path?? Probably better to store a set (AVL) of cwd
+    //             Paths and just have the thing on Target be a str.
+    target->recipe_working_directory = fs::Path::cwd();
 
-		s32 next = lua_tonumber(L, -1);
-		lua_pop(L, 1);
+    // get the next slot to fill and then set 'next' to whatever that slot points to
+    lua.pushstring("next"_str);
+    lua.gettable(-2);
 
-		lua_pushlstring(L, "next", 4);
-		lua_rawgeti(L, -2, next);
+    s32 next = lua.tonumber();
+    lua.pop();
 
-		if (lua_isnil(L, -1))
-		{
-			// if we werent pointing at another slot 
-			// just set next to the next value
-			lua_pop(L, 1);
-			lua_pushnumber(L, next+1);
-		}
-		lua_settable(L, -3);
+    lua.pushstring("next"_str);
+    lua.rawgeti(-2, next);
 
-		target->lua_ref = next;
+    if (lua.isnil())
+    {
+      // if we werent pointing at another slot 
+      // just set next to the next value
+      lua.pop();
+      lua.pushinteger(next+1);
+    }
+    lua.settable(-3);
+
+    target->lua_ref = next;
  
-		return next;
-	}
+    return next;
+  }
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__createGroupTarget
+/* ------------------------------------------------------------------------------------------------
  */
 Target* lua__createGroupTarget()
 {
-	Target* group = lake.target_pool.add();
-	group->init_group();
-	group->build_node = lake.build_queue.pushHead(group);
-	lake.targets.pushHead(group);
-	INFO("Created group '", (void*)group, "'.\n");
-	return group;
+  Target* group = lake.target_pool.add();
+  group->initGroup();
+  group->build_node = lake.build_queue.pushHead(group);
+  lake.targets.pushHead(group);
+  INFO("Created group '", (void*)group, "'.\n");
+  return group;
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__addTargetToGroup
+/* ------------------------------------------------------------------------------------------------
  */
 void lua__addTargetToGroup(Target* group, Target* target)
 {
-	assert_group(group);
-	assert_single(target);
+  assertGroup(group);
+  assertSingle(target);
 
-	INFO("Adding target '", target->name(), "' to group '", group->name(), "'.\n");
-	SCOPED_INDENT;
+  INFO("Adding target '", target->name(), "' to group '", group->name(), "'.\n");
+  SCOPED_INDENT;
 
-	group->group.targets.insert(target);
-	target->single.group = group;
+  group->group.targets.insert(target);
+  target->single.group = group;
 
 
-	if (target->build_node)
-	{
-		TRACE("Target '", target->name(), "' is in the build queue so it will be removed.\n");
-		lake.build_queue.remove(target->build_node);
-		target->build_node = nullptr;
-	}
+  if (target->build_node)
+  {
+    TRACE("Target '", target->name(), "' is in the build queue so it will be removed.\n");
+    lake.build_queue.remove(target->build_node);
+    target->build_node = nullptr;
+  }
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__targetAlreadyInGroup
+/* ------------------------------------------------------------------------------------------------
  */
 b8 lua__targetAlreadyInGroup(Target* target)
 {
-	assert_single(target);
-	return target->single.group != nullptr;
+  assertSingle(target);
+  return target->single.group != nullptr;
 }
 
 
-/* ------------------------------------------------------------------------------------------------ lua__getTargetPath
+/* ------------------------------------------------------------------------------------------------
  */
 str lua__getTargetPath(Target* target)
 {
-	assert_single(target);
-	return target->name();
+  assertSingle(target);
+  return target->name();
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__nextCliarg
+/* ------------------------------------------------------------------------------------------------
  */
 const char* lua__nextCliarg()
 {
-	if (!lake.lua_cli_arg_iterator)
-		return nullptr;
+  if (!lake.lua_cli_arg_iterator)
+    return nullptr;
 
-	const char* out = *lake.lua_cli_arg_iterator->data;
-	lake.lua_cli_arg_iterator = lake.lua_cli_arg_iterator->next;
-	return out;
+  const char* out = *lake.lua_cli_arg_iterator->data;
+  lake.lua_cli_arg_iterator = lake.lua_cli_arg_iterator->next;
+  return out;
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__finalizeGroup
+/* ------------------------------------------------------------------------------------------------
  *  Finalizes the given group. We assume no more targets will be added to it and hash together the
  *  hashes of each target in the group to form the hash of the group. 
  *
@@ -682,412 +664,417 @@ const char* lua__nextCliarg()
  */
 void lua__finalizeGroup(Target* target)
 {
-	assert_group(target);
+  assertGroup(target);
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__stackDump
+/* ------------------------------------------------------------------------------------------------
  */
 void lua__stackDump()
 {
-	stack_dump(lake.L);
+  lake.lua.stackDump();
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__getMonotonicClock
+/* ------------------------------------------------------------------------------------------------
  */
 u64 lua__getMonotonicClock()
 {
-	auto now = TimePoint::monotonic();
-	return now.s * 1e6 + now.ns / 1e3;
+  auto now = TimePoint::monotonic();
+  return now.s * 1e6 + now.ns / 1e3;
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__makeDir
+/* ------------------------------------------------------------------------------------------------
  */
 b8 lua__makeDir(str path, b8 make_parents)
 {
-	return fs::Dir::make(path, make_parents);
+  return fs::Dir::make(path, make_parents);
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__dirDestroy
+/* ------------------------------------------------------------------------------------------------
  */
 void lua__dirDestroy(fs::Dir* dir)
 {
-	mem::stl_allocator.deconstruct(dir);
+  mem::stl_allocator.deconstruct(dir);
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__processSpawn
+/* ------------------------------------------------------------------------------------------------
  */
 ActiveProcess* lua__processSpawn(str* args, u32 args_count)
 {
-	assert(args && args_count);
+  assert(args && args_count);
 
-	DEBUG("spawning process from file '", args[0], "'\n");
-	SCOPED_INDENT;
+  DEBUG("spawning process from file '", args[0], "'\n");
+  SCOPED_INDENT;
 
-	if (logger.verbosity <= Logger::Verbosity::Debug)
-	{
-		DEBUG("with args:\n");
-		SCOPED_INDENT;
-		for (s32 i = 0; i < args_count; i++)
-		{
-			DEBUG(args[i], "\n");
-		}
-	}	
+  if (logger.verbosity <= Logger::Verbosity::Debug)
+  {
+    DEBUG("with args:\n");
+    SCOPED_INDENT;
+    for (s32 i = 0; i < args_count; i++)
+    {
+      DEBUG(args[i], "\n");
+    }
+  } 
 
-	ActiveProcess* proc = active_process_pool.add();
-	Process::Stream streams[3] = {{}, {true, &proc->stdout}, {true, &proc->stderr}};
-	proc->process = Process::spawn(args[0], {args+1, args_count-1}, streams, nil);
-	if (isnil(proc->process))
-	{
-		ERROR("failed to spawn process using file '", args[0], "'\n");
-		exit(1);
-	}
+  ActiveProcess* proc = active_process_pool.add();
+  Process::Stream streams[3] = {{}, {true, &proc->stdout}, {true, &proc->stderr}};
+  proc->process = Process::spawn(args[0], {args+1, args_count-1}, streams, nil);
+  if (isnil(proc->process))
+  {
+    ERROR("failed to spawn process using file '", args[0], "'\n");
+    exit(1);
+  }
 
-	return proc;
+  return proc;
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__processRead
+/* ------------------------------------------------------------------------------------------------
  */
 void lua__processRead(
-		ActiveProcess* proc, 
-		void* stdout_ptr, u64 stdout_len, u64* out_stdout_bytes_read,
-		void* stderr_ptr, u64 stderr_len, u64* out_stderr_bytes_read)
+    ActiveProcess* proc, 
+    void* stdout_ptr, u64 stdout_len, u64* out_stdout_bytes_read,
+    void* stderr_ptr, u64 stderr_len, u64* out_stderr_bytes_read)
 {
-	assert(
-		proc &&
-		stdout_ptr && stdout_len && out_stdout_bytes_read &&
-		stderr_ptr && stderr_len && out_stderr_bytes_read);
+  assert(
+    proc &&
+    stdout_ptr && stdout_len && out_stdout_bytes_read &&
+    stderr_ptr && stderr_len && out_stderr_bytes_read);
 
-	*out_stdout_bytes_read = proc->stdout.read({(u8*)stdout_ptr, stdout_len});
-	*out_stderr_bytes_read = proc->stderr.read({(u8*)stderr_ptr, stderr_len});
+  *out_stdout_bytes_read = proc->stdout.read({(u8*)stdout_ptr, stdout_len});
+  *out_stderr_bytes_read = proc->stderr.read({(u8*)stderr_ptr, stderr_len});
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__processPoll
+/* ------------------------------------------------------------------------------------------------
  */
 b8 lua__processPoll(ActiveProcess* proc, s32* out_exit_code)
 {
-	assert(proc && out_exit_code);
+  assert(proc && out_exit_code);
 
-	proc->process.checkStatus();
+  proc->process.checkStatus();
 
-	if (proc->process.terminated)
-	{
-		*out_exit_code = proc->process.exit_code;
-		return true;
-	}
-	return false;
+  if (proc->process.terminated)
+  {
+    *out_exit_code = proc->process.exit_code;
+    return true;
+  }
+  return false;
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__processClose
+/* ------------------------------------------------------------------------------------------------
  */
 void lua__processClose(ActiveProcess* proc)
 {
-	assert(proc);
-	TRACE("closing proc ", (void*)proc, "\n");
+  assert(proc);
+  TRACE("closing proc ", (void*)proc, "\n");
 
-	proc->stdout.close();
-	proc->stderr.close();
-	active_process_pool.remove(proc);
+  proc->stdout.close();
+  proc->stderr.close();
+  active_process_pool.remove(proc);
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__globCreate
+/* ------------------------------------------------------------------------------------------------
  *  This could PROBABLY be implemented better but whaaatever.
  */
 struct LuaGlobResult
 {
-	str* paths;
-	s32 paths_count;
+  str* paths;
+  s32 paths_count;
 };
 
 LuaGlobResult lua__globCreate(str pattern)
 {
 
-	auto matches = Array<str>::create();
-	auto glob = fs::Globber::create(pattern);
-	glob.run(
-		[&matches](fs::Path& p)
-		{
-			str match = p.buffer.asStr();
-			*matches.push() = match.allocateCopy();
-			return true;
-		});
-	glob.destroy();
-	return {matches.arr, matches.len()};
+  auto matches = Array<str>::create();
+  auto glob = fs::Globber::create(pattern);
+  glob.run(
+    [&matches](fs::Path& p)
+    {
+      str match = p.buffer.asStr();
+      *matches.push() = match.allocateCopy();
+      return true;
+    });
+  glob.destroy();
+  return {matches.arr, matches.len()};
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__globDestroy
+/* ------------------------------------------------------------------------------------------------
  */
 void lua__globDestroy(LuaGlobResult x)
 {
-	auto arr = Array<str>::fromOpaquePointer(x.paths);
+  auto arr = Array<str>::fromOpaquePointer(x.paths);
 
-	for (str& s : arr)
-		mem::stl_allocator.free(s.bytes);
+  for (str& s : arr)
+    mem::stl_allocator.free(s.bytes);
 
-	arr.destroy();
+  arr.destroy();
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__setMaxJobs
+/* ------------------------------------------------------------------------------------------------
  */
 void lua__setMaxJobs(s32 n)
 {
-	if (!lake.max_jobs_set_on_cli)
-	{
-		NOTICE("max_jobs set to ", n, " from lakefile call to lake.maxjobs\n");
+  if (!lake.max_jobs_set_on_cli)
+  {
+    NOTICE("max_jobs set to ", n, " from lakefile call to lake.maxjobs\n");
 
-		// TODO(sushi) make a thing to get number of logical processors and also 
-		//             warn here if max jobs is set too high
-		lake.max_jobs = n;
-	}
+    // TODO(sushi) make a thing to get number of logical processors and also 
+    //             warn here if max jobs is set too high
+    lake.max_jobs = n;
+  }
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__getMaxJobs
+/* ------------------------------------------------------------------------------------------------
  */
 s32 lua__getMaxJobs()
 {
-	return lake.max_jobs;
+  return lake.max_jobs;
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__importFile
+/* ------------------------------------------------------------------------------------------------
  */
 int lua__importFile(lua_State* L)
 {
-	using Path = fs::Path;
+  // TODO(sushi) update to LuaState maybe eventually.
+  //             its possible now since LuaState doesnt store anything but the 
+  //             lua_State* but im not sure if it will ever store anything else
+  //             and I also don't feel like rewriting this atm.
+  using Path = fs::Path;
 
-	size_t len;
-	const char* s = lua_tolstring(L, -1, &len);
-	str path = {(u8*)s, len};
+  size_t len;
+  const char* s = lua_tolstring(L, -1, &len);
+  str path = {(u8*)s, len};
 
-	auto cwd = Path::cwd();
-	defer { cwd.chdir(); cwd.destroy(); };
+  auto cwd = Path::cwd();
+  defer { cwd.chdir(); cwd.destroy(); };
 
-	lua_getglobal(L, lake_err_handler);
-	defer { lua_pop(L, 1); };
+  lua_getglobal(L, lake_err_handler);
+  defer { lua_pop(L, 1); };
 
-	if (luaL_loadfile(L, s)) 
-	{
-		ERROR(lua_tostring(L, -1), "\n");
-		lua_pop(L, 1);
-		return 0;
-	}
+  if (luaL_loadfile(L, s)) 
+  {
+    ERROR(lua_tostring(L, -1), "\n");
+    lua_pop(L, 1);
+    return 0;
+  }
 
-	// so dumb 
-	auto null_terminated = Path::from(Path::removeBasename(path));
-	defer { null_terminated.destroy(); };
+  // so dumb 
+  auto null_terminated = Path::from(Path::removeBasename(path));
+  defer { null_terminated.destroy(); };
 
-	if (!Path::chdir(null_terminated.buffer.asStr()))
-		return 0;
+  if (!Path::chdir(null_terminated.buffer.asStr()))
+    return 0;
 
-	// call the imported file
-	int top = lua_gettop(L) - 1;
+  // call the imported file
+  int top = lua_gettop(L) - 1;
 
-	if (lua_pcall(L, 0, LUA_MULTRET, 2))
-	{
-		ERROR(lua_tostring(L, -1), "\n");
-		lua_pop(L, 1);
-		return 0;
-	}
+  if (lua_pcall(L, 0, LUA_MULTRET, 2))
+  {
+    ERROR(lua_tostring(L, -1), "\n");
+    lua_pop(L, 1);
+    return 0;
+  }
 
-	// check how many thing the file returned
-	int nresults = lua_gettop(L) - top;
+  // check how many thing the file returned
+  int nresults = lua_gettop(L) - top;
 
-	// return all the stuff the file returned
-	return nresults;
+  // return all the stuff the file returned
+  return nresults;
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__cwd
+/* ------------------------------------------------------------------------------------------------
  */
 int lua__cwd(lua_State* L)
 {
-	auto cwd = fs::Path::cwd();
-	defer { cwd.destroy(); };
+  auto cwd = fs::Path::cwd();
+  defer { cwd.destroy(); };
 
-	auto s = cwd.buffer.asStr();
+  auto s = cwd.buffer.asStr();
 
-	lua_pushlstring(L, (char*)s.bytes, s.len);
+  lua_pushlstring(L, (char*)s.bytes, s.len);
 
-	return 1;
+  return 1;
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__chdir
+/* ------------------------------------------------------------------------------------------------
  */
 b8 lua__chdir(str path)
 {
-	return fs::Path::chdir(path);
+  return fs::Path::chdir(path);
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__canonicalizePath
+/* ------------------------------------------------------------------------------------------------
  */
 int lua__canonicalizePath(lua_State* L)
 {
-	size_t len;
-	const char* s = lua_tolstring(L, 1, &len);
-	str path = {(u8*)s, len};
+  size_t len;
+  const char* s = lua_tolstring(L, 1, &len);
+  str path = {(u8*)s, len};
 
-	auto canonicalized = fs::Path::from(path);
-	defer { canonicalized.destroy(); };
+  auto canonicalized = fs::Path::from(path);
+  defer { canonicalized.destroy(); };
 
-	if (!canonicalized.makeAbsolute())
-	{
-		ERROR("failed to make path '", path, "' canonical\n");
-		return 0;
-	}
+  if (!canonicalized.makeAbsolute())
+  {
+    ERROR("failed to make path '", path, "' canonical\n");
+    return 0;
+  }
 
 
-	lua_pushlstring(L, (char*)canonicalized.buffer.buffer, canonicalized.buffer.len);
+  lua_pushlstring(L, (char*)canonicalized.buffer.buffer, canonicalized.buffer.len);
 
-	return 1;
+  return 1;
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__copyFile
+/* ------------------------------------------------------------------------------------------------
  */
 b8 lua__copyFile(str dst, str src)
 {
-	return fs::File::copy(dst, src);
+  return fs::File::copy(dst, src);
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__rm
+/* ------------------------------------------------------------------------------------------------
  */
 b8 lua__rm(str path, b8 recursive, b8 force)
 {
-	using namespace fs;
+  // TODO(sushi) move to iro
+  using namespace fs;
 
-	if (!Path::isDirectory(path))
-		return File::unlink(path);
+  if (!Path::isDirectory(path))
+    return File::unlink(path);
 
-	// TODO(sushi) uhh apparently i forgot to implement the non-recursive part of this
-	//             so do that when i actually use it :P
-	if (recursive)
-	{
-		mem::Bump bump;
-		bump.init();
-		defer { bump.deinit(); };
+  // TODO(sushi) uhh apparently i forgot to implement the non-recursive part of this
+  //             so do that when i actually use it :P
+  if (recursive)
+  {
+    mem::Bump bump;
+    bump.init();
+    defer { bump.deinit(); };
 
-		u64 file_count = 0;
+    u64 file_count = 0;
 
-		struct DirEntry 
-		{ 
-			Dir dir; 
-			Path* path; 
-			SList<Path> files; 
+    struct DirEntry 
+    { 
+      Dir dir; 
+      Path* path; 
+      SList<Path> files; 
 
-			DirEntry() : dir(nil), path(nil), files(nil) {} 
-			DirEntry(Dir&& dir, Path* path, mem::Bump* bump) : dir(dir), path(path) { files = SList<Path>::create(bump); }
-		};
+      DirEntry() : dir(nil), path(nil), files(nil) {} 
+      DirEntry(Dir&& dir, Path* path, mem::Bump* bump) : dir(dir), path(path) { files = SList<Path>::create(bump); }
+    };
 
-		auto pathpool = DLinkedPool<Path>::create(&bump);
-		auto dirpool = DLinkedPool<DirEntry>::create(&bump);
-		auto dirstack = DList<DirEntry>::create(&bump);
-		auto dirqueue = DList<DirEntry>::create(&bump);
+    auto pathpool = DLinkedPool<Path>::create(&bump);
+    auto dirpool = DLinkedPool<DirEntry>::create(&bump);
+    auto dirstack = DList<DirEntry>::create(&bump);
+    auto dirqueue = DList<DirEntry>::create(&bump);
 
-		defer 
-		{ 
-			for (auto& path : pathpool.list)
-				path.destroy();
+    defer 
+    { 
+      for (auto& path : pathpool.list)
+        path.destroy();
 
-			for (auto& dir : dirpool.list)
-				dir.files.destroy();
-			// NOTE(sushi) the rest of the mem SHOULD be handled by bump.deinit
-		};
+      for (auto& dir : dirpool.list)
+        dir.files.destroy();
+      // NOTE(sushi) the rest of the mem SHOULD be handled by bump.deinit
+    };
 
-		pathpool.pushHead(Path::from(path));
-		dirpool.pushHead(DirEntry(Dir::open(path), &pathpool.head(), &bump));
-		dirstack.pushHead(&dirpool.head());
+    pathpool.pushHead(Path::from(path));
+    dirpool.pushHead(DirEntry(Dir::open(path), &pathpool.head(), &bump));
+    dirstack.pushHead(&dirpool.head());
 
-		while (!dirstack.isEmpty())
-		{
-			auto* direntry_node = dirstack.tail;
-			DirEntry* direntry = direntry_node->data;
+    while (!dirstack.isEmpty())
+    {
+      auto* direntry_node = dirstack.tail;
+      DirEntry* direntry = direntry_node->data;
 
-			StackArray<u8, 255> dirent;
+      StackArray<u8, 255> dirent;
 
-			dirent.len = direntry->dir.next({dirent.arr, dirent.capacity()});
-			if (dirent.len < 0)
-				return false;
+      dirent.len = direntry->dir.next({dirent.arr, dirent.capacity()});
+      if (dirent.len < 0)
+        return false;
 
-			if (dirent.len == 0)
-			{
-				direntry->dir.close();
-				dirstack.remove(direntry_node);
-				dirqueue.pushTail(direntry);
+      if (dirent.len == 0)
+      {
+        direntry->dir.close();
+        dirstack.remove(direntry_node);
+        dirqueue.pushTail(direntry);
 
-				if (dirstack.isEmpty())
-					break;
+        if (dirstack.isEmpty())
+          break;
 
-				continue;
-			}
+        continue;
+      }
 
-			str s = str::from(dirent.asSlice());
-			if (s == "."_str || s == ".."_str)
-				continue;
+      str s = str::from(dirent.asSlice());
+      if (s == "."_str || s == ".."_str)
+        continue;
 
-			Path* full = pathpool.pushHead()->data;
-			full->init(direntry->path->buffer.asStr());
-			full->makeDir().append(s);
+      Path* full = pathpool.pushHead()->data;
+      full->init(direntry->path->buffer.asStr());
+      full->makeDir().append(s);
 
-			if (full->isDirectory())
-			{
-				dirpool.pushHead(DirEntry(Dir::open(full->buffer.asStr()), full, &bump));
-				dirstack.pushTail(&dirpool.head());
-			}
-			else
-			{
-				file_count += 1;
-				direntry->files.push(full);
-			}
-		}
+      if (full->isDirectory())
+      {
+        dirpool.pushHead(DirEntry(Dir::open(full->buffer.asStr()), full, &bump));
+        dirstack.pushTail(&dirpool.head());
+      }
+      else
+      {
+        file_count += 1;
+        direntry->files.push(full);
+      }
+    }
 
-		if (!force && file_count)
-		{
-			io::formatv(&fs::stdout, "Are you sure you want to delete all ", file_count, " files in '", path, "'? [y/N] ");
-			u8 c;
-			fs::stdin.read({&c, 1});
-			io::format(&fs::stdout, "\n");
-			if (c != 'y')
-				return true;
-		}
+    if (!force && file_count)
+    {
+      io::formatv(&fs::stdout, "Are you sure you want to delete all ", file_count, " files in '", path, "'? [y/N] ");
+      u8 c;
+      fs::stdin.read({&c, 1});
+      io::format(&fs::stdout, "\n");
+      if (c != 'y')
+        return true;
+    }
 
-		for (auto& de : dirqueue)
-		{
-			for (auto& f : de.files)
-			{
-				NOTICE("Deleting file: ", f, "\n");
-				f.unlink();
-			}
+    for (auto& de : dirqueue)
+    {
+      for (auto& f : de.files)
+      {
+        NOTICE("Deleting file: ", f, "\n");
+        f.unlink();
+      }
 
-			NOTICE("Deleting dir: ", *de.path, "\n");
-			de.path->rmdir();
-		}
-	}
-	else
-	{
-		ERROR("cannot rm path '", path, "' because either its a directory and recursive was not specified\n");
-		return false;
-	}
+      NOTICE("Deleting dir: ", *de.path, "\n");
+      de.path->rmdir();
+    }
+  }
+  else
+  {
+    ERROR("cannot rm path '", path, "' because either its a directory and recursive was not specified\n");
+    return false;
+  }
 
-	return true;
+  return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__queueAction
+/* ------------------------------------------------------------------------------------------------
  */
 void lua__queueAction(str name)
 {
-	str* s = lake.action_pool.add();
-	*s = name.allocateCopy();
-	lake.action_queue.pushTail(s);
+  str* s = lake.action_pool.add();
+  *s = name.allocateCopy();
+  lake.action_queue.pushTail(s);
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__inRecipe
+/* ------------------------------------------------------------------------------------------------
  */
 b8 lua__inRecipe()
 {
-	return lake.in_recipe;
+  return lake.in_recipe;
 }
 
-/* ------------------------------------------------------------------------------------------------ lua__touch
+/* ------------------------------------------------------------------------------------------------
  */
 b8 lua__touch(str path)
 {
-	return platform::touchFile(path);
+  return platform::touchFile(path);
 }
 
 }

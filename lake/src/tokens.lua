@@ -3,85 +3,85 @@ local str_output   = "src/generated/token.strings.h"
 local kwmap_output = "src/generated/token.kwmap.h"
 
 local write_out = function(path, out)
-	local f = io.open(path, "w")
+  local f = io.open(path, "w")
 
-	if not f then
-		print("failed to open file '"..path.."' for writing")
-		return
-	end
+  if not f then
+    print("failed to open file '"..path.."' for writing")
+    return
+  end
 
-	f:write(out)
-	f:close()
+  f:write(out)
+  f:close()
 end
 
 
 local tokens = 
 {
-	"Eof",
+  "Eof",
 
-	"Colon",
-	"Semicolon", 
-	"Equal",
-	"Comma",
-	"ParenLeft",
-	"ParenRight",
-	"BraceLeft",
-	"BraceRight",
-	"SquareLeft",
-	"SquareRight",
-	"Ellipses",
-	"DotDouble",
-	"Dot",
-	"Caret",
-	"Percent",
-	"TildeEqual",
-	"Plus",
-	"Minus",
-	"Solidus",
-	"Asterisk",
-	"LessThan",
-	"LessThanOrEqual",
-	"GreaterThan",
-	"GreaterThanOrEqual",
-	"EqualDouble",
-	"DotDoubleEqual",
-	"Pound",
+  "Colon",
+  "Semicolon", 
+  "Equal",
+  "Comma",
+  "ParenLeft",
+  "ParenRight",
+  "BraceLeft",
+  "BraceRight",
+  "SquareLeft",
+  "SquareRight",
+  "Ellipses",
+  "DotDouble",
+  "Dot",
+  "Caret",
+  "Percent",
+  "TildeEqual",
+  "Plus",
+  "Minus",
+  "Solidus",
+  "Asterisk",
+  "LessThan",
+  "LessThanOrEqual",
+  "GreaterThan",
+  "GreaterThanOrEqual",
+  "EqualDouble",
+  "DotDoubleEqual",
+  "Pound",
 
-	"Identifier",
-	"Number",
-	"String",
-	"Whitespace",
+  "Identifier",
+  "Number",
+  "String",
+  "Whitespace",
 
-	-- lake specific
+  -- lake specific
 
-	"Backtick",
-	"Dollar",
-	"ColonEqual",
-	"QuestionMarkEqual",
+  "Backtick",
+  "Dollar",
+  "ColonEqual",
+  "QuestionMarkEqual",
 }
 
 local keyword_tokens = {
-	{"Not",      "not"      },
-	{"For",      "for"      },
-	{"In",       "in"       },
-	{"While",    "while"    },
-	{"Break",    "break"    },
-	{"Repeat",   "repeat"   },
-	{"Until",    "until"    },
-	{"Do",       "do"       },
-	{"If",       "if"       },
-	{"Else",     "else"     },
-	{"ElseIf",   "elseif"   },
-	{"Then",     "then"     },  
-	{"True",     "true"     },
-	{"False",    "false"    },
-	{"Nil",      "nil"      },
-	{"And",      "and"      },
-	{"Or",       "or"       },
-	{"Local",    "local"    },
-	{"Function", "function" },
-	{"Return",   "return"   },
-	{"End",      "end"      },
+  {"Not",      "not"      },
+  {"For",      "for"      },
+  {"In",       "in"       },
+  {"While",    "while"    },
+  {"Break",    "break"    },
+  {"Repeat",   "repeat"   },
+  {"Until",    "until"    },
+  {"Do",       "do"       },
+  {"If",       "if"       },
+  {"Else",     "else"     },
+  {"ElseIf",   "elseif"   },
+  {"Then",     "then"     },  
+  {"True",     "true"     },
+  {"False",    "false"    },
+  {"Nil",      "nil"      },
+  {"And",      "and"      },
+  {"Or",       "or"       },
+  {"Local",    "local"    },
+  {"Function", "function" },
+  {"Return",   "return"   },
+  {"End",      "end"      },
 }
 
 local out = [[
@@ -90,11 +90,11 @@ enum class tok
 ]]
 
 for _,v in ipairs(tokens) do
-	out = out.."\t"..v..",\n"	
+  out = out.."\t"..v..",\n" 
 end
 
 for _,v in ipairs(keyword_tokens) do
-	out = out.."\t"..v[1]..",\n"
+  out = out.."\t"..v[1]..",\n"
 end
 
 out = out..[[
@@ -109,11 +109,11 @@ static const str tok_strings[] =
 ]]
 
 for _,v in ipairs(tokens) do
-	out = out.."\t\""..v.."\"_str,\n"
+  out = out.."\t\""..v.."\"_str,\n"
 end
 
 for _,v in ipairs(keyword_tokens) do
-	out = out.."\t\""..v[1].."\"_str,\n"
+  out = out.."\t\""..v[1].."\"_str,\n"
 end
 
 out = out..[[
@@ -125,25 +125,25 @@ write_out(str_output, out)
 out = [[
 struct KWElem
 {
-	u64 hash;
-	tok kind;
+  u64 hash;
+  tok kind;
 };
 
 static tok is_keyword_or_identifier(str s)
 {
-	u64 hash = s.hash();
-	switch (hash)
-	{
+  u64 hash = s.hash();
+  switch (hash)
+  {
 ]]
 
 for _,v in ipairs(keyword_tokens) do
-	out = out.."\t\t case \""..v[2].."\"_hashed: return tok::"..v[1]..";\n"
+  out = out.."\t\t case \""..v[2].."\"_hashed: return tok::"..v[1]..";\n"
 end
 
 out = out..[[
-	}
+  }
 
-	return tok::Identifier;
+  return tok::Identifier;
 }
 ]]
 

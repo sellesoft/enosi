@@ -16,8 +16,8 @@ local List = require "list"
 local Twine = require "twine"
 
 local errhandler = function(message)
-	print(debug.traceback())
-	return message
+  print(debug.traceback())
+  return message
 end
 
 --- Global lake table used to report targets and dependencies between them
@@ -32,14 +32,14 @@ local recipe_table = { next = 1 }
 local actions = {}
 
 local Target,
-	  TargetGroup
+    TargetGroup
 
 --- Table containing variables specified on command line. 
 --- For example if lake is invoked:
 ---
 --- ```shell
---- 	lake mode=release
----	```
+---   lake mode=release
+--- ```
 ---
 --- then this table will contain a key 'mode' equal to "release".
 --- This is useful for a quick way to change a lakefile's behavior from
@@ -59,73 +59,74 @@ lake.clivars = {}
 
 
 local ffi = require "ffi"
-ffi.cdef [[
-	typedef uint8_t  u8;
-	typedef uint16_t u16;
-	typedef uint32_t u32;
-	typedef uint64_t u64;
-	typedef int8_t   s8;
-	typedef int16_t  s16;
-	typedef int32_t  s32;
-	typedef int64_t  s64;
-	typedef float    f32;
-	typedef double   f64;
-	typedef u8       b8; // booean type
+ffi.cdef
+[[
+  typedef uint8_t  u8;
+  typedef uint16_t u16;
+  typedef uint32_t u32;
+  typedef uint64_t u64;
+  typedef int8_t   s8;
+  typedef int16_t  s16;
+  typedef int32_t  s32;
+  typedef int64_t  s64;
+  typedef float    f32;
+  typedef double   f64;
+  typedef u8       b8; // booean type
 
-	typedef struct str
-	{
-		const char* s;
-		s32 len;
-	} str;
+  typedef struct str
+  {
+    const char* s;
+    s32 len;
+  } str;
 
-	void* lua__createSingleTarget(str path);
-	void  lua__makeDep(void* target, void* dependent);
-	s32   lua__targetSetRecipe(void* target);
-	void* lua__createGroupTarget();
-	void  lua__addTargetToGroup(void* group, void* target);
-	b8    lua__targetAlreadyInGroup(void* group);
-	void  lua__stackDump();
-	u64   lua__getMonotonicClock();
-	b8    lua__makeDir(str path, b8 make_parents);
+  void* lua__createSingleTarget(str path);
+  void  lua__makeDep(void* target, void* dependent);
+  s32   lua__targetSetRecipe(void* target);
+  void* lua__createGroupTarget();
+  void  lua__addTargetToGroup(void* group, void* target);
+  b8    lua__targetAlreadyInGroup(void* group);
+  void  lua__stackDump();
+  u64   lua__getMonotonicClock();
+  b8    lua__makeDir(str path, b8 make_parents);
 
-	const char* lua__nextCliarg();
+  const char* lua__nextCliarg();
 
-	void* lua__processSpawn(str* args, u32 args_count);
-	void lua__processRead(
-		void* proc, 
-		void* stdout_ptr, u64 stdout_len, u64* out_stdout_bytes_read,
-		void* stderr_ptr, u64 stderr_len, u64* out_stderr_bytes_read);
-	b8 lua__processPoll(void* proc, s32* out_exit_code);
-	void lua__processClose(void* proc);
+  void* lua__processSpawn(str* args, u32 args_count);
+  void lua__processRead(
+    void* proc, 
+    void* stdout_ptr, u64 stdout_len, u64* out_stdout_bytes_read,
+    void* stderr_ptr, u64 stderr_len, u64* out_stderr_bytes_read);
+  b8 lua__processPoll(void* proc, s32* out_exit_code);
+  void lua__processClose(void* proc);
 
-	typedef struct
-	{
-		str* paths;
-		s32 paths_count;
-	} LuaGlobResult;
+  typedef struct
+  {
+    str* paths;
+    s32 paths_count;
+  } LuaGlobResult;
 
-	LuaGlobResult lua__globCreate(str pattern);
-	void lua__globDestroy(LuaGlobResult x);
+  LuaGlobResult lua__globCreate(str pattern);
+  void lua__globDestroy(LuaGlobResult x);
 
-	void lua__setMaxJobs(s32 n);
+  void lua__setMaxJobs(s32 n);
 
-	str lua__getTargetPath(void* handle);
+  str lua__getTargetPath(void* handle);
 
-	b8 lua__copyFile(str dst, str src);
+  b8 lua__copyFile(str dst, str src);
 
-	b8 lua__chdir(str path);
+  b8 lua__chdir(str path);
 
-	b8 lua__unlinkFile(str path);
+  b8 lua__unlinkFile(str path);
 
-	void lua__queueAction(str name);
+  void lua__queueAction(str name);
 
-	b8 lua__rm(str path, b8, b8);
+  b8 lua__rm(str path, b8, b8);
 
-	b8 lua__inRecipe();
+  b8 lua__inRecipe();
 
-	s32 lua__getMaxJobs();
+  s32 lua__getMaxJobs();
 
-	b8 lua__touch(str path);
+  b8 lua__touch(str path);
 ]]
 local C = ffi.C
 local strtype = ffi.typeof("str")
@@ -137,11 +138,11 @@ local strtype = ffi.typeof("str")
 ---@param s string
 ---@return str
 local make_str = function(s)
-	if not s then
-		print(debug.traceback())
-		os.exit(1)
-	end
-	return strtype(s, #s)
+  if not s then
+    print(debug.traceback())
+    os.exit(1)
+  end
+  return strtype(s, #s)
 end
 
 
@@ -155,26 +156,26 @@ end
 -- * : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : command line arguments
 --   Process command line arguments.
 while true do
-	local arg = C.lua__nextCliarg()
+  local arg = C.lua__nextCliarg()
 
-	if arg == nil then
-		break
-	end
+  if arg == nil then
+    break
+  end
 
-	arg = ffi.string(arg)
+  arg = ffi.string(arg)
 
-	local var, value = arg:match("(%w+)=(%w+)")
+  local var, value = arg:match("(%w+)=(%w+)")
 
-	if not var then
-		C.lua__queueAction(make_str(arg))
-	else
-		lake.clivars[var] = value
-	end
+  if not var then
+    C.lua__queueAction(make_str(arg))
+  else
+    lake.clivars[var] = value
+  end
 end
 
 local tryAction = function(name)
-	assert(actions[name], "attempt to run unknown action "..name..". If you've to specified a target you want to specifically build (as you can in make), lake does not support this at the moment!")
-	actions[name]()
+  assert(actions[name], "attempt to run unknown action "..name..". If you've to specified a target you want to specifically build (as you can in make), lake does not support this at the moment!")
+  actions[name]()
 end
 
 
@@ -197,7 +198,7 @@ end
 ---
 --- Currently this just returns whatever luajit reports from its os() function.
 --- This could be one of: 
---- 	Windows
+---   Windows
 ---     Linux
 ---     OSX
 ---     BSD
@@ -209,7 +210,7 @@ end
 ---
 ---@return string
 lake.os = function()
-	return jit.os
+  return jit.os
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.arch
@@ -218,25 +219,25 @@ end
 ---
 --- Currently this just returns whatever luajit reports from its arch() function.
 --- This could be one of:
---- 	x86
---- 	x64
----		arm
----		arm64
----		arm64be
----		ppc
----		mips
----		mipsel
----		mips64
----		mips64el
----		mips64r6
----		mips64r6el
+---   x86
+---   x64
+---   arm
+---   arm64
+---   arm64be
+---   ppc
+---   mips
+---   mipsel
+---   mips64
+---   mips64el
+---   mips64r6
+---   mips64r6el
 ---
 --- TODO(sushi) make this return the target architecture if I ever get around to supporting 
 ---             cross-compilation.
 ---
 ---@return string
 lake.arch = function()
-	return jit.arch
+  return jit.arch
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.canonicalizePath
@@ -247,7 +248,7 @@ end
 ---@param path string
 ---@return string
 lake.canonicalizePath = function(path)
-	return lua__canonicalizePath(path)
+  return lua__canonicalizePath(path)
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.touch
@@ -257,7 +258,7 @@ end
 ---
 ---@param path string
 lake.touch = function(path)
-	C.lua__touch(make_str(path))
+  C.lua__touch(make_str(path))
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.flatten
@@ -273,40 +274,49 @@ end
 ---@param handleUnknownType function?
 ---@return List
 lake.flatten = function(tbl, handleUnknownType)
-	local out = List()
+  local out = List()
 
-	local function recur(x)
-		local xtype = type(x)
+  local function recur(x)
+    local xtype = type(x)
 
-		if xtype == "table" then
-			local xmt = getmetatable(x)
+    if xtype == "table" then
+      local xmt = getmetatable(x)
 
-			if List == xmt then
-				for e in x:each() do
-					recur(e)
-				end
-			elseif Twine == xmt then
-				x:each(function(s) out:push(s) end)
-			else
-				if handleUnknownType then
-					local res = handleUnknownType(x, xmt)
-					if res then
-						out:push(res)
-						return
-					end
-				end
+      if List == xmt then
+        for e in x:each() do
+          recur(e)
+        end
+      elseif Twine == xmt then
+        x:each(function(s) out:push(s) end)
+      else
+        if handleUnknownType then
+          local res = handleUnknownType(x, xmt)
+          if res then
+            out:push(res)
+            return
+          end
+        end
 
-				for _,e in ipairs(x) do
-					recur(e)
-				end
-			end
-		else
-			out:push(x)
-		end
-	end
+        for _,e in ipairs(x) do
+          recur(e)
+        end
+      end
+    else
+      out:push(x)
+    end
+  end
 
-	recur(tbl)
-	return out
+  recur(tbl)
+  return out
+end
+
+-- * ---------------------------------------------------------------------------------------------- lake.cliArgs
+
+--- Returns a list of all cliargs passed that lake did not consume internally.
+---
+---@return List
+lake.cliArgs = function()
+
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.action
@@ -323,11 +333,11 @@ end
 --- The function to execute when this action is specified.
 ---@param f function
 lake.action = function(name, f)
-	if actions[name] then
-		error("attempt to specify an action twice", 2)
-	end
+  if actions[name] then
+    error("attempt to specify an action twice", 2)
+  end
 
-	actions[name] = f
+  actions[name] = f
 end
 
 local options_stack = List()
@@ -348,10 +358,10 @@ local options_stack = List()
 ---@param options table?
 ---@return ...
 lake.import = function(path, options)
-	options_stack:push(options)
-	local results = {lua__importFile(path)}
-	options_stack:pop()
-	return unpack(results)
+  options_stack:push(options)
+  local results = {lua__importFile(path)}
+  options_stack:pop()
+  return unpack(results)
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.getOptions
@@ -361,7 +371,7 @@ end
 ---
 ---@return table?
 lake.getOptions = function()
-	return options_stack[options_stack:len()]
+  return options_stack[options_stack:len()]
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.cwd
@@ -370,7 +380,7 @@ end
 ---
 ---@return string
 lake.cwd = function()
-	return lua__cwd()
+  return lua__cwd()
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.chdir
@@ -381,7 +391,7 @@ end
 ---@param path string
 ---@return boolean
 lake.chdir = function(path)
-	return 0 ~= C.lua__chdir(make_str(path))
+  return 0 ~= C.lua__chdir(make_str(path))
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.setMaxJobs
@@ -392,7 +402,7 @@ end
 ---
 ---@param n number
 lake.setMaxJobs = function(n)
-	C.lua__setMaxJobs(n)
+  C.lua__setMaxJobs(n)
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.getMaxJobs
@@ -401,7 +411,7 @@ end
 ---
 ---@return number
 lake.getMaxJobs = function()
-	return C.lua__getMaxJobs()
+  return C.lua__getMaxJobs()
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.rm
@@ -419,37 +429,37 @@ end
 ---@param options table?
 ---@return boolean
 lake.rm = function(path, options)
-	options = options or {recursive = false, force = false}
-	return 0 ~= C.lua__rm(make_str(path), options.recursive or false, options.force or false)
+  options = options or {recursive = false, force = false}
+  return 0 ~= C.lua__rm(make_str(path), options.recursive or false, options.force or false)
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.mkdir
 
 --- Creates the directory at the given path.
 --- 'options' is an optional table containing optional parameters
----		* make_parents | bool = false
+---   * make_parents | bool = false
 ---         Create any missing directories in the given path
 ---
 ---@param path string
 ---@param options table?
 lake.mkdir = function(path, options)
-	if type(path) ~= "string" then
-		error("path given to lake.mkdir is not a string! it is "..type(path), 2)
-	end
+  if type(path) ~= "string" then
+    error("path given to lake.mkdir is not a string! it is "..type(path), 2)
+  end
 
-	local make_parents = false
+  local make_parents = false
 
-	if options then
-		if options.make_parents then
-			make_parents = true
-		end
-	end
+  if options then
+    if options.make_parents then
+      make_parents = true
+    end
+  end
 
-	if C.lua__makeDir(strtype(path, #path), make_parents) == 0 then
-		return false
-	end
+  if C.lua__makeDir(strtype(path, #path), make_parents) == 0 then
+    return false
+  end
 
-	return true
+  return true
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.copy
@@ -460,7 +470,7 @@ end
 ---@param dst string
 ---@return boolean
 lake.copy = function(dst, src)
-	return C.lua__copyFile(make_str(dst), make_str(src))
+  return C.lua__copyFile(make_str(dst), make_str(src))
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.find
@@ -477,26 +487,26 @@ end
 ---@param pattern string
 ---@return List 
 lake.find = function(pattern)
-	if type(pattern) ~= "string" then
-		error("pattern given to lake.find must be a string!", 2)
-	end
+  if type(pattern) ~= "string" then
+    error("pattern given to lake.find must be a string!", 2)
+  end
 
-	local glob = C.lua__globCreate(make_str(pattern))
+  local glob = C.lua__globCreate(make_str(pattern))
 
-	if not glob.paths then
-		return {}
-	end
+  if not glob.paths then
+    return {}
+  end
 
-	local out = List()
+  local out = List()
 
-	for i=0,tonumber(glob.paths_count-1) do
-		local s = glob.paths[i]
-		out:push(ffi.string(s.s, s.len))
-	end
+  for i=0,tonumber(glob.paths_count-1) do
+    local s = glob.paths[i]
+    out:push(ffi.string(s.s, s.len))
+  end
 
-	C.lua__globDestroy(glob)
+  C.lua__globDestroy(glob)
 
-	return out
+  return out
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.cmd
@@ -511,109 +521,107 @@ end
 ---@param options table?
 ---@return number
 lake.cmd = function(args, options)
-	-- check if were in a recipe and yield the coroutine 
-	-- if so.
-	local in_recipe = 0 ~= C.lua__inRecipe()
+  -- check if were in a recipe and yield the coroutine 
+  -- if so.
+  local in_recipe = 0 ~= C.lua__inRecipe()
 
-	args = lake.flatten(args, function(x, mt)
-		if mt == Target then
-			return x.path
-		elseif mt == TargetGroup then
-			error("flattened cmd argument resolved to a TargetGroup, which cannot be stringized!")
-		end
-	end)
+  args = lake.flatten(args, function(x, mt)
+    if mt == Target then
+      return x.path
+    elseif mt == TargetGroup then
+      error("flattened cmd argument resolved to a TargetGroup, which cannot be stringized!")
+    end
+  end)
 
-	options = options or {}
+  options = options or {}
 
-	local onStdout = options.onStdout
-	local onStderr = options.onStderr
+  local onStdout = options.onStdout
+  local onStderr = options.onStderr
 
-	local argsarr = ffi.new("str["..(args:len()+1).."]")
+  local argsarr = ffi.new("str["..(args:len()+1).."]")
 
-	for arg,i in args:eachWithIndex() do
-		if "string" ~= type(arg) then
-			local errstr = "argument "..tostring(i).." in call to cmd was not a string, it was a "..type(arg)..". Arguments were:\n"
+  for arg,i in args:eachWithIndex() do
+    if "string" ~= type(arg) then
+      local errstr = "argument "..tostring(i).." in call to cmd was not a string, it was a "..type(arg)..". Arguments were:\n"
 
-			for _,arg in ipairs(args) do
-				errstr = " "..errstr..arg.."\n"
-			end
+      for _,arg in ipairs(args) do
+        errstr = " "..errstr..arg.."\n"
+      end
 
-			error(errstr)
-		end
+      error(errstr)
+    end
 
-		argsarr[i-1] = make_str(args[i])
-	end
+    argsarr[i-1] = make_str(args[i])
+  end
 
-	-- args:each(print)
+  local handle = C.lua__processSpawn(argsarr, args:len()+1)
 
-	local handle = C.lua__processSpawn(argsarr, args:len()+1)
+  if not handle then
+    local argsstr = ""
+    for _,arg in ipairs(args) do
+      argsstr = " "..argsstr..arg.."\n"
+    end
+    error("failed to spawn process with arguments:\n"..argsstr)
+  end
 
-	if not handle then
-		local argsstr = ""
-		for _,arg in ipairs(args) do
-			argsstr = " "..argsstr..arg.."\n"
-		end
-		error("failed to spawn process with arguments:\n"..argsstr)
-	end
+  local buffer = require "string.buffer"
 
-	local buffer = require "string.buffer"
+  local out_buf = buffer.new()
+  local err_buf = buffer.new()
 
-	local out_buf = buffer.new()
-	local err_buf = buffer.new()
+  local space_wanted = 256
 
-	local space_wanted = 256
+  local exit_code = ffi.new("s32[1]")
+  local out_read = ffi.new("u64[1]")
+  local err_read = ffi.new("u64[1]")
 
-	local exit_code = ffi.new("s32[1]")
-	local out_read = ffi.new("u64[1]")
-	local err_read = ffi.new("u64[1]")
+  local doRead = function()
+    local out_ptr, out_len = out_buf:reserve(space_wanted)
+    local err_ptr, err_len = err_buf:reserve(space_wanted)
 
-	local doRead = function()
-		local out_ptr, out_len = out_buf:reserve(space_wanted)
-		local err_ptr, err_len = err_buf:reserve(space_wanted)
+    C.lua__processRead(handle,
+      out_ptr, out_len, out_read,
+      err_ptr, err_len, err_read)
 
-		C.lua__processRead(handle,
-			out_ptr, out_len, out_read,
-			err_ptr, err_len, err_read)
+    -- print(out_read[0], err_read[0])
 
-		-- print(out_read[0], err_read[0])
+    out_buf:commit(out_read[0])
+    err_buf:commit(err_read[0])
 
-		out_buf:commit(out_read[0])
-		err_buf:commit(err_read[0])
+    if onStdout and out_read[0] ~= 0 then
+      onStdout(ffi.string(out_ptr, out_read[0]))
+    end
 
-		if onStdout and out_read[0] ~= 0 then
-			onStdout(ffi.string(out_ptr, out_read[0]))
-		end
+    if onStderr and err_read[0] ~= 0 then
+      onStderr(ffi.string(err_ptr, err_read[0]))
+    end
 
-		if onStderr and err_read[0] ~= 0 then
-			onStderr(ffi.string(err_ptr, err_read[0]))
-		end
+    return out_read[0] + err_read[0]
+  end
 
-		return out_read[0] + err_read[0]
-	end
+  while true do
+    doRead()
 
-	while true do
-		doRead()
+    local ret = C.lua__processPoll(handle, exit_code)
 
-		local ret = C.lua__processPoll(handle, exit_code)
+    if ret ~= 0 then
+      -- try to read until we stop recieving data because the process can report
+      -- that its terminated before all of its buffered output is consumed
+      while doRead() ~= 0 do end
 
-		if ret ~= 0 then
-			-- try to read until we stop recieving data because the process can report
-			-- that its terminated before all of its buffered output is consumed
-			while doRead() ~= 0 do end
+      C.lua__processClose(handle)
 
-			C.lua__processClose(handle)
-
-			return assert(tonumber(exit_code[0]))
-		else
-			-- yield if were running in a coroutine, otherwise 
-			-- just keep blocking 
-			-- TODO(sushi) make the stdout/stderr pipes blocking 
-			--             if this is called outside of a coroutine/recipe
-			if in_recipe then
-				co.yield(false)
-			end
-		end
-	end
+      return assert(tonumber(exit_code[0]))
+    else
+      -- yield if were running in a coroutine, otherwise 
+      -- just keep blocking 
+      -- TODO(sushi) make the stdout/stderr pipes blocking 
+      --             if this is called outside of a coroutine/recipe
+      if in_recipe then
+        co.yield(false)
+      end
+    end
+  end
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.replace
@@ -631,24 +639,24 @@ end
 ---@param repl string
 ---@return List | string
 lake.replace = function(subject, search, repl)
-	if type(subject) == "table" then
-		local out = List()
-		for _,v in ipairs(subject) do
-			if type(v) ~= "string" then
-				error("element of table given to lake.replace is not a string!", 2)
-			end
+  if type(subject) == "table" then
+    local out = List()
+    for _,v in ipairs(subject) do
+      if type(v) ~= "string" then
+        error("element of table given to lake.replace is not a string!", 2)
+      end
 
-			local res = v:gsub(search, repl)
+      local res = v:gsub(search, repl)
 
-			out:insert(res)
-		end
-		return out
-	elseif type(subject) == "string" then
-		local res = subject:gsub(search, repl)
-		return res
-	else
-		error("unsupported type given as subject of lake.replace: '"..type(subject).."'", 2)
-	end
+      out:insert(res)
+    end
+    return out
+  elseif type(subject) == "string" then
+    local res = subject:gsub(search, repl)
+    return res
+  else
+    error("unsupported type given as subject of lake.replace: '"..type(subject).."'", 2)
+  end
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.getMonotonicClock
@@ -657,7 +665,7 @@ end
 ---
 ---@return number
 lake.getMonotonicClock = function()
-	return assert(tonumber(C.lua__getMonotonicClock()))
+  return assert(tonumber(C.lua__getMonotonicClock()))
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.getRealtimeClock
@@ -666,8 +674,8 @@ end
 ---
 ---@return number
 lake.getRealtimeClock = function()
-	assert(false, "implement realtime clock at some point :)")
-	return 0
+  assert(false, "implement realtime clock at some point :)")
+  return 0
 end
 
 
@@ -701,17 +709,17 @@ Target.__index = Target
 ---@param path string
 ---@return Target
 Target.new = function(path)
-	local o = {}
-	setmetatable(o, Target)
-	o.path = path
-	o.handle = C.lua__createSingleTarget(make_str(path))
-	return o
+  local o = {}
+  setmetatable(o, Target)
+  o.path = path
+  o.handle = C.lua__createSingleTarget(make_str(path))
+  return o
 end
 
 -- * ---------------------------------------------------------------------------------------------- Target.__tostring
 
 Target.__tostring = function(self)
-	return self.path
+  return self.path
 end
 
 -- * ---------------------------------------------------------------------------------------------- Target:depends_on
@@ -722,21 +730,21 @@ end
 ---@param x string | Target | List
 ---@return self
 Target.dependsOn = function(self, x)
-	local x_type = type(x)
-	if "string" == x_type then
-		C.lua__makeDep(self.handle, lake.target(x).handle)
-	elseif "table" == x_type then
-		for v,i in lake.flatten(x):eachWithIndex() do
-			local v_type = type(v)
-			if "string" ~= v_type then
-				error("Element "..i.." of flattened table given to Target.depends_on is not a string, rather a "..v_type.." whose value is "..tostring(v)..".", 2)
-			end
-			C.lua__makeDep(self.handle, lake.target(v).handle)
-		end
-	else
-		error("Target.depends_on can take either a string or a table of strings, got: "..x_type..".", 2)
-	end
-	return self
+  local x_type = type(x)
+  if "string" == x_type then
+    C.lua__makeDep(self.handle, lake.target(x).handle)
+  elseif "table" == x_type then
+    for v,i in lake.flatten(x):eachWithIndex() do
+      local v_type = type(v)
+      if "string" ~= v_type then
+        error("Element "..i.." of flattened table given to Target.depends_on is not a string, rather a "..v_type.." whose value is "..tostring(v)..".", 2)
+      end
+      C.lua__makeDep(self.handle, lake.target(v).handle)
+    end
+  else
+    error("Target.depends_on can take either a string or a table of strings, got: "..x_type..".", 2)
+  end
+  return self
 end
 
 -- * ---------------------------------------------------------------------------------------------- Target:recipe
@@ -754,12 +762,12 @@ end
 ---@param f function
 ---@return self
 Target.recipe = function(self, f)
-	if "function" ~= type(f) then
-		error("expected a lua function as the recipe of target '"..self.path.."', got: "..type(f), 2)
-	end
-	local recipeidx = C.lua__targetSetRecipe(self.handle)
-	recipe_table[recipeidx] = co.create(f)
-	return self
+  if "function" ~= type(f) then
+    error("expected a lua function as the recipe of target '"..self.path.."', got: "..type(f), 2)
+  end
+  local recipeidx = C.lua__targetSetRecipe(self.handle)
+  recipe_table[recipeidx] = co.create(f)
+  return self
 end
 
 -- * ---------------------------------------------------------------------------------------------- lake.target
@@ -767,7 +775,7 @@ end
 --- Either creates the target at 'path' or returns it if it has already been created. Referring to
 --- the same target by two different lexical paths is currently undefined behavior! Eg. it is not 
 --- advisable to write something like: 
----	```lua
+--- ```lua
 ---   lake.target("./src/target.cpp")
 ---   lake.target("src/target.cpp")
 --- ```
@@ -776,34 +784,34 @@ end
 ---@param path string
 ---@return Target
 lake.target = function(path)
-	assert(type(path) == "string", "lake.target passed a non-string value")
-	local target = targets[path]
-	if target then
-		return target
-	end
-	targets[path] = Target.new(path)
-	return targets[path]
+  assert(type(path) == "string", "lake.target passed a non-string value")
+  local target = targets[path]
+  if target then
+    return target
+  end
+  targets[path] = Target.new(path)
+  return targets[path]
 end
 
 -- A grouping of targets that are built from a single invocation of a common recipe.
 TargetGroup =
 {
-	-- array of targets belonging to this group
-	targets = nil,
+  -- array of targets belonging to this group
+  targets = nil,
 
-	-- handle to C representation of the group
-	handle = nil,
+  -- handle to C representation of the group
+  handle = nil,
 }
 TargetGroup.__index = TargetGroup
 
 -- * ---------------------------------------------------------------------------------------------- TargetGroup.new
 -- | Create a new TargetGroup.
 TargetGroup.new = function()
-	local o = {}
-	setmetatable(o, TargetGroup)
-	o.targets = List()
-	o.handle = C.lua__createGroupTarget()
-	return o
+  local o = {}
+  setmetatable(o, TargetGroup)
+  o.targets = List()
+  o.handle = C.lua__createGroupTarget()
+  return o
 end
 -- |
 -- * ----------------------------------------------------------------------------------------------
@@ -811,10 +819,10 @@ end
 -- * ---------------------------------------------------------------------------------------------- TargetGroup:uses
 -- | Calls 'uses' for every target in this group.
 TargetGroup.uses = function(self, x)
-	for target in self.targets:each() do
-		target:uses(x)
-	end
-	return self
+  for target in self.targets:each() do
+    target:uses(x)
+  end
+  return self
 end
 -- |
 -- * ----------------------------------------------------------------------------------------------
@@ -822,21 +830,21 @@ end
 -- * ---------------------------------------------------------------------------------------------- TargetGroup:depends_on
 -- | Calls 'depends_on' for every target in this group.
 TargetGroup.dependsOn = function(self, x)
-	local x_type = type(x)
-	if "string" == x_type then
-		C.lua__makeDep(self.handle, lake.target(x).handle)
-	elseif "table" == x_type then
-		for i,v in ipairs(lake.flatten(x)) do
-			local v_type = type(v)
-			if "string" ~= v_type then
-				error("Element "..i.." of flattened table given to TargetGroup.depends_on is not a string, rather a "..v_type.." whose value is "..tostring(v)..".", 2)
-			end
-			C.lua__makeDep(self.handle, lake.target(v).handle)
-		end
-	else
-		error("TargetGroup.depends_on can take either a string or a table of strings, got: "..x_type..".", 2)
-	end
-	return self
+  local x_type = type(x)
+  if "string" == x_type then
+    C.lua__makeDep(self.handle, lake.target(x).handle)
+  elseif "table" == x_type then
+    for i,v in ipairs(lake.flatten(x)) do
+      local v_type = type(v)
+      if "string" ~= v_type then
+        error("Element "..i.." of flattened table given to TargetGroup.depends_on is not a string, rather a "..v_type.." whose value is "..tostring(v)..".", 2)
+      end
+      C.lua__makeDep(self.handle, lake.target(v).handle)
+    end
+  else
+    error("TargetGroup.depends_on can take either a string or a table of strings, got: "..x_type..".", 2)
+  end
+  return self
 end
 -- |
 -- * ----------------------------------------------------------------------------------------------
@@ -844,9 +852,9 @@ end
 -- * ---------------------------------------------------------------------------------------------- TargetGroup:recipe
 -- | Sets the recipe for this group.
 TargetGroup.recipe = function(self, f)
-	local recipeidx = C.lua__targetSetRecipe(self.handle)
-	recipe_table[recipeidx] = co.create(f)
-	return self
+  local recipeidx = C.lua__targetSetRecipe(self.handle)
+  recipe_table[recipeidx] = co.create(f)
+  return self
 end
 -- |
 -- * ----------------------------------------------------------------------------------------------
@@ -867,27 +875,27 @@ end
 -- | 'a' and 'b' refer to different groups, and the second call to 'targets' will throw an 
 -- | error, as no target may belong to two different groups!
 lake.targets = function(...)
-	local args = lake.flatten{...}
+  local args = lake.flatten{...}
 
-	local group = TargetGroup.new()
+  local group = TargetGroup.new()
 
-	for arg,i in args:eachWithIndex() do
-		if type(arg) ~= "string" then
-			error("flattened argument "..i.." given to lake.targets was not a string, rather a "..type(arg).." with value "..tostring(arg),2)
-		end
+  for arg,i in args:eachWithIndex() do
+    if type(arg) ~= "string" then
+      error("flattened argument "..i.." given to lake.targets was not a string, rather a "..type(arg).." with value "..tostring(arg),2)
+    end
 
-		local target = lake.target(arg)
+    local target = lake.target(arg)
 
-		if C.lua__targetAlreadyInGroup(target.handle) ~= 0 then
-			error("target '"..target.path.."' is already in a group!",2)
-		end
+    if C.lua__targetAlreadyInGroup(target.handle) ~= 0 then
+      error("target '"..target.path.."' is already in a group!",2)
+    end
 
-		C.lua__addTargetToGroup(group.handle, target.handle)
+    C.lua__addTargetToGroup(group.handle, target.handle)
 
-		group.targets:insert(target)
-	end
+    group.targets:insert(target)
+  end
 
-	return group
+  return group
 end
 
 lake.__internal = {}

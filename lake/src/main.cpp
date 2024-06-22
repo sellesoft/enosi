@@ -20,31 +20,31 @@ DEFINE_GDB_PY_SCRIPT("lpp-gdb.py");
 
 int main(const int argc, const char* argv[]) 
 {
-	if (!iro::log.init())
-		return 1;
-	defer { iro::log.deinit(); };
+  if (!iro::log.init())
+    return 1;
+  defer { iro::log.deinit(); };
 
-	auto f = fs::File::from("temp/log"_str, fs::OpenFlag::Create | fs::OpenFlag::Truncate | fs::OpenFlag::Write);
-	defer { if (notnil(f)) f.close(); };
+  auto f = fs::File::from("temp/log"_str, fs::OpenFlag::Create | fs::OpenFlag::Truncate | fs::OpenFlag::Write);
+  defer { if (notnil(f)) f.close(); };
 
-	{
-		using enum Log::Dest::Flag;
-		iro::log.newDestination("stdout"_str, &fs::stdout, 
-				AllowColor | 
-				// ShowCategoryName |
-				ShowVerbosity |
-				PadVerbosity |
-				TrackLongestName);
+  {
+    using enum Log::Dest::Flag;
+    iro::log.newDestination("stdout"_str, &fs::stdout, 
+        AllowColor | 
+        // ShowCategoryName |
+        ShowVerbosity |
+        PadVerbosity |
+        TrackLongestName);
 
-		if (notnil(f))
-			iro::log.newDestination("templog"_str, &f, {});
-	}
+    if (notnil(f))
+      iro::log.newDestination("templog"_str, &f, {});
+  }
 
-	if (!lake.init(argv, argc))
-		return 1;
-	defer { lake.deinit(); };
+  if (!lake.init(argv, argc))
+    return 1;
+  defer { lake.deinit(); };
 
-	if (!lake.run())
-		return 1;
-	return 0;
+  if (!lake.run())
+    return 1;
+  return 0;
 }

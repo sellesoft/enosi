@@ -26,11 +26,11 @@ static const int lake_lua_bytecode[] =
 local compiled_length = #compiled
 
 for i=1,compiled_length do
-	if (i - 1) % 16 == 0 then
-		out:put "\n "
-	end
+  if (i - 1) % 16 == 0 then
+    out:put "\n "
+  end
 
-	out:putf("0x%02x, ", compiled:byte(i))
+  out:putf("0x%02x, ", compiled:byte(i))
 end
 
 out:put([[
@@ -41,7 +41,7 @@ static const int lake_lua_bytecode_count = ]], compiled_length, ";")
 local file = io.open(outpath, "w")
 
 if not file then
-	error("failed to open '"..outpath.."' for writing")
+  error("failed to open '"..outpath.."' for writing")
 end
 
 file:write(out:get())

@@ -46,6 +46,7 @@ compiler_flags :=     \
 	-Iinclude         \
 	-Isrc             \
 	-I../iro          \
+	-DIRO_LINUX       \
 	-Wall             \
 	-Wno-switch       \
 	-Wno-\#warnings   \

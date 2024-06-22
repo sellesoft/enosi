@@ -11,9 +11,9 @@ struct Target;
  */
 struct Job
 {
-	Target* target;
+  Target* target;
 
-	int closure_ref;
+  int closure_ref;
 };
 
 #endif
