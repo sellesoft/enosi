@@ -27,6 +27,7 @@ struct LuaState
 	/* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 	 =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
 
+	static LuaState fromExistingState(lua_State* L) { LuaState out; out.L = L; return out; }
 	
 	b8 init();
 	void deinit();
@@ -40,6 +41,9 @@ struct LuaState
 	void newtable();
 	void settable(s32 idx);
 	void gettable(s32 idx);
+	void getfield(s32 idx, const char* k);
+
+	void rawgeti(s32 tblidx, s32 idx);
 
 	void setglobal(const char* name);
 	void getglobal(const char* name);
@@ -68,6 +72,8 @@ struct LuaState
 	void pushinteger(s32 i);
 	void pushvalue(s32 idx);
 	void pushnil();
+	void pushcfunction(int (*cfunc)(lua_State*)); 
+
 
 	int type(s32 idx);
 	const char* typeName(s32 idx);

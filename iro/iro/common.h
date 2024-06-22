@@ -92,12 +92,31 @@ inline b8 matchAny(V v, T... args)
 #endif
 
 #ifndef defer
+
+template <class F> 
+struct deferrer 
+{ 
+	F f; 
+	~deferrer() { f(); } 
+};
 struct defer_dummy {};
+
+template <class F> 
+deferrer<F> operator*(defer_dummy, F f) { return {f}; }
+
+template<typename F> 
+struct deferrer_with_cancel 
+{ 
+	b8 canceled; 
+	F f; 
+	~deferrer_with_cancel() { if (!canceled) f(); }  
+	void cancel() { canceled = true; } 
+};
 struct defer_with_cancel_dummy {};
-template <class F> struct deferrer { F f; ~deferrer() { f(); } };
-template<typename F> struct deferrer_with_cancel { b8 canceled; F f; ~deferrer_with_cancel() { if (!canceled) f(); }  void cancel() { canceled = true; } };
-template <class F> deferrer<F> operator*(defer_dummy, F f) { return {f}; }
-template <class F> deferrer_with_cancel<F> operator*(defer_with_cancel_dummy, F f) { return {false, f}; }
+
+template <class F> 
+deferrer_with_cancel<F> operator*(defer_with_cancel_dummy, F f) { return {false, f}; }
+
 #  define DEFER_(LINE) zz_defer##LINE
 #  define DEFER(LINE) DEFER_(LINE)
 #  define defer auto DEFER(__LINE__) = defer_dummy{} *[&]()

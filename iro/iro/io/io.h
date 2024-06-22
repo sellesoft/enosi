@@ -66,7 +66,8 @@ struct IO
 
 protected:
 
-	// helpers for use internally, especially for things that define their own 'flags' like FileDescriptor
+	// helpers for use internally, especially for things that define their own 'flags' 
+	// like FileDescriptor
 	void setOpen()     { flags.set(Flag::Open); }
 	void setWritable() { flags.set(Flag::Writable); }
 	void setReadable() { flags.set(Flag::Readable); }

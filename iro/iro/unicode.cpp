@@ -11,7 +11,7 @@ namespace iro::utf8
 
 Logger logger = Logger::create("utf8"_str, Logger::Verbosity::Notice);
 
-/* ------------------------------------------------------------------------------------------------ utf8::bytesNeededToEncodeCharacter
+/* ------------------------------------------------------------------------------------------------
  */
 u8 bytesNeededToEncodeCharacter(u32 c)
 {
@@ -26,14 +26,14 @@ u8 bytesNeededToEncodeCharacter(u32 c)
 	return 0; // do not encode this character !!
 }
 
-/* ------------------------------------------------------------------------------------------------ utf8::isContinuationByte
+/* ------------------------------------------------------------------------------------------------
  */
 b8 isContinuationByte(u8 c)
 {
 	return ((c) & 0xc0) == 0x80;
 }
 
-/* ------------------------------------------------------------------------------------------------ utf8::encodeCharacter
+/* ------------------------------------------------------------------------------------------------
  */
 Char encodeCharacter(u32 codepoint)
 {
@@ -44,7 +44,8 @@ Char encodeCharacter(u32 codepoint)
 	switch (c.count)
 	{
 		default:
-			ERROR("utf8::encodeCharacter(): could not resolve a proper number of bytes needed to encode codepoint: ", codepoint, "\n");
+			ERROR("utf8::encodeCharacter(): could not resolve a proper number of bytes needed to "
+				  "encode codepoint: ", codepoint, "\n");
 			return Char::invalid();
 
 		case 1: 
@@ -75,14 +76,14 @@ Char encodeCharacter(u32 codepoint)
 	}
 }
 
-/* ------------------------------------------------------------------------------------------------ utf8::decodeCharacter
+/* ------------------------------------------------------------------------------------------------
  */
 Codepoint decodeCharacter(u8* s, s32 slen)
 {
 	assert(s);
 
-#define FERROR(...) ERROR("utf8::decodeCharacter(): "_str, __VA_ARGS__)
-#define FWARN(...)  WARN("utf8::decodeCharacter(): "_str, __VA_ARGS__)
+#define FERROR(...) ERROR("decodeCharacter(): "_str, __VA_ARGS__)
+#define FWARN(...)  WARN("decodeCharacter(): "_str, __VA_ARGS__)
 
 	if (slen == 0)
 	{
@@ -130,7 +131,8 @@ Codepoint decodeCharacter(u8* s, s32 slen)
 
 		if (!isContinuationByte(s[1]) || !isContinuationByte(s[2]))
 		{
-			FERROR("encountered 3 byte character but one of the trailing bytes is not a continuation character\n");
+			FERROR("encountered 3 byte character but one of the trailing bytes is not a "
+				   "continuation character\n");
 			return nil;
 		}
 
@@ -147,7 +149,8 @@ Codepoint decodeCharacter(u8* s, s32 slen)
 		if (c< 0x800)
 		{
 			// TODO(sushi) look into why this is wrong
-			FERROR("c->codepoint wound up being < 0x800 which is wrong for some reason idk yet look into it maybe???\n");
+			FERROR("c->codepoint wound up being < 0x800 which is wrong for some reason idk yet "
+				   "look into it maybe???\n");
 			return nil; 
 		}
 
@@ -162,7 +165,8 @@ Codepoint decodeCharacter(u8* s, s32 slen)
 
 	if (!isContinuationByte(s[1]) || !isContinuationByte(s[2]) || !isContinuationByte(s[3]))
 	{
-		FERROR("encountered 4 byte character but one of the trailing bytes is not a continuation character\n");
+		FERROR("encountered 4 byte character but one of the trailing bytes is not a continuation "
+			   "character\n");
 		return nil;
 	}
 
@@ -170,7 +174,8 @@ Codepoint decodeCharacter(u8* s, s32 slen)
 	{
 		if (s[1] < 0x90)
 		{
-			FERROR("encountered a 4 byte character but the codepoint is less than the valid range (0x10000 - 0x10ffff)");
+			FERROR("encountered a 4 byte character but the codepoint is less than the valid range "
+				   "(0x10000 - 0x10ffff)");
 			return nil;
 		}	
 	}
@@ -178,7 +183,8 @@ Codepoint decodeCharacter(u8* s, s32 slen)
 	{
 		if (s[1] > 0x8f)
 		{
-			FERROR("encountered a 4 byte character but the codepoint is greater than the valid range (0x10000 - 0x10ffff)");
+			FERROR("encountered a 4 byte character but the codepoint is greater than the valid "
+					"range (0x10000 - 0x10ffff)");
 			return nil;
 		}
 	}
@@ -193,7 +199,7 @@ Codepoint decodeCharacter(u8* s, s32 slen)
 #undef FWARN
 }
 
-/* ------------------------------------------------------------------------------------------------ utf8::str::advance
+/* ------------------------------------------------------------------------------------------------
  */
 Codepoint str::advance(s32 n)
 {
@@ -211,7 +217,7 @@ Codepoint str::advance(s32 n)
 	return c;
 }
 
-/* ------------------------------------------------------------------------------------------------ utf8::str::operator ==
+/* ------------------------------------------------------------------------------------------------
  */
 b8 str::operator==(str s)
 {
@@ -227,7 +233,7 @@ b8 str::operator==(str s)
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ utf8::str::hash
+/* ------------------------------------------------------------------------------------------------
  *  REMEMBER: this needs to be exactly the same as staticStringHash!!!!
  */
 u64 str::hash()
@@ -241,7 +247,7 @@ u64 str::hash()
 	return seed;
 }
 
-/* ------------------------------------------------------------------------------------------------ utf8::str::nullTerminate
+/* ------------------------------------------------------------------------------------------------
  */
 b8 str::nullTerminate(u8* buffer, s32 buffer_len)
 {
@@ -253,7 +259,7 @@ b8 str::nullTerminate(u8* buffer, s32 buffer_len)
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ utf8::str::countCharacters
+/* ------------------------------------------------------------------------------------------------ 
  */
 u64 str::countCharacters()
 {
@@ -264,7 +270,7 @@ u64 str::countCharacters()
 	return accum;
 }
 
-/* ------------------------------------------------------------------------------------------------ utf8::str::findFirst
+/* ------------------------------------------------------------------------------------------------ 
  */
 str::pos str::findFirst(u8 c)
 {
@@ -276,7 +282,7 @@ str::pos str::findFirst(u8 c)
 	return pos::notFound();
 }
 
-/* ------------------------------------------------------------------------------------------------ utf8::str::findLast
+/* ------------------------------------------------------------------------------------------------ 
  */
 str::pos str::findLast(u8 c)
 {
@@ -288,7 +294,7 @@ str::pos str::findLast(u8 c)
 	return pos::notFound();
 }
 
-/* ------------------------------------------------------------------------------------------------ utf8::str::startsWith
+/* ------------------------------------------------------------------------------------------------ 
  */
 b8 str::startsWith(str s)
 {

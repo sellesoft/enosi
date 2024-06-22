@@ -33,7 +33,7 @@ void walk(str path, DirWalkCallback auto f, mem::Allocator* allocator = &mem::st
 namespace __internal
 {
 
-/* ------------------------------------------------------------------------------------------------ walkForReal
+/* ------------------------------------------------------------------------------------------------
  */
 b8 walkForReal(Path& path, DirWalkCallback auto f)
 {
@@ -110,7 +110,7 @@ b8 walkForReal(Path& path, DirWalkCallback auto f)
 
 }
 
-/* ------------------------------------------------------------------------------------------------ walk
+/* ------------------------------------------------------------------------------------------------
  */
 void walk(str pathin, DirWalkCallback auto f, mem::Allocator* allocator)
 {

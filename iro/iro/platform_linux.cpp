@@ -29,7 +29,7 @@ namespace iro::platform
 static iro::Logger logger = 
 	iro::Logger::create("platform.linux"_str, iro::Logger::Verbosity::Warn);
 
-/* ------------------------------------------------------------------------------------------------ error helper
+/* ------------------------------------------------------------------------------------------------
  */
 template<typename... T>
 b8 reportErrno(T... args)
@@ -39,14 +39,14 @@ b8 reportErrno(T... args)
 	return false;
 }
 
-/* ------------------------------------------------------------------------------------------------ sleep
+/* ------------------------------------------------------------------------------------------------
  */
 void sleep(TimeSpan time)
 {
 	usleep((int)time.toMicroseconds());
 }
 
-/* ------------------------------------------------------------------------------------------------ open
+/* ------------------------------------------------------------------------------------------------
  */
 b8 open(fs::File::Handle* out_handle, str path, fs::OpenFlags flags)
 {
@@ -73,7 +73,8 @@ b8 open(fs::File::Handle* out_handle, str path, fs::OpenFlags flags)
 		oflags |= O_RDONLY;
 	else
 	{
-		ERROR("failed to open file at path '", path, "': one of OpenFlag::Read/Write was not given\n");
+		ERROR("failed to open file at path '", path, 
+			  "': one of OpenFlag::Read/Write was not given\n");
 		return false;
 	}
 
@@ -83,23 +84,26 @@ b8 open(fs::File::Handle* out_handle, str path, fs::OpenFlags flags)
 
 	// TODO(sushi) handle non-null-terminated strings
 	if (r == -1)
-		return reportErrno("failed to open file at path '", path, "': ", explain_open((char*)path.bytes, oflags, mode));
+		return reportErrno(
+				"failed to open file at path '", path, "': ", 
+				explain_open((char*)path.bytes, oflags, mode));
 
 	*out_handle = (u64)r;
 
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ close
+/* ------------------------------------------------------------------------------------------------
  */
 b8 close(fs::File::Handle handle)
 {
 	if (::close((s64)handle) == -1)
-		return reportErrno("failed to close file with handle ", handle, ": ", explain_close((s64)handle));
+		return reportErrno(
+				"failed to close file with handle ", handle, ": ", explain_close((s64)handle));
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ read
+/* ------------------------------------------------------------------------------------------------
  */
 s64 read(fs::File::Handle handle, Bytes buffer, b8 non_blocking)
 {
@@ -108,14 +112,16 @@ s64 read(fs::File::Handle handle, Bytes buffer, b8 non_blocking)
 	if (r == -1)
 	{
 		if (errno != EAGAIN || !non_blocking)
-			return reportErrno("failed to read from file with handle ", handle, ": ", explain_read((s64)handle, buffer.ptr, buffer.len));
+			return reportErrno(
+					"failed to read from file with handle ", handle, ": ", 
+					explain_read((s64)handle, buffer.ptr, buffer.len));
 		else 
 			r = errno = 0;
 	}
 	return r;
 }
 
-/* ------------------------------------------------------------------------------------------------ write
+/* ------------------------------------------------------------------------------------------------
  */
 s64 write(fs::File::Handle handle, Bytes buffer, b8 non_blocking)
 {
@@ -124,23 +130,27 @@ s64 write(fs::File::Handle handle, Bytes buffer, b8 non_blocking)
 	if (r == -1)
 	{
 		if (errno != EAGAIN || !non_blocking)
-			return reportErrno("failed to write to file with handle ", handle, ": ", explain_write((s64)handle, buffer.ptr, buffer.len));
+			return reportErrno(
+				    "failed to write to file with handle ", handle, ": ", 
+					explain_write((s64)handle, buffer.ptr, buffer.len));
 		else 
 			r = errno = 0;
 	}
 	return r;
 }
 
-/* ------------------------------------------------------------------------------------------------ setNonBlocking
+/* ------------------------------------------------------------------------------------------------
  */
 b8 setNonBlocking(fs::File::Handle handle)
 {
 	if (-1 == fcntl((s64)handle, F_SETFL, fcntl((s64)handle, F_GETFL, 0) | O_NONBLOCK))
-		return reportErrno("failed to set file with handle ", handle, " as non-blocking: ", explain_fcntl((s64)handle, F_SETFL, O_NONBLOCK | fcntl((s64)handle, F_GETFL, 0)));
+		return reportErrno(
+				"failed to set file with handle ", handle, " as non-blocking: ", 
+				explain_fcntl((s64)handle, F_SETFL, O_NONBLOCK | fcntl((s64)handle, F_GETFL, 0)));
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ clock_realtime
+/* ------------------------------------------------------------------------------------------------
  */
 Timespec clock_realtime()
 {
@@ -149,7 +159,7 @@ Timespec clock_realtime()
 	return {(u64)ts.tv_sec, (u64)ts.tv_nsec};
 }
 
-/* ------------------------------------------------------------------------------------------------ clock_monotonic
+/* ------------------------------------------------------------------------------------------------
  */
 Timespec clock_monotonic()
 {
@@ -158,7 +168,7 @@ Timespec clock_monotonic()
 	return {(u64)ts.tv_sec, (u64)ts.tv_nsec};
 }
 
-/* ------------------------------------------------------------------------------------------------ opendir
+/* ------------------------------------------------------------------------------------------------
  */
 b8 opendir(fs::Dir::Handle* out_handle, str path)
 {
@@ -167,13 +177,14 @@ b8 opendir(fs::Dir::Handle* out_handle, str path)
 	DIR* dir = ::opendir((char*)path.bytes);
 
 	if (!dir)
-		return reportErrno("failed to open dir at path '", path, "': ", explain_opendir((char*)path.bytes));
+		return reportErrno(
+				"failed to open dir at path '", path, "': ", explain_opendir((char*)path.bytes));
 
 	*out_handle = dir;
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ opendir
+/* ------------------------------------------------------------------------------------------------
  */
 b8 opendir(fs::Dir::Handle* out_handle, fs::File::Handle file_handle)
 {
@@ -182,25 +193,28 @@ b8 opendir(fs::Dir::Handle* out_handle, fs::File::Handle file_handle)
 	DIR* dir = fdopendir((s64)file_handle);
 
 	if (!dir)
-		return reportErrno("failed to open dir from file handle ", file_handle, "': ", strerror(errno));
+		return reportErrno(
+				"failed to open dir from file handle ", file_handle, "': ", strerror(errno));
 
 	*out_handle = dir;
 	return false;
 }
 
-/* ------------------------------------------------------------------------------------------------ closedir
+/* ------------------------------------------------------------------------------------------------
  */
 b8 closedir(fs::Dir::Handle handle)
 {
 	int r = ::closedir((DIR*)handle);
 
 	if (r == -1)
-		return reportErrno("failed to close dir with handle ", handle, ": ", explain_closedir((DIR*)handle));
+		return reportErrno(
+				"failed to close dir with handle ", handle, ": ", 
+				explain_closedir((DIR*)handle));
 
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ readdir
+/* ------------------------------------------------------------------------------------------------
  */
 s64 readdir(fs::Dir::Handle handle, Bytes buffer)
 {
@@ -213,14 +227,17 @@ s64 readdir(fs::Dir::Handle handle, Bytes buffer)
 	{
 		if (errno == 0)
 			return false;
-		reportErrno("failed to read directory stream with handle ", handle, ": ", explain_readdir((DIR*)handle));
+		reportErrno(
+			"failed to read directory stream with handle ", handle, ": ", 
+			explain_readdir((DIR*)handle));
 		return -1;
 	}
 	
 	s64 len = strlen(de->d_name);
 	if (len > buffer.len)
 	{
-		ERROR("buffer given to readdir() is too small. File name '", de->d_name, "' is ", len, " bytes long, but given buffer is ", buffer.len, " bytes long\n");
+		ERROR("buffer given to readdir() is too small. File name '", de->d_name, "' is ", len, 
+			  " bytes long, but given buffer is ", buffer.len, " bytes long\n");
 		return -1;
 	}
 
@@ -228,7 +245,7 @@ s64 readdir(fs::Dir::Handle handle, Bytes buffer)
 	return len;
 }
 
-/* ------------------------------------------------------------------------------------------------ stat
+/* ------------------------------------------------------------------------------------------------
  */
 b8 stat(fs::FileInfo* out_info, str path)
 {
@@ -274,7 +291,8 @@ b8 stat(fs::FileInfo* out_info, str path)
 	
 	out_info->byte_size = s.stx_size;
 	
-	auto timespecToTimePoint = [](statx_timestamp ts) { return TimePoint{u64(ts.tv_sec), u64(ts.tv_nsec)}; };
+	auto timespecToTimePoint = 
+		[](statx_timestamp ts) { return TimePoint{u64(ts.tv_sec), u64(ts.tv_nsec)}; };
 
 	out_info->birth_time = timespecToTimePoint(s.stx_btime);
 	out_info->last_access_time = timespecToTimePoint(s.stx_atime);
@@ -284,14 +302,14 @@ b8 stat(fs::FileInfo* out_info, str path)
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ fileExists
+/* ------------------------------------------------------------------------------------------------
  */
 b8 fileExists(str path)
 {
 	return access((char*)path.bytes, F_OK) == 0;
 }
 
-/* ------------------------------------------------------------------------------------------------ copyFile
+/* ------------------------------------------------------------------------------------------------
  *  This implementation will not work on Linux versions < 2.6.33 but I'm not sure if that'll ever
  *  be a problem. sendfile is more efficient than simply read/writing because it doesnt require 
  *  moving mem around in userspace.
@@ -325,35 +343,40 @@ b8 copyFile(str dst, str src)
 	{
 		bytes_copied = sendfile((s64)dstf.handle, (s64)srcf.handle, nullptr, srcinfo.byte_size);
 		if (bytes_copied < 0)
-			return reportErrno("failed to copy '", src, "' to '", dst, "': ", strerror(errno));
+			return reportErrno(
+					"failed to copy '", src, "' to '", dst, "': ", strerror(errno));
 	}
 
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ unlinkFile
+/* ------------------------------------------------------------------------------------------------
  */
 b8 unlinkFile(str path)
 {
 	assert(notnil(path) and not path.isEmpty());
 
 	if (-1 == unlink((char*)path.bytes))
-		return reportErrno("failed to unlink file at path '", path, "': ", explain_unlink((char*)path.bytes));
+		return reportErrno(
+				"failed to unlink file at path '", path, "': ", 
+				explain_unlink((char*)path.bytes));
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ removeDir
+/* ------------------------------------------------------------------------------------------------
  */
 b8 removeDir(str path)
 {
 	assert(notnil(path) and not path.isEmpty());
 
 	if (-1 == rmdir((char*)path.bytes))
-		return reportErrno("failed to remove directory at path '", path, "': ", explain_rmdir((char*)path.bytes));
+		return reportErrno(
+				"failed to remove directory at path '", path, "': ", 
+				explain_rmdir((char*)path.bytes));
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ makeDir
+/* ------------------------------------------------------------------------------------------------
  */
 b8 makeDir(str path, b8 make_parents)
 {
@@ -370,14 +393,17 @@ b8 makeDir(str path, b8 make_parents)
 	if (!make_parents)
 	{
 		if (-1 == mkdir((char*)path.bytes, 0777))
-			return reportErrno("failed to make directory at path '", path, "': ", explain_mkdir((char*)path.bytes, 0777));
+			return reportErrno(
+				"failed to make directory at path '", path, "': ", 
+				explain_mkdir((char*)path.bytes, 0777));
 		return true;
 	}
 
 	// TODO(sushi) if this is ever hit make it use dynamic alloc to handle it 
 	if (path.len >= 4096)
 	{
-		ERROR("path given to makeDir is too long! the limit is 4096 characters. Path is ", path, "\n");
+		ERROR("path given to makeDir is too long! "
+			  "The limit is 4096 characters. Path is ", path, "\n");
 		return false;
 	}
 
@@ -392,7 +418,9 @@ b8 makeDir(str path, b8 make_parents)
 			if (-1 == mkdir((char*)path_buffer, 0777))
 			{
 				if (errno != EEXIST)
-					return reportErrno("failed to make directory at path '", path, "': ", explain_mkdir((char*)path_buffer, 0777));
+					return reportErrno(
+						"failed to make directory at path '", path, "': ", 
+						explain_mkdir((char*)path_buffer, 0777));
 				errno = 0;
 			}
 		}
@@ -401,7 +429,7 @@ b8 makeDir(str path, b8 make_parents)
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ processSpawn
+/* ------------------------------------------------------------------------------------------------
  */
 b8 processSpawn(
 		Process::Handle* out_handle, 
@@ -426,7 +454,8 @@ b8 processSpawn(
 		{streams[2].file, streams[2].non_blocking},
 	};
 
-	// TODO(sushi) replace this with some container thats a stack buffer up to a point then dynamically allocates
+	// TODO(sushi) replace this with some container thats a stack buffer 
+	//             up to a point then dynamically allocates
 	Array<char*> argsc = Array<char*>::create(args.len);
 	argsc.push((char*)file.bytes);
 	for (s32 i = 0; i < args.len; i++)
@@ -444,12 +473,15 @@ b8 processSpawn(
 
 		if (notnil(*infos[i].f))
 		{
-			ERROR("Stream ", i, " file given to processSpawn is not nil! Given files cannot already own resources.\n");
+			ERROR("Stream ", i, " file given to processSpawn is not nil! Given files cannot "
+				  "already own resources.\n");
 			return false;
 		}
 
 		if (-1 == pipe(infos[i].pipes))
-			return reportErrno("failed to open pipes for stream ", i, " for process '", file, "': ", explain_pipe(infos[i].pipes));
+			return reportErrno(
+					"failed to open pipes for stream ", i, " for process '", file, "': ", 
+					explain_pipe(infos[i].pipes));
 	}
 
 	if (pid_t pid = fork())
@@ -526,7 +558,9 @@ b8 processSpawn(
 
 		if (-1 == execvp(argsc.arr[0], argsc.arr))
 		{
-			reportErrno("execvp failed to replace child process with file '", file, "': ", explain_execvp(argsc.arr[0], argsc.arr));
+			reportErrno(
+				"execvp failed to replace child process with file '", file, "': ", 
+				explain_execvp(argsc.arr[0], argsc.arr));
 			exit(1);
 		}
 	}
@@ -534,7 +568,7 @@ b8 processSpawn(
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ processCheck
+/* ------------------------------------------------------------------------------------------------
  */
 ProcessCheckResult processCheck(Process::Handle handle, s32* out_exit_code)
 {
@@ -544,7 +578,9 @@ ProcessCheckResult processCheck(Process::Handle handle, s32* out_exit_code)
 	int r = waitpid((s64)handle, &status, WNOHANG);
 	if (-1 == r)
 	{
-		reportErrno("waitpid failed on process with handle ", handle, ": ", explain_waitpid((s64)handle, &status, WNOHANG));
+		reportErrno(
+			"waitpid failed on process with handle ", handle, ": ", 
+			explain_waitpid((s64)handle, &status, WNOHANG));
 		return ProcessCheckResult::Error;
 	}
 
@@ -560,7 +596,7 @@ ProcessCheckResult processCheck(Process::Handle handle, s32* out_exit_code)
 	return ProcessCheckResult::StillRunning;
 }
 
-/* ------------------------------------------------------------------------------------------------ realpath
+/* ------------------------------------------------------------------------------------------------
  */
 b8 realpath(fs::Path* path)
 {
@@ -568,7 +604,9 @@ b8 realpath(fs::Path* path)
 
 	if (::realpath((char*)path->buffer.buffer, (char*)buf.arr) == nullptr)
 	{
-		reportErrno("failed to canonicalize path ", *path, "': ", explain_realpath((char*)path->buffer.buffer, (char*)buf.arr));
+		reportErrno(
+			"failed to canonicalize path ", *path, "': ", 
+			explain_realpath((char*)path->buffer.buffer, (char*)buf.arr));
 		return false;
 	}
 
@@ -582,7 +620,7 @@ b8 realpath(fs::Path* path)
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ cwd
+/* ------------------------------------------------------------------------------------------------
  */
 fs::Path cwd(mem::Allocator* allocator)
 {
@@ -602,7 +640,8 @@ fs::Path cwd(mem::Allocator* allocator)
 		{
 			if (errno != ERANGE)
 			{
-				reportErrno("failed to get cwd: ", explain_getcwd((char*)path.buffer.buffer, bufferlen));
+				reportErrno(
+					"failed to get cwd: ", explain_getcwd((char*)path.buffer.buffer, bufferlen));
 				path.destroy();
 				return nil;
 			}
@@ -612,7 +651,8 @@ fs::Path cwd(mem::Allocator* allocator)
 
 			if (bufferlen > maxlen)
 			{
-				ERROR("the length of cwd is greater than the max length cwd() is willing to allocate (", maxlen, ")!\n");
+				ERROR("the length of cwd is greater than the max length cwd() is willing to "
+					  "allocate (", maxlen, ")!\n");
 				path.destroy();
 				return nil;
 			}
@@ -626,16 +666,17 @@ fs::Path cwd(mem::Allocator* allocator)
 	}
 }
 
-/* ------------------------------------------------------------------------------------------------ chdir
+/* ------------------------------------------------------------------------------------------------
  */
 b8 chdir(str path)
 {
 	if (-1 == ::chdir((char*)path.bytes))
-		return reportErrno("failed to chdir into path '", path, "': ", explain_chdir((char*)path.bytes));
+		return reportErrno(
+				"failed to chdir into path '", path, "': ", explain_chdir((char*)path.bytes));
 	return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ termSetNonCanonical
+/* ------------------------------------------------------------------------------------------------
  */
 TermSettings termSetNonCanonical(mem::Allocator* allocator)
 {
@@ -651,7 +692,7 @@ TermSettings termSetNonCanonical(mem::Allocator* allocator)
 	return (TermSettings)mode;
 }
 
-/* ------------------------------------------------------------------------------------------------ termRestoreSettings
+/* ------------------------------------------------------------------------------------------------
  */
 void termRestoreSettings(TermSettings settings, mem::Allocator* allocator)
 {
@@ -659,7 +700,7 @@ void termRestoreSettings(TermSettings settings, mem::Allocator* allocator)
 	allocator->free(settings);
 }
 
-/* ------------------------------------------------------------------------------------------------ touchFile
+/* ------------------------------------------------------------------------------------------------
  */
 b8 touchFile(str path)
 {

@@ -1,6 +1,6 @@
 /*
- *  Path to some File in the filesystem. This is just a lexical representation, the file named may or may not 
- *  exist.
+ *  Path to some File in the filesystem. This is just a lexical representation, the file named may 
+ *  or may not exist.
  *
  *  Provides helpers to manipulate and query information about whatever is at the given path.
  *
@@ -75,8 +75,10 @@ struct Path
 
 	b8 makeAbsolute();
 
-	// TODO(sushi) rename cause this can be confused with actually creating the directory at this path
-	Path& makeDir() { if (buffer.len != 0 && buffer.buffer[buffer.len-1] != '/') append('/'); return *this; }
+	// TODO(sushi) rename cause this can be confused with actually creating the 
+	//             directory at this path
+	Path& makeDir() 
+		{ if (buffer.len != 0 && buffer.buffer[buffer.len-1] != '/') append('/'); return *this; }
 
 	b8 chdir() { return chdir(buffer.asStr()); }
 
@@ -93,8 +95,29 @@ struct Path
 	b8 isRegularFile() { return Path::isRegularFile(buffer.asStr()); }
 	b8 isDirectory() { return Path::isDirectory(buffer.asStr()); }
 
-	inline b8 isCurrentDirectory() { return (buffer.len == 1 && buffer[0] == '.') || (buffer.len > 1 && buffer[buffer.len-1] == '.' && buffer[buffer.len-2] == '/'); }
-	inline b8 isParentDirectory() { return (buffer.len == 2 && buffer[0] == '.' && buffer[1] == '.') || (buffer.len > 2 && buffer[buffer.len-1] == '.' && buffer[buffer.len-2] == '.' && buffer[buffer.len-3] == '/'); }
+	inline b8 isCurrentDirectory() 
+	{ 
+		return 
+			(buffer.len == 1 && 
+			 buffer[1] == '.') 
+			|| 
+			(buffer.len > 1 && 
+			 buffer[buffer.len-1] == '.' && 
+			 buffer[buffer.len-2] == '/'); 
+	}
+
+	inline b8 isParentDirectory() 
+	{ 
+		return 
+			(buffer.len == 2 && 
+			 buffer[0] == '.' && 
+			 buffer[1] == '.') 
+			|| 
+			(buffer.len > 2 && 
+			 buffer[buffer.len-1] == '.' && 
+			 buffer[buffer.len-2] == '.' && 
+			 buffer[buffer.len-3] == '/');
+	}
 
 	// Returns if this path matches the given pattern
 	// TODO(sushi) write up the specification of patterns that can be used here

@@ -64,13 +64,16 @@ struct Log
 			ShowCategoryName,
 			// show the verbosity level before the message
 			ShowVerbosity,
-			// pad the verbosity level to the right so that messages printed at different levels stay aligned
+			// pad the verbosity level to the right so that messages printed at different 
+			// levels stay aligned
 			PadVerbosity,
 			// allow color
 			AllowColor,
-			// track the longest category name and indent all other names so that they stay aligned
+			// track the longest category name and indent all other names so that they 
+			// stay aligned
 			TrackLongestName,
-			// if a logger logs a message that spans multiple lines, prefix each line with the enabled information above
+			// if a logger logs a message that spans multiple lines, prefix each line 
+			// with the enabled information above
 			PrefixNewlines,
 		};
 		typedef iro::Flags<Flag> Flags;
@@ -168,7 +171,7 @@ struct Colorer
 {
 	b8 enabled;
 	Color color;
-	Colorer(Color color) : color(color), enabled(true) {}
+	Colorer(Color color) : enabled(true), color(color) {}
 
 	template<typename T>
 	Colored<T> operator()(T&& x) { return Colored<T>(color, x); }
