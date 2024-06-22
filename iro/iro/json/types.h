@@ -24,90 +24,90 @@ struct Value;
  */
 struct Array
 {
-	typedef iro::Array<Value*> ValueArray;
-	
-	ValueArray values;
+  typedef iro::Array<Value*> ValueArray;
+  
+  ValueArray values;
 
 
-	/* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-	 */
+  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+   */
 
 
-	b8   init();
-	void deinit();
+  b8   init();
+  void deinit();
 
-	void   push(Value* o);
-	Value* pop();
+  void   push(Value* o);
+  Value* pop();
 };
 
 /* ================================================================================================ json::Object
  */
 struct Object
 {
-	struct Member
-	{
-		str name;
-		u64 hash;
-		Value* value;
+  struct Member
+  {
+    str name;
+    u64 hash;
+    Value* value;
 
-		static u64 getKey(const Member* x) { return x->hash; }
-	};
+    static u64 getKey(const Member* x) { return x->hash; }
+  };
 
-	typedef AVL<Member, Member::getKey> MemberMap;
-	typedef Pool<Member> MemberPool;
+  typedef AVL<Member, Member::getKey> MemberMap;
+  typedef Pool<Member> MemberPool;
 
-	MemberMap  members;
-	MemberPool pool;
-
-
-	/* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-	 */
+  MemberMap  members;
+  MemberPool pool;
 
 
-	b8   init();
-	void deinit();
+  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+   */
 
-	b8 addMember(str name, Value* value);
-	Value* findMember(str name);
+
+  b8   init();
+  void deinit();
+
+  b8 addMember(str name, Value* value);
+  Value* findMember(str name);
 };
 
 /* ================================================================================================ json::Value
  */
 struct Value
 {
-	enum class Kind
-	{
-		Null,
-		False,
-		True,
-		Object,
-		Array,
-		Number,
-		String,
-	};
+  enum class Kind
+  {
+    Null,
+    False,
+    True,
+    Object,
+    Array,
+    Number,
+    String,
+  };
 
-	Kind kind;
+  Kind kind;
 
-	union
-	{
-		Object object;
-		Array  array;
-		f64    number;
-		str    string;
-	};
+  union
+  {
+    Object object;
+    Array  array;
+    f64    number;
+    str    string;
+  };
 
-	Value() : kind(Kind::Null) {}
+  Value() : kind(Kind::Null) {}
 
-	
-	/* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-	 */
+  
+  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+   */
 
 
-	b8   init();
-	void deinit();
-	
+  b8   init();
+  void deinit();
+  
 
-	void print();
+  void print();
 };
 
 /* ================================================================================================ json::JSON
@@ -119,24 +119,24 @@ struct Value
  */
 struct JSON
 {
-	typedef Pool<Value>  ValuePool;
-	typedef DList<Value> ValueList;
+  typedef Pool<Value>  ValuePool;
+  typedef DList<Value> ValueList;
 
-	ValuePool pool;
-	Value*    root;
+  ValuePool pool;
+  Value*    root;
 
 
-	/* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-	 */
+  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+   */
 
-	
-	b8   init();
-	void deinit();
+  
+  b8   init();
+  void deinit();
 
-	// allocates a value of the given kind from the pool and returns a pointer to it
-	Value* newValue(Value::Kind kind);
+  // allocates a value of the given kind from the pool and returns a pointer to it
+  Value* newValue(Value::Kind kind);
 
-	s64 prettyPrint(io::IO* out);
+  s64 prettyPrint(io::IO* out);
 };
 
 } // namespace json
@@ -146,7 +146,7 @@ namespace iro::io
 
 static s64 format(IO* io, json::JSON json)
 {
-	return json.prettyPrint(io);
+  return json.prettyPrint(io);
 }
 
 }

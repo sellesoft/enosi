@@ -18,17 +18,17 @@
 
 /* ================================================================================================ NilValue
  *  Template for types that define a nil value. 
- *	
- *	Types implementing this are expected to define two things:
- *		
- *		constexpr static const T Value;
- *		  	A compile time value that represents the nil state of T.
- *		
- *		static b8 isNil(const T& x);
- *			A function used to check if 'x' is nil.
+ *  
+ *  Types implementing this are expected to define two things:
+ *    
+ *    constexpr static const T Value;
+ *        A compile time value that represents the nil state of T.
+ *    
+ *    static b8 isNil(const T& x);
+ *      A function used to check if 'x' is nil.
  *
- *	The helper DefineNilValue helps wrap up the boilerplate needed to actually define
- *	these things.
+ *  The helper DefineNilValue helps wrap up the boilerplate needed to actually define
+ *  these things.
  *
  */
 template<typename T>
@@ -40,12 +40,12 @@ struct NilValue {};
  *  of 'T' is nil.
  */
 #define DefineNilValue(T, V, F)              \
-	template<>                               \
-	struct NilValue<T>                       \
-	{                                        \
-		constexpr static const T Value = V;  \
-		inline static b8 isNil(const T& x) F \
-	}                                        \
+  template<>                               \
+  struct NilValue<T>                       \
+  {                                        \
+    constexpr static const T Value = V;  \
+    inline static b8 isNil(const T& x) F \
+  }                                        \
 
 /* ------------------------------------------------------------------------------------------------ Nillable
  *  Concept used to require a type to have implemented NilValue and so compiler errors aren't 
@@ -54,8 +54,8 @@ struct NilValue {};
 template<typename T>
 concept Nillable = requires(const T& x)
 {
-	NilValue<T>::Value;
-	NilValue<T>::isNil(x);
+  NilValue<T>::Value;
+  NilValue<T>::isNil(x);
 };
 
 /* ------------------------------------------------------------------------------------------------ Nil
@@ -63,13 +63,13 @@ concept Nillable = requires(const T& x)
  */
 struct Nil
 {
-	template<Nillable T>
-	consteval operator T() const { return NilValue<T>::Value; }
+  template<Nillable T>
+  consteval operator T() const { return NilValue<T>::Value; }
 
-	// any pointer can be nil!
-	// note this also handles the case of checking if a pointer is nil
-	template<Nillable T>
-	consteval operator T*() const { return nullptr; }
+  // any pointer can be nil!
+  // note this also handles the case of checking if a pointer is nil
+  template<Nillable T>
+  consteval operator T*() const { return nullptr; }
 };
 
 template<Nillable T>
@@ -83,12 +83,12 @@ release_inline bool notnil(const T& x) { return not isnil(x); }
 template<Nillable T>
 inline b8 resolve(T& x, T v) 
 {
-	if (isnil(x))
-	{
-		x = v;
-		return true;
-	}
-	return false;
+  if (isnil(x))
+  {
+    x = v;
+    return true;
+  }
+  return false;
 }
 
 /* ------------------------------------------------------------------------------------------------ nil
@@ -107,22 +107,22 @@ constexpr Nil nil = Nil();
 //template<typename T>
 //struct NilOr
 //{
-//	T x;
+//  T x;
 //
-//	consteval NilOr<T>(const Nil& n) : x(n) {}
-//	NilOr<T>(T x) : T(x) {}
+//  consteval NilOr<T>(const Nil& n) : x(n) {}
+//  NilOr<T>(T x) : T(x) {}
 //
-//	explicit operator T() { assert(notnil() || !"attempt to coerce a nil value to its underlying type"); return *this;  }
+//  explicit operator T() { assert(notnil() || !"attempt to coerce a nil value to its underlying type"); return *this;  }
 //
-//	inline bool isnil() { return isnil(*this); }
-//	inline bool notnil() { return notnil(*this); } 
+//  inline bool isnil() { return isnil(*this); }
+//  inline bool notnil() { return notnil(*this); } 
 //};
 //
 // template<typename T>
 // struct NilValue<NilOr<T>>
 // {
-// 	constexpr static const T Value = NilValue<T>::Value;
-// 	inline static bool isNil(const NilOr<T>& x) { return NilValue<T>::isNil(x); }
+//  constexpr static const T Value = NilValue<T>::Value;
+//  inline static bool isNil(const NilOr<T>& x) { return NilValue<T>::isNil(x); }
 // };
 
 /* ------------------------------------------------------------------------------------------------ Common nil value definitions

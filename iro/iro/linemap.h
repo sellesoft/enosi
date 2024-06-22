@@ -19,29 +19,29 @@ namespace iro
 // the index of the line and its byte offset into the buffer
 struct LineOffset
 {
-	u64 line, offset;
+  u64 line, offset;
 };
 
 /* ================================================================================================ LineMap
  */
 struct LineMap
 {
-	Array<u64> line_offsets;
-	b8 cached;
+  Array<u64> line_offsets;
+  b8 cached;
 
 
-	/* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-	 */
+  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+   */
 
 
-	b8   init(mem::Allocator* allocator = &mem::stl_allocator);
-	void deinit();
+  b8   init(mem::Allocator* allocator = &mem::stl_allocator);
+  void deinit();
 
-	b8 cache(Bytes bytes);
+  b8 cache(Bytes bytes);
 
-	void touchedBuffer() { cached = false; }
+  void touchedBuffer() { cached = false; }
 
-	LineOffset getLine(u64 offset);
+  LineOffset getLine(u64 offset);
 };
 
 }

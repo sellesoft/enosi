@@ -22,10 +22,10 @@
 local List = {}
 
 List.__index = function(self, n)
-	if type(n) == "number" then
-		return rawget(self, "arr")[n]
-	end
-	return rawget(List, n)
+  if type(n) == "number" then
+    return rawget(self, "arr")[n]
+  end
+  return rawget(List, n)
 end
 
 setmetatable(List, List)
@@ -40,62 +40,62 @@ local isList = function(x) return getmetatable(x) == List end
 ---@generic T
 ---@param init table | List
 List.new = function(init) 
-	if init then
-		assert(type(init) == "table" or isList(init))
-	else
-		init = {}
-	end
+  if init then
+    assert(type(init) == "table" or isList(init))
+  else
+    init = {}
+  end
 
-	local o = {}
-	setmetatable(o, List)
+  local o = {}
+  setmetatable(o, List)
 
-	if isList(init) then
-		for elem in init:each() do
-			o:push(elem)
-		end
-	else
-		o.arr = init
-	end
+  if isList(init) then
+    for elem in init:each() do
+      o:push(elem)
+    end
+  else
+    o.arr = init
+  end
 
-	return o
+  return o
 end
 
 List.__call = function(self, init)
-	return List.new(init)
+  return List.new(init)
 end
 
 --- Returns the length of this List.
 ---@return number
 List.len = function(self)
-	return #self.arr
+  return #self.arr
 end
 
 --- Pushes the given element.
 ---@params elem T
 List.push = function(self, elem)
-	table.insert(self.arr, elem)
-	return self
+  table.insert(self.arr, elem)
+  return self
 end
 
 List.pop = function(self)
-	return table.remove(self.arr)
+  return table.remove(self.arr)
 end
 
 List.pushFront = function(self, elem)
-	table.insert(self.arr, 1, elem)
-end	
+  table.insert(self.arr, 1, elem)
+end 
 
 List.insert = function(self, idx, elem)
-	if not elem then
-		table.insert(self.arr, idx)
-	else
-		table.insert(self.arr, idx, elem)
-	end
-	return self
+  if not elem then
+    table.insert(self.arr, idx)
+  else
+    table.insert(self.arr, idx, elem)
+  end
+  return self
 end
 
 List.remove = function(self, idx)
-	return table.remove(self.arr, idx)
+  return table.remove(self.arr, idx)
 end
 
 --- Returns an iterator function that gives each element of 
@@ -105,23 +105,23 @@ end
 ---@param f function?
 ---@return function | self
 List.each = function(self, f)
-	local i = 0
-	local iter = function()
-		i = i + 1
-		if i > self:len() then
-			return nil
-		end
-		return self.arr[i]
-	end
+  local i = 0
+  local iter = function()
+    i = i + 1
+    if i > self:len() then
+      return nil
+    end
+    return self.arr[i]
+  end
 
-	if f then
-		for e in iter do
-			f(e)
-		end
-		return self
-	else
-		return iter
-	end
+  if f then
+    for e in iter do
+      f(e)
+    end
+    return self
+  else
+    return iter
+  end
 end
 
 --- The same as each, but returns as a second value the
@@ -130,35 +130,35 @@ end
 ---@param f function?
 ---@return function | self
 List.eachWithIndex = function(self, f)
-	local i = 0
-	local iter = function()
-		i = i + 1
-		if i > self:len() then
-			return nil
-		end
-		return self[i], i
-	end
+  local i = 0
+  local iter = function()
+    i = i + 1
+    if i > self:len() then
+      return nil
+    end
+    return self[i], i
+  end
 
-	if f then
-		for e,i in iter do
-			f(e, i)
-		end
-		return self
-	else
-		return iter
-	end
+  if f then
+    for e,i in iter do
+      f(e, i)
+    end
+    return self
+  else
+    return iter
+  end
 end
 
 List.__concat = function(self, rhs)
-	assert(type(rhs) == "table" or isList(rhs), "List can only concat with tables or other Lists!")
+  assert(type(rhs) == "table" or isList(rhs), "List can only concat with tables or other Lists!")
 
-	local out = List(self)
+  local out = List(self)
 
-	for _,elem in rhs.arr or rhs do
-		out:push(elem)
-	end
+  for _,elem in rhs.arr or rhs do
+    out:push(elem)
+  end
 
-	return out
+  return out
 end
 
 --- Apply function 'f' to each element of this List and return
@@ -169,11 +169,11 @@ end
 ---@param f function
 ---@return List
 List.map = function(self, f)
-	local new = List()
-	for e in self:each() do
-		new:push(f(e))
-	end
-	return new
+  local new = List()
+  for e in self:each() do
+    new:push(f(e))
+  end
+  return new
 end
 
 return List

@@ -6,25 +6,25 @@ namespace iro
 
 Process Process::spawn(str file, Slice<str> args, Stream streams[3], str cwd)
 {
-	Process out = {};
-	if (!platform::processSpawn(&out.handle, file, args, streams, cwd))
-		return nil;
-	return out;
+  Process out = {};
+  if (!platform::processSpawn(&out.handle, file, args, streams, cwd))
+    return nil;
+  return out;
 }
 
 void Process::checkStatus()
 {
-	assert(handle);
+  assert(handle);
 
-	if (!terminated)
-	{
-		switch (platform::processCheck(handle, &exit_code))
-		{
-		case platform::ProcessCheckResult::Exited:
-		case platform::ProcessCheckResult::Error:
-			terminated = true;
-		}
-	}
+  if (!terminated)
+  {
+    switch (platform::processCheck(handle, &exit_code))
+    {
+    case platform::ProcessCheckResult::Exited:
+    case platform::ProcessCheckResult::Error:
+      terminated = true;
+    }
+  }
 }
 
 }

@@ -10,7 +10,7 @@
 #include "stddef.h"
 
 /* ----------------------------------------------
- *	Nice typedefs
+ *  Nice typedefs
  */
 typedef uint8_t  u8;
 typedef uint16_t u16;
@@ -36,37 +36,37 @@ consteval s64 constevalStrlen(const char* s) {
 // TODO(sushi) really gotta move this hashing stuff elsewhere
 static u64 cStrHash(const char* s)
 {
-	u64 seed = 14695981039;
-	while (*s)
-	{
-		seed ^= *s;
-		seed *= 1099511628211;
-		s += 1;
-	}
-	return seed;
+  u64 seed = 14695981039;
+  while (*s)
+  {
+    seed ^= *s;
+    seed *= 1099511628211;
+    s += 1;
+  }
+  return seed;
 }
 
 consteval u64 staticStringHash(const char* s, size_t len)
 {
-	u64 seed = 14695981039;
-	for (s32 i = 0; i < len; i++)
-	{
-		seed ^= (u8)s[i];
-		seed *= 1099511628211;
-	}
-	return seed;
+  u64 seed = 14695981039;
+  for (s32 i = 0; i < len; i++)
+  {
+    seed ^= (u8)s[i];
+    seed *= 1099511628211;
+  }
+  return seed;
 }
 
 consteval u64 operator ""_hashed (const char* s, size_t len)
 {
-	return staticStringHash(s, len);
+  return staticStringHash(s, len);
 }
 
 // Nice sugar for matching a single value against any of 'args'.
 template<typename V, typename... T>
 inline b8 matchAny(V v, T... args)
 {
-	return ((v == args) || ...);
+  return ((v == args) || ...);
 }
 
 // Useful to be able to call normally-inlined functions from a debugger
@@ -96,8 +96,8 @@ inline b8 matchAny(V v, T... args)
 template <class F> 
 struct deferrer 
 { 
-	F f; 
-	~deferrer() { f(); } 
+  F f; 
+  ~deferrer() { f(); } 
 };
 struct defer_dummy {};
 
@@ -107,10 +107,10 @@ deferrer<F> operator*(defer_dummy, F f) { return {f}; }
 template<typename F> 
 struct deferrer_with_cancel 
 { 
-	b8 canceled; 
-	F f; 
-	~deferrer_with_cancel() { if (!canceled) f(); }  
-	void cancel() { canceled = true; } 
+  b8 canceled; 
+  F f; 
+  ~deferrer_with_cancel() { if (!canceled) f(); }  
+  void cancel() { canceled = true; } 
 };
 struct defer_with_cancel_dummy {};
 

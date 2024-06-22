@@ -17,28 +17,28 @@ namespace iro::mem
 
 struct Bump : public Allocator
 {
-	const static u32 slab_size = 4096;
+  const static u32 slab_size = 4096;
 
-	struct Slab
-	{
-		Slab* next;
-		u8 content[slab_size];
-	};
+  struct Slab
+  {
+    Slab* next;
+    u8 content[slab_size];
+  };
 
-	u8* start;
-	u8* cursor;
+  u8* start;
+  u8* cursor;
 
-	Slab* slabs;
+  Slab* slabs;
 
-	b8   init();
-	void deinit();
+  b8   init();
+  void deinit();
 
-	void* allocate(u64 size) override;
+  void* allocate(u64 size) override;
 
-	void* reallocate(void* ptr, u64 size) override;
-	
-	[[deprecated("Bump does not implement free! It is OK to call this function directly, but it will do nothing.")]]
-	void  free(void* ptr) override {}
+  void* reallocate(void* ptr, u64 size) override;
+  
+  [[deprecated("Bump does not implement free! It is OK to call this function directly, but it will do nothing.")]]
+  void  free(void* ptr) override {}
 };
 
 }

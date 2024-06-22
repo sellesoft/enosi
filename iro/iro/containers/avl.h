@@ -11,617 +11,624 @@
 namespace iro
 {
 
-/* ================================================================================================ AVL
+/* ============================================================================
  */
 template<
 
-	// the type this tree points at
-	typename T,
+  // the type this tree points at
+  typename T,
 
-	// key accessor
-	// which could be a hash function or member or whatever
-	u64 (*GetKey)(const T*)
-	
+  // key accessor
+  // which could be a hash function or member or whatever
+  u64 (*GetKey)(const T*)
+  
 >
 struct AVL
 {
-	typedef AVL<T, GetKey> Self;
+  typedef AVL<T, GetKey> Self;
 
-	/* ============================================================================================ AVL::Node
- 	*/
-	struct Node
-	{
-		s8 balance_factor = 0; // -1, 0, or 1
-		// TODO(sushi) we may be able to do something neat where we instead store offsets from the nodes position in the 
-		//             pool with s32s or even like s16 to save some space so experiment later
-		//             this would require the pools chunks being connected via doubly connected list
-		Node* left = nullptr;
-		Node* right = nullptr;
-		Node* parent = nullptr;
-		T* data = nullptr;
-	};
-	
-	Node* root;
-	Pool<Node> pool;
-
-
-	/* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-	 */
+  /* ==========================================================================
+  */
+  struct Node
+  {
+    s8 balance_factor = 0; // -1, 0, or 1
+    // TODO(sushi) we may be able to do something neat where we instead store 
+    //             offsets from the nodes position in the pool with s32s or 
+    //             even like s16 to save some space so experiment later
+    //             this would require the pools chunks being connected via 
+    //             doubly connected list
+    Node* left = nullptr;
+    Node* right = nullptr;
+    Node* parent = nullptr;
+    T* data = nullptr;
+  };
+  
+  Node* root;
+  Pool<Node> pool;
 
 
-	/* -------------------------------------------------------------------------------------------- create
-	 */
-	static Self create(mem::Allocator* allocator = &mem::stl_allocator)
-	{
-		Self out = {};
-		out.pool = Pool<Node>::create(allocator);
-		return out;
-	}
-
-	/* -------------------------------------------------------------------------------------------- destroy
-	 */
-	void destroy()
-	{
-		pool.destroy();
-		root = nullptr;
-	}
-
-	/* -------------------------------------------------------------------------------------------- has
-	 */
-	b8 has(T* data)
-	{
-		if (!root)
-			return false;
-
-		u64 data_key = GetKey(data);
-
-		Node* search_node = root;
-		for (;;)
-		{
-			u64 search_key = GetKey(search_node->data);
-
-			if (search_key == data_key)
-				return true;
-
-			if (search_key > data_key)
-			{
-				if (search_node->left)
-					search_node = search_node->left;
-				else
-					return false;
-			}
-			else if (search_node->right)
-				search_node = search_node->right;
-			else
-				return false;
-		}
-	}
-
-	/* -------------------------------------------------------------------------------------------- find
-	 */
-	T* find(u64 key)
-	{
-		if (!root)
-			return nullptr;
-
-		Node* search_node = root;
-		for (;;)
-		{
-			u64 search_key = GetKey(search_node->data);
-
-			if (search_key == key)
-				return search_node->data;
-
-			if (search_key > key)
-			{
-				if (search_node->left)
-					search_node = search_node->left;
-				else
-					return nullptr;
-			}
-			else if (search_node->right)
-				search_node = search_node->right;
-			else
-				return nullptr;
-		}
-	}
+  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+   */
 
 
-	/* -------------------------------------------------------------------------------------------- insert
-	 *  Attempts to insert the given data. If the data already exists then nothing happens.
-	 */
-	void insert(T* data)
-	{
-		if (!root)
-		{
-			root = pool.add();
-			root->data = data;
-			root->balance_factor = 0;
-			return;
-		}
+  /* --------------------------------------------------------------------------
+   */
+  static Self create(mem::Allocator* allocator = &mem::stl_allocator)
+  {
+    Self out = {};
+    out.pool = Pool<Node>::create(allocator);
+    return out;
+  }
 
-		u64 data_key = GetKey(data);
-		
-		Node* search_node = root;
-		b8 place_right = true;
-		for (;;)
-		{
-			u64 search_key = GetKey(search_node->data);
+  /* --------------------------------------------------------------------------
+   */
+  void destroy()
+  {
+    pool.destroy();
+    root = nullptr;
+  }
 
-			if (search_key == data_key)
-				return;
-			
-			if (search_key > data_key)
-			{
-				if (search_node->left)
-				{
-					search_node = search_node->left;
-				}
-				else
-				{
-					place_right = false;
-					break;
-				}
-			}
-			else if (search_node->right)
-				search_node = search_node->right;
-			else
-				break; 
-		}
+  /* --------------------------------------------------------------------------
+   */
+  b8 has(T* data)
+  {
+    if (!root)
+      return false;
 
-		// need a new node
-		Node* new_node = pool.add();
-		new_node->parent = search_node;
-		if (place_right)
-			search_node->right = new_node;
-		else
-			search_node->left = new_node;
+    u64 data_key = GetKey(data);
 
-		new_node->data = data;
+    Node* search_node = root;
+    for (;;)
+    {
+      u64 search_key = GetKey(search_node->data);
 
-		// walk back up the tree and adjust balance
-		for (Node* parent = search_node,* child = new_node; parent; child = parent, parent = child->parent)
-		{
-			Node* new_child = nullptr;
-			Node* parents_parent = parent->parent;
+      if (search_key == data_key)
+        return true;
 
-			if (parent->right == child)
-			{
-				// right subtree has increased in height
-				if (parent->balance_factor > 0)
-				{
-					// the parent was already right heavy, so its balance factor
-					// is now +2
-					if (child->balance_factor < 0)
-						new_child = rotateRightLeft(parent, child);
-					else 
-						new_child = rotateLeft(parent, child);
-				}
-				else
-				{
-					// the parent is either already balanced or left heavy
-					if (parent->balance_factor < 0)
-					{
-						// if left heavy, then we're now balanced by the
-						// addition to the right child.
-						parent->balance_factor = 0;
-						break;
-					}
-					// if we were balanced all we need to do is set the parent's 
-					// balance factor to 1 and move on
-					parent->balance_factor = 1;
-					continue;
-				}
-			}
-			else
-			{
-				if (parent->balance_factor < 0)
-				{
-					if (child->balance_factor > 0)
-						new_child = rotateLeftRight(parent, child);
-					else
-						new_child = rotateRight(parent, child);
-				}
-				else
-				{
-					if (parent->balance_factor > 0)
-					{
-						parent->balance_factor = 0;
-						break;
-					}
-					parent->balance_factor = -1;
-					continue;
-				}
-			}
+      if (search_key > data_key)
+      {
+        if (search_node->left)
+          search_node = search_node->left;
+        else
+          return false;
+      }
+      else if (search_node->right)
+        search_node = search_node->right;
+      else
+        return false;
+    }
+  }
 
-			new_child->parent = parents_parent;
-			if (parents_parent) 
-			{
-				if (parent == parents_parent->left)
-					parents_parent->left = new_child;
-				else
-					parents_parent->right = new_child;
-			}
-			else
-				root = new_child;
-			break;
-		}
-	}
-	
-	/* -------------------------------------------------------------------------------------------- remove
-	 *  Removes the given data from the tree.
-	 */
-	void remove(T* data)
-	{
-		u64 data_key = GetKey(data);
+  /* --------------------------------------------------------------------------
+   */
+  T* find(u64 key)
+  {
+    if (!root)
+      return nullptr;
 
-		// find the node representing the given data
-		Node* search_node = root;
-		for (;;)
-		{
-			if (!search_node)
-				return;
+    Node* search_node = root;
+    for (;;)
+    {
+      u64 search_key = GetKey(search_node->data);
 
-			u64 search_key = GetKey(search_node->data);
+      if (search_key == key)
+        return search_node->data;
 
-			if (search_key == data_key)
-				break;
+      if (search_key > key)
+      {
+        if (search_node->left)
+          search_node = search_node->left;
+        else
+          return nullptr;
+      }
+      else if (search_node->right)
+        search_node = search_node->right;
+      else
+        return nullptr;
+    }
+  }
 
-			if (data_key > search_key)
-				search_node = search_node->right;
-			else
-				search_node = search_node->left;
-		}
 
-		Node* target = search_node;
+  /* --------------------------------------------------------------------------
+   *  Attempts to insert the given data. If the data already exists then 
+   *  nothing happens.
+   */
+  void insert(T* data)
+  {
+    if (!root)
+    {
+      root = pool.add();
+      root->data = data;
+      root->balance_factor = 0;
+      return;
+    }
 
-		if (search_node->left && search_node->right)
-		{
-			target = predecessor(search_node);
-			search_node->data = target->data;
-		}
+    u64 data_key = GetKey(data);
+    
+    Node* search_node = root;
+    b8 place_right = true;
+    for (;;)
+    {
+      u64 search_key = GetKey(search_node->data);
 
-		for (Node* parent = target->parent,* child = target; parent; parent = child->parent)
-		{
-			Node* parents_parent = parent->parent;
-			u8 b = 0;
+      if (search_key == data_key)
+        return;
+      
+      if (search_key > data_key)
+      {
+        if (search_node->left)
+        {
+          search_node = search_node->left;
+        }
+        else
+        {
+          place_right = false;
+          break;
+        }
+      }
+      else if (search_node->right)
+        search_node = search_node->right;
+      else
+        break; 
+    }
 
-			if (child == parent->left)
-			{
-				// left subtree decreases
-				if (parent->balance_factor > 0)
-				{
-					// parent was right heavy
-					// so we need to rebalance it 
-					Node* sibling = parent->right;
-					b = sibling->balance_factor;
-					if (b < 0)
-						child = rotateRightLeft(parent, sibling);
-					else
-						child = rotateLeft(parent, sibling);
-				}
-				else
-				{
-					if (parent->balance_factor == 0)
-					{
-						parent->balance_factor = 1;
-						break;
-					}
-					child = parent;
-					child ->balance_factor = 0;
-					continue;
-				}
-			}
-			else
-			{
-				if (parent->balance_factor < 0)
-				{
-					Node* sibling = parent->left;
-					b = sibling->balance_factor;
-					if (b < 0)
-						child = rotateLeftRight(parent, sibling);
-					else
-						child = rotateRight(parent, sibling);
-				}
-				else
-				{
-					if (parent->balance_factor == 0)
-					{
-						parent->balance_factor = -1;
-						break;
-					}
-					child = parent;
-					child ->balance_factor = 0;
-					continue;
-				}
-			}
+    // need a new node
+    Node* new_node = pool.add();
+    new_node->parent = search_node;
+    if (place_right)
+      search_node->right = new_node;
+    else
+      search_node->left = new_node;
 
-			child ->parent = parents_parent;
-			if (parents_parent)
-			{
-				if (parent == parents_parent->left)
-					parents_parent->left = child ;
-				else
-					parents_parent->right = child ;
-			}
-			else
-				root = child;
+    new_node->data = data;
 
-			if (!b)
-				break;
-		}
+    // walk back up the tree and adjust balance
+    for (Node* parent = search_node,* child = new_node; 
+        parent; 
+        child = parent, parent = child->parent)
+    {
+      Node* new_child = nullptr;
+      Node* parents_parent = parent->parent;
 
-		Node* child = (target->left ? target->left : target->right);
+      if (parent->right == child)
+      {
+        // right subtree has increased in height
+        if (parent->balance_factor > 0)
+        {
+          // the parent was already right heavy, so its balance factor
+          // is now +2
+          if (child->balance_factor < 0)
+            new_child = rotateRightLeft(parent, child);
+          else 
+            new_child = rotateLeft(parent, child);
+        }
+        else
+        {
+          // the parent is either already balanced or left heavy
+          if (parent->balance_factor < 0)
+          {
+            // if left heavy, then we're now balanced by the
+            // addition to the right child.
+            parent->balance_factor = 0;
+            break;
+          }
+          // if we were balanced all we need to do is set the parent's 
+          // balance factor to 1 and move on
+          parent->balance_factor = 1;
+          continue;
+        }
+      }
+      else
+      {
+        if (parent->balance_factor < 0)
+        {
+          if (child->balance_factor > 0)
+            new_child = rotateLeftRight(parent, child);
+          else
+            new_child = rotateRight(parent, child);
+        }
+        else
+        {
+          if (parent->balance_factor > 0)
+          {
+            parent->balance_factor = 0;
+            break;
+          }
+          parent->balance_factor = -1;
+          continue;
+        }
+      }
 
-		if (child)
-			child->parent = target->parent;
+      new_child->parent = parents_parent;
+      if (parents_parent) 
+      {
+        if (parent == parents_parent->left)
+          parents_parent->left = new_child;
+        else
+          parents_parent->right = new_child;
+      }
+      else
+        root = new_child;
+      break;
+    }
+  }
+  
+  /* --------------------------------------------------------------------------
+   *  Removes the given data from the tree.
+   */
+  void remove(T* data)
+  {
+    u64 data_key = GetKey(data);
 
-		if (target->parent)
-		{
-			if (target == target->parent->left)
-				target->parent->left = child;
-			else
-				target->parent->right = child;
-		}
+    // find the node representing the given data
+    Node* search_node = root;
+    for (;;)
+    {
+      if (!search_node)
+        return;
 
-		pool.remove(target);
-	}
+      u64 search_key = GetKey(search_node->data);
 
-	/* -------------------------------------------------------------------------------------------- replace
-	 *  Replaces u with v
-	 */
-	void replace(Node* u, Node* v)
-	{
-		if (!u->parent)
-			root = v;
-		else if (u == u->parent->left)
-			u->parent->left = v;
-		else
-			u->parent->right = v;
-		if (v)
-			v->parent = u->parent;
-	}
+      if (search_key == data_key)
+        break;
 
-	/* -------------------------------------------------------------------------------------------- successor
-	 */
-	static Node* successor(Node* n)
-	{
-		if (n->right)
-			return minimum(n->right);
-		Node* parent = n->parent;
-		while (parent && n == parent->right)
-		{
-			n = parent;
-			parent = parent->parent;
-		}
-		return parent;
-	}
+      if (data_key > search_key)
+        search_node = search_node->right;
+      else
+        search_node = search_node->left;
+    }
 
-	/* -------------------------------------------------------------------------------------------- predecessor
-	 */
-	static Node* predecessor(Node* n)
-	{
-		if (n->left)
-			return maximum(n->left);
-		Node* parent = n->parent;
-		while (parent && n == parent->left)
-		{
-			n = parent;
-			parent = parent->parent;
-		}
-		return parent;
-	}
+    Node* target = search_node;
 
-	/* -------------------------------------------------------------------------------------------- maximum
-	 */ 
-	static Node* maximum(Node* n)
-	{
-		while (n->right)
-			n = n->right;
-		return n;
-	}
+    if (search_node->left && search_node->right)
+    {
+      target = predecessor(search_node);
+      search_node->data = target->data;
+    }
 
-	/* -------------------------------------------------------------------------------------------- minimum
-	 */ 
-	static Node* minimum(Node* n)
-	{
-		while (n->left)
-			n = n->left;
-		return n;
-	}
+    for (Node* parent = target->parent,* child = target; 
+         parent; 
+         parent = child->parent)
+    {
+      Node* parents_parent = parent->parent;
+      u8 b = 0;
 
-	/* --------------------------------------------------------------------------------------------
-	 *  Internal helpers
-	 */
+      if (child == parent->left)
+      {
+        // left subtree decreases
+        if (parent->balance_factor > 0)
+        {
+          // parent was right heavy
+          // so we need to rebalance it 
+          Node* sibling = parent->right;
+          b = sibling->balance_factor;
+          if (b < 0)
+            child = rotateRightLeft(parent, sibling);
+          else
+            child = rotateLeft(parent, sibling);
+        }
+        else
+        {
+          if (parent->balance_factor == 0)
+          {
+            parent->balance_factor = 1;
+            break;
+          }
+          child = parent;
+          child ->balance_factor = 0;
+          continue;
+        }
+      }
+      else
+      {
+        if (parent->balance_factor < 0)
+        {
+          Node* sibling = parent->left;
+          b = sibling->balance_factor;
+          if (b < 0)
+            child = rotateLeftRight(parent, sibling);
+          else
+            child = rotateRight(parent, sibling);
+        }
+        else
+        {
+          if (parent->balance_factor == 0)
+          {
+            parent->balance_factor = -1;
+            break;
+          }
+          child = parent;
+          child ->balance_factor = 0;
+          continue;
+        }
+      }
+
+      child ->parent = parents_parent;
+      if (parents_parent)
+      {
+        if (parent == parents_parent->left)
+          parents_parent->left = child ;
+        else
+          parents_parent->right = child ;
+      }
+      else
+        root = child;
+
+      if (!b)
+        break;
+    }
+
+    Node* child = (target->left ? target->left : target->right);
+
+    if (child)
+      child->parent = target->parent;
+
+    if (target->parent)
+    {
+      if (target == target->parent->left)
+        target->parent->left = child;
+      else
+        target->parent->right = child;
+    }
+
+    pool.remove(target);
+  }
+
+  /* --------------------------------------------------------------------------
+   *  Replaces u with v
+   */
+  void replace(Node* u, Node* v)
+  {
+    if (!u->parent)
+      root = v;
+    else if (u == u->parent->left)
+      u->parent->left = v;
+    else
+      u->parent->right = v;
+    if (v)
+      v->parent = u->parent;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  static Node* successor(Node* n)
+  {
+    if (n->right)
+      return minimum(n->right);
+    Node* parent = n->parent;
+    while (parent && n == parent->right)
+    {
+      n = parent;
+      parent = parent->parent;
+    }
+    return parent;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  static Node* predecessor(Node* n)
+  {
+    if (n->left)
+      return maximum(n->left);
+    Node* parent = n->parent;
+    while (parent && n == parent->left)
+    {
+      n = parent;
+      parent = parent->parent;
+    }
+    return parent;
+  }
+
+  /* --------------------------------------------------------------------------
+   */ 
+  static Node* maximum(Node* n)
+  {
+    while (n->right)
+      n = n->right;
+    return n;
+  }
+
+  /* --------------------------------------------------------------------------
+   */ 
+  static Node* minimum(Node* n)
+  {
+    while (n->left)
+      n = n->left;
+    return n;
+  }
+
+  /* --------------------------------------------------------------------------
+   *  Internal helpers
+   */
 private:
 
-	/* -------------------------------------------------------------------------------------------- rotate_left
-	 *  (A a (B b g))
-	 *  ->
-	 *  (B (A a b) g)
-	 */
-	Node* rotateLeft(Node* A, Node* B)
-	{
-		Node* b = B->left;
-		A->right = b;
-		if (b)
-			b->parent = A;
-		B->left = A;
-		A->parent = B;
+  /* --------------------------------------------------------------------------
+   *  (A a (B b g))
+   *  ->
+   *  (B (A a b) g)
+   */
+  Node* rotateLeft(Node* A, Node* B)
+  {
+    Node* b = B->left;
+    A->right = b;
+    if (b)
+      b->parent = A;
+    B->left = A;
+    A->parent = B;
 
-		if (!B->balance_factor)
-		{
-			// in if B was balanced, it no longer is
-			// this only happens in deletion
-			A->balance_factor =  1;
-			B->balance_factor = -1;
-		}
-		else
-		{
-			// otherwise the tree has been rebalanced.
-			A->balance_factor = 
-			B->balance_factor = 0;
-		}
+    if (!B->balance_factor)
+    {
+      // in if B was balanced, it no longer is
+      // this only happens in deletion
+      A->balance_factor =  1;
+      B->balance_factor = -1;
+    }
+    else
+    {
+      // otherwise the tree has been rebalanced.
+      A->balance_factor = 
+      B->balance_factor = 0;
+    }
 
-		return B;
-	}
+    return B;
+  }
 
-	/* -------------------------------------------------------------------------------------------- rotate_right
-	 *  (A (B a b) g)
-	 *  ->
-	 *  (B a (A b g))
-	 */
-	Node* rotateRight(Node* A, Node* B)
-	{
-		Node* b = B->right;
-		A->left = b;
-		if (b)
-			b->parent = A;
-		B->right = A;
-		A->parent = B;
+  /* --------------------------------------------------------------------------
+   *  (A (B a b) g)
+   *  ->
+   *  (B a (A b g))
+   */
+  Node* rotateRight(Node* A, Node* B)
+  {
+    Node* b = B->right;
+    A->left = b;
+    if (b)
+      b->parent = A;
+    B->right = A;
+    A->parent = B;
 
-		if (!B->balance_factor)
-		{
-			A->balance_factor = -1;
-			B->balance_factor =  1;
-		}
-		else
-		{
-			B->balance_factor = 
-			A->balance_factor = 0;
-		}
+    if (!B->balance_factor)
+    {
+      A->balance_factor = -1;
+      B->balance_factor =  1;
+    }
+    else
+    {
+      B->balance_factor = 
+      A->balance_factor = 0;
+    }
 
-		return B;
-	}
-	
-	/* -------------------------------------------------------------------------------------------- rotateRightLeft
-	 *  (A a (C (B b c) d))
-	 *  -> 
-	 *  (A a (B b (C c d)))
-	 *  ->
-	 *  (B (A a b) (C c d))
-	 */
-	Node* rotateRightLeft(Node* A, Node* C)
-	{
-		Node* B = C->left;
-		Node* c = B->right;
-		C->left = c;
-		if (c)
-			c->parent = C;
-		B->right = C;
-		C->parent = B;
-		Node* b = B->left;
-		A->right = b;
-		if (b)
-			b->parent = A;
-		B->left = A;
-		A->parent = B;
+    return B;
+  }
+  
+  /* --------------------------------------------------------------------------
+   *  (A a (C (B b c) d))
+   *  -> 
+   *  (A a (B b (C c d)))
+   *  ->
+   *  (B (A a b) (C c d))
+   */
+  Node* rotateRightLeft(Node* A, Node* C)
+  {
+    Node* B = C->left;
+    Node* c = B->right;
+    C->left = c;
+    if (c)
+      c->parent = C;
+    B->right = C;
+    C->parent = B;
+    Node* b = B->left;
+    A->right = b;
+    if (b)
+      b->parent = A;
+    B->left = A;
+    A->parent = B;
 
-		if (!B->balance_factor)
-		{
-			A->balance_factor = 0;
-			C->balance_factor = 0;
-		}
-		else if (B->balance_factor > 0)
-		{
-			A->balance_factor = -1;
-			C->balance_factor =  0;
-		}
-		else
-		{
-			A->balance_factor =  0;
-			C->balance_factor = -1;
-		}
+    if (!B->balance_factor)
+    {
+      A->balance_factor = 0;
+      C->balance_factor = 0;
+    }
+    else if (B->balance_factor > 0)
+    {
+      A->balance_factor = -1;
+      C->balance_factor =  0;
+    }
+    else
+    {
+      A->balance_factor =  0;
+      C->balance_factor = -1;
+    }
 
-		return B;
-	}
+    return B;
+  }
 
-	/* -------------------------------------------------------------------------------------------- rotateLeftRight
-	 *  (A (C a (B b c)) d)
-	 *  ->
-	 *  (A (B (C a b) c) d)
-	 *  ->
-	 *  (B (C a b) (A c d))
-	 */
-	Node* rotateLeftRight(Node* A, Node* C)
-	{
-		Node* B = C->right;
-		Node* b = B->left;
-		C->right = b;
-		if (b) 
-			b->parent = C;
-		B->left = C;	
-		C->parent = B;
-		Node* c = B->right;
-		A->left = c;
-		if (c)
-			c->parent = A;
-		B->right = A;
-		A->parent = B;
+  /* --------------------------------------------------------------------------
+   *  (A (C a (B b c)) d)
+   *  ->
+   *  (A (B (C a b) c) d)
+   *  ->
+   *  (B (C a b) (A c d))
+   */
+  Node* rotateLeftRight(Node* A, Node* C)
+  {
+    Node* B = C->right;
+    Node* b = B->left;
+    C->right = b;
+    if (b) 
+      b->parent = C;
+    B->left = C;  
+    C->parent = B;
+    Node* c = B->right;
+    A->left = c;
+    if (c)
+      c->parent = A;
+    B->right = A;
+    A->parent = B;
 
-		if (!B->balance_factor)
-		{
-			A->balance_factor = 0;
-			C->balance_factor = 0;
-		}
-		else if (B->balance_factor > 0)
-		{
-			A->balance_factor = -1;
-			C->balance_factor =  0;
-		}
-		else
-		{
-			A->balance_factor =  0;
-			C->balance_factor = -1;
-		}
+    if (!B->balance_factor)
+    {
+      A->balance_factor = 0;
+      C->balance_factor = 0;
+    }
+    else if (B->balance_factor > 0)
+    {
+      A->balance_factor = -1;
+      C->balance_factor =  0;
+    }
+    else
+    {
+      A->balance_factor =  0;
+      C->balance_factor = -1;
+    }
 
-		return B;
-	}
+    return B;
+  }
 
 private:
 
-	/* -+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+ RangeIterator 
-	 *  Iterator for compatibility with C++ ranged for loops 
-	 *
-	 *  It is NOT safe to add or remove things from the tree while using this!!
-	 */
-	struct RangeIterator
-	{
-		Node* current;
+  /* -+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+   *  Iterator for compatibility with C++ ranged for loops 
+   *
+   *  It is NOT safe to add or remove things from the tree while using this!!
+   */
+  struct RangeIterator
+  {
+    Node* current;
 
-		Node* operator++()
-		{
-			current = successor(current);
-			return current;
-		}
+    Node* operator++()
+    {
+      current = successor(current);
+      return current;
+    }
 
-		b8 operator !=(const RangeIterator& rhs)
-		{
-			return current != rhs.current;
-		}
+    b8 operator !=(const RangeIterator& rhs)
+    {
+      return current != rhs.current;
+    }
 
-		T* operator->()
-		{
-			return current;
-		}
+    T* operator->()
+    {
+      return current;
+    }
 
-		T& operator*()
-		{
-			return *current->data;
-		}
-	};
+    T& operator*()
+    {
+      return *current->data;
+    }
+  };
 
 public:
 
-	RangeIterator begin()
-	{
-		return RangeIterator{ root? minimum(root) : nullptr };
-	}
+  RangeIterator begin()
+  {
+    return RangeIterator{ root? minimum(root) : nullptr };
+  }
 
-	RangeIterator end()
-	{
-		return RangeIterator{ nullptr };
-	}
+  RangeIterator end()
+  {
+    return RangeIterator{ nullptr };
+  }
 };
 
 }
@@ -629,8 +636,9 @@ public:
 template<typename T, u64 (*GetKey)(const T*)>
 struct NilValue<iro::AVL<T, GetKey>>
 {
-	constexpr static iro::AVL<T, GetKey> Value = {};
-	inline static bool isNil(const iro::AVL<T, GetKey>& x) { return isnil(x.pool); }
+  constexpr static iro::AVL<T, GetKey> Value = {};
+  inline static bool isNil(const iro::AVL<T, GetKey>& x) 
+    { return isnil(x.pool); }
 };
 
 #endif

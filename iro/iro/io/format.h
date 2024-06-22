@@ -27,7 +27,7 @@ struct IO;
 template<typename T>
 concept Formattable = requires(IO* io, T x)
 {
-	{ format(io, x) } -> std::same_as<s64>;
+  { format(io, x) } -> std::same_as<s64>;
 };
 
 /* ------------------------------------------------------------------------------------------------ Primitive formatting
@@ -53,9 +53,9 @@ s64 format(IO* io, const char* x);
  */
 s64 formatv(IO* io, Formattable auto&&... args)
 {
-	s64 accumulator = 0;
-	((accumulator += format(io, args)), ...);
-	return accumulator;
+  s64 accumulator = 0;
+  ((accumulator += format(io, args)), ...);
+  return accumulator;
 }
 
 /* ------------------------------------------------------------------------------------------------ Formatting wrappers
@@ -68,8 +68,8 @@ s64 formatv(IO* io, Formattable auto&&... args)
  */ 
 struct SanitizeControlCharacters
 {
-	const str& x;
-	SanitizeControlCharacters(const str& in) : x(in) {};
+  const str& x;
+  SanitizeControlCharacters(const str& in) : x(in) {};
 };
 
 s64 format(IO* io, const SanitizeControlCharacters& x);

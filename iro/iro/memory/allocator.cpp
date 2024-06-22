@@ -11,17 +11,17 @@ STLAllocator stl_allocator;
 
 void* STLAllocator::allocate(u64 size)
 {
-	return malloc(size);
+  return malloc(size);
 }
 
 void* STLAllocator::reallocate(void* ptr, u64 size)
 {
-	return realloc(ptr, size);
+  return realloc(ptr, size);
 }
 
 void STLAllocator::free(void* ptr)
 {
-	::free(ptr);
+  ::free(ptr);
 }
 
 }

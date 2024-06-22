@@ -21,123 +21,123 @@ namespace iro
 
 template
 <
-	typename T, // element type
-	s32 N_slots_per_chunk = 16
+  typename T, // element type
+  s32 N_slots_per_chunk = 16
 >
 struct Pool 
 {
-	typedef Pool<T, N_slots_per_chunk> Self;
+  typedef Pool<T, N_slots_per_chunk> Self;
 
-	struct Slot
-	{
-		// NOTE(sushi) element/next_free_slot union MUST be first
-		//             as this avoids the offsetof warning about non-standard-layout 
-		//             or some garbage IDK C++ is weird
-		//             MAYBE ill look into it more later
-		union
-		{
-			T     element;
-			Slot* next_free_slot = nullptr;
-		};
-	};
+  struct Slot
+  {
+    // NOTE(sushi) element/next_free_slot union MUST be first
+    //             as this avoids the offsetof warning about non-standard-layout 
+    //             or some garbage IDK C++ is weird
+    //             MAYBE ill look into it more later
+    union
+    {
+      T     element;
+      Slot* next_free_slot = nullptr;
+    };
+  };
 
-	struct Chunk
-	{
-		Chunk* next = nullptr;
-		Slot   slots[N_slots_per_chunk];
-	};
-	
+  struct Chunk
+  {
+    Chunk* next = nullptr;
+    Slot   slots[N_slots_per_chunk];
+  };
+  
 
-	Chunk* current_chunk = nullptr;
-	Slot*  free_slot = nullptr;
+  Chunk* current_chunk = nullptr;
+  Slot*  free_slot = nullptr;
 
-	mem::Allocator* allocator = nullptr;
-
-
-	/* -------------------------------------------------------------------------------------------- 
-	 */
+  mem::Allocator* allocator = nullptr;
 
 
-	/* -------------------------------------------------------------------------------------------- create
-	 */ 
-	static Self create(mem::Allocator* allocator = &mem::stl_allocator)
-	{
-		Self out = {};
-		
-		out.allocator = allocator;
-		out.newChunk();
-		out.free_slot = out.current_chunk->slots;
+  /* -------------------------------------------------------------------------------------------- 
+   */
 
-		return out;
-	}
 
-	/* -------------------------------------------------------------------------------------------- destroy
-	 */ 
-	void destroy()
-	{
-		while (current_chunk)	
-		{
-			Chunk* next = current_chunk->next;
-			allocator->free(current_chunk);
-			current_chunk = next;
-		}
+  /* -------------------------------------------------------------------------------------------- create
+   */ 
+  static Self create(mem::Allocator* allocator = &mem::stl_allocator)
+  {
+    Self out = {};
+    
+    out.allocator = allocator;
+    out.newChunk();
+    out.free_slot = out.current_chunk->slots;
 
-		current_chunk = nullptr;
-		free_slot = nullptr;
-	}
+    return out;
+  }
 
-	/* -------------------------------------------------------------------------------------------- add
-	 */ 
-	T* add()
-	{
-		Slot* slot = free_slot;
-		if (!slot->next_free_slot)
-		{
-			newChunk();
-			slot->next_free_slot = current_chunk->slots;
-		}
+  /* -------------------------------------------------------------------------------------------- destroy
+   */ 
+  void destroy()
+  {
+    while (current_chunk) 
+    {
+      Chunk* next = current_chunk->next;
+      allocator->free(current_chunk);
+      current_chunk = next;
+    }
 
-		free_slot = slot->next_free_slot;
+    current_chunk = nullptr;
+    free_slot = nullptr;
+  }
 
-		return new (&slot->element) T;
-	}
+  /* -------------------------------------------------------------------------------------------- add
+   */ 
+  T* add()
+  {
+    Slot* slot = free_slot;
+    if (!slot->next_free_slot)
+    {
+      newChunk();
+      slot->next_free_slot = current_chunk->slots;
+    }
 
-	void add(const T& x)
-	{
-		T* v = add();
-		*v = x;
-	}
+    free_slot = slot->next_free_slot;
 
-	/* -------------------------------------------------------------------------------------------- remove
-	 */ 
-	void remove(T* x)
-	{
-		Slot* slot = (Slot*)x;
-		slot->element.~T();
-		slot->next_free_slot = free_slot;
-		free_slot = slot;
-	}
+    return new (&slot->element) T;
+  }
 
-	/* --------------------------------------------------------------------------------------------
-	 *  Internal helpers
-	 */ 
+  void add(const T& x)
+  {
+    T* v = add();
+    *v = x;
+  }
+
+  /* -------------------------------------------------------------------------------------------- remove
+   */ 
+  void remove(T* x)
+  {
+    Slot* slot = (Slot*)x;
+    slot->element.~T();
+    slot->next_free_slot = free_slot;
+    free_slot = slot;
+  }
+
+  /* --------------------------------------------------------------------------------------------
+   *  Internal helpers
+   */ 
 private:
 
-	/* -------------------------------------------------------------------------------------------- newChunk
-	 */ 
-	void newChunk()
-	{
-		auto chunk = (Chunk*)allocator->allocate(sizeof(Chunk));
-		
-		for (s32 i = 0; i < N_slots_per_chunk; i++)
-		{
-			Slot& slot = chunk->slots[i];
-			slot.next_free_slot = (i == N_slots_per_chunk - 1 ? nullptr : &chunk->slots[i+1]);
-		}
+  /* -------------------------------------------------------------------------------------------- newChunk
+   */ 
+  void newChunk()
+  {
+    auto chunk = (Chunk*)allocator->allocate(sizeof(Chunk));
+    
+    for (s32 i = 0; i < N_slots_per_chunk; i++)
+    {
+      Slot& slot = chunk->slots[i];
+      slot.next_free_slot = (i == N_slots_per_chunk - 1 ? nullptr : &chunk->slots[i+1]);
+    }
 
-		chunk->next = current_chunk;
-		current_chunk = chunk;
-	}
+    chunk->next = current_chunk;
+    current_chunk = chunk;
+  }
 };
 
 }
@@ -145,9 +145,9 @@ private:
 template<typename T>
 struct NilValue<iro::Pool<T>>
 {
-	constexpr static iro::Pool<T> Value = {};
-	
-	static inline bool isNil(const iro::Pool<T>& x) { return x.free_slot == nullptr; }
+  constexpr static iro::Pool<T> Value = {};
+  
+  static inline bool isNil(const iro::Pool<T>& x) { return x.free_slot == nullptr; }
 };
 
 // DefineExpandableContainerT(iro::Pool, { self->add(value); return true; });

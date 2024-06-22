@@ -12,182 +12,182 @@ static Logger logger = Logger::create("iro.fs.file"_str, Logger::Verbosity::Warn
  */
 File File::from(str path, OpenFlags flags, mem::Allocator* allocator)
 {
-	return from(move(Path::from(path, allocator)), flags);
+  return from(move(Path::from(path, allocator)), flags);
 }
 
 File File::from(Path path, OpenFlags flags, mem::Allocator* allocator)
 {
-	return from(move(Path::from(path.buffer.asStr(), allocator)), flags);
+  return from(move(Path::from(path.buffer.asStr(), allocator)), flags);
 }
 
 File File::from(Moved<Path> path, OpenFlags flags)
 {
-	if (isnil(path))
-	{
-		ERROR("nil path given to File::from()\n");
-		return nil;
-	}
+  if (isnil(path))
+  {
+    ERROR("nil path given to File::from()\n");
+    return nil;
+  }
 
-	File out = nil;
+  File out = nil;
 
-	if (!out.open(path, flags))
-		return nil;
+  if (!out.open(path, flags))
+    return nil;
 
-	return out;
+  return out;
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
 b8 File::copy(str dst, str src)
 {
-	return platform::copyFile(dst, src);
+  return platform::copyFile(dst, src);
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
 b8 File::unlink(str path)
 {
-	return platform::unlinkFile(path);
+  return platform::unlinkFile(path);
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
 b8 File::open(Moved<Path> path, OpenFlags flags)
 {
-	if (isOpen())
-	{
-		path.destroy();
-		return false; 
-	}
+  if (isOpen())
+  {
+    path.destroy();
+    return false; 
+  }
 
-	if (!platform::open(&handle, path.buffer.asStr(), flags))
-	{
-		path.destroy();
-		return false;
-	}
+  if (!platform::open(&handle, path.buffer.asStr(), flags))
+  {
+    path.destroy();
+    return false;
+  }
 
-	setOpen();
+  setOpen();
 
-	if (flags.test(OpenFlag::Read))
-		setReadable();
+  if (flags.test(OpenFlag::Read))
+    setReadable();
 
-	if (flags.test(OpenFlag::Write))
-		setWritable();
+  if (flags.test(OpenFlag::Write))
+    setWritable();
 
-	openflags = flags;
+  openflags = flags;
 
-	this->path = path;
+  this->path = path;
 
-	return true;
+  return true;
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
 void File::close()
 {
-	if (!isOpen())
-		return;
+  if (!isOpen())
+    return;
 
-	// ugh
-	if (handle > 2)
-		platform::close(handle);
-	
-	path.destroy();
+  // ugh
+  if (handle > 2)
+    platform::close(handle);
+  
+  path.destroy();
 
-	unsetOpen();
-	unsetReadable();
-	unsetWritable();
+  unsetOpen();
+  unsetReadable();
+  unsetWritable();
 
-	*this = nil;
+  *this = nil;
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
 s64 File::write(Bytes bytes)
 {
-	if (!isOpen() ||
-		!canWrite())
-		return -1;
+  if (!isOpen() ||
+    !canWrite())
+    return -1;
 
-	return platform::write(handle, bytes, openflags.test(OpenFlag::NoBlock));
+  return platform::write(handle, bytes, openflags.test(OpenFlag::NoBlock));
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
 s64 File::read(Bytes bytes)
 {
-	if (!isOpen() ||
-		!canRead())
-		return -1;
+  if (!isOpen() ||
+    !canRead())
+    return -1;
 
-	return platform::read(handle, bytes, openflags.test(OpenFlag::NoBlock));
+  return platform::read(handle, bytes, openflags.test(OpenFlag::NoBlock));
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
 File File::fromFileDescriptor(u64 fd, OpenFlags flags)
 {
-	File out = {};
-	out.handle = fd;
+  File out = {};
+  out.handle = fd;
 
-	DEBUG("creating File from file descriptor ", fd, "\n");
-	SCOPED_INDENT;
+  DEBUG("creating File from file descriptor ", fd, "\n");
+  SCOPED_INDENT;
 
-	out.setOpen();
+  out.setOpen();
 
-	if (flags.test(OpenFlag::Read))
-		out.setReadable();
+  if (flags.test(OpenFlag::Read))
+    out.setReadable();
 
-	if (flags.test(OpenFlag::Write))
-		out.setWritable();
+  if (flags.test(OpenFlag::Write))
+    out.setWritable();
 
-	if (flags.test(OpenFlag::NoBlock))
-	{
-		TRACE("setting as non-blocking\n");
-		platform::setNonBlocking(out.handle);
-	}
+  if (flags.test(OpenFlag::NoBlock))
+  {
+    TRACE("setting as non-blocking\n");
+    platform::setNonBlocking(out.handle);
+  }
 
-	out.path = nil;
+  out.path = nil;
 
-	out.openflags = flags;
+  out.openflags = flags;
 
-	return out;
+  return out;
 }
 
 File File::fromFileDescriptor(u64 fd, str name, OpenFlags flags, mem::Allocator* allocator)
 {
-	return fromFileDescriptor(fd, move(Path::from(name, allocator)), flags);
+  return fromFileDescriptor(fd, move(Path::from(name, allocator)), flags);
 }
 
 File File::fromFileDescriptor(u64 fd, Moved<Path> name, OpenFlags flags)
 {
-	File out = fromFileDescriptor(fd, flags);
-	out.path = name;
-	return out;
+  File out = fromFileDescriptor(fd, flags);
+  out.path = name;
+  return out;
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
 FileInfo File::getInfo()
 {
-	return FileInfo::of(*this);
+  return FileInfo::of(*this);
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
 FileInfo FileInfo::of(str path)
 {
-	assert(notnil(path) && path.len);
+  assert(notnil(path) && path.len);
 
-	FileInfo out = {};
-	if (!platform::stat(&out, path))
-		return nil;
-	return out;
+  FileInfo out = {};
+  if (!platform::stat(&out, path))
+    return nil;
+  return out;
 }
 
 FileInfo FileInfo::of(File file)
 {
-	return FileInfo::of(file.path.buffer.asStr());
+  return FileInfo::of(file.path.buffer.asStr());
 }
 
 }

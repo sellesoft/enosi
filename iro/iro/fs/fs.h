@@ -16,10 +16,10 @@ namespace iro::fs
 
 enum class DirWalkResult
 {
-	Stop,     // completely stop the walk 
-	Next,     // move to the next file in the current directory
-	StepInto, // step into the current file if it is a directory
-	StepOut,  // step out of the current directory
+  Stop,     // completely stop the walk 
+  Next,     // move to the next file in the current directory
+  StepInto, // step into the current file if it is a directory
+  StepOut,  // step out of the current directory
 };
 
 template<typename F>
@@ -37,75 +37,75 @@ namespace __internal
  */
 b8 walkForReal(Path& path, DirWalkCallback auto f)
 {
-	auto dir = Dir::open(path);
+  auto dir = Dir::open(path);
 
-	// if were starting in cwd we dont want it to appear in the path we give
-	// so just clear it 
-	// TODO(sushi) this is kinda dumb
-	if (path.isCurrentDirectory())
-		path.clear();
+  // if were starting in cwd we dont want it to appear in the path we give
+  // so just clear it 
+  // TODO(sushi) this is kinda dumb
+  if (path.isCurrentDirectory())
+    path.clear();
 
-	if (isnil(dir))
-		return false;
+  if (isnil(dir))
+    return false;
 
-	defer { dir.close(); };
+  defer { dir.close(); };
 
-	// Path we offer to the user via the callback, which they can move 
-	// elsewhere if they want to take it.
-	MayMove<Path> user_path;
-	defer { if (!user_path.wasMoved()) user_path->destroy(); };
+  // Path we offer to the user via the callback, which they can move 
+  // elsewhere if they want to take it.
+  MayMove<Path> user_path;
+  defer { if (!user_path.wasMoved()) user_path->destroy(); };
 
-	for (;;)
-	{
-		// rollback to the original path after were done messing with this file
-		auto rollback = path.makeRollback();
-		defer { path.commitRollback(rollback); };
+  for (;;)
+  {
+    // rollback to the original path after were done messing with this file
+    auto rollback = path.makeRollback();
+    defer { path.commitRollback(rollback); };
 
-		Bytes buf = path.reserve(255);
+    Bytes buf = path.reserve(255);
 
-		s64 len = dir.next(buf);
-		if (len < 0)
-			return false;
-		else if (len == 0)
-			return true;
-		
-		path.commit(len);
+    s64 len = dir.next(buf);
+    if (len < 0)
+      return false;
+    else if (len == 0)
+      return true;
+    
+    path.commit(len);
 
-		if (path.isParentDirectory() || path.isCurrentDirectory())
-			continue;
+    if (path.isParentDirectory() || path.isCurrentDirectory())
+      continue;
 
-		if (user_path.wasMoved()) 
-		{
-			// if the user took the copy of the path, make another one
-			user_path = path.copy();
-		}
-		else 
-		{
-			// otherwise just write into the same buffer
-			user_path->clear();
-			user_path->append(path.buffer.asStr());
-		}
+    if (user_path.wasMoved()) 
+    {
+      // if the user took the copy of the path, make another one
+      user_path = path.copy();
+    }
+    else 
+    {
+      // otherwise just write into the same buffer
+      user_path->clear();
+      user_path->append(path.buffer.asStr());
+    }
 
-		auto result = f(user_path);
+    auto result = f(user_path);
 
-		switch (result)
-		{
-		case DirWalkResult::Stop: 
-			return false;
-		
-		case DirWalkResult::Next:
-			break;
+    switch (result)
+    {
+    case DirWalkResult::Stop: 
+      return false;
+    
+    case DirWalkResult::Next:
+      break;
 
-		case DirWalkResult::StepInto:
-			path.makeDir();
-			if (!walkForReal(path, f))
-				return false;
-			break;
+    case DirWalkResult::StepInto:
+      path.makeDir();
+      if (!walkForReal(path, f))
+        return false;
+      break;
 
-		case DirWalkResult::StepOut:
-			return true;
-		}
-	}
+    case DirWalkResult::StepOut:
+      return true;
+    }
+  }
 }
 
 }
@@ -114,8 +114,8 @@ b8 walkForReal(Path& path, DirWalkCallback auto f)
  */
 void walk(str pathin, DirWalkCallback auto f, mem::Allocator* allocator)
 {
-	auto path = scoped(Path::from(pathin, allocator));
-	__internal::walkForReal(path, f);
+  auto path = scoped(Path::from(pathin, allocator));
+  __internal::walkForReal(path, f);
 }
 
 }

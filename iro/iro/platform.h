@@ -74,8 +74,8 @@ b8 setNonBlocking(fs::File::Handle handle);
  */
 struct Timespec
 {
-	u64 seconds;
-	u64 nanoseconds;
+  u64 seconds;
+  u64 nanoseconds;
 };
 
 /* ------------------------------------------------------------------------------------------------ clock_realtime
@@ -164,16 +164,16 @@ b8 processSpawn(Process::Handle* out_handle, str file, Slice<str> args, Process:
  */
 enum class ProcessCheckResult
 {
-	Error,
-	Exited,
-	StillRunning,
+  Error,
+  Exited,
+  StillRunning,
 };
 
 ProcessCheckResult processCheck(Process::Handle handle, s32* out_exit_code);
 
 /* ------------------------------------------------------------------------------------------------ realpath
- *	Converts the given path, that must exist, to a canonical path, that is with segments /./ and 
- *	/../ evaluated and links followed.
+ *  Converts the given path, that must exist, to a canonical path, that is with segments /./ and 
+ *  /../ evaluated and links followed.
  */
 b8 realpath(fs::Path* path);
 

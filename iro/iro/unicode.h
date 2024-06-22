@@ -36,11 +36,11 @@ b8 isContinuationByte(u8 c);
  */
 struct Char
 {
-	u8 bytes[4];
-	u8 count;
+  u8 bytes[4];
+  u8 count;
 
-	static Char invalid() { return {{},0}; }
-	b8 isValid() { return count != 0; }
+  static Char invalid() { return {{},0}; }
+  b8 isValid() { return count != 0; }
 };
 
 // Encodes the given codepoint into 'ch'.
@@ -53,16 +53,16 @@ Char encodeCharacter(u32 codepoint);
  */
 struct Codepoint
 {
-	u32 codepoint;
-	u32 advance;
+  u32 codepoint;
+  u32 advance;
 
-	operator u32() { return codepoint; }
+  operator u32() { return codepoint; }
 
-	bool operator ==(u32  x) { return codepoint == x; }
-	bool operator ==(Codepoint c) { return codepoint == c.codepoint; }
-	bool operator !=(u32  x) { return codepoint != x; }
-	bool operator ==(char x) { return codepoint == x; }
-	bool operator !=(char x) { return codepoint != x; }
+  bool operator ==(u32  x) { return codepoint == x; }
+  bool operator ==(Codepoint c) { return codepoint == c.codepoint; }
+  bool operator !=(u32  x) { return codepoint != x; }
+  bool operator ==(char x) { return codepoint == x; }
+  bool operator !=(char x) { return codepoint != x; }
 };
 
 // Attempt to decode the character at 's' into 'codepoint'.
@@ -77,92 +77,92 @@ Codepoint decodeCharacter(u8* s, s32 slen);
  */
 struct str
 {
-	u8* bytes = nullptr;
-	u64 len = 0;
+  u8* bytes = nullptr;
+  u64 len = 0;
 
-	operator Bytes() { return {bytes, len}; }
+  operator Bytes() { return {bytes, len}; }
 
-	// where 'end' is a pointer to the byte AFTER the last of the range desired
-	static inline str from(u8* start, u8* end) { assert(start >= end); return {start, u64(end - start)}; }
-	static inline str from(u8* start, u64 len) { return {start, len}; }
-	static inline str from(Slice<u8> slice) { return {slice.ptr, slice.len}; }
+  // where 'end' is a pointer to the byte AFTER the last of the range desired
+  static inline str from(u8* start, u8* end) { assert(start >= end); return {start, u64(end - start)}; }
+  static inline str from(u8* start, u64 len) { return {start, len}; }
+  static inline str from(Slice<u8> slice) { return {slice.ptr, slice.len}; }
 
-	b8 isEmpty() { return len == 0; }
+  b8 isEmpty() { return len == 0; }
 
-	u64 hash();
+  u64 hash();
 
-	// Advances this str by 'n' codepoints and returns the last codepoint passed.
-	// This may return invalid codepoints if this str is not valid utf8!
-	Codepoint advance(s32 n = 1);
+  // Advances this str by 'n' codepoints and returns the last codepoint passed.
+  // This may return invalid codepoints if this str is not valid utf8!
+  Codepoint advance(s32 n = 1);
 
-	void increment(s32 n) { n = (n > len? len : n); bytes += n; len -= n; }
+  void increment(s32 n) { n = (n > len? len : n); bytes += n; len -= n; }
 
-	// If the provided buffer is large enough, copy this 
-	// str into it followed by a null terminator and return true.
-	// Otherwise return false;
-	b8 nullTerminate(u8* buffer, s32 buffer_len);
+  // If the provided buffer is large enough, copy this 
+  // str into it followed by a null terminator and return true.
+  // Otherwise return false;
+  b8 nullTerminate(u8* buffer, s32 buffer_len);
 
-	str sub(s32 start) { assert(start >= 0 && start < len); return {bytes + start, len - start}; }
-	str sub(s32 start, s32 end) { assert(start >= 0 && start <= end && end <= len); return {bytes + start, u64(end - start)};  }
+  str sub(s32 start) { assert(start >= 0 && start < len); return {bytes + start, len - start}; }
+  str sub(s32 start, s32 end) { assert(start >= 0 && start <= end && end <= len); return {bytes + start, u64(end - start)};  }
 
-	b8 operator ==(str s);
+  b8 operator ==(str s);
 
-	u8* begin() { return bytes; }
-	u8* end()   { return bytes + len; }
+  u8* begin() { return bytes; }
+  u8* end()   { return bytes + len; }
 
-	u8& last() { return *(end()-1); }
+  u8& last() { return *(end()-1); }
 
-	// returns how many characters there are in this string
-	u64 countCharacters();
+  // returns how many characters there are in this string
+  u64 countCharacters();
 
-	b8 startsWith(str s);
+  b8 startsWith(str s);
 
-	struct pos
-	{
-		u64 x;
+  struct pos
+  {
+    u64 x;
 
-		pos operator + (const int& rhs) { return pos{x + rhs}; }
-		static pos found(u64 x) { return {x}; }
-		static pos notFound() { return {(u64)-1}; }
-		b8 found() { return x != (u64)-1; }
-		operator u64() { return x; }
-	};
+    pos operator + (const int& rhs) { return pos{x + rhs}; }
+    static pos found(u64 x) { return {x}; }
+    static pos notFound() { return {(u64)-1}; }
+    b8 found() { return x != (u64)-1; }
+    operator u64() { return x; }
+  };
 
-	// each find function should provide a byte and codepoint variant
-	pos findFirst(u8 c);
-	pos findLast(u8 c);
+  // each find function should provide a byte and codepoint variant
+  pos findFirst(u8 c);
+  pos findLast(u8 c);
 
-	void split(u8 c, ExpandableContainer<str> auto* container, b8 remove_empty = true)
-	{
-		str scan = *this;
+  void split(u8 c, ExpandableContainer<str> auto* container, b8 remove_empty = true)
+  {
+    str scan = *this;
 
-		while (not scan.isEmpty())
-		{
-			pos p = scan.findFirst(c);
-			if (!p.found())
-			{
-				containerAdd(container, scan);
-				return;
-			}
+    while (not scan.isEmpty())
+    {
+      pos p = scan.findFirst(c);
+      if (!p.found())
+      {
+        containerAdd(container, scan);
+        return;
+      }
 
-			if (p == 0 && remove_empty)
-				continue;
+      if (p == 0 && remove_empty)
+        continue;
 
-			if (!containerAdd(container, scan.sub(0, p)))
-				return;
+      if (!containerAdd(container, scan.sub(0, p)))
+        return;
 
-			scan = scan.sub(p+1);
-		}
-	}
+      scan = scan.sub(p+1);
+    }
+  }
 
-	str allocateCopy(mem::Allocator* allocator = &mem::stl_allocator)
-	{
-		str out;
-		out.bytes = (u8*)allocator->allocate(len);
-		out.len = len;
-		mem::copy(out.bytes, bytes, len);
-		return out;
-	}
+  str allocateCopy(mem::Allocator* allocator = &mem::stl_allocator)
+  {
+    str out;
+    out.bytes = (u8*)allocator->allocate(len);
+    out.len = len;
+    mem::copy(out.bytes, bytes, len);
+    return out;
+  }
 };
 
 }
@@ -174,7 +174,7 @@ using str  = utf8::str;
 
 static str operator ""_str (const char* s, size_t len)
 {
-	return str{(u8*)s, len};
+  return str{(u8*)s, len};
 }
 
 }

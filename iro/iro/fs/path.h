@@ -27,117 +27,117 @@ struct File;
 
 struct Path
 {
-	// TODO(sushi) replace this with either a manual implementation of a 
-	//             dynamic buffer or some more general byte buffer as 
-	//             the way this is being used is really pushing what io::Memory
-	//             is meant to be used for.
-	//             plus, the reading api on IO is useless here
-	io::Memory buffer; // dynamic buffer for now, maybe make static later
+  // TODO(sushi) replace this with either a manual implementation of a 
+  //             dynamic buffer or some more general byte buffer as 
+  //             the way this is being used is really pushing what io::Memory
+  //             is meant to be used for.
+  //             plus, the reading api on IO is useless here
+  io::Memory buffer; // dynamic buffer for now, maybe make static later
 
-	// Makes a new Path from the given string.
-	static Path from(str s = {}, mem::Allocator* allocator = &mem::stl_allocator);
+  // Makes a new Path from the given string.
+  static Path from(str s = {}, mem::Allocator* allocator = &mem::stl_allocator);
 
-	static Path cwd(mem::Allocator* allocator = &mem::stl_allocator);
+  static Path cwd(mem::Allocator* allocator = &mem::stl_allocator);
 
-	// Unlink a file. For directories use 'rmdir'.
-	static b8 unlink(str path);
+  // Unlink a file. For directories use 'rmdir'.
+  static b8 unlink(str path);
 
-	// Remove a directory.
-	static b8 rmdir(str path);
+  // Remove a directory.
+  static b8 rmdir(str path);
 
-	// Change the current working directory into the one at 'path'.
-	static b8 chdir(str path);
-	static b8 matches(str name, str pattern);
-	static b8 exists(str path);
-	static b8 isRegularFile(str path);
-	static b8 isDirectory(str path);
+  // Change the current working directory into the one at 'path'.
+  static b8 chdir(str path);
+  static b8 matches(str name, str pattern);
+  static b8 exists(str path);
+  static b8 isRegularFile(str path);
+  static b8 isDirectory(str path);
 
-	static str basename(str path);
-	static str removeBasename(str path);
+  static str basename(str path);
+  static str removeBasename(str path);
 
-	b8   init(mem::Allocator* allocator = &mem::stl_allocator) { return init({}, allocator); }
-	b8   init(str s, mem::Allocator* allocator = &mem::stl_allocator);
-	void destroy();
+  b8   init(mem::Allocator* allocator = &mem::stl_allocator) { return init({}, allocator); }
+  b8   init(str s, mem::Allocator* allocator = &mem::stl_allocator);
+  void destroy();
 
-	b8 unlink() { return unlink(buffer.asStr()); }
-	b8 rmdir() { return rmdir(buffer.asStr()); }
+  b8 unlink() { return unlink(buffer.asStr()); }
+  b8 rmdir() { return rmdir(buffer.asStr()); }
 
-	Path copy();
+  Path copy();
 
-	void clear();
+  void clear();
 
-	Path& appendDir(str dir) { append("/"_str, dir); return *this; }
-	Path& appendDir(Slice<u8> dir) { append("/"_str, str{dir.ptr, dir.len}); return *this; }
-	Path& append(io::Formattable auto... args) { io::formatv(&buffer, args...); return *this; }
+  Path& appendDir(str dir) { append("/"_str, dir); return *this; }
+  Path& appendDir(Slice<u8> dir) { append("/"_str, str{dir.ptr, dir.len}); return *this; }
+  Path& append(io::Formattable auto... args) { io::formatv(&buffer, args...); return *this; }
 
-	Bytes reserve(s32 space) { return buffer.reserve(space); }
-	void  commit(s32 space) { buffer.commit(space); }
+  Bytes reserve(s32 space) { return buffer.reserve(space); }
+  void  commit(s32 space) { buffer.commit(space); }
 
-	b8 makeAbsolute();
+  b8 makeAbsolute();
 
-	// TODO(sushi) rename cause this can be confused with actually creating the 
-	//             directory at this path
-	Path& makeDir() 
-		{ if (buffer.len != 0 && buffer.buffer[buffer.len-1] != '/') append('/'); return *this; }
+  // TODO(sushi) rename cause this can be confused with actually creating the 
+  //             directory at this path
+  Path& makeDir() 
+    { if (buffer.len != 0 && buffer.buffer[buffer.len-1] != '/') append('/'); return *this; }
 
-	b8 chdir() { return chdir(buffer.asStr()); }
+  b8 chdir() { return chdir(buffer.asStr()); }
 
-	// Returns the final component of this path eg.
-	// src/fs/path.h -> path.h
-	str basename() { return basename(buffer.asStr()); }
+  // Returns the final component of this path eg.
+  // src/fs/path.h -> path.h
+  str basename() { return basename(buffer.asStr()); }
 
-	void removeBasename() { buffer.len = removeBasename(buffer.asStr()).len; }
+  void removeBasename() { buffer.len = removeBasename(buffer.asStr()).len; }
 
-	// Helpers for querying information about the file at this path
+  // Helpers for querying information about the file at this path
 
-	b8 exists() { return Path::exists(buffer.asStr()); }
+  b8 exists() { return Path::exists(buffer.asStr()); }
 
-	b8 isRegularFile() { return Path::isRegularFile(buffer.asStr()); }
-	b8 isDirectory() { return Path::isDirectory(buffer.asStr()); }
+  b8 isRegularFile() { return Path::isRegularFile(buffer.asStr()); }
+  b8 isDirectory() { return Path::isDirectory(buffer.asStr()); }
 
-	inline b8 isCurrentDirectory() 
-	{ 
-		return 
-			(buffer.len == 1 && 
-			 buffer[1] == '.') 
-			|| 
-			(buffer.len > 1 && 
-			 buffer[buffer.len-1] == '.' && 
-			 buffer[buffer.len-2] == '/'); 
-	}
+  inline b8 isCurrentDirectory() 
+  { 
+    return 
+      (buffer.len == 1 && 
+       buffer[1] == '.') 
+      || 
+      (buffer.len > 1 && 
+       buffer[buffer.len-1] == '.' && 
+       buffer[buffer.len-2] == '/'); 
+  }
 
-	inline b8 isParentDirectory() 
-	{ 
-		return 
-			(buffer.len == 2 && 
-			 buffer[0] == '.' && 
-			 buffer[1] == '.') 
-			|| 
-			(buffer.len > 2 && 
-			 buffer[buffer.len-1] == '.' && 
-			 buffer[buffer.len-2] == '.' && 
-			 buffer[buffer.len-3] == '/');
-	}
+  inline b8 isParentDirectory() 
+  { 
+    return 
+      (buffer.len == 2 && 
+       buffer[0] == '.' && 
+       buffer[1] == '.') 
+      || 
+      (buffer.len > 2 && 
+       buffer[buffer.len-1] == '.' && 
+       buffer[buffer.len-2] == '.' && 
+       buffer[buffer.len-3] == '/');
+  }
 
-	// Returns if this path matches the given pattern
-	// TODO(sushi) write up the specification of patterns that can be used here
-	//             its just Linux shell globbing 
-	b8 matches(str pattern);
+  // Returns if this path matches the given pattern
+  // TODO(sushi) write up the specification of patterns that can be used here
+  //             its just Linux shell globbing 
+  b8 matches(str pattern);
 
-	typedef io::Memory::Rollback Rollback;
+  typedef io::Memory::Rollback Rollback;
 
-	Rollback makeRollback() { return buffer.createRollback(); }
-	void commitRollback(Rollback rollback) { buffer.commitRollback(rollback); }
+  Rollback makeRollback() { return buffer.createRollback(); }
+  void commitRollback(Rollback rollback) { buffer.commitRollback(rollback); }
 };
 
 }
 
 namespace iro::io
 {
-	
+  
 static s64 format(io::IO* io, fs::Path& x)
 {
-	return io::format(io, x.buffer.asStr());
+  return io::format(io, x.buffer.asStr());
 }
 
 }

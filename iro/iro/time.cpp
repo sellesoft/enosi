@@ -14,19 +14,19 @@ namespace iro
 
 TimePoint TimePoint::now()
 {
-	platform::Timespec ts = platform::clock_realtime();
-	return {ts.seconds, ts.nanoseconds};
+  platform::Timespec ts = platform::clock_realtime();
+  return {ts.seconds, ts.nanoseconds};
 }
 
 TimePoint TimePoint::monotonic()
 {
-	platform::Timespec ts = platform::clock_monotonic();
-	return {ts.seconds, ts.nanoseconds};
+  platform::Timespec ts = platform::clock_monotonic();
+  return {ts.seconds, ts.nanoseconds};
 }
 
 TimeSpan operator-(const TimePoint& lhs, const TimePoint& rhs)
 {
-	return { s64(lhs.s * 1000000000 + lhs.ns) - s64(rhs.s * 1000000000 + rhs.ns) };
+  return { s64(lhs.s * 1000000000 + lhs.ns) - s64(rhs.s * 1000000000 + rhs.ns) };
 }
 
 TimeSpan TimeSpan::fromNanoseconds(s64 n)  { return { n }; }
@@ -50,54 +50,54 @@ namespace io
 
 s64 format(IO* io, const TimeSpan& x)
 {
-	return io::format(io, x.toSeconds());
+  return io::format(io, x.toSeconds());
 }
 
 s64 format(IO* io, const UTCDate& x)
 {
-	char buffer[255];
-	struct tm* tm = gmtime(&(time_t&)x.point.s);
-	size_t written = strftime(buffer, 255, x.fmtstr, tm);
-	return io->write({(u8*)buffer, written});
+  char buffer[255];
+  struct tm* tm = gmtime(&(time_t&)x.point.s);
+  size_t written = strftime(buffer, 255, x.fmtstr, tm);
+  return io->write({(u8*)buffer, written});
 }
 
 s64 format(IO* io, const LocalDate& x)
 {
-	char buffer[255];
-	struct tm* tm = localtime(&(time_t&)x.point.s);
-	size_t written = strftime(buffer, 255, x.fmtstr, tm);
-	return io->write({(u8*)buffer, written});
+  char buffer[255];
+  struct tm* tm = localtime(&(time_t&)x.point.s);
+  size_t written = strftime(buffer, 255, x.fmtstr, tm);
+  return io->write({(u8*)buffer, written});
 }
 
 s64 format(IO* io, const WithUnits& x)
 {
-	TimeSpan span = x.x;
-	s64 bytes_written = 0;
-	s64 units = x.maxunits;
-	s64 n = 0;
+  TimeSpan span = x.x;
+  s64 bytes_written = 0;
+  s64 units = x.maxunits;
+  s64 n = 0;
 #define unit(f, u) \
-	n = floor(span.GLUE(to,f)()); \
-	if (n) \
-	{ \
-		if (units != 1) \
-			bytes_written += formatv(io, n, STRINGIZE(u) " "); \
-		else \
-			bytes_written += formatv(io, n, STRINGIZE(u)); \
-		units -= 1; \
-		if (!units) \
-			return bytes_written; \
-		span.ns -= GLUE(TimeSpan::from, f)(n).ns; \
-	} 
+  n = floor(span.GLUE(to,f)()); \
+  if (n) \
+  { \
+    if (units != 1) \
+      bytes_written += formatv(io, n, STRINGIZE(u) " "); \
+    else \
+      bytes_written += formatv(io, n, STRINGIZE(u)); \
+    units -= 1; \
+    if (!units) \
+      return bytes_written; \
+    span.ns -= GLUE(TimeSpan::from, f)(n).ns; \
+  } 
 
-	unit(Days,         days);
-	unit(Hours,        h);
-	unit(Minutes,      m);
-	unit(Seconds,      s);
-	unit(Milliseconds, ms);
-	unit(Microseconds, μs);
-	unit(Nanoseconds,  ns);
+  unit(Days,         days);
+  unit(Hours,        h);
+  unit(Minutes,      m);
+  unit(Seconds,      s);
+  unit(Milliseconds, ms);
+  unit(Microseconds, μs);
+  unit(Nanoseconds,  ns);
 
-	return bytes_written;
+  return bytes_written;
 }
 
 }

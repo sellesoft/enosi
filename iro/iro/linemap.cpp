@@ -7,68 +7,68 @@ namespace iro
  */
 b8 LineMap::init(mem::Allocator* allocator)
 {
-	line_offsets = Array<u64>::create(allocator);
-	return true;
+  line_offsets = Array<u64>::create(allocator);
+  return true;
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
 void LineMap::deinit()
 {
-	line_offsets.destroy();
+  line_offsets.destroy();
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
 b8 LineMap::cache(Bytes bytes)
 {
-	if (cached)
-		return true;
+  if (cached)
+    return true;
 
-	line_offsets.clear();
+  line_offsets.clear();
 
-	line_offsets.push(0);
+  line_offsets.push(0);
 
-	for (s64 i = 0; i < bytes.len; i++)
-	{
-		if (bytes[i] == '\n')
-			line_offsets.push(i + 1);
-	}
+  for (s64 i = 0; i < bytes.len; i++)
+  {
+    if (bytes[i] == '\n')
+      line_offsets.push(i + 1);
+  }
 
-	cached = true;
+  cached = true;
 
-	return true;
+  return true;
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
 LineOffset LineMap::getLine(u64 offset)
 {
-	assert(cached);
+  assert(cached);
 
-	u64 l = 0,
-		m = 0,
-		r = line_offsets.len() - 1;
+  u64 l = 0,
+    m = 0,
+    r = line_offsets.len() - 1;
 
-	u64 cur;
-	while (l <= r)
-	{
-		m = l + (r - l) / 2;
-		if (!m)
-			break;
-		cur = line_offsets[m];
-		if (cur < offset)
-			l = m + 1;
-		else if (cur > offset)
-			r = m - 1;
-		else
-			break;
-	}
+  u64 cur;
+  while (l <= r)
+  {
+    m = l + (r - l) / 2;
+    if (!m)
+      break;
+    cur = line_offsets[m];
+    if (cur < offset)
+      l = m + 1;
+    else if (cur > offset)
+      r = m - 1;
+    else
+      break;
+  }
 
-	if (cur > offset)
-		cur = line_offsets[m - 1];
+  if (cur > offset)
+    cur = line_offsets[m - 1];
 
-	return {m, cur};
+  return {m, cur};
 }
 
 }
