@@ -7,7 +7,6 @@
 #include "target.h"
 
 #include "iro/logger.h"
-#include "luahelpers.h"
 
 #include "assert.h"
 

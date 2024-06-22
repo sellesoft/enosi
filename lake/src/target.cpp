@@ -4,16 +4,7 @@
 #include "stdlib.h"
 #include "assert.h"
 
-#include "luahelpers.h"
-
 #include "iro/logger.h"
-
-extern "C"
-{
-#include "lua.h"
-#include "lualib.h"
-#include "lauxlib.h"
-}
 
 static Logger logger = 
   Logger::create("lake.target"_str, Logger::Verbosity::Notice);
