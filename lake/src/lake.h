@@ -16,9 +16,8 @@ static const char* lake_targets_table = "__lake__targets";
 static const char* lake_recipe_table = "__lake__recipe_table";
 static const char* lake_coroutine_resume = "__lake__coroutine_resume";
 static const char* lake_err_handler = "__lake__err_handler";
-static const char* lake_tryAction = "__lake__tryAction";
 
-typedef SList<const char*> LuaCLIArgList;
+typedef DList<const char*> LuaCLIArgList;
 
 struct Lake
 {

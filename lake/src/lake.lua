@@ -146,15 +146,17 @@ local make_str = function(s)
 end
 
 
--- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
+-- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
 --      
 --      Module initialization
 --
--- * >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> -
+-- * >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> -
 
 
--- * : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : : command line arguments
---   Process command line arguments.
+--- A list of command line arguments not consumed internally by lake to be 
+--- processed by the user.
+lake.cliargs = List{}
+
 while true do
   local arg = C.lua__nextCliarg()
 
@@ -164,35 +166,21 @@ while true do
 
   arg = ffi.string(arg)
 
-  local var, value = arg:match("(%w+)=(%w+)")
-
-  if not var then
-    C.lua__queueAction(make_str(arg))
-  else
-    lake.clivars[var] = value
-  end
-end
-
-local tryAction = function(name)
-  assert(actions[name], "attempt to run unknown action "..name..". If you've to specified a target you want to specifically build (as you can in make), lake does not support this at the moment!")
-  actions[name]()
+  print(arg)
+  lake.cliargs:push(arg)
 end
 
 
 
--- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
+-- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
 --      
 --      Lake util functions
 --
---      Utility api provided to lake files for finding files, replacing strings, etc. as well
---      as functions used to support lake's syntax sugar, such as 'concat' which is used 
---      to support the '..=' operator.
---
--- * >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> -
+-- * >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> -
 
 
 
--- * ---------------------------------------------------------------------------------------------- lake.os
+-- * --------------------------------------------------------------------------
 
 --- Get a string specifying the current operating system.
 ---
@@ -205,7 +193,8 @@ end
 ---     POSIX
 ---     Other
 ---
---- TODO(sushi) make this return the target operating system if I ever get around to supporting
+-- TODO(sushi) make this return the target operating system if I ever get 
+--             around to supporting
 ---             cross-compilation.
 ---
 ---@return string
@@ -213,11 +202,12 @@ lake.os = function()
   return jit.os
 end
 
--- * ---------------------------------------------------------------------------------------------- lake.arch
+-- * --------------------------------------------------------------------------
 
 --- Get a string specifying the current architecture.
 ---
---- Currently this just returns whatever luajit reports from its arch() function.
+--- Currently this just returns whatever luajit reports from its arch() 
+--- function.
 --- This could be one of:
 ---   x86
 ---   x64
@@ -232,15 +222,15 @@ end
 ---   mips64r6
 ---   mips64r6el
 ---
---- TODO(sushi) make this return the target architecture if I ever get around to supporting 
----             cross-compilation.
+-- TODO(sushi) make this return the target architecture if I ever get around 
+--             to supporting cross-compilation.
 ---
 ---@return string
 lake.arch = function()
   return jit.arch
 end
 
--- * ---------------------------------------------------------------------------------------------- lake.canonicalizePath
+-- * --------------------------------------------------------------------------
 
 --- Takes a path to a file and returns a canonicalized/absolute
 --- path to it. The file must exist!
@@ -251,7 +241,7 @@ lake.canonicalizePath = function(path)
   return lua__canonicalizePath(path)
 end
 
--- * ---------------------------------------------------------------------------------------------- lake.touch
+-- * --------------------------------------------------------------------------
 
 --- Touch the file at 'path', updating its modified time to the current time.
 --- This does not create a new file.
@@ -261,7 +251,7 @@ lake.touch = function(path)
   C.lua__touch(make_str(path))
 end
 
--- * ---------------------------------------------------------------------------------------------- lake.flatten
+-- * --------------------------------------------------------------------------
 
 --- Takes a table, List or Twine, and flattens all nested tables,
 --- Lists, Twines, etc. recursively and returns a new List of 
@@ -310,39 +300,9 @@ lake.flatten = function(tbl, handleUnknownType)
   return out
 end
 
--- * ---------------------------------------------------------------------------------------------- lake.cliArgs
-
---- Returns a list of all cliargs passed that lake did not consume internally.
----
----@return List
-lake.cliArgs = function()
-
-end
-
--- * ---------------------------------------------------------------------------------------------- lake.action
-
---- Define an 'action', which is a function that can be specified to run from the command line.
---- This is intended to replace make's concept of 'phony' targets. If an action is specified on
---- cli then normal building will not occur and only actions specified will be run.
---- 
---- Multiple actions may be specified on cli and they will be executed in the order given.
----
---- The name of the action as it would be referred to on cli.
----@param name string
----
---- The function to execute when this action is specified.
----@param f function
-lake.action = function(name, f)
-  if actions[name] then
-    error("attempt to specify an action twice", 2)
-  end
-
-  actions[name] = f
-end
+-- * --------------------------------------------------------------------------
 
 local options_stack = List()
-
--- * ---------------------------------------------------------------------------------------------- lake.import
 
 --- Imports the lake module at 'path' and passes the table 'options'
 --- to it. 'options' may be retrieved in the module by calling 
@@ -364,7 +324,7 @@ lake.import = function(path, options)
   return unpack(results)
 end
 
--- * ---------------------------------------------------------------------------------------------- lake.getOptions
+-- * --------------------------------------------------------------------------
 
 --- Gets the options set for the current module, or nil if not in a 
 --- a module or if no options were passed.
@@ -374,7 +334,7 @@ lake.getOptions = function()
   return options_stack[options_stack:len()]
 end
 
--- * ---------------------------------------------------------------------------------------------- lake.cwd
+-- * --------------------------------------------------------------------------
 
 --- Returns the current working directory as a string
 ---
@@ -383,7 +343,7 @@ lake.cwd = function()
   return lua__cwd()
 end
 
--- * ---------------------------------------------------------------------------------------------- lake.chdir
+-- * --------------------------------------------------------------------------
 
 --- Changes the current working directory to 'path'. Returns
 --- a bool determining success.
@@ -394,7 +354,7 @@ lake.chdir = function(path)
   return 0 ~= C.lua__chdir(make_str(path))
 end
 
--- * ---------------------------------------------------------------------------------------------- lake.setMaxJobs
+-- * --------------------------------------------------------------------------
 
 --- Attempt to set the max jobs lake will use in building. If this 
 --- is set on command line (--max-jobs <n> or -j <n>), this call
@@ -405,7 +365,7 @@ lake.setMaxJobs = function(n)
   C.lua__setMaxJobs(n)
 end
 
--- * ---------------------------------------------------------------------------------------------- lake.getMaxJobs
+-- * --------------------------------------------------------------------------
 
 --- Get the current setting for max jobs.
 ---
@@ -414,12 +374,13 @@ lake.getMaxJobs = function()
   return C.lua__getMaxJobs()
 end
 
--- * ---------------------------------------------------------------------------------------------- lake.rm
+-- * --------------------------------------------------------------------------
 
 --- Remove a file or an empty directory.
 --- 'options' is an optional table of optional params:
 ---     * recursive = false
----         Recursively iterate the given path if it is a directory and delete all files.
+---         Recursively iterate the given path if it is a directory and delete 
+---         all files.
 ---     * force = false
 ---         Suppress asking the user if each file should be removed.
 --- 
@@ -430,10 +391,14 @@ end
 ---@return boolean
 lake.rm = function(path, options)
   options = options or {recursive = false, force = false}
-  return 0 ~= C.lua__rm(make_str(path), options.recursive or false, options.force or false)
+  return 0 ~=
+    C.lua__rm(
+      make_str(path),
+      options.recursive or false,
+      options.force or false)
 end
 
--- * ---------------------------------------------------------------------------------------------- lake.mkdir
+-- * --------------------------------------------------------------------------
 
 --- Creates the directory at the given path.
 --- 'options' is an optional table containing optional parameters
@@ -462,7 +427,7 @@ lake.mkdir = function(path, options)
   return true
 end
 
--- * ---------------------------------------------------------------------------------------------- lake.copy
+-- * --------------------------------------------------------------------------
 
 --- Copies the file at 'src' to 'dst'.
 ---
@@ -473,7 +438,7 @@ lake.copy = function(dst, src)
   return C.lua__copyFile(make_str(dst), make_str(src))
 end
 
--- * ---------------------------------------------------------------------------------------------- lake.find
+-- * --------------------------------------------------------------------------
 
 --- Globs from the current working directory and returns a List 
 --- of all files that match the given pattern.
@@ -509,15 +474,16 @@ lake.find = function(pattern)
   return out
 end
 
--- * ---------------------------------------------------------------------------------------------- lake.cmd
+-- * --------------------------------------------------------------------------
 
 --- Executes the program referred to by the first parameter
 --- and passes any following arguments as cli args.
 ---
---- TODO(sushi) add a way to pass callbacks for reading stdout/stderr while the process is 
----             running and maybe even passing a stdin if it ever seems useful/necessary.
+-- TODO(sushi) add a way to pass callbacks for reading stdout/stderr while the 
+--             process is running and maybe even passing a stdin if it ever 
+--             seems useful/necessary.
 ---
----@param args string[]
+---@param args string[] | Twine
 ---@param options table?
 ---@return number
 lake.cmd = function(args, options)
@@ -529,7 +495,9 @@ lake.cmd = function(args, options)
     if mt == Target then
       return x.path
     elseif mt == TargetGroup then
-      error("flattened cmd argument resolved to a TargetGroup, which cannot be stringized!")
+      error(
+        "flattened cmd argument resolved to a TargetGroup, which cannot be "..
+        "stringized!")
     end
   end)
 
@@ -542,7 +510,9 @@ lake.cmd = function(args, options)
 
   for arg,i in args:eachWithIndex() do
     if "string" ~= type(arg) then
-      local errstr = "argument "..tostring(i).." in call to cmd was not a string, it was a "..type(arg)..". Arguments were:\n"
+      local errstr =
+        "argument "..tostring(i).." in call to cmd was not a string, it was "..
+        "a "..type(arg)..". Arguments were:\n"
 
       for _,arg in ipairs(args) do
         errstr = " "..errstr..arg.."\n"
@@ -605,8 +575,9 @@ lake.cmd = function(args, options)
     local ret = C.lua__processPoll(handle, exit_code)
 
     if ret ~= 0 then
-      -- try to read until we stop recieving data because the process can report
-      -- that its terminated before all of its buffered output is consumed
+      -- try to read until we stop recieving data because the process can 
+      -- report that its terminated before all of its buffered output is 
+      -- consumed
       while doRead() ~= 0 do end
 
       C.lua__processClose(handle)
@@ -624,7 +595,7 @@ lake.cmd = function(args, options)
   end
 end
 
--- * ---------------------------------------------------------------------------------------------- lake.replace
+-- * --------------------------------------------------------------------------
 
 --- Performs a string replacement on 'subject', which may be a string
 --- or a table of strings, a List of strings, or a Twine. When a container is
@@ -655,11 +626,13 @@ lake.replace = function(subject, search, repl)
     local res = subject:gsub(search, repl)
     return res
   else
-    error("unsupported type given as subject of lake.replace: '"..type(subject).."'", 2)
+    error(
+      "unsupported type given as subject of lake.replace: '"..
+      type(subject).."'", 2)
   end
 end
 
--- * ---------------------------------------------------------------------------------------------- lake.getMonotonicClock
+-- * --------------------------------------------------------------------------
 
 --- Returns a timestamp in microseconds from the system's monotonic clock.
 ---
@@ -668,7 +641,7 @@ lake.getMonotonicClock = function()
   return assert(tonumber(C.lua__getMonotonicClock()))
 end
 
--- * ---------------------------------------------------------------------------------------------- lake.getRealtimeClock
+-- * --------------------------------------------------------------------------
 
 --- Returns a timestamp in microseconds from the system's realtime clock.
 ---
@@ -679,11 +652,11 @@ lake.getRealtimeClock = function()
 end
 
 
--- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
+-- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
 --      
 --      Target api
 --
--- * >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> -
+-- * >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> -
 
 
 --- A file that the user wants built. Targets may depend on other Targets and 
@@ -702,7 +675,7 @@ end
 Target = {}
 Target.__index = Target
 
--- * ---------------------------------------------------------------------------------------------- Target.new
+-- * --------------------------------------------------------------------------
 
 --- Creates a new target at 'path'.
 ---
@@ -716,13 +689,13 @@ Target.new = function(path)
   return o
 end
 
--- * ---------------------------------------------------------------------------------------------- Target.__tostring
+-- * --------------------------------------------------------------------------
 
 Target.__tostring = function(self)
   return self.path
 end
 
--- * ---------------------------------------------------------------------------------------------- Target:depends_on
+-- * --------------------------------------------------------------------------
 
 --- Defines the given target as a prerequisite of this one.
 ---
@@ -737,49 +710,58 @@ Target.dependsOn = function(self, x)
     for v,i in lake.flatten(x):eachWithIndex() do
       local v_type = type(v)
       if "string" ~= v_type then
-        error("Element "..i.." of flattened table given to Target.depends_on is not a string, rather a "..v_type.." whose value is "..tostring(v)..".", 2)
+        error(
+          "Element "..i.." of flattened table given to Target.depends_on is "..
+          "not a string, rather a "..v_type.." whose value is "..
+          tostring(v)..".", 2)
       end
       C.lua__makeDep(self.handle, lake.target(v).handle)
     end
   else
-    error("Target.depends_on can take either a string or a table of strings, got: "..x_type..".", 2)
+    error(
+      "Target.depends_on can take either a string or a table of strings, got: "
+      ..x_type..".", 2)
   end
   return self
 end
 
--- * ---------------------------------------------------------------------------------------------- Target:recipe
+-- * --------------------------------------------------------------------------
 
---- Defines the recipe used to create this target in the event that it does not exist or if any 
---- of its prerequisites are newer than it.
+--- Defines the recipe used to create this target in the event that it does not 
+--- exist or if any of its prerequisites are newer than it.
 ---
---- NOTE that this saves the cwd at the time the recipe is saved and the recipe is executed in 
---- that directory!
+--- NOTE that this saves the cwd at the time the recipe is saved and the recipe 
+--- is executed in that directory!
 ---
---- Unlike make, a recipe does not have any implicit variables defined for it to know what its 
---- inputs and outputs are. It is assumed that the function has all the information it needs 
---- captured where it is defined.
+--- Unlike make, a recipe does not have any implicit variables defined for it 
+--- to know what its inputs and outputs are. It is assumed that the function 
+--- has all the information it needs captured where it is defined.
 ---
 ---@param f function
 ---@return self
 Target.recipe = function(self, f)
   if "function" ~= type(f) then
-    error("expected a lua function as the recipe of target '"..self.path.."', got: "..type(f), 2)
+    error(
+      "expected a lua function as the recipe of target '"..self.path..
+      "', got: "..type(f), 2)
   end
   local recipeidx = C.lua__targetSetRecipe(self.handle)
   recipe_table[recipeidx] = co.create(f)
   return self
 end
 
--- * ---------------------------------------------------------------------------------------------- lake.target
+-- * --------------------------------------------------------------------------
 
---- Either creates the target at 'path' or returns it if it has already been created. Referring to
---- the same target by two different lexical paths is currently undefined behavior! Eg. it is not 
---- advisable to write something like: 
+--- Either creates the target at 'path' or returns it if it has already been 
+--- created. Referring to the same target by two different lexical paths is 
+--- currently undefined behavior! Eg. it is not advisable to write something 
+--- like: 
 --- ```lua
 ---   lake.target("./src/target.cpp")
 ---   lake.target("src/target.cpp")
 --- ```
---- and expect it to refer to the same file. This may be better defined in the future but for now...
+--- and expect it to refer to the same file. This may be better defined in 
+--- the future but for now...
 ---
 ---@param path string
 ---@return Target
@@ -793,7 +775,8 @@ lake.target = function(path)
   return targets[path]
 end
 
--- A grouping of targets that are built from a single invocation of a common recipe.
+-- A grouping of targets that are built from a single invocation of a common 
+-- recipe.
 TargetGroup =
 {
   -- array of targets belonging to this group
@@ -903,6 +886,5 @@ lake.__internal.targets = targets
 lake.__internal.recipe_table = recipe_table
 lake.__internal.coresume = co.resume
 lake.__internal.errhandler = errhandler
-lake.__internal.tryAction = tryAction
 
 return lake

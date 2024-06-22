@@ -58,7 +58,7 @@ Pool<ActiveProcess> active_process_pool = {};
 
 platform::TermSettings saved_term_settings;
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 Lake::init(const char** argv_, int argc_, mem::Allocator* allocator)
 {
@@ -92,7 +92,8 @@ b8 Lake::init(const char** argv_, int argc_, mem::Allocator* allocator)
   if (!fs::Path::exists(initpath))
   {
     if (resolved)
-      FATAL("no file was specified (-f) and no file with the default name 'lakefile.lua' could be found\n");
+      FATAL("no file was specified (-f) and no file with the default name "
+            "'lakefile.lua' could be found\n");
     else
       FATAL("failed to find specified file (-f) '", initpath, "'\n");
     return false;
@@ -132,7 +133,7 @@ b8 Lake::init(const char** argv_, int argc_, mem::Allocator* allocator)
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void Lake::deinit()
 {
@@ -183,7 +184,7 @@ struct ArgIter
   }
 };
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 processMaxJobsArg(Lake* lake, ArgIter* iter)
 {
@@ -204,7 +205,8 @@ b8 processMaxJobsArg(Lake* lake, ArgIter* iter)
   {
     if (!isdigit(*scan))
     {
-      FATAL("given argument '", arg, "' after '", mjarg, "' must be a number\n");
+      FATAL("given argument '", arg, "' after '", mjarg, 
+            "' must be a number\n");
       return false;
     }
 
@@ -220,7 +222,7 @@ b8 processMaxJobsArg(Lake* lake, ArgIter* iter)
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 processArgDoubleDash(Lake* lake, str arg, str* initfile, ArgIter* iter)
 {
@@ -274,7 +276,7 @@ b8 processArgDoubleDash(Lake* lake, str arg, str* initfile, ArgIter* iter)
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 processArgSingleDash(Lake* lake, str arg, str* initfile, ArgIter* iter)
 {
@@ -294,7 +296,7 @@ b8 processArgSingleDash(Lake* lake, str arg, str* initfile, ArgIter* iter)
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 Lake::processArgv(str* initfile)
 {
@@ -319,20 +321,20 @@ b8 Lake::processArgv(str* initfile)
     }
     else
     {
-      lua_cli_args.push(argv + iter.idx - 1);
+      // TODO(sushi) we could just build a list in lua directly here.
+      lua_cli_args.pushTail(argv + iter.idx - 1);
       DEBUG("Encountered unknown cli arg '", arg, 
-          "' so it has been added to the lua cli args list.\n");
+            "' so it has been added to the lua cli args list.\n");
     }
   }
 
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 Lake::run()
 {
-
   INFO("Loading lake lua module.\n");
 
 #if LAKE_DEBUG
@@ -353,8 +355,8 @@ b8 Lake::run()
 
   INFO("Setting lua globals.\n");
 
-  // TODO(sushi) this can probably be removed in favor of just tracking where on the 
-  //             stack these are when returned by the lake module.
+  // TODO(sushi) this can probably be removed in favor of just tracking 
+  //             where on the stack these are when returned by the lake module.
   lua.getfield(1, "__internal");
 
 #define setGlobal(name, var) \
@@ -365,25 +367,37 @@ b8 Lake::run()
   setGlobal("recipe_table", lake_recipe_table);
   setGlobal("coresume", lake_coroutine_resume);
   setGlobal("errhandler", lake_err_handler);
-  setGlobal("tryAction", lake_tryAction);
 
 #undef setGlobal
 
   lua.pop();
 
   lua.getglobal(lake_err_handler);
-  if (!lua.loadfile((char*)initpath.bytes) || !lua.pcall(0,0,2))
+  if (!lua.loadfile((char*)initpath.bytes) || 
+      !lua.pcall(0,1,2))
   {
     ERROR("failed to run ", initpath, ": ", lua.tostring(), "\n");
     lua.pop();
     return false;
   }
+
+  if (lua.isboolean())
+  {
+    // If the lakefile returns false, dont move onto building.
+    // Other other kind of return is ignored.
+    // TODO(sushi) make what the lakefile returns explicit, or have them 
+    //             signal not to perform building via a lake api function
+    //             or something.
+    if (!lua.toboolean())
+      return true;
+    lua.pop();
+  }
   lua.pop();
 
   INFO("Beginning build loop.\n");
 
-  // as of rn i think the only code that will run from here on is recipe callbacks
-  // but i could be wrong idk
+  // as of rn i think the only code that will run from here on is recipe 
+  // callbacks but i could be wrong idk
   lake.in_recipe = true;
 
   for (u64 build_pass = 0;;)
@@ -422,7 +436,8 @@ b8 Lake::run()
     
     if (active_recipes.isEmpty() && build_queue.isEmpty())
     {
-      INFO("Active recipe list and build queue are empty, we must be finished.\n");
+      INFO("Active recipe list and build queue are empty, we must be "
+           "finished.\n");
       break;
     }
 
@@ -449,23 +464,25 @@ b8 Lake::run()
           ;
       }
 
-      // Very naive way to try and prevent lake from constantly contesting for a thread 
-      // when running a recipe that spawns several processes itself. Eg. when building 
-      // llvm the recipe leaves it up to the generated build system stuff to run multiple 
-      // jobs. During this lake will be constantly polling the process for output/termination
-      // which wastes an entire thread of execution that whatever is building llvm could be 
-      // using.
+      // Very naive way to try and prevent lake from constantly contesting for 
+      // a thread when running a recipe that spawns several processes itself. 
+      // Eg. when building llvm the recipe leaves it up to the generated build 
+      // system stuff to run multiple jobs. During this lake will be constantly 
+      // polling the process for output/termination which wastes an entire 
+      // thread of execution that whatever is building llvm could be using.
       //
       // This is a really silly way to handle it and ideally later on should be 
-      // adjusted based on how long something is taking. Like, we can time how long the 
-      // current recipes have been running for and scale how often we poll based on that.
-      // This would work well to avoid my primary concern with rate limiting the polling: 
-      // accurately (sorta) tracking how long it takes for a recipe to complete. As long 
-      // as we scale this number to be negligible compared to the total time the recipe has 
-      // been running for, it shouldn't matter. 
+      // adjusted based on how long something is taking. Like, we can time how 
+      // long the current recipes have been running for and scale how often we 
+      // poll based on that. This would work well to avoid my primary concern 
+      // with rate limiting the polling: accurately (sorta) tracking how long 
+      // it takes for a recipe to complete. As long as we scale this number to 
+      // be negligible compared to the total time the recipe has been running 
+      // for, it shouldn't matter. 
       //
       // So,
-      // TODO(sushi) setup internal target recipe timers and then fix this issue
+      // TODO(sushi) setup internal target recipe timers and then fix this 
+      //             issue
       platform::sleep(TimeSpan::fromMicroseconds(3));
     }
   }
@@ -498,13 +515,13 @@ void assertGroup(Target*){}
 void assertSingle(Target*){}
 #endif
 
-/* ================================================================================================ Lua API
+/* ============================================================================
  *  Implementation of the api used in the lua lake module.
  */
 extern "C"
 {
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 Target* lua__createSingleTarget(str path)
 {
@@ -516,11 +533,12 @@ Target* lua__createSingleTarget(str path)
   return t;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void lua__makeDep(Target* target, Target* prereq)
 {
-  INFO("Making '", prereq->name(), "' a prerequisite of target '", target->name(), "'.\n");
+  INFO("Making '", prereq->name(), "' a prerequisite of target '", 
+       target->name(), "'.\n");
   SCOPED_INDENT;
 
   if (!target->prerequisites.has(prereq))
@@ -539,9 +557,10 @@ void lua__makeDep(Target* target, Target* prereq)
   }
 }
 
-/* ------------------------------------------------------------------------------------------------
- *  Sets the target as having a recipe and returns an index into the recipe table that the calling
- *  function is expected to use to set the recipe appropriately.
+/* ----------------------------------------------------------------------------
+ *  Sets the target as having a recipe and returns an index into the recipe 
+ *  table that the calling function is expected to use to set the recipe 
+ *  appropriately.
  */
 s32 lua__targetSetRecipe(Target* target)
 {
@@ -559,14 +578,17 @@ s32 lua__targetSetRecipe(Target* target)
   } 
   else
   {
-    TRACE("Target '", target->name(), "' is being marked as having a recipe.\n");
+    TRACE("Target '", target->name(), "' is being marked as having a " 
+          "recipe.\n");
     target->flags.set(Target::Flags::HasRecipe);
-    // TODO(sushi) targets that have their recipe set from the same directory should
-    //             use the same Path?? Probably better to store a set (AVL) of cwd
-    //             Paths and just have the thing on Target be a str.
+    // TODO(sushi) targets that have their recipe set from the same directory 
+    //             should use the same Path?? Probably better to store a set 
+    //             (AVL) of cwd Paths and just have the thing on Target be a 
+    //             str.
     target->recipe_working_directory = fs::Path::cwd();
 
-    // get the next slot to fill and then set 'next' to whatever that slot points to
+    // get the next slot to fill and then set 'next' to whatever that slot 
+    // points to
     lua.pushstring("next"_str);
     lua.gettable(-2);
 
@@ -591,7 +613,7 @@ s32 lua__targetSetRecipe(Target* target)
   }
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 Target* lua__createGroupTarget()
 {
@@ -603,14 +625,15 @@ Target* lua__createGroupTarget()
   return group;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void lua__addTargetToGroup(Target* group, Target* target)
 {
   assertGroup(group);
   assertSingle(target);
 
-  INFO("Adding target '", target->name(), "' to group '", group->name(), "'.\n");
+  INFO("Adding target '", target->name(), "' to group '", 
+       group->name(), "'.\n");
   SCOPED_INDENT;
 
   group->group.targets.insert(target);
@@ -619,13 +642,14 @@ void lua__addTargetToGroup(Target* group, Target* target)
 
   if (target->build_node)
   {
-    TRACE("Target '", target->name(), "' is in the build queue so it will be removed.\n");
+    TRACE("Target '", target->name(), "' is in the build queue so it will be "
+          "removed.\n");
     lake.build_queue.remove(target->build_node);
     target->build_node = nullptr;
   }
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 lua__targetAlreadyInGroup(Target* target)
 {
@@ -634,7 +658,7 @@ b8 lua__targetAlreadyInGroup(Target* target)
 }
 
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 str lua__getTargetPath(Target* target)
 {
@@ -642,7 +666,7 @@ str lua__getTargetPath(Target* target)
   return target->name();
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 const char* lua__nextCliarg()
 {
@@ -654,27 +678,29 @@ const char* lua__nextCliarg()
   return out;
 }
 
-/* ------------------------------------------------------------------------------------------------
- *  Finalizes the given group. We assume no more targets will be added to it and hash together the
- *  hashes of each target in the group to form the hash of the group. 
+/* ----------------------------------------------------------------------------
+ *  Finalizes the given group. We assume no more targets will be added to it 
+ *  and hash together the hashes of each target in the group to form the hash 
+ *  of the group. 
  *
  *  TODO(sushi) implement this. I don't know if it is actually useful, its only usecase I can
- *              think of is referring to the same group by calling 'lake.targets' with the 
- *              same paths, but I don't intend on ever doing that myself.
+ *              think of is referring to the same group by calling 
+ *              'lake.targets' with the same paths, but I don't intend on ever 
+ *              doing that myself.
  */
 void lua__finalizeGroup(Target* target)
 {
   assertGroup(target);
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void lua__stackDump()
 {
   lake.lua.stackDump();
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 u64 lua__getMonotonicClock()
 {
@@ -682,21 +708,21 @@ u64 lua__getMonotonicClock()
   return now.s * 1e6 + now.ns / 1e3;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 lua__makeDir(str path, b8 make_parents)
 {
   return fs::Dir::make(path, make_parents);
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void lua__dirDestroy(fs::Dir* dir)
 {
   mem::stl_allocator.deconstruct(dir);
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 ActiveProcess* lua__processSpawn(str* args, u32 args_count)
 {
@@ -716,8 +742,10 @@ ActiveProcess* lua__processSpawn(str* args, u32 args_count)
   } 
 
   ActiveProcess* proc = active_process_pool.add();
-  Process::Stream streams[3] = {{}, {true, &proc->stdout}, {true, &proc->stderr}};
-  proc->process = Process::spawn(args[0], {args+1, args_count-1}, streams, nil);
+  Process::Stream streams[3] = 
+    {{}, {true, &proc->stdout}, {true, &proc->stderr}};
+  proc->process = 
+    Process::spawn(args[0], {args+1, args_count-1}, streams, nil);
   if (isnil(proc->process))
   {
     ERROR("failed to spawn process using file '", args[0], "'\n");
@@ -727,7 +755,7 @@ ActiveProcess* lua__processSpawn(str* args, u32 args_count)
   return proc;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void lua__processRead(
     ActiveProcess* proc, 
@@ -743,7 +771,7 @@ void lua__processRead(
   *out_stderr_bytes_read = proc->stderr.read({(u8*)stderr_ptr, stderr_len});
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 lua__processPoll(ActiveProcess* proc, s32* out_exit_code)
 {
@@ -759,7 +787,7 @@ b8 lua__processPoll(ActiveProcess* proc, s32* out_exit_code)
   return false;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void lua__processClose(ActiveProcess* proc)
 {
@@ -771,7 +799,7 @@ void lua__processClose(ActiveProcess* proc)
   active_process_pool.remove(proc);
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  *  This could PROBABLY be implemented better but whaaatever.
  */
 struct LuaGlobResult
@@ -796,7 +824,7 @@ LuaGlobResult lua__globCreate(str pattern)
   return {matches.arr, matches.len()};
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void lua__globDestroy(LuaGlobResult x)
 {
@@ -808,7 +836,7 @@ void lua__globDestroy(LuaGlobResult x)
   arr.destroy();
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void lua__setMaxJobs(s32 n)
 {
@@ -822,14 +850,14 @@ void lua__setMaxJobs(s32 n)
   }
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 s32 lua__getMaxJobs()
 {
   return lake.max_jobs;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 int lua__importFile(lua_State* L)
 {
@@ -880,7 +908,7 @@ int lua__importFile(lua_State* L)
   return nresults;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 int lua__cwd(lua_State* L)
 {
@@ -894,14 +922,14 @@ int lua__cwd(lua_State* L)
   return 1;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 lua__chdir(str path)
 {
   return fs::Path::chdir(path);
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 int lua__canonicalizePath(lua_State* L)
 {
@@ -924,14 +952,14 @@ int lua__canonicalizePath(lua_State* L)
   return 1;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 lua__copyFile(str dst, str src)
 {
   return fs::File::copy(dst, src);
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 lua__rm(str path, b8 recursive, b8 force)
 {
@@ -941,8 +969,8 @@ b8 lua__rm(str path, b8 recursive, b8 force)
   if (!Path::isDirectory(path))
     return File::unlink(path);
 
-  // TODO(sushi) uhh apparently i forgot to implement the non-recursive part of this
-  //             so do that when i actually use it :P
+  // TODO(sushi) uhh apparently i forgot to implement the non-recursive part 
+  //             of this so do that when i actually use it :P
   if (recursive)
   {
     mem::Bump bump;
@@ -958,7 +986,8 @@ b8 lua__rm(str path, b8 recursive, b8 force)
       SList<Path> files; 
 
       DirEntry() : dir(nil), path(nil), files(nil) {} 
-      DirEntry(Dir&& dir, Path* path, mem::Bump* bump) : dir(dir), path(path) { files = SList<Path>::create(bump); }
+      DirEntry(Dir&& dir, Path* path, mem::Bump* bump) 
+        : dir(dir), path(path) { files = SList<Path>::create(bump); }
     };
 
     auto pathpool = DLinkedPool<Path>::create(&bump);
@@ -1013,7 +1042,8 @@ b8 lua__rm(str path, b8 recursive, b8 force)
 
       if (full->isDirectory())
       {
-        dirpool.pushHead(DirEntry(Dir::open(full->buffer.asStr()), full, &bump));
+        dirpool.pushHead(
+            DirEntry(Dir::open(full->buffer.asStr()), full, &bump));
         dirstack.pushTail(&dirpool.head());
       }
       else
@@ -1025,7 +1055,9 @@ b8 lua__rm(str path, b8 recursive, b8 force)
 
     if (!force && file_count)
     {
-      io::formatv(&fs::stdout, "Are you sure you want to delete all ", file_count, " files in '", path, "'? [y/N] ");
+      io::formatv(&fs::stdout, 
+          "Are you sure you want to delete all ", file_count, " files in '", 
+          path, "'? [y/N] ");
       u8 c;
       fs::stdin.read({&c, 1});
       io::format(&fs::stdout, "\n");
@@ -1047,14 +1079,16 @@ b8 lua__rm(str path, b8 recursive, b8 force)
   }
   else
   {
-    ERROR("cannot rm path '", path, "' because either its a directory and recursive was not specified\n");
+    ERROR("cannot rm path '", path, "' because either its a directory and "
+          "recursive was not specified or because I still have not added "
+          "non-recursive rm yet ;_;\n");
     return false;
   }
 
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void lua__queueAction(str name)
 {
@@ -1063,14 +1097,14 @@ void lua__queueAction(str name)
   lake.action_queue.pushTail(s);
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 lua__inRecipe()
 {
   return lake.in_recipe;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 lua__touch(str path)
 {

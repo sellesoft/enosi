@@ -15,16 +15,17 @@ extern "C"
 #include "lauxlib.h"
 }
 
-static Logger logger = Logger::create("lake.target"_str, Logger::Verbosity::Notice);
+static Logger logger = 
+  Logger::create("lake.target"_str, Logger::Verbosity::Notice);
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 u64 hashTarget(const Target* t)
 {
   return t->hash;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void Target::initCommon()
 {
@@ -33,7 +34,7 @@ void Target::initCommon()
   build_node = nullptr;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 str Target::name()
 {
@@ -46,7 +47,7 @@ str Target::name()
   return {};
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void Target::initSingle(str path)
 {
@@ -54,17 +55,18 @@ void Target::initSingle(str path)
   kind = Kind::Single;
   auto temp = fs::Path::from(path);
   mem::copy(&single.path, &temp, sizeof(fs::Path)); 
-  // TODO(sushi) make a lexical absolute thing so that this can still work in that case.
-  //             this needs to be done because i use cpp to get the headers a cpp 
-  //             file depends on, which gives the paths relative to where they're 
-  //             being included from, so if i dont sanitize them multiple targets
-  //             will be created for the same file since targets are based on the path.
+  // TODO(sushi) make a lexical absolute thing so that this can still work in 
+  //             that case. This needs to be done because i use clang to get 
+  //             the headers a cpp file depends on, which gives the paths 
+  //             relative to where they're being included from, so if i dont 
+  //             sanitize them multiple targets will be created for the same 
+  //             file since targets are based on the path.
   if (single.path.exists())
     single.path.makeAbsolute();
   hash = path.hash();
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void Target::initGroup()
 {
@@ -74,7 +76,7 @@ void Target::initGroup()
   group.targets = TargetSet::create();
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void Target::deinit()
 {
@@ -87,7 +89,7 @@ void Target::deinit()
   recipe_working_directory.destroy();
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 Target::exists()
 {
@@ -107,7 +109,7 @@ b8 Target::exists()
   return {};
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 s64 Target::modtime()
 {
@@ -115,7 +117,11 @@ s64 Target::modtime()
   switch (kind)
   {
     // TODO(sushi) what if our path is not null-terminated ?
-    case Kind::Single: return fs::FileInfo::of(single.path.buffer.asStr()).last_modified_time.s;
+    case Kind::Single: 
+      return 
+        fs::FileInfo::of(
+          single.path.buffer.asStr())
+            .last_modified_time.s;
 
     case Kind::Group: {
       s64 min = 9223372036854775807;
@@ -132,14 +138,14 @@ s64 Target::modtime()
 }
 
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 Target::isNewerThan(Target* t)
 {
   return modtime() > t->modtime();
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 Target::needsBuilt()
 {
@@ -149,13 +155,15 @@ b8 Target::needsBuilt()
     case Kind::Single: {
       if (flags.test(Flags::PrerequisiteJustBuilt))
       {
-        TRACE("Target '", single.path, "' needs built because the 'PrerequisiteJustBuilt' flag was set.\n");
+        TRACE("Target '", single.path, "' needs built because the "
+              "'PrerequisiteJustBuilt' flag was set.\n");
         return true;
       }
 
       if (!exists())
       {
-        TRACE("Target '", single.path, "' needs built because it does not exist on disk.\n");
+        TRACE("Target '", single.path, "' needs built because it does not "
+              "exist on disk.\n");
         return true;
       }
     
@@ -164,7 +172,8 @@ b8 Target::needsBuilt()
       {
         if (prereq.isNewerThan(this))
         {
-          TRACE("Target '", single.path, "' needs built because its prerequisite, '", prereq.name(), "', is newer.\n");
+          TRACE("Target '", single.path, "' needs built because its "
+                "prerequisite, '", prereq.name(), "', is newer.\n");
           return true;
         }
         TRACE("Prereq '", prereq.name(), "' is older than the target.\n");
@@ -176,20 +185,21 @@ b8 Target::needsBuilt()
   return false;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 Target::hasRecipe()
 {
   return flags.test(Flags::HasRecipe);
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 Target::RecipeResult Target::resumeRecipe(LuaState& lua)
 {
   if (!lua_ref || !flags.test(Flags::HasRecipe))
   {
-    ERROR("Target '", name(), "' had resume_recipe() called on it, but it has no recipe!");
+    ERROR("Target '", name(), "' had resume_recipe() called on it, but it "
+          "has no recipe!");
     return RecipeResult::Error;
   }
 
@@ -208,10 +218,11 @@ Target::RecipeResult Target::resumeRecipe(LuaState& lua)
   // We only ever expect 2 returns:
   // the first being co.resume reporting if everything went okay,
   // the second either being nil, or not nil. 
-  // A recipe, for now, is expected to return nil when it is finished. Internally
-  // when we are asyncronously checking a process we return 'true' to indicate 
-  // that the recipe is not yet finished, but we dont check for this explicitly.
-  if (lua.pcall(1, 2))
+  // A recipe, for now, is expected to return nil when it is finished. 
+  // Internally when we are asyncronously checking a process we return 'true' 
+  // to indicate that the recipe is not yet finished, but we dont check for 
+  // this explicitly.
+  if (!lua.pcall(1, 2))
   {
     ERROR(lua.tostring(), "\n");
     return RecipeResult::Error;
@@ -226,9 +237,10 @@ Target::RecipeResult Target::resumeRecipe(LuaState& lua)
     return RecipeResult::Error;
   }
 
-  // this kiiinda sucks a little but i want to support a recipe managing cwd, so just save 
-  // the cwd everytime we resume. This is probably horribly inefficient and should be replaced
-  // with something that just reads cwd into the path obj already existing on the target
+  // this kiiinda sucks a little but i want to support a recipe managing cwd, 
+  // so just save the cwd everytime we resume. This is probably horribly 
+  // inefficient and should be replaced with something that just reads cwd 
+  // into the path obj already existing on the target
   recipe_working_directory.destroy();
   recipe_working_directory = fs::Path::cwd();
 
@@ -240,7 +252,7 @@ Target::RecipeResult Target::resumeRecipe(LuaState& lua)
     return RecipeResult::InProgress;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void Target::updateDependents(TargetList& build_queue, b8 mark_just_built)
 {
@@ -253,7 +265,8 @@ void Target::updateDependents(TargetList& build_queue, b8 mark_just_built)
           dependent.flags.set(Flags::PrerequisiteJustBuilt);
         if (dependent.unsatified_prereq_count == 1)
         {
-          INFO("Dependent '", dependent.name(), "' has no more unsatisfied prerequisites, adding it to the build queue.\n");
+          INFO("Dependent '", dependent.name(), "' has no more unsatisfied "
+               "prerequisites, adding it to the build queue.\n");
           dependent.build_node = build_queue.pushTail(&dependent);
           dependent.unsatified_prereq_count = 0;
         }
@@ -261,7 +274,9 @@ void Target::updateDependents(TargetList& build_queue, b8 mark_just_built)
         {
           
           dependent.unsatified_prereq_count -= 1;
-          TRACE("Target '", name(), "' has ", dependent.unsatified_prereq_count, " unsatisfied prereqs left.\n");
+          TRACE("Target '", name(), "' has ", 
+                 dependent.unsatified_prereq_count, " unsatisfied prereqs "
+                 "left.\n");
         }
       }
     } break;
