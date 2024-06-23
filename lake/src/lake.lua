@@ -94,10 +94,10 @@ ffi.cdef
   void* lua__processSpawn(str* args, u32 args_count);
   void lua__processRead(
     void* proc, 
-    void* stdout_ptr, u64 stdout_len, u64* out_stdout_bytes_read,
-    void* stderr_ptr, u64 stderr_len, u64* out_stderr_bytes_read);
-  b8 lua__processPoll(void* proc, s32* out_exit_code);
+    void* ptr, u64 len, u64* out_bytes_read);
+  b8 lua__processCheck(void* proc, s32* out_exit_code);
   void lua__processClose(void* proc);
+  b8 lua__processCanRead(void* proc);
 
   typedef struct
   {
@@ -166,7 +166,6 @@ while true do
 
   arg = ffi.string(arg)
 
-  print(arg)
   lake.cliargs:push(arg)
 end
 
@@ -503,8 +502,7 @@ lake.cmd = function(args, options)
 
   options = options or {}
 
-  local onStdout = options.onStdout
-  local onStderr = options.onStderr
+  local onRead = options.onRead
 
   local argsarr = ffi.new("str["..(args:len()+1).."]")
 
@@ -537,48 +535,41 @@ lake.cmd = function(args, options)
   local buffer = require "string.buffer"
 
   local out_buf = buffer.new()
-  local err_buf = buffer.new()
 
   local space_wanted = 256
 
   local exit_code = ffi.new("s32[1]")
   local out_read = ffi.new("u64[1]")
-  local err_read = ffi.new("u64[1]")
 
-  local doRead = function()
-    local out_ptr, out_len = out_buf:reserve(space_wanted)
-    local err_ptr, err_len = err_buf:reserve(space_wanted)
+  local tryRead = function()
+    if not onRead then return 0 end
 
-    C.lua__processRead(handle,
-      out_ptr, out_len, out_read,
-      err_ptr, err_len, err_read)
+    if 0 == C.lua__processCanRead(handle) then
+      return 0
+    end
 
-    -- print(out_read[0], err_read[0])
+    local ptr, len = out_buf:reserve(space_wanted)
+
+    C.lua__processRead(handle, ptr, len, out_read)
 
     out_buf:commit(out_read[0])
-    err_buf:commit(err_read[0])
 
-    if onStdout and out_read[0] ~= 0 then
-      onStdout(ffi.string(out_ptr, out_read[0]))
+    if onRead and out_read[0] ~= 0 then
+      onRead(ffi.string(ptr, out_read[0]))
     end
-
-    if onStderr and err_read[0] ~= 0 then
-      onStderr(ffi.string(err_ptr, err_read[0]))
-    end
-
-    return out_read[0] + err_read[0]
+    return out_read[0]
   end
 
   while true do
-    doRead()
+    tryRead()
 
-    local ret = C.lua__processPoll(handle, exit_code)
+    local ret = C.lua__processCheck(handle, exit_code)
 
     if ret ~= 0 then
       -- try to read until we stop recieving data because the process can 
       -- report that its terminated before all of its buffered output is 
       -- consumed
-      while doRead() ~= 0 do end
+      while tryRead() ~= 0 do end
 
       C.lua__processClose(handle)
 

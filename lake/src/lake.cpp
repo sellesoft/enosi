@@ -49,8 +49,7 @@ Lake lake; // global for now, maybe not later
 struct ActiveProcess
 {
   Process process;
-  fs::File stdout;
-  fs::File stderr;
+  fs::File stream;
 };
 
 Pool<ActiveProcess> active_process_pool = {};
@@ -153,6 +152,7 @@ void Lake::deinit()
   action_pool.destroy();
   action_queue.destroy();
 
+  // TODO(sushi) this needs to be done using some platform on exit thing.
   platform::termRestoreSettings(saved_term_settings);
 }
 
@@ -522,6 +522,7 @@ extern "C"
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 Target* lua__createSingleTarget(str path)
 {
   Target* t = lake.target_pool.add();
@@ -534,6 +535,7 @@ Target* lua__createSingleTarget(str path)
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 void lua__makeDep(Target* target, Target* prereq)
 {
   INFO("Making '", prereq->name(), "' a prerequisite of target '", 
@@ -561,6 +563,7 @@ void lua__makeDep(Target* target, Target* prereq)
  *  table that the calling function is expected to use to set the recipe 
  *  appropriately.
  */
+EXPORT_DYNAMIC
 s32 lua__targetSetRecipe(Target* target)
 {
   LuaState& lua = lake.lua;
@@ -614,6 +617,7 @@ s32 lua__targetSetRecipe(Target* target)
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 Target* lua__createGroupTarget()
 {
   Target* group = lake.target_pool.add();
@@ -626,6 +630,7 @@ Target* lua__createGroupTarget()
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 void lua__addTargetToGroup(Target* group, Target* target)
 {
   assertGroup(group);
@@ -650,6 +655,7 @@ void lua__addTargetToGroup(Target* group, Target* target)
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 b8 lua__targetAlreadyInGroup(Target* target)
 {
   assertSingle(target);
@@ -659,6 +665,7 @@ b8 lua__targetAlreadyInGroup(Target* target)
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 str lua__getTargetPath(Target* target)
 {
   assertSingle(target);
@@ -667,6 +674,7 @@ str lua__getTargetPath(Target* target)
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 const char* lua__nextCliarg()
 {
   if (!lake.lua_cli_arg_iterator)
@@ -687,6 +695,7 @@ const char* lua__nextCliarg()
  *              'lake.targets' with the same paths, but I don't intend on ever 
  *              doing that myself.
  */
+EXPORT_DYNAMIC
 void lua__finalizeGroup(Target* target)
 {
   assertGroup(target);
@@ -694,6 +703,7 @@ void lua__finalizeGroup(Target* target)
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 void lua__stackDump()
 {
   lake.lua.stackDump();
@@ -701,6 +711,7 @@ void lua__stackDump()
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 u64 lua__getMonotonicClock()
 {
   auto now = TimePoint::monotonic();
@@ -709,6 +720,7 @@ u64 lua__getMonotonicClock()
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 b8 lua__makeDir(str path, b8 make_parents)
 {
   return fs::Dir::make(path, make_parents);
@@ -716,6 +728,7 @@ b8 lua__makeDir(str path, b8 make_parents)
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 void lua__dirDestroy(fs::Dir* dir)
 {
   mem::stl_allocator.deconstruct(dir);
@@ -723,6 +736,7 @@ void lua__dirDestroy(fs::Dir* dir)
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 ActiveProcess* lua__processSpawn(str* args, u32 args_count)
 {
   assert(args && args_count);
@@ -741,10 +755,8 @@ ActiveProcess* lua__processSpawn(str* args, u32 args_count)
   } 
 
   ActiveProcess* proc = active_process_pool.add();
-  Process::Stream streams[3] = 
-    {{}, {true, &proc->stdout}, {true, &proc->stderr}};
   proc->process = 
-    Process::spawn(args[0], {args+1, args_count-1}, streams, nil);
+    Process::spawnpty(args[0], {args+1, args_count-1}, &proc->stream);
   if (isnil(proc->process))
   {
     ERROR("failed to spawn process using file '", args[0], "'\n");
@@ -756,28 +768,41 @@ ActiveProcess* lua__processSpawn(str* args, u32 args_count)
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 void lua__processRead(
     ActiveProcess* proc, 
-    void* stdout_ptr, u64 stdout_len, u64* out_stdout_bytes_read,
-    void* stderr_ptr, u64 stderr_len, u64* out_stderr_bytes_read)
+    void* ptr, u64 len, u64* out_bytes_read)
 {
-  assert(
-    proc &&
-    stdout_ptr && stdout_len && out_stdout_bytes_read &&
-    stderr_ptr && stderr_len && out_stderr_bytes_read);
+  assert(proc && ptr && len && out_bytes_read);
+  *out_bytes_read = proc->stream.read({(u8*)ptr, len});
+}
 
-  *out_stdout_bytes_read = proc->stdout.read({(u8*)stdout_ptr, stdout_len});
-  *out_stderr_bytes_read = proc->stderr.read({(u8*)stderr_ptr, stderr_len});
+/* ----------------------------------------------------------------------------
+ *  TODO(sushi) maybe add support for writing someday.
+ *
+ *  This needs to be explicitly checked now that we use pty's instead of plain
+ *  pipes (which is kinda a mistake, I shoulda made that optional!).
+ */
+EXPORT_DYNAMIC
+b8 lua__processCanRead(ActiveProcess* proc)
+{
+  assert(proc);
+
+  fs::PollEventFlags flags = fs::PollEvent::In;
+  if (!proc->stream.poll(&flags))
+    return false;
+
+  return flags.test(fs::PollEvent::In);
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 lua__processPoll(ActiveProcess* proc, s32* out_exit_code)
+EXPORT_DYNAMIC
+b8 lua__processCheck(ActiveProcess* proc, s32* out_exit_code)
 {
-  assert(proc && out_exit_code);
-
+  assert(proc and out_exit_code);
+  
   proc->process.checkStatus();
-
   if (proc->process.terminated)
   {
     *out_exit_code = proc->process.exit_code;
@@ -788,13 +813,13 @@ b8 lua__processPoll(ActiveProcess* proc, s32* out_exit_code)
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 void lua__processClose(ActiveProcess* proc)
 {
   assert(proc);
   TRACE("closing proc ", (void*)proc, "\n");
 
-  proc->stdout.close();
-  proc->stderr.close();
+  proc->stream.close();
   active_process_pool.remove(proc);
 }
 
@@ -807,9 +832,9 @@ struct LuaGlobResult
   s32 paths_count;
 };
 
+EXPORT_DYNAMIC
 LuaGlobResult lua__globCreate(str pattern)
 {
-
   auto matches = Array<str>::create();
   auto glob = fs::Globber::create(pattern);
   glob.run(
@@ -825,6 +850,7 @@ LuaGlobResult lua__globCreate(str pattern)
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 void lua__globDestroy(LuaGlobResult x)
 {
   auto arr = Array<str>::fromOpaquePointer(x.paths);
@@ -837,6 +863,7 @@ void lua__globDestroy(LuaGlobResult x)
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 void lua__setMaxJobs(s32 n)
 {
   if (!lake.max_jobs_set_on_cli)
@@ -851,6 +878,7 @@ void lua__setMaxJobs(s32 n)
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 s32 lua__getMaxJobs()
 {
   return lake.max_jobs;
@@ -858,6 +886,7 @@ s32 lua__getMaxJobs()
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 int lua__importFile(lua_State* L)
 {
   // TODO(sushi) update to LuaState maybe eventually.
@@ -909,6 +938,7 @@ int lua__importFile(lua_State* L)
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 int lua__cwd(lua_State* L)
 {
   auto cwd = fs::Path::cwd();
@@ -923,6 +953,7 @@ int lua__cwd(lua_State* L)
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 b8 lua__chdir(str path)
 {
   return fs::Path::chdir(path);
@@ -930,6 +961,7 @@ b8 lua__chdir(str path)
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 int lua__canonicalizePath(lua_State* L)
 {
   size_t len;
@@ -953,6 +985,7 @@ int lua__canonicalizePath(lua_State* L)
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 b8 lua__copyFile(str dst, str src)
 {
   return fs::File::copy(dst, src);
@@ -960,6 +993,7 @@ b8 lua__copyFile(str dst, str src)
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 b8 lua__rm(str path, b8 recursive, b8 force)
 {
   // TODO(sushi) move to iro
@@ -1089,15 +1123,7 @@ b8 lua__rm(str path, b8 recursive, b8 force)
 
 /* ----------------------------------------------------------------------------
  */
-void lua__queueAction(str name)
-{
-  str* s = lake.action_pool.add();
-  *s = name.allocateCopy();
-  lake.action_queue.pushTail(s);
-}
-
-/* ----------------------------------------------------------------------------
- */
+EXPORT_DYNAMIC
 b8 lua__inRecipe()
 {
   return lake.in_recipe;
@@ -1105,6 +1131,7 @@ b8 lua__inRecipe()
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 b8 lua__touch(str path)
 {
   return platform::touchFile(path);
