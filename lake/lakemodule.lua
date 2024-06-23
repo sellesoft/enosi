@@ -25,6 +25,7 @@ report.executable(tostring(lakeexe))
 local cflags = List
 {
   "-Isrc",
+  "-DIRO_LINUX=1",
   options.getProjIncludeDirFlags "iro"
 }
 
@@ -48,12 +49,12 @@ for c_file in c_files:each() do
   report.objFile(o_file)
 
   lake.target(o_file)
-    :dependsOn(c_file)
-    :recipe(recipes.compiler(c_file, o_file, cflags))
+      :dependsOn(c_file)
+      :recipe(recipes.compiler(c_file, o_file, cflags))
 
   lake.target(d_file)
-    :dependsOn(c_file)
-    :recipe(recipes.depfile(c_file, d_file, o_file, cflags))
+      :dependsOn(c_file)
+      :recipe(recipes.depfile(c_file, d_file, o_file, cflags))
 end
 
 local ofiles = lake.flatten {reports.lake.objFiles, reports.iro.objFiles}
