@@ -5,6 +5,10 @@ lake := ${build_dir}/lake
 
 all: ${lake}
 
+# clean up stuff we output
+clean:
+	-rm -r makebuild/*
+
 VPATH = src
 
 # collect c files for the common files, lpp, and commonlua
@@ -15,17 +19,11 @@ c_files := $(shell find src/ -type f -name '*.cpp')
 o_files := $(foreach file,$(c_files),${build_dir}/$(file:.cpp=.o))
 d_files := $(o_files:.o=.d)
 
-iro_c_files := $(shell find ../iro/iro/ -type f -name '*.cpp')
-iro_o_files := $(foreach file,$(iro_c_files),${build_dir}/$(file:.cpp=.o))
-iro_d_files := $(iro_o_files:.o=.d)
+iro_o_files := $(shell find ../iro/makebuild/${mode}/ -type f -name '*.o')
 
-lua_files := src/lake.lua src/twine.lua src/list.lua
+lua_files := src/lake.lua
 lua_o_files := $(foreach file,$(lua_files),${build_dir}/$(file:.lua=.lua.o))
 
-# clean up stuff we output
-clean:
-	-rm -r build/*
-	-rm -r src/generated/*
 
 # set verbose to false unless it was already specified 
 # on cmdline (eg. make verbose=true)
@@ -51,7 +49,8 @@ compiler_flags :=     \
 	-Wno-switch       \
 	-Wno-\#warnings   \
 	-Wno-unused-function \
-	-fno-caret-diagnostics
+	-fno-caret-diagnostics \
+	-fvisibility=hidden
 
 ifeq ($(mode),debug)
 	compiler_flags += -O0 -ggdb3 -DLAKE_DEBUG=1
@@ -64,7 +63,7 @@ linker_flags := \
 	-lluajit    \
 	-lexplain   \
 	-lm         \
-	-Wl,--export-dynamic
+	-Wl,-E
 
 # print a success message
 reset := \033[0m
@@ -89,21 +88,8 @@ ${build_dir}/%.d: %.cpp
 	@mkdir -p $(@D) # ensure directories exist
 	$(v)${compiler} -E $< ${compiler_flags} -MM -MG -MT ${build_dir}/$*.o -o $@
 
-src/generated/token.enum.h    \
-src/generated/token.strings.h \
-src/generated/token.kwmap.h &: src/tokens.lua
-	${v}luajit $<
-	$(call print,$<,$@)
-
-src/generated/cliargparser.h: src/cliargs.lua
-	${v}luajit $<
-	$(call print,$<,$@)
-
-# src/generated/lakeluacompiled.o: src/lake.lua
-# 	${v}luajit -b -g $< $@
-# 	$(call print,$<,$@)
-
 ${build_dir}/%.lua.o: %.lua
+	@mkdir -p $(@D) # ensure directories exist
 	${v}luajit -b -g $< $@
 	$(call print,$<,$@)
 
