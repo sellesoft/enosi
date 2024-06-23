@@ -16,7 +16,7 @@
 namespace iro
 {
 
-/* ================================================================================================ Process
+/* ============================================================================
  */
 struct Process
 {
@@ -24,11 +24,12 @@ struct Process
 
   Handle handle;
   b8 terminated;
+  b8 ispty;
   s32 exit_code;
 
-    /* ============================================================================================ Process:Stream
+  /* ==========================================================================
    *  A file stream that may replace one of the process' stdio streams.
-     */
+   */
   struct Stream
   {
     // prevent blocking on reads/writes 
@@ -48,8 +49,15 @@ struct Process
   // parent process to read from it. If the given stream is marked as 
   // non_blocking, reading or writing to the child process will be done 
   // in an async manner (eg. if the child process does not have any buffered
-  // data on stdout, the parent process wont wait for data like it normally does)
-  static Process spawn(str file, Slice<str> args, Stream streams[3], str cwd);
+  // data on stdout, the parent process wont wait for data like it normally 
+  // does)
+  static Process spawn(
+      str        file, 
+      Slice<str> args, 
+      Stream     streams[3], 
+      str        cwd);
+
+  static Process spawnpty(str file, Slice<str> args, fs::File* stream);
 
   // Checks the status of this process and sets 'terminated' and 'exit_code'
   // if the process has finished.

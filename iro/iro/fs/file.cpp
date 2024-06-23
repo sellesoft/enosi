@@ -106,24 +106,43 @@ void File::close()
 s64 File::write(Bytes bytes)
 {
   if (!isOpen() ||
-    !canWrite())
+      !canWrite())
     return -1;
 
-  return platform::write(handle, bytes, openflags.test(OpenFlag::NoBlock));
+  return platform::write(
+      handle, 
+      bytes, 
+      openflags.test(OpenFlag::NoBlock),
+      is_pty);
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 s64 File::read(Bytes bytes)
 {
   if (!isOpen() ||
-    !canRead())
+      !canRead())
     return -1;
 
-  return platform::read(handle, bytes, openflags.test(OpenFlag::NoBlock));
+  return platform::read(
+      handle, 
+      bytes, 
+      openflags.test(OpenFlag::NoBlock),
+      is_pty);
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
+ */
+b8 File::poll(PollEventFlags* flags)
+{
+  assert(handle and flags);
+
+  if (!platform::poll(handle, flags))
+    return false;
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
  */
 File File::fromFileDescriptor(u64 fd, OpenFlags flags)
 {

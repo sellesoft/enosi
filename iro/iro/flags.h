@@ -29,6 +29,8 @@ struct Flags
     return out; 
   }
 
+  void clear() { flags = 0; }
+
   constexpr Flags<T>() {}
 
   template<typename... Args>

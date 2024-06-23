@@ -59,7 +59,24 @@ enum class FileKind
   Socket,
 };
 
-/* ================================================================================================ fs::File
+/* ============================================================================
+ *  Arguments and returns from File::poll
+ */
+enum class PollEvent
+{
+  In,  // There is data to read, so a call to read() will not block.
+  Out, // Writing now will not block.
+
+  // These events are only returned and have no effect on the request.
+  Err,     // Error occured.
+  HangUp,  // Whatever was there isnt anymore.
+  Invalid, // Invalid request.
+};
+typedef Flags<PollEvent> PollEventFlags;
+
+DefineFlagsOrOp(PollEventFlags, PollEvent);
+
+/* ============================================================================
  */
 struct File : public io::IO
 {
@@ -72,15 +89,24 @@ struct File : public io::IO
 
   OpenFlags openflags;
 
-  static File from(str path, OpenFlags flags, mem::Allocator* allocator = &mem::stl_allocator);
-  static File from(Path path, OpenFlags flags, mem::Allocator* allocator = &mem::stl_allocator);
-  static File from(Moved<Path> path, OpenFlags flags);
+  b8 is_pty; // TODO(sushi) put somewhere better later
+
+  static File from(
+      str path, OpenFlags flags, 
+      mem::Allocator* allocator = &mem::stl_allocator);
+
+  static File from(
+      Path path, OpenFlags flags, 
+      mem::Allocator* allocator = &mem::stl_allocator);
+
+  static File from( Moved<Path> path, OpenFlags flags);
 
   static b8 copy(str dst, str src);
   static b8 unlink(str path);
 
   [[deprecated("File cannot be opened without OpenFlags!")]]
-  b8 open() override { assert(!"File cannot be opened without OpenFlags!"); return false; }
+  b8 open() override 
+    { assert(!"File cannot be opened without OpenFlags!"); return false; }
 
   // Opens the file specified by 'path'.
   b8 open(Moved<Path> path, OpenFlags flags);
@@ -90,21 +116,24 @@ struct File : public io::IO
   s64 write(Bytes bytes) override;
   s64 read(Bytes bytes) override;
 
-  static File stdout() { return fromFileDescriptor(1, "stdout"_str, OpenFlag::Write); }
-  static File stderr() { return fromFileDescriptor(2, "stderr"_str, OpenFlag::Write); }
-  static File stdin()  { return fromFileDescriptor(0, "stdin"_str, OpenFlag::Read); }
-
   static File fromFileDescriptor(u64 fd, OpenFlags flags);
-  static File fromFileDescriptor(u64 fd, str name, OpenFlags flags, mem::Allocator* allocator = &mem::stl_allocator);
+  static File fromFileDescriptor(
+      u64 fd, str name, OpenFlags flags, 
+      mem::Allocator* allocator = &mem::stl_allocator);
   static File fromFileDescriptor(u64 fd, Moved<Path> name, OpenFlags flags);
+
+  b8 poll(PollEventFlags* flags);
 
   // Returns a File::Info containing various information about this file.
   FileInfo getInfo();
 };
 
-static File stdout = File::stdout();
-static File stderr = File::stderr();
-static File stdin = File::stdin();
+static File stdout = 
+  File::fromFileDescriptor(1, "stdout"_str, OpenFlag::Write);
+static File stderr = 
+  File::fromFileDescriptor(2, "stderr"_str, OpenFlag::Write);
+static File stdin = 
+  File::fromFileDescriptor(0, "stdin"_str, OpenFlag::Read);
 
 /* ================================================================================================ fs::FileInfo
  */
