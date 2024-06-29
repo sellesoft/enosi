@@ -55,13 +55,14 @@ compiler_flags :=     \
 ifeq ($(mode),debug)
 	compiler_flags += -O0 -ggdb3 -DLAKE_DEBUG=1
 else ifeq ($(mode),release)
-	compiler_flags += -O2
+	compiler_flags += -O2 -ggdb3
 endif
 
 linker_flags := \
 	-L../luajit/lib       \
 	-lluajit    \
 	-lexplain   \
+	-fuse-ld=mold \
 	-lm         \
 	-Wl,-E
 

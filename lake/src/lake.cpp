@@ -16,6 +16,7 @@
 
 #include "iro/process.h"
 #include "iro/fs/glob.h"
+#include "iro/fs/path.h"
 
 #include "iro/platform.h"
 
@@ -112,7 +113,7 @@ b8 Lake::init(const char** argv_, int argc_, mem::Allocator* allocator)
 
   if (!lua.init())
   {
-    ERROR("failed to load luaa state\n");
+    ERROR("failed to load lua state\n");
     return false;
   }
 
@@ -262,10 +263,6 @@ b8 processArgDoubleDash(Lake* lake, str arg, str* initfile, ArgIter* iter)
     }
     break;
 
-  case "print-transformed"_hashed:
-    lake->print_transformed = true;
-    break;
-
   case "max-jobs"_hashed:
     if (!processMaxJobsArg(lake, iter))
       return false;
@@ -332,6 +329,26 @@ b8 Lake::processArgv(str* initfile)
 
 /* ----------------------------------------------------------------------------
  */
+static void makeDot(Lake* lake, io::IO* out)
+{
+  out->write("digraph G \n{\n"_str);
+
+  for (auto& target : lake->targets)
+  {
+    for (auto& prereq : target.prerequisites)
+    {
+      io::formatv(out, 
+          '"', fs::Path::basename(target.name()), '"', 
+          " -> ", 
+          '"', fs::Path::basename(prereq.name()), '"', "\n");
+    }
+  }
+
+  out->write("}"_str);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 Lake::run()
 {
   INFO("Loading lake lua module.\n");
@@ -393,19 +410,36 @@ b8 Lake::run()
   }
   lua.pop();
 
+  if (0) // TODO(sushi) maybe make into a cli arg not very useful tho
+  {
+    using namespace fs;
+    auto dot = 
+      File::from("out"_str, 
+          OpenFlag::Truncate 
+        | OpenFlag::Create
+        | OpenFlag::Write);
+
+    if (notnil(dot))
+    {
+      makeDot(this, &dot);
+      dot.close();
+    }
+  }
+
   INFO("Beginning build loop.\n");
 
   // as of rn i think the only code that will run from here on is recipe 
   // callbacks but i could be wrong idk
   lake.in_recipe = true;
 
-  for (u64 build_pass = 0;;)
+  for (u64 build_pass = 0, recipe_pass = 0;;)
   {
     if (!build_queue.isEmpty() && max_jobs - active_recipe_count)
     {
       build_pass += 1;
 
-      INFO("Entering build pass ", build_pass, "\n");
+      if (build_pass % 1000 == 0)
+        TRACE("Entering build pass ", build_pass, "\n");
       SCOPED_INDENT;
 
       while (!build_queue.isEmpty() && max_jobs - active_recipe_count)
@@ -438,6 +472,24 @@ b8 Lake::run()
       INFO("Active recipe list and build queue are empty, we must be "
            "finished.\n");
       break;
+    }
+
+    recipe_pass += 1;
+
+    if (logger.verbosity == Logger::Verbosity::Trace 
+        && recipe_pass % 10000 == 0)
+    {
+      TRACE("Entering recipe pass ", recipe_pass, "\n",
+            "Active recipes are: \n");
+      SCOPED_INDENT; 
+
+      for (auto& t :active_recipes)
+      {
+        TRACE(t.name(), "\n");
+      }
+
+      TRACE("active count: ", active_recipe_count, "\n"
+            "build queue empty? ", build_queue.isEmpty()? "yes" : "no", "\n");
     }
 
     for (auto& t : active_recipes)
@@ -1119,6 +1171,14 @@ b8 lua__rm(str path, b8 recursive, b8 force)
   }
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+EXPORT_DYNAMIC
+b8 lua__pathExists(str path)
+{
+  return platform::fileExists(path);
 }
 
 /* ----------------------------------------------------------------------------

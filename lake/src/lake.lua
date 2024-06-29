@@ -88,6 +88,7 @@ ffi.cdef
   void  lua__stackDump();
   u64   lua__getMonotonicClock();
   b8    lua__makeDir(str path, b8 make_parents);
+  b8    lua__pathExists(str path);
 
   const char* lua__nextCliarg();
 
@@ -371,6 +372,16 @@ end
 ---@return number
 lake.getMaxJobs = function()
   return C.lua__getMaxJobs()
+end
+
+-- * --------------------------------------------------------------------------
+
+--- Check if the given path exists.
+---
+---@param path string
+---@return boolean
+lake.pathExists = function(path)
+  return C.lua__pathExists(make_str(path))
 end
 
 -- * --------------------------------------------------------------------------
@@ -690,8 +701,7 @@ end
 
 --- Defines the given target as a prerequisite of this one.
 ---
---- The target this one depends on
----@param x string | Target | List
+---@param x string | Target | List The target this one depends on
 ---@return self
 Target.dependsOn = function(self, x)
   local x_type = type(x)
