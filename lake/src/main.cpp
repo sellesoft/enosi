@@ -30,11 +30,12 @@ int main(const int argc, const char* argv[])
   {
     using enum Log::Dest::Flag;
     iro::log.newDestination("stdout"_str, &fs::stdout, 
-        AllowColor | 
-        // ShowCategoryName |
-        ShowVerbosity |
-        PadVerbosity |
-        TrackLongestName);
+        //  AllowColor 
+         ShowCategoryName 
+        | ShowVerbosity 
+        | PadVerbosity 
+        | TrackLongestName
+        | PrefixNewlines);
 
     if (notnil(f))
       iro::log.newDestination("templog"_str, &f, {});
