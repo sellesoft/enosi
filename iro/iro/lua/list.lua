@@ -39,7 +39,7 @@ local isList = function(x) return getmetatable(x) == List end
 ---
 ---@generic T
 ---@param init table | List
-List.new = function(init) 
+List.new = function(init)
   if init then
     assert(type(init) == "table" or isList(init))
   else
@@ -70,6 +70,12 @@ List.len = function(self)
   return #self.arr
 end
 
+--- Test if this list is empty
+---@return boolean
+List.isEmpty = function(self)
+  return 0 == self:len()
+end
+
 --- Pushes the given element.
 ---@params elem T
 List.push = function(self, elem)
@@ -83,7 +89,7 @@ end
 
 List.pushFront = function(self, elem)
   table.insert(self.arr, 1, elem)
-end 
+end
 
 List.insert = function(self, idx, elem)
   if not elem then

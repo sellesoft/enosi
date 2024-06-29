@@ -21,6 +21,7 @@ ffi.cdef
   void iro_initLogger(void* logger, str name, u32 verbosity);
   b8 iro_logFirst(void* logger, u32 verbosity, str s);
   void iro_logTrail(void* logger, u32 verbosity, str s);
+  void iro_loggerSetName(void* logger, str name);
 
 ]]
 local C = ffi.C
@@ -45,6 +46,7 @@ end
 local logger_size = tonumber(C.iro_loggerSize())
 local logger_type = ffi.typeof("u8["..logger_size.."]")
 
+---@class Logger
 local Logger = {}
 Logger.__index = Logger
 
@@ -65,6 +67,10 @@ Logger.notice = function(self, ...) doLog(self, Verbosity.Notice, ...) end
 Logger.warn   = function(self, ...) doLog(self, Verbosity.Warn,   ...) end
 Logger.error  = function(self, ...) doLog(self, Verbosity.Error,  ...) end
 Logger.fatal  = function(self, ...) doLog(self, Verbosity.Fatal,  ...) end
+
+Logger.setName = function(self, name)
+  C.iro_loggerSetName(self.handle, name)
+end
 
 local createLogger = function(name, verbosity)
   local logger = ffi.new(logger_type)

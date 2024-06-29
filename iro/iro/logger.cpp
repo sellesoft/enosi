@@ -147,6 +147,15 @@ void iro_initLogger(Logger* logger, str name, u32 verbosity)
 }
 
 /* ----------------------------------------------------------------------------
+ *  Change the loggers name.
+ */
+EXPORT_DYNAMIC
+void iro_loggerSetName(Logger* logger, str name)
+{
+  logger->name = name;
+}
+
+/* ----------------------------------------------------------------------------
  *  Test if this logger can output anything with its set verbosity and log the 
  *  first part if so.
  */

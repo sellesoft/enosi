@@ -10,26 +10,33 @@ options.registerCleaner(function()
   lake.rm(build_dir, {recursive = true, force = options.force_clean})
 end)
 
+options.dependsOnProj "notcurses"
+
 lake.mkdir(build_dir, {make_parents = true})
 
 local report = assert(options.report)
+local reports = assert(options.reports)
 local recipes = assert(options.recipes)
 
 report.includeDir(lake.cwd())
 
-local cflags = Twine.new
-  "-fvisibility=hidden" -- prevent bloating the dynamic symbol table, as most of my projects 
-              -- currently need to export all symbols so luajit may use them
+local cflags = List{}
+
+-- prevent bloating the dynamic symbol table, as most of my projects 
+-- currently need to export all symbols so luajit may use them
+cflags:push "-fvisibility=hidden"
 
 if mode == "debug" then
-  cflags "-O0" "-ggdb3" "-DIRO_DEBUG=1"
+  cflags:push { "-O0", "-ggdb3", "-DIRO_DEBUG=1" }
 else
-  cflags "-O2"
+  cflags:push "-O2"
 end
 
 if lake.os() == "Linux" then
-  cflags "-DIRO_LINUX=1"
+  cflags:push "-DIRO_LINUX=1"
 end
+
+cflags:push(options.getDependencyCompilerFlags())
 
 local c_files = lake.find("iro/**/*.cpp")
 
@@ -41,8 +48,8 @@ for c_file in c_files:each() do
 
   lake.target(o_file) -- TODO(sushi) consider using groups to make this_file 
                       --             dependency not need to be applied to 
-            --             every file
-    :dependsOn {c_file, options.this_file} 
+                      --             every file
+    :dependsOn {c_file, options.this_file}
     :recipe(recipes.compiler(c_file, o_file, cflags))
 
   lake.target(d_file)
@@ -66,6 +73,6 @@ lake.find("iro/lua/*.lua"):each(function(lua_file)
   report.objFile(o_file)
 
   lake.target(o_file)
-    :dependsOn { lua_file, options.this_file }
-    :recipe(recipes.luaToObj(lua_file, o_file))
+      :dependsOn { lua_file, options.this_file }
+      :recipe(recipes.luaToObj(lua_file, o_file))
 end)
