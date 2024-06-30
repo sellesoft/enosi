@@ -530,7 +530,9 @@ lake.cmd = function(args, options)
       error(errstr)
     end
 
-    argsarr[i-1] = make_str(args[i])
+    if #args[i] ~= 0 then
+      argsarr[i-1] = make_str(args[i])
+    end
   end
 
   local handle = C.lua__processSpawn(argsarr, args:len()+1)
