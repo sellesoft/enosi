@@ -155,10 +155,13 @@ struct FileInfo
 }
 
 // semantics definitions
-DefineMove(iro::fs::File, { to.handle = from.handle; to.path = move(from.path); });
+DefineMove(iro::fs::File, 
+    { to.handle = from.handle; to.path = move(from.path); });
 DefineNilValue(iro::fs::File, {}, { return x.handle == -1; });
 DefineScoped(iro::fs::File, { x.close(); });
 
-DefineNilValue(iro::fs::FileInfo, {iro::fs::FileKind::Invalid}, { return x.kind == iro::fs::FileKind::Invalid; });
+DefineNilValue(iro::fs::FileInfo, 
+    {iro::fs::FileKind::Invalid}, 
+    { return x.kind == iro::fs::FileKind::Invalid; });
 
 #endif

@@ -57,6 +57,7 @@ lake.find("iro/**/*.cpp"):each(function(cfile)
   lake.target(ofile)
       :dependsOn { cfile, proj.path }
       :recipe(recipes.objFile(cpp_driver, proj))
+
   lake.target(dfile)
       :dependsOn(cfile)
       :recipe(
