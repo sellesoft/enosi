@@ -37,7 +37,7 @@ cpp_driver.defines = proj:collectDefines()
 lake.find("src/**/*.cpp"):each(function(cfile)
   local ofile = builddir..cfile..".o"
   local dfile = builddir..cfile..".d"
-  -- cfile = cwd.."/"..cfile
+  cfile = cwd.."/"..cfile
 
   cpp_driver.input = cfile
   cpp_driver.output = ofile
@@ -57,7 +57,7 @@ local lua_driver = Driver.LuaObj.new()
 
 lake.find("src/*.lua"):each(function(lfile)
   local ofile = builddir..lfile..".o"
-  -- lfile = cwd.."/"..lfile
+  lfile = cwd.."/"..lfile
 
   proj:reportObjFile(ofile)
 
