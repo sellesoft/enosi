@@ -130,6 +130,32 @@ List.each = function(self, f)
   end
 end
 
+--- Returns an iterator function that gives each element of 
+--- this List or, if 'f' is provided, calls f with each 
+--- element of the list and returns self
+---
+---@param f function?
+---@return function | self
+List.eachReverse = function(self, f)
+  local i = self:len()+1
+  local iter = function()
+    i = i - 1
+    if i == 0 then
+      return nil
+    end
+    return self.arr[i]
+  end
+
+  if f then
+    for e in iter do
+      f(e)
+    end
+    return self
+  else
+    return iter
+  end
+end
+
 --- The same as each, but returns as a second value the
 --- index of the element.
 ---
