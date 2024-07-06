@@ -32,6 +32,9 @@ else
   cpp_driver.opt = "speed"
 end
 
+-- need to export everything since we're compiling to a shared lib
+cpp_driver.export_all = true
+
 -- llvm does not compile with rtti enabled
 cpp_driver.nortti = true
 cpp_driver.defines = proj:collectDefines()
@@ -39,20 +42,36 @@ cpp_driver.defines = proj:collectDefines()
 lake.find("src/**/*.cpp"):each(function(cfile)
   local ofile = builddir..cfile..".o"
   local dfile = builddir..cfile..".d"
-  --cfile = cwd.."/"..cfile
+  cfile = cwd.."/"..cfile
 
   proj:reportObjFile(ofile)
 
   cpp_driver.input = cfile
   cpp_driver.output = ofile
 
-  lake.target(ofile):dependsOn(cfile)
+  lake.target(ofile):dependsOn { cfile, proj.path }
     :recipe(recipes.objFile(cpp_driver, proj))
 
   lake.target(dfile):dependsOn(cfile)
     :recipe(recipes.depfile(
       Driver.Depfile.fromCpp(cpp_driver),
       proj, ofile, dfile))
+end)
+
+local lua_driver = Driver.LuaObj.new()
+
+lake.find("src/*.lua"):each(function(lfile)
+  local ofile = builddir..lfile..".o"
+  lfile = cwd.."/"..lfile
+  print(lfile)
+
+  proj:reportLuaObjFile(ofile)
+
+  lua_driver.input = lfile
+  lua_driver.output = ofile
+
+  lake.target(ofile):dependsOn { lfile, proj.path }
+      :recipe(recipes.luaObjFile(lua_driver, proj))
 end)
 
 exe:dependsOn(proj:collectObjFiles())
