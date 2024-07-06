@@ -86,6 +86,7 @@ struct str
   static inline str from(u8* start, u8* end) { assert(start >= end); return {start, u64(end - start)}; }
   static inline str from(u8* start, u64 len) { return {start, len}; }
   static inline str from(Slice<u8> slice) { return {slice.ptr, slice.len}; }
+  static str fromCStr(const char* s);
 
   b8 isEmpty() { return len == 0; }
 

@@ -199,6 +199,22 @@ Codepoint decodeCharacter(u8* s, s32 slen)
 #undef FWARN
 }
 
+
+/* ------------------------------------------------------------------------------------------------
+ */
+str str::fromCStr(const char* s)
+{
+  str out;
+  out.bytes = (u8*)s;
+  out.len = 0;
+  while (s[0])
+  {
+    out.len += 1;
+    s += 1;
+  }
+  return out;
+}
+
 /* ------------------------------------------------------------------------------------------------
  */
 Codepoint str::advance(s32 n)
