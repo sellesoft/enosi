@@ -130,9 +130,69 @@ struct ClangIter
   }
 };
 
-typedef ClangIter<clang::DeclContext::decl_iterator> DeclIterator;
+typedef ClangIter<clang::DeclContext::decl_iterator> DeclContextIterator;
 typedef ClangIter<clang::RecordDecl::field_iterator> FieldIterator;
 typedef ClangIter<clang::EnumDecl::enumerator_iterator> EnumIterator;
+
+struct DeclGroupIterator
+{
+  typedef clang::DeclGroupRef::iterator I;
+
+  I current;
+  I end;
+
+  clang::Decl* next()
+  {
+    if (current == end)
+      return nullptr;
+
+    auto out = *current;
+    current++;
+    return out;
+  }
+};
+
+struct DeclIterator
+{
+  enum class Kind
+  {
+    Context,
+    Group,
+  };
+
+  Kind kind;
+
+  union
+  {
+    DeclContextIterator context;
+    DeclGroupIterator group;
+  };
+
+  clang::Decl* next()
+  {
+    switch (kind)
+    {
+    case Kind::Context:
+      return context.next();
+    case Kind::Group:
+      return group.next();
+    }
+  }
+
+  void initContext(clang::DeclContext* ctx)
+  {
+    kind = Kind::Context;
+    context.current = ctx->decls_begin();
+    context.end = ctx->decls_end();
+  }
+
+  void initGroup(clang::DeclGroupRef g)
+  {
+    kind = Kind::Group;
+    group.current = g.begin();
+    group.end = g.end();
+  }
+};
 
 // dumb special case
 struct ParamIterator
@@ -167,67 +227,19 @@ struct Lexer
   b8 at_end;
 };
 
-namespace clang{
-class LppParser
+inline static u64 getTokenStartOffset(
+    clang::SourceManager& srcmgr, 
+    const clang::Token& token)
 {
-public:
-  CompilerInstance& clang;
-  Parser& parser;
-
-  LppParser(
-        CompilerInstance& clang,
-        Parser& parser)
-    : clang(clang),
-      parser(parser) {}
-
-  void parseStatement()
-  {
-    DiagnosticsEngine& diags = clang.getDiagnostics();
-    diags.Reset(true);
-
-    s32 errcount = diags.getNumErrors();
-
-    StmtResult result = parser.ParseStatement();
-    if (!result.isUsable())
-      return;
-
-    Stmt* stmt = result.get();
-
-    if (!diags.hasErrorOccurred())
-    {
-      stmt->dump();
-      return;
-    }
-
-    if (auto declstmt = tryAs<DeclStmt>(stmt))
-    {
-      // Remove the decl from the decl context so that we can try 
-      // to declare it again.
-      parser.getCurScope()->getEntity()->
-        removeDecl(declstmt->getSingleDecl());
-    }
-  }
-
-  str consumeIdentifier()
-  {
-    if (parser.expectIdentifier())
-      return nil;
-
-    const Token& tok = parser.getCurToken();
-    SourceManager& srcmgr = clang.getSourceManager();
-    FileID fileid = srcmgr.getFileID(tok.getLocation());
-
-    // TODO(sushi) surely there is a better way to do this.
-    auto beginoffset = srcmgr.getDecomposedLoc(tok.getLocation()).second;
-    auto endoffset = srcmgr.getDecomposedLoc(tok.getEndLoc()).second;
-    auto membuf = srcmgr.getBufferOrFake(fileid);
-    auto buf = membuf.getBuffer().substr(beginoffset, endoffset-beginoffset);
-    parser.ConsumeToken();
-    return {(u8*)buf.data(), buf.size()};
-  }
-};
+  return srcmgr.getDecomposedSpellingLoc(token.getLocation()).second;
 }
 
+inline static u64 getTokenEndOffset(
+    clang::SourceManager& srcmgr, 
+    const clang::Token& token)
+{
+  return srcmgr.getDecomposedSpellingLoc(token.getEndLoc()).second;
+}
 struct Context
 {
   ASTUnitPtr ast_unit;
@@ -334,7 +346,7 @@ struct Context
 
   Up<DiagConsumer> diag_consumer;
 
-  b8 init()
+  b8 init(Slice<str> args)
   {
     using namespace clang;
 
@@ -344,7 +356,8 @@ struct Context
     lexers.init(&allocator);
 
     // not sure if putting this stuff into the bump allocator is ok
-    overlayfs = new llvm::vfs::OverlayFileSystem(llvm::vfs::getRealFileSystem());
+    overlayfs = 
+      new llvm::vfs::OverlayFileSystem(llvm::vfs::getRealFileSystem());
     inmemfs = new llvm::vfs::InMemoryFileSystem;
     overlayfs->pushOverlay(inmemfs);
 
@@ -362,11 +375,17 @@ struct Context
     driver_args.push_back("-c");
     driver_args.push_back("lppclang-inputs");
 
+    for (auto arg : args)
+    {
+      driver_args.push_back((char*)arg.bytes);
+    }
+
     // Temp diags buffer to properly catch anything that might go wrong in the 
     // driver. Probaby not very useful atm, but if user args are ever supported
     // this may become more important.
     Rc<DiagnosticIDs> diagids(new DiagnosticIDs);
     diagopts = CreateAndPopulateDiagOpts(driver_args);
+
     TextDiagnosticBuffer* diagbuffer = new TextDiagnosticBuffer;
     DiagnosticsEngine diags(diagids, &*diagopts, diagbuffer);
 
@@ -504,12 +523,181 @@ struct Context
   }
 };
 
+namespace clang{
+// This class is declared a 'friend' of clang's Parser so that we may hook into
+// it and call its private functions.
+class LppParser
+{
+public:
+  CompilerInstance& clang;
+  Parser& parser;
+  Context* ctx;
+
+  LppParser(
+        CompilerInstance& clang,
+        Parser& parser,
+        Context* ctx)
+    : clang(clang),
+      parser(parser),
+      ctx(ctx) {}
+
+  s64 getParseResultOffset(SourceManager& srcmgr)
+  {
+    const Token& curt = parser.getCurToken();
+    if (curt.isOneOf(tok::eof, tok::annot_repl_input_end))
+      return -1;
+    else
+      return getTokenStartOffset(srcmgr, curt);
+  }
+
+  ParseStmtResult parseStatement()
+  {
+    SourceManager&     srcmgr = clang.getSourceManager();
+    DiagnosticsEngine& diags = clang.getDiagnostics();
+
+    // Make sure diags is clean before we parse so we can detect any errors
+    diags.Reset(true);
+
+    StmtResult result = parser.ParseStatement();
+    if (!result.isUsable())
+      return {nullptr, 0};
+
+    Stmt* stmt = result.get();
+
+    if (!diags.hasErrorOccurred())
+      return { (::Stmt*)stmt, getParseResultOffset(srcmgr) };
+
+    // If an error has occured and this statement declared something, 
+    // remove the declaration from the compiler's context to allow the 
+    // user to try parsing the statement again if they fix it.
+
+    if (auto declstmt = tryAs<DeclStmt>(stmt))
+      parser.getCurScope()->getEntity()->
+        removeDecl(declstmt->getSingleDecl());
+
+    return {nullptr, 0};
+  }
+
+  str consumeIdentifier()
+  {
+    if (parser.expectIdentifier())
+      return nil;
+
+    const Token& tok = parser.getCurToken();
+    SourceManager& srcmgr = clang.getSourceManager();
+    FileID fileid = srcmgr.getFileID(tok.getLocation());
+
+    // TODO(sushi) surely there is a better way to do this.
+    auto beginoffset = srcmgr.getDecomposedLoc(tok.getLocation()).second;
+    auto endoffset = srcmgr.getDecomposedLoc(tok.getEndLoc()).second;
+    auto membuf = srcmgr.getBufferOrFake(fileid);
+    auto buf = membuf.getBuffer().substr(beginoffset, endoffset-beginoffset);
+    parser.ConsumeToken();
+    return {(u8*)buf.data(), buf.size()};
+  }
+
+  Decl* lookupName(str s)
+  {
+    Preprocessor& preprocessor = clang.getPreprocessor();
+    IdentifierInfo* ii = preprocessor.getIdentifierInfo(strRef(s));
+    DeclarationName declname(ii);
+    auto result = parser.getCurScope()->getEntity()->lookup(declname);
+    if (result.empty())
+      return nullptr;
+    return result.front();
+  }
+
+  ParseTypeNameResult parseTypeName()
+  {
+    SourceManager&     srcmgr = clang.getSourceManager();
+    DiagnosticsEngine& diags = clang.getDiagnostics();
+
+    diags.Reset(true);
+    
+    auto TR = parser.ParseTypeName();
+    if (!TR.isUsable() || diags.hasErrorOccurred())
+      return {nullptr, 0};
+
+    return {(::Type*)TR.get().getAsOpaquePtr(), getParseResultOffset(srcmgr)};
+  }
+
+  ParseDeclResult parseTopLevelDecl()
+  {
+    SourceManager&     srcmgr = clang.getSourceManager();
+    DiagnosticsEngine& diags = clang.getDiagnostics();
+
+    diags.Reset(true);
+
+    Parser::DeclGroupPtrTy decl_group;
+    Sema::ModuleImportState import_state;
+    parser.ParseTopLevelDecl(decl_group, import_state);
+
+    if (diags.hasErrorOccurred())
+      return {nullptr, 0};
+
+    return 
+      {
+        (::Decl*)decl_group.get().getSingleDecl(), 
+        getParseResultOffset(srcmgr)
+      };
+  }
+
+  ParseTopLevelDeclsResult parseTopLevelDecls()
+  {
+    SourceManager&     srcmgr = clang.getSourceManager();
+    DiagnosticsEngine& diags = clang.getDiagnostics();
+
+    diags.Reset(true);
+
+    Parser::DeclGroupPtrTy decl_group;
+    Sema::ModuleImportState import_state;
+    parser.ParseTopLevelDecl(decl_group, import_state);
+
+    if (diags.hasErrorOccurred())
+    {
+      // Similar to what we do in parsing statements, clear out any
+      // declarations created here so that the user can try to fix 
+      // stuff and parse again w/o clang complaining about stuff
+      // being redefined.
+      DeclGroupRef group = decl_group.get();
+      for (auto decl = group.begin(); decl != group.end(); decl++)
+        parser.getCurScope()->getEntity()->removeDecl(*decl);
+
+      return {nullptr, 0};
+    }
+
+    auto dctx = ctx->allocate<DeclIterator>();
+    dctx->initGroup(decl_group.get());
+
+    return 
+      {
+        (DeclIter*)dctx,
+        getParseResultOffset(srcmgr)
+      };
+  }
+
+  ParseExprResult parseExpr()
+  {
+    SourceManager&     srcmgr = clang.getSourceManager();
+    DiagnosticsEngine& diags = clang.getDiagnostics();
+
+    diags.Reset(true);
+
+    ExprResult result = parser.ParseExpression();
+    if (!result.isUsable() || diags.hasErrorOccurred())
+      return {nullptr, 0};
+
+    return {(::Expr*)result.get(), getParseResultOffset(srcmgr)};
+  }
+};
+}
+
 /* ----------------------------------------------------------------------------
  */
-Context* createContext()
+Context* createContext(str* args, u64 argc)
 {
   auto ctx = new Context;
-  if (!ctx->init())
+  if (!ctx->init({args, argc}))
     return nullptr;
   return ctx;
 }
@@ -524,14 +712,21 @@ void destroyContext(Context* ctx)
 
 /* ----------------------------------------------------------------------------
  */
-static clang::Decl* getClangDecl(Decl* decl)
+inline static clang::Decl* getClangDecl(Decl* decl)
 {
   return (clang::Decl*)decl;
 }
 
 /* ----------------------------------------------------------------------------
  */
-static clang::QualType getClangType(Type* type)
+inline static clang::Stmt* getClangStmt(Stmt* stmt)
+{
+  return (clang::Stmt*)stmt;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+inline static clang::QualType getClangType(Type* type)
 {
   return clang::QualType::getFromOpaquePtr(type);
 }
@@ -647,13 +842,15 @@ TokenKind tokenGetKind(Token* t)
   map(numeric_constant, NumericConstant);
   map(char_constant, CharConstant);
   map(string_literal, StringLiteral);
-  map(unknown, Whitespace); // just assume this is whitespace, kinda stupid its marked this way
-                // if this causes problems then maybe confirm it's whitespace by 
-                // searching the raw later
-                // TODO(sushi) if i actually do wind up forking clang so i can have local patches
-                //             maybe make this an explicit token
-  // TODO(sushi) MAYBE implement the rest of these, but not really neccessary cause for punc
-  //             and keyword we can just string compare in lua.
+  map(unknown, Whitespace); // just assume this is whitespace, kinda stupid 
+                            // its marked this way
+                // if this causes problems then maybe confirm it's whitespace 
+                // by searching the raw later
+                // TODO(sushi) if i actually do wind up forking clang so i 
+                //             can have local patches maybe make this an 
+                //             explicit token
+  // TODO(sushi) MAYBE implement the rest of these, but not really neccessary 
+  //             cause for punc and keyword we can just string compare in lua.
 
 #undef map
   }
@@ -712,7 +909,7 @@ static b8 startNewBuffer(
 {
   using namespace clang;
 
-  SourceLocation new_loc = srcmgr.getLocForStartOfFile(srcmgr.getMainFileID());
+  SourceLocation new_loc = srcmgr.getLocForEndOfFile(srcmgr.getMainFileID());
 
   FileID fileid = 
     srcmgr.createFileID(
@@ -734,6 +931,11 @@ static void maybeResetParser(
     clang::Sema& sema)
 {
   using namespace clang;
+
+  ASTContext& astctx = sema.getASTContext();
+  if (!astctx.getTranslationUnitDecl())
+    astctx.addTranslationUnitDecl();
+
   if (parser.getCurToken().is(tok::annot_repl_input_end))
   {
     // reset parser from last incremental parse
@@ -788,7 +990,29 @@ Decl* parseString(Context* ctx, str s)
 
 /* ----------------------------------------------------------------------------
  */
-void parseStatement(Context* ctx, str s)
+b8 loadString(Context* ctx, str s)
+{
+  using namespace clang;
+
+  assert(ctx);
+
+  CompilerInstance& clang = *ctx->clang;
+  Parser&           parser = *ctx->parser;
+  SourceManager&    srcmgr = clang.getSourceManager();
+  Preprocessor&     preprocessor = clang.getPreprocessor();
+  Sema&             sema = clang.getSema();
+
+  if (!startNewBuffer(srcmgr, preprocessor, s))
+    return false;
+
+  maybeResetParser(parser, sema);
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+ParseStmtResult parseStatement(Context* ctx)
 {
   assert(ctx);
 
@@ -796,26 +1020,94 @@ void parseStatement(Context* ctx, str s)
 
   CompilerInstance& clang = *ctx->clang;
   Parser&           parser = *ctx->parser;
-  SourceManager&    srcmgr = clang.getSourceManager();
-  Preprocessor&     preprocessor = clang.getPreprocessor();
-  Sema&             sema = clang.getSema();
-  ASTContext&       astctx = sema.getASTContext();
 
-  if (!startNewBuffer(srcmgr, preprocessor, s))
-    return;
+  LppParser lppparser(clang, parser, ctx);
+  return lppparser.parseStatement();
+}
 
-  if (parser.getCurToken().is(tok::annot_repl_input_end))
-  {
-    // reset parser from last incremental parse
-    parser.ConsumeAnyToken();
-    parser.ExitScope();
-    sema.CurContext = nullptr;
-    parser.EnterScope(Scope::DeclScope);
-    sema.ActOnTranslationUnitScope(parser.getCurScope());
-  }
+/* ----------------------------------------------------------------------------
+ */
+Decl* getStmtDecl(Context* ctx, Stmt* stmt)
+{
+  assert(ctx and stmt);
+  if (auto decl = tryAs<clang::DeclStmt>(getClangStmt(stmt)))
+    return (Decl*)decl->getSingleDecl();
+  return nullptr;
+}
 
-  clang::LppParser lppparser(clang, parser);
-  lppparser.parseStatement();
+/* ----------------------------------------------------------------------------
+ */
+ParseDeclResult parseTopLevelDecl(Context* ctx)
+{
+  assert(ctx);
+
+  using namespace clang;
+
+  CompilerInstance& clang = *ctx->clang;
+  Parser&           parser = *ctx->parser;
+
+  LppParser lppparser(clang, parser, ctx);
+  return lppparser.parseTopLevelDecl();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+ParseTopLevelDeclsResult parseTopLevelDecls(Context* ctx)
+{
+  assert(ctx);
+
+  using namespace clang;
+
+  CompilerInstance& clang = *ctx->clang;
+  Parser&           parser = *ctx->parser;
+
+  LppParser lppparser(clang, parser, ctx);
+  return lppparser.parseTopLevelDecls();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+ParseExprResult parseExpr(Context* ctx)
+{
+  assert(ctx);
+
+  using namespace clang;
+
+  CompilerInstance& clang = *ctx->clang;
+  Parser&           parser = *ctx->parser;
+
+  LppParser lppparser(clang, parser, ctx);
+  return lppparser.parseExpr();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+ParseTypeNameResult parseTypeName(Context* ctx)
+{
+  assert(ctx);
+
+  using namespace clang;
+
+  CompilerInstance& clang = *ctx->clang;
+  Parser&           parser = *ctx->parser;
+
+  LppParser lppparser(clang, parser, ctx);
+  return lppparser.parseTypeName();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Decl* lookupName(Context* ctx, str s)
+{
+  assert(ctx);
+
+  using namespace clang;
+
+  CompilerInstance& clang = *ctx->clang;
+  Parser&           parser = *ctx->parser;
+
+  LppParser lppparser(clang, parser, ctx);
+  return (::Decl*)lppparser.lookupName(s);
 }
 
 /* ----------------------------------------------------------------------------
@@ -856,8 +1148,7 @@ DeclIter* createDeclIter(Context* ctx, Decl* decl)
     return nullptr;
 
   auto range = ctx->allocate<DeclIterator>();
-  range->current = dctx->decls_begin();
-  range->end = dctx->decls_end();
+  range->initContext(dctx);
   return (DeclIter*)range;
 }
 
@@ -870,9 +1161,22 @@ Decl* getNextDecl(DeclIter* iter)
   auto out = diter->next();
   if (!out)
     return nullptr;
-  if (out->isImplicit()) // only really care about stuff thats actually written here
+  if (out->isImplicit()) // only really care about stuff thats actually 
+                         // written here
     return getNextDecl(iter);
   return (Decl*)out;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+DeclIter* getContextOfDecl(Context* ctx, Decl* decl)
+{
+  assert(ctx and decl);
+  auto cdecl = getClangDecl(decl);
+  auto dctx = clang::Decl::castToDeclContext(cdecl);
+  auto range = ctx->allocate<DeclIterator>();
+  range->initContext(dctx);
+  return (DeclIter*)range;
 }
 
 /* ----------------------------------------------------------------------------
@@ -1100,6 +1404,7 @@ Decl* getNextParam(ParamIter* iter)
  */
 b8 isCanonical(Type* type)
 {
+  assert(type);
   return getClangType(type).isCanonical();
 }
 
@@ -1107,6 +1412,7 @@ b8 isCanonical(Type* type)
  */
 b8 isUnqualified(Type* type)
 {
+  assert(type);
   return !getClangType(type).hasQualifiers();
 }
 
@@ -1114,6 +1420,7 @@ b8 isUnqualified(Type* type)
  */
 b8 isUnqualifiedAndCanonical(Type* type)
 {
+  assert(type);
   return isUnqualified(type) && isCanonical(type);
 }
 
@@ -1365,7 +1672,7 @@ void playground()
 {
   using namespace clang;
 
-  auto ctx = createContext();
+  auto ctx = createContext(nullptr, 0);
 
   CompilerInstance& clang = *ctx->clang;
   Parser&           parser = *ctx->parser;
@@ -1373,7 +1680,7 @@ void playground()
   SourceManager&    srcmgr = clang.getSourceManager();
   Preprocessor&     preprocessor = clang.getPreprocessor();
 
-  LppParser lppparser(clang, parser);
+  LppParser lppparser(clang, parser, ctx);
 
   startNewBuffer(srcmgr, preprocessor, R"cpp(
     hello there

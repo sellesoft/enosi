@@ -150,7 +150,7 @@ int testContext()
   }
 
 
-  Context* ctx = createContext();
+  Context* ctx = createContext(nullptr, 0);
   defer { destroyContext(ctx); };
 
   if (!createASTFromString(ctx, buffer.asStr()))
@@ -165,7 +165,7 @@ int testContext()
 
 int testLexer()
 {
-  Context* ctx = createContext();
+  Context* ctx = createContext(nullptr, 0);
   if (!ctx)
     return 1;
   defer { destroyContext(ctx); };
@@ -192,7 +192,7 @@ int testLexer()
 
 int testLookup()
 {
-  Context* ctx = createContext();
+  Context* ctx = createContext(nullptr, 0);
   if (!ctx)
     return 1;
   defer { destroyContext(ctx); };
@@ -226,7 +226,7 @@ int testLookup()
 
 int testMultipleParses()
 {
-  Context* ctx = createContext();
+  Context* ctx = createContext(nullptr, 0);
   if (!ctx)
     return 1;
   defer { destroyContext(ctx); };
@@ -273,25 +273,178 @@ int testMultipleParses()
 
 int testParseStmt()
 {
-  Context* ctx = createContext();
+  Context* ctx = createContext(nullptr, 0);
   if (!ctx)
     return 1;
   defer { destroyContext(ctx); };
 
-  INFO("\n\nparsing statement\n");
-  parseStatement(ctx, R"cpp(
+  str test = R"cpp(
     int a = 1 + 2;
-  )cpp"_str);
-
-  INFO("\n\nparsing statement\n");
-  parseStatement(ctx, R"cpp(
-    int b = 3 + 
-  )cpp"_str);
-
-  INFO("\n\nparsing statement\n");
-  parseStatement(ctx, R"cpp(
     int b = 3 + 4;
+    int c = a + b;
+  )cpp"_str;
+
+  loadString(ctx, test);
+
+  ParseStmtResult result;
+  u64 offset = 0;
+
+  auto tryParse = [&]()
+  {
+    INFO("~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+
+    result = parseStatement(ctx);
+    
+    if (result.stmt == nullptr)
+    {
+      INFO("parse failed\n");
+      return false;
+    }
+
+    str s = {test.bytes+offset};
+    if (result.offset == -1)
+      s.len = test.bytes  + test.len - s.bytes;
+    else
+      s.len = result.offset - offset;
+
+    INFO("parsed statement: ", s, "\n");
+
+    offset = result.offset;
+    if (offset == -1)
+      return false;
+    return true;
+  };
+
+  while (tryParse())
+    ;
+
+  return 0;
+}
+
+int testParsePartialStmt()
+{
+  Context* ctx = createContext(nullptr, 0);
+  if (!ctx)
+    return 1;
+  defer { destroyContext(ctx); };
+
+  io::Memory mem;
+  mem.open();
+
+  mem.write(R"cpp(
+    int a = 1 + 2;
+    int b = 
   )cpp"_str);
+
+  loadString(ctx, mem.asStr());
+
+  s64 offset = 0;
+
+  ParseStmtResult result;
+
+  result = parseStatement(ctx);
+  assert(result.stmt);
+
+  INFO("parsed statement: ", 
+      str{mem.buffer+offset, u64(result.offset-offset)}, "\n");
+
+  offset = result.offset;
+
+  // should fail.
+  result = parseStatement(ctx);
+  assert(!result.stmt);
+
+  s64 newstart = mem.len;
+  mem.write(" a + 2; "_str);
+
+  loadString(ctx, str{mem.buffer+offset, u64(mem.len-offset)});
+
+  result = parseStatement(ctx);
+  assert(result.stmt);
+
+  INFO("parsed statement: ", 
+      str{mem.buffer+offset, u64(mem.len-offset)}, "\n");
+
+  return 0;
+}
+
+int testLookupName()
+{
+  Context* ctx = createContext(nullptr, 0);
+  if (!ctx)
+    return 1;
+  defer { destroyContext(ctx); };
+
+  str test = R"cpp(
+    int a = 1 + 2;
+    int b = 2 + 3;
+  )cpp"_str;
+
+  loadString(ctx, test);
+
+  ParseStmtResult result;
+
+  result = parseStatement(ctx);
+  assert(result.stmt);
+  result = parseStatement(ctx);
+  assert(result.stmt);
+
+  Decl* lookup = lookupName(ctx, "a"_str);
+  dumpDecl(lookup);
+
+  loadString(ctx, R"cpp(
+    struct Apple 
+    {
+      int leaves;
+    };
+  )cpp"_str);
+
+  parseTopLevelDecl(ctx);
+
+  loadString(ctx, R"cpp(
+    auto apple = Apple{1};
+  )cpp"_str);
+
+  result = parseStatement(ctx);
+
+  if (auto decl = getStmtDecl(ctx, result.stmt))
+  {
+    dumpDecl(decl);
+  }
+
+  return 0;
+}
+
+int testArgs()
+{
+  str args[] =
+  {
+    "-I/home/sushi/src/enosi/iro"_str,
+    "-DHELLO"_str,
+  };
+
+  auto ctx = createContext(args, 1);
+  if (!ctx)
+    return 1;
+  defer { destroyContext(ctx); };
+
+  loadString(ctx, R"cpp(
+    #include "iro/containers/array.h"
+
+    int main()
+    {
+      Array<int> arr;
+      arr.hello();
+      return 1;
+    }
+  )cpp"_str);
+
+  auto result = parseTopLevelDecls(ctx);
+
+  while (auto decl = getNextDecl(result.iter))
+  {
+    dumpDecl(decl);
+  }
 
   return 0;
 }
@@ -313,12 +466,15 @@ int main()
           AllowColor));
   }
 
-  playground();
+  // playground();
 
   // return testContext();
   // return testLexer();
   // return testLookup();
   // return testMultipleParses();
   // return testParseStmt();
+  // return testParsePartialStmt();
+  // return testLookupName();
+  return testArgs();
 }
 

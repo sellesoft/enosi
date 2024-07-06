@@ -96,7 +96,61 @@ typedef struct DeclIter DeclIter;
 typedef struct ParamIter ParamIter;
 typedef struct FieldIter FieldIter;
 typedef struct EnumIter EnumIter;
+typedef struct Stmt Stmt;
+typedef struct Expr Expr;
 
+/* ============================================================================
+ */
+typedef struct ParseStmtResult
+{
+  Stmt* stmt;
+  // Offset into the buffer where parsing stopped.
+  // -1 if EOF.
+  s64 offset;
+} ParseStmtResult;
+
+/* ============================================================================
+ */
+typedef struct ParseDeclResult
+{
+  Decl* decl;
+  // Offset into the buffer where parsing stopped.
+  // -1 if EOF.
+  s64 offset;
+} ParseDeclResult;
+
+/* ============================================================================
+ */
+typedef struct ParseTopLevelDeclsResult
+{
+  DeclIter* iter;
+  // Offset into the buffer where parsing stopped.
+  // -1 if EOF.
+  s64 offset;
+} ParseTopLevelDeclsResult;
+
+/* ============================================================================
+ */
+typedef struct ParseTypeNameResult
+{
+  Type* type;
+  // Offset into the buffer where parsing stopped.
+  // -1 if EOF.
+  s64 offset;
+} ParseTypeNameResult;
+
+/* ============================================================================
+ */
+typedef struct ParseExprResult
+{
+  Expr* expr;
+  // Offset into the buffer where parsing stopped.
+  // -1 if EOF.
+  s64 offset;
+} ParseExprResult;
+
+/* ============================================================================
+ */
 typedef struct
 {
   str raw;
@@ -105,16 +159,25 @@ typedef struct
 } TokenRawAndLoc;
 
 // **** EXPERIMENTAL ****
-void addIncludeDir(Context* ctx, str s); // TODO(sushi) move to normal api
+void addIncludeDir(Context* ctx, str s);
 Type* lookupType(Context* ctx, str name);
-void parseStatement(Context* ctx, str s);
+ParseStmtResult parseStatement(Context* ctx);
+// Returns the declaration of the given statement, or nullptr if the given
+// stmt is not a declaration.
+Decl* getStmtDecl(Context* ctx, Stmt* stmt);
+ParseTypeNameResult parseTypeName(Context* ctx);
+ParseDeclResult parseTopLevelDecl(Context* ctx);
+ParseTopLevelDeclsResult parseTopLevelDecls(Context* ctx);
+ParseExprResult parseExpr(Context* ctx);
+Decl* lookupName(Context* ctx, str s);
+b8 loadString(Context* ctx, str s);
 // **** EXPERIMENTAL ****
 
 /* ----------------------------------------------------------------------------
  |  Create/destroy an lppclang context. This keeps track of clang's ASTUnit and 
  |  also various things that we must dynamically allocate.
  */
-Context* createContext();
+Context* createContext(str* args, u64 argc);
 void     destroyContext(Context*);
 
 /* ----------------------------------------------------------------------------
@@ -168,6 +231,12 @@ Decl* getTranslationUnitDecl(Context* ctx);
  */
 DeclIter* createDeclIter(Context* ctx, Decl* decl);
 Decl*     getNextDecl(DeclIter* iter);
+
+/* ----------------------------------------------------------------------------
+ |  Returns an iterator over the declaration context that the given Decl
+ |  belongs to. This starts at the beginning of the context!
+ */
+DeclIter* getContextOfDecl(Context* ctx, Decl* decl);
 
 /* ----------------------------------------------------------------------------
  |  Returns the kind of declaration 'decl' represents, if it is known to this 
