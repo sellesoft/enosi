@@ -81,6 +81,11 @@ s64 write(
 b8 poll(fs::File::Handle handle, fs::PollEventFlags* flags);
 
 /* ----------------------------------------------------------------------------
+ *  Returns true if the given file handle refers to a terminal.
+ */
+b8 isatty(fs::File::Handle handle);
+
+/* ----------------------------------------------------------------------------
  *  Sets the given file handle as non-blocking, eg. read will not block if 
  *  there is no buffered data take and write will not block until something 
  *  consumes the written data.

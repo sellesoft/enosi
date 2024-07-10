@@ -144,6 +144,13 @@ b8 File::poll(PollEventFlags* flags)
 
 /* ----------------------------------------------------------------------------
  */
+b8 File::isatty()
+{
+  return platform::isatty(handle);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 File File::fromFileDescriptor(u64 fd, OpenFlags flags)
 {
   File out = {};

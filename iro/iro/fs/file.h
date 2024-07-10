@@ -87,9 +87,9 @@ struct File : public io::IO
 
   Path path = nil;
 
-  OpenFlags openflags;
+  OpenFlags openflags = {};
 
-  b8 is_pty; // TODO(sushi) put somewhere better later
+  b8 is_pty = false; // TODO(sushi) put somewhere better later
 
   static File from(
       str path, OpenFlags flags, 
@@ -123,6 +123,9 @@ struct File : public io::IO
   static File fromFileDescriptor(u64 fd, Moved<Path> name, OpenFlags flags);
 
   b8 poll(PollEventFlags* flags);
+
+  // Test if this file refers to a terminal.
+  b8 isatty();
 
   // Returns a File::Info containing various information about this file.
   FileInfo getInfo();

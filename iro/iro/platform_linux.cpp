@@ -182,6 +182,13 @@ b8 poll(fs::File::Handle handle, fs::PollEventFlags* flags)
 
 /* ----------------------------------------------------------------------------
  */
+b8 isatty(fs::File::Handle handle)
+{
+  return ::isatty((s64)handle);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 setNonBlocking(fs::File::Handle handle)
 {
   int oldflags = fcntl( (s64)handle, F_GETFL, 0);
