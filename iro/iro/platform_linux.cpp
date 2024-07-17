@@ -53,6 +53,8 @@ void sleep(TimeSpan time)
  */
 b8 open(fs::File::Handle* out_handle, str path, fs::OpenFlags flags)
 {
+  using enum fs::OpenFlag;
+
   assert(out_handle);
 
   int oflags = 0;
@@ -68,11 +70,11 @@ b8 open(fs::File::Handle* out_handle, str path, fs::OpenFlags flags)
 
 #undef flagmap
 
-  if (flags.testAll<fs::OpenFlag::Read, fs::OpenFlag::Write>())
+  if (flags.testAll<Read, Write>())
     oflags |= O_RDWR;
-  else if (flags.test(fs::OpenFlag::Write))
+  else if (flags.test(Write))
     oflags |= O_WRONLY;
-  else if (flags.test(fs::OpenFlag::Read))
+  else if (flags.test(Read))
     oflags |= O_RDONLY;
   else
   {
