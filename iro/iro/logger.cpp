@@ -43,17 +43,6 @@ namespace iro
     return true;
   }
 
-
-  /* --------------------------------------------------------------------------
-   */
-  str tryColor(Log::Dest& dest, color::Color color)
-  {
-    if (!dest.flags.test(Log::Dest::Flag::AllowColor))
-      return ""_str;
-
-    return color::getColor(color);
-  }
-
   /* --------------------------------------------------------------------------
    */
   void Logger::writePrefix(Verbosity v, Log::Dest& d)
@@ -86,33 +75,44 @@ namespace iro
     {
       using enum Verbosity;
       using enum color::Color;
+      b8 allow_color = d.flags.test(AllowColor);
+
+#define c(x, c, y) \
+      case x: \
+        if (allow_color) \
+          io::formatv(d.io, color::c(GLUE(y,_str))); \
+        else \
+          io::formatv(d.io, GLUE(y,_str)); \
+        break;
 
       if (d.flags.test(PadVerbosity))
       {
         switch (v)
         {
-        case Trace:  io::formatv(d.io, color::   cyan(" trace"_str)); break;
-        case Debug:  io::formatv(d.io, color::  green(" debug"_str)); break;
-        case Info:   io::formatv(d.io, color::   blue("  info"_str)); break;
-        case Notice: io::formatv(d.io, color::magenta("notice"_str)); break;
-        case Warn:   io::formatv(d.io, color:: yellow("  warn"_str)); break;
-        case Error:  io::formatv(d.io, color::    red(" error"_str)); break;
-        case Fatal:  io::formatv(d.io, color::    red(" fatal"_str)); break;
+        c(Trace,  cyan,    " trace");
+        c(Debug,  green,   " debug");
+        c(Info,   blue,    "  info");
+        c(Notice, magenta, "notice");
+        c(Warn,   yellow,  "  warn");
+        c(Error,  red,     " error");
+        c(Fatal,  red,     " fatal");
         }
       }
       else
       {
         switch (v)
         {
-        case Trace:  io::formatv(d.io, color::   cyan("trace"_str));  break;
-        case Debug:  io::formatv(d.io, color::  green("debug"_str));  break;
-        case Info:   io::formatv(d.io, color::   blue("info"_str));   break;
-        case Notice: io::formatv(d.io, color::magenta("notice"_str)); break;
-        case Warn:   io::formatv(d.io, color:: yellow("warn"_str));   break;
-        case Error:  io::formatv(d.io, color::    red("error"_str));  break;
-        case Fatal:  io::formatv(d.io, color::    red("fatal"_str));  break;
+        c(Trace,  cyan,    "trace");
+        c(Debug,  green,   "debug");
+        c(Info,   blue,    "info");
+        c(Notice, magenta, "notice");
+        c(Warn,   yellow,  "warn");
+        c(Error,  red,     "error");
+        c(Fatal,  red,     "fatal");
         }
       }
+
+#undef c
 
       io::format(d.io, ": ");
     }
