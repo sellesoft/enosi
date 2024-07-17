@@ -133,7 +133,10 @@ struct str
   pos findFirst(u8 c);
   pos findLast(u8 c);
 
-  void split(u8 c, ExpandableContainer<str> auto* container, b8 remove_empty = true)
+  void split(
+      u8 c, 
+      ExpandableContainer<str> auto* container, 
+      b8 remove_empty = true)
   {
     str scan = *this;
 
@@ -154,6 +157,32 @@ struct str
 
       scan = scan.sub(p+1);
     }
+  }
+
+  struct LineAndColumn
+  {
+    s32 line = 1;
+    s32 column = 1;
+  };
+
+  LineAndColumn findLineAndColumnAtOffset(s32 offset)
+  {
+    LineAndColumn result = {};
+    str me = *this;
+    while (not me.isEmpty() && me.bytes - bytes < offset)
+    {
+      Codepoint c = me.advance();
+      if (c.codepoint == '\n')
+      {
+        result.line += 1;
+        result.column = 1;
+      }
+      else
+      {
+        result.column += 1;
+      }
+    }
+    return result;
   }
 
   str allocateCopy(mem::Allocator* allocator = &mem::stl_allocator)
