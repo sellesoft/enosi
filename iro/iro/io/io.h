@@ -150,28 +150,42 @@ private:
  *  room for N+1 bytes and on every write sets the byte after the write_pos 
  *  to 0.
  *
- *  TODO(sushi) this sucks and ive found it to be useless in most cases. 
- *              Either get rid of this or fix it so its not so useless.
+ *  Currently the buffer is always overwritten on writes. Initially this 
+ *  tracked the write (and read) pos properly but that would up being pretty
+ *  useless. This is to be used for temporary stuff.
+ *
  */ 
 template<size_t N>
 struct StaticBuffer : public IO
 {
-  static const size_t len = N;
-
   u8  buffer[N+1];
-  s32 write_pos;
-  s32 read_pos;
+  s32 len;
 
-  size_t capacity() { return len; }
-  str asStr() { return str{buffer, u64(write_pos)}; }
+  inline static size_t capacity() { return N; }
+  str asStr() { return str{buffer, u64(len)}; }
 
   operator char*() { return (char*)buffer; }
 
-  void clear();
-  void rewind();
+  virtual s64 write(Bytes slice) override
+  {
+    len = (slice.len > N? N : slice.len);
+    mem::copy(buffer, slice.ptr, len);
+    buffer[len] = 0;
+    return len;
+  }
 
-  virtual s64 write(Bytes slice) override;
-  virtual s64 read(Bytes slice) override;
+  virtual s64 read(Bytes slice) override
+  {
+    if (len)
+      mem::copy(slice.ptr, buffer, len);
+    return len;
+  }
+
+  s64 readFrom(io::IO* io)
+  {
+    len = io->read({buffer, N});
+    return len;
+  }
 };
 
 }
