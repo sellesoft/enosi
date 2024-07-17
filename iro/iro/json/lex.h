@@ -13,6 +13,8 @@
 #include "../io/io.h"
 #include "../io/format.h"
 
+#include "csetjmp"
+
 namespace iro::json
 {
 
@@ -42,16 +44,19 @@ struct Token
     String,
   };
 
-  Kind kind;
+  Kind kind = Kind::Invalid;
 
-  u32 line;
-  u32 column;
-
-  str raw;
-
-  static Token invalid() { return {Kind::Invalid}; }
-    b8 isValid() { return kind != Kind::Invalid; }
+  s32 loc = 0;
+  s32 len = 0;
 };
+
+}
+
+DefineNilValue(iro::json::Token, {}, 
+  { return x.kind == iro::json::Token::Kind::Invalid; });
+
+namespace iro::json
+{
 
 /* ================================================================================================ json::Lexer
  */
@@ -59,31 +64,32 @@ struct Lexer
 {
   str stream_name;
 
-    io::Memory stream_buffer;
-    io::IO* in;
+  io::Memory cache;
+  io::IO* in;
 
-  str cursor;
-  utf8::Codepoint cursor_codepoint;
+  utf8::Codepoint current_codepoint;
+  u64 current_offset;
 
-  u32 line;
-  u32 column;
+  b8 at_end;
 
-  enum class Flag
-  {
-    ReturnWhitespaceTokens,
-  };
-  typedef Flags<Flag> Flags;
+  jmp_buf* failjmp;
 
-  Flags flags;
-
-  b8   init(io::IO* input_stream, str stream_name, Logger::Verbosity verbosity = Logger::Verbosity::Warn);
+  b8 init(io::IO* input_stream, str stream_name, jmp_buf* failjmp);
   void deinit();
 
   Token nextToken();
 
+  str getRaw(Token t) { return { cache.buffer + t.loc, u64(t.len) }; }
+
 private:
 
-    Logger logger;
+  Token curt;
+
+  b8 readStreamIfNeeded();
+  b8 decodeCurrent();
+
+  void initCurt();
+  void finishCurt(Token::Kind kind, s32 len_offset = 0);
 
   u32 current();
 
@@ -98,20 +104,12 @@ private:
   void skipWhitespace();
 
   template<io::Formattable... T>
-  Token errorHere(T... args)
-  {
-    ERROR(stream_name, ":"_str, line, ":"_str, column, ": "_str, args..., "\n");
-    return Token::invalid();
-  }
+  Token errorHere(T... args);
 
   template<io::Formattable... T>
-  Token errorAt(u32 line, u32 column, T... args)
-  {
-    ERROR(stream_name, ":"_str, line, ":"_str, column, ": "_str, args..., "\n");
-    return Token::invalid();
-  }
+  Token errorAt(s32 offset, T... args);
 };
 
-} // namespace json
+}
 
 #endif // _iro_json_lex_h

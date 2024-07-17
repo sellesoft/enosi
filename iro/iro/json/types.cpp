@@ -79,11 +79,12 @@ Value* Object::findMember(str name)
   return nullptr;
 }
 
-
 /* ------------------------------------------------------------------------------------------------
  */
 b8 JSON::init()
 {
+  if (!string_buffer.init())
+    return false;
   pool = ValuePool::create();
   root = nullptr;
   return true;
@@ -95,6 +96,13 @@ void JSON::deinit()
 {
   pool.destroy();
   root = nullptr;
+}
+
+/* ------------------------------------------------------------------------------------------------
+ */
+str JSON::cacheString(str s)
+{
+  return s.allocateCopy(&string_buffer);
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -116,50 +124,50 @@ void prettyPrintRecur(io::IO* out, Value* value, s32 depth)
 
   switch (value->kind)
   {
-    case Null: 
-      out->write("null"_str);
-      return;
-    case False:
-      out->write("false"_str);
-      return;
-    case True:
-      out->write("true"_str);
-      return;
-    case Number:
-            io::format(out, value->number);
-      return;
-    case String:
-            io::formatv(out, "\"", value->string, "\"");
-      return;
-    case Array:
-      out->write("[\n"_str);
-      for (s32 i = 0, len = value->array.values.len(); i < len; i++)
-      {
-        for (s32 i = 0; i < depth + 1; i++)
-          out->write(" "_str);
-        prettyPrintRecur(out, value->array.values[i], depth + 2);
-        if (i != len - 1)
-          out->write(","_str);
-        out->write("\n"_str);
-      }
-      for (s32 i = 0; i < depth-1; i++)
+  case Null: 
+    out->write("null"_str);
+    return;
+  case False:
+    out->write("false"_str);
+    return;
+  case True:
+    out->write("true"_str);
+    return;
+  case Number:
+    io::format(out, value->number);
+    return;
+  case String:
+    io::formatv(out, "\"", value->string, "\"");
+    return;
+  case Array:
+    out->write("[\n"_str);
+    for (s32 i = 0, len = value->array.values.len(); i < len; i++)
+    {
+      for (s32 i = 0; i < depth + 1; i++)
         out->write(" "_str);
-      out->write("]"_str);
-      return;
-    case Object:
-      out->write("{\n"_str);
-      for (auto& member : value->object.members)
-      {
-        for (s32 i = 0; i < depth + 1; i++)
-          out->write(" "_str);
-                io::formatv(out, "\"", member.name, "\": ");
-        prettyPrintRecur(out, member.value, depth + 2);
-        out->write("\n"_str);
-      }
-      for (s32 i = 0; i < depth-1; i++)
+      prettyPrintRecur(out, value->array.values[i], depth + 2);
+      if (i != len - 1)
+        out->write(","_str);
+      out->write("\n"_str);
+    }
+    for (s32 i = 0; i < depth-1; i++)
+      out->write(" "_str);
+    out->write("]"_str);
+    return;
+  case Object:
+    out->write("{\n"_str);
+    for (auto& member : value->object.members)
+    {
+      for (s32 i = 0; i < depth + 1; i++)
         out->write(" "_str);
-      out->write("}"_str);
-      return;
+      io::formatv(out, "\"", member.name, "\": ");
+      prettyPrintRecur(out, member.value, depth + 2);
+      out->write("\n"_str);
+    }
+    for (s32 i = 0; i < depth-1; i++)
+      out->write(" "_str);
+    out->write("}"_str);
+    return;
   }
 }
 
@@ -168,7 +176,7 @@ void prettyPrintRecur(io::IO* out, Value* value, s32 depth)
 s64 JSON::prettyPrint(io::IO* out)
 {
   prettyPrintRecur(out, root, 0);
-    return 0; // TODO(sushi) return number written later... maybe
+  return 0; // TODO(sushi) return number written later... maybe
 }
 
 } // namespace json

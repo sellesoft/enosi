@@ -14,7 +14,7 @@
 namespace iro::json
 {
 
-/* ================================================================================================ json::Parser
+/* ============================================================================
  */
 struct Parser
 {
@@ -31,8 +31,10 @@ struct Parser
 
   io::IO* in;
 
+  jmp_buf* failjmp;
 
-  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
    */
 
 
@@ -41,7 +43,11 @@ struct Parser
   // The given JSON is assumed to not be initialized and to contain
   // no information!
   // 'stream_name' is used in error reporting
-  b8   init(io::IO* input_stream, JSON* json, str stream_name, Logger::Verbosity v = Logger::Verbosity::Warn);
+  b8 init(
+      io::IO*  input_stream, 
+      JSON*    json, 
+      str      stream_name, 
+      jmp_buf* failjmp = nullptr);
   void deinit();
 
   // Returns a pointer to a JSON object on success,
@@ -50,28 +56,14 @@ struct Parser
 
 private:
 
-  Logger logger;
+  template<typename... T>
+  b8 errorHere(T... args);
 
   template<typename... T>
-  b8 errorHere(T... args)
-  {
-    ERROR(lexer.stream_name, ":", curt.line, ":", curt.column, ": ", args..., "\n");
-    return false;
-  }
+  b8 errorAt(s64 line, s64 column, T... args);
 
   template<typename... T>
-  b8 errorAt(s64 line, s64 column, T... args)
-  {
-    ERROR(lexer.stream_name, ":", line, ":", column, ": ", args..., "\n");
-    return false;
-  }
-
-  template<typename... T>
-  b8 errorNoLocation(T... args)
-  {
-    ERROR(args..., "\n");
-    return false;
-  }
+  b8 errorNoLocation(T... args);
 
   void nextToken();
 

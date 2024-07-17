@@ -11,6 +11,7 @@
 #include "../containers/avl.h"
 #include "../containers/list.h"
 #include "../containers/array.h"
+#include "../memory/bump.h"
 #include "../io/io.h"
 
 namespace iro::json
@@ -18,9 +19,9 @@ namespace iro::json
 
 struct Value;
 
-/* ================================================================================================ json::Array
- *  An array of json::Values, or really, references to json::Values. The objects are expected 
- *  not to move in memory.
+/* ============================================================================
+ *  An array of json::Values, or really, references to json::Values. The 
+ *  objects are expected not to move in memory.
  */
 struct Array
 {
@@ -29,7 +30,7 @@ struct Array
   ValueArray values;
 
 
-  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
    */
 
 
@@ -40,7 +41,7 @@ struct Array
   Value* pop();
 };
 
-/* ================================================================================================ json::Object
+/* ============================================================================
  */
 struct Object
 {
@@ -60,7 +61,7 @@ struct Object
   MemberPool pool;
 
 
-  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
    */
 
 
@@ -71,7 +72,7 @@ struct Object
   Value* findMember(str name);
 };
 
-/* ================================================================================================ json::Value
+/* ============================================================================
  */
 struct Value
 {
@@ -99,23 +100,22 @@ struct Value
   Value() : kind(Kind::Null) {}
 
   
-  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
    */
 
 
   b8   init();
   void deinit();
-  
 
   void print();
 };
 
-/* ================================================================================================ json::JSON
- *  Type representing a single JSON text and which manages the memory of all values 
- *  contained in it.
+/* ============================================================================
+ *  Type representing a single JSON text and which manages the memory of all 
+ *  values contained in it.
  *
- *  This may either be created via json::Parser or created manually through the api.
- *  These can be transformed into JSON source via json::Generator
+ *  This may either be created via json::Parser or created manually through the 
+ *  api. These can be transformed into JSON source via json::Generator.
  */
 struct JSON
 {
@@ -125,15 +125,20 @@ struct JSON
   ValuePool pool;
   Value*    root;
 
+  mem::LenientBump string_buffer;
 
-  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
    */
 
   
   b8   init();
   void deinit();
 
-  // allocates a value of the given kind from the pool and returns a pointer to it
+  str cacheString(str s);
+
+  // Allocates a value of the given kind from the pool and returns a pointer 
+  // to it.
   Value* newValue(Value::Kind kind);
 
   s64 prettyPrint(io::IO* out);
