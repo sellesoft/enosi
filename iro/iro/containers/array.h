@@ -47,13 +47,9 @@ struct Array
 
   /* --------------------------------------------------------------------------
    */ 
-  static Array<T> create(
-      s32 init_space = 8, 
-      mem::Allocator* allocator = &mem::stl_allocator)
+  b8 init(s32 init_space = 8, mem::Allocator* allocator = &mem::stl_allocator)
   {
     init_space = (8 > init_space ? 8 : init_space);
-
-    Array<T> out = {};
 
     Header* header = 
       (Header*)allocator->allocate(sizeof(Header) + init_space * sizeof(T));
@@ -62,7 +58,22 @@ struct Array
     header->len = 0;
     header->allocator = allocator;
 
-    out.arr = (T*)(header + 1);
+    arr = (T*)(header + 1);
+
+    return true;
+  }
+
+  /* --------------------------------------------------------------------------
+   */ 
+  static Array<T> create(
+      s32 init_space = 8, 
+      mem::Allocator* allocator = &mem::stl_allocator)
+  {
+
+    Array<T> out = {};
+    
+    if (!out.init(init_space, allocator))
+      return nil;
 
     return out;
   }
