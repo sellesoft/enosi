@@ -63,7 +63,6 @@ local lua_driver = Driver.LuaObj.new()
 lake.find("src/*.lua"):each(function(lfile)
   local ofile = builddir..lfile..".o"
   lfile = cwd.."/"..lfile
-  print(lfile)
 
   proj:reportLuaObjFile(ofile)
 
