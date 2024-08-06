@@ -126,6 +126,7 @@ b8 Parser::value()
       else
         return errorHere("failed to create value for null token");
 
+    case TKind::False:
     case TKind::True:
       if (Value* v = json->newValue(VKind::Boolean))
       {
