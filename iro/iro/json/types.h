@@ -79,8 +79,7 @@ struct Value
   enum class Kind
   {
     Null,
-    False,
-    True,
+    Boolean,
     Object,
     Array,
     Number,
@@ -91,6 +90,7 @@ struct Value
 
   union
   {
+    b8     boolean;
     Object object;
     Array  array;
     f64    number;
@@ -109,6 +109,25 @@ struct Value
 
   void print();
 };
+
+/* ----------------------------------------------------------------------------
+ */
+static inline str getValueKindString(Value::Kind x)
+{
+  switch (x)
+  {
+#define z(x) case Value::Kind::x: return GLUE(STRINGIZE(x),_str);
+  z(Null);
+  z(Boolean);
+  z(Object);
+  z(Array);
+  z(Number);
+  z(String);
+#undef z
+  }
+  assert(!"Invalid value kind passed");
+  return {};
+}
 
 /* ============================================================================
  *  Type representing a single JSON text and which manages the memory of all 

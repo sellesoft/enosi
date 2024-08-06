@@ -127,11 +127,8 @@ void prettyPrintRecur(io::IO* out, Value* value, s32 depth)
   case Null: 
     out->write("null"_str);
     return;
-  case False:
-    out->write("false"_str);
-    return;
-  case True:
-    out->write("true"_str);
+  case Boolean:
+    out->write(value->boolean? "true"_str : "false"_str);
     return;
   case Number:
     io::format(out, value->number);

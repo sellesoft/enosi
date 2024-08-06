@@ -116,23 +116,27 @@ b8 Parser::value()
 {
   switch (curt.kind)
   {
-    #define literalCase(k) \
-      case TKind::k: \
-        if (Value* v = json->newValue(VKind::k)) \
-        { \
-          value_stack.push(v); \
-          nextToken(); \
-          return true; \
-        } \
-        else \
-          return errorHere( \
-              "failed to create value for " STRINGIZE(k) " token");
-    
-    literalCase(Null);
-    literalCase(False);
-    literalCase(True);
+    case TKind::Null:
+      if(Value* v = json->newValue(VKind::Null))
+      {
+        value_stack.push(v);
+        nextToken();
+        return true;
+      }
+      else
+        return errorHere("failed to create value for null token");
 
-    #undef literal_case
+    case TKind::True:
+      if (Value* v = json->newValue(VKind::Boolean))
+      {
+        v->boolean = curt.kind == TKind::True;
+
+        value_stack.push(v);
+        nextToken();
+        return true;
+      }
+      else
+        return errorHere("failed to create value for boolean token");
 
     case TKind::Number:
       if (Value* v = json->newValue(VKind::Number))
