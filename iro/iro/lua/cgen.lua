@@ -27,7 +27,7 @@ end
 --- Appends indentation upto self.depth
 CGen.appendIndentation = function(self)
   for _=1,self.depth do
-    self.buffer:put "  "
+    self.buffer:put " "
   end
 end
 
@@ -139,13 +139,7 @@ CGen.beginElseIf = function(self, cond)
   self:beginScope()
 end
 
---- Begins a function definition.
----@param return_type string
----@param name string
---- The function parameters
----@param ... string
-CGen.beginFunction = function(self, return_type, name, ...)
-  self:appendIndentation()
+local commonFunction = function(self, return_type, name, ...)
   self.buffer:put(return_type, " ", name, "(")
   local args = List{...}
   args:eachWithIndex(function(arg, i)
@@ -156,6 +150,27 @@ CGen.beginFunction = function(self, return_type, name, ...)
   end)
   self.buffer:put(")\n")
   self:beginScope()
+end
+
+--- Begins a function definition.
+---@param return_type string
+---@param name string
+--- The function parameters
+---@param ... string
+CGen.beginFunction = function(self, return_type, name, ...)
+  self:appendIndentation()
+  commonFunction(self, return_type, name, ...)
+end
+
+--- Begins a static function.
+---@param return_type string
+---@param name string
+--- The function parameters
+---@param ... string
+CGen.beginStaticFunction = function(self, return_type, name, ...)
+  self:appendIndentation()
+  self.buffer:put("static ")
+  commonFunction(self, return_type, name, ...)
 end
 
 --- Ends a function definition.
@@ -240,6 +255,23 @@ CGen.typedef = function(self, from, to)
   self:appendIndentation()
   self.buffer:put("typedef ", from, " ", to, ";\n")
 end
+
+--- Begins a for loop. Pass nil for parts of the clause meant to be empty.
+---@param p0 string
+---@param p1 string
+---@param p2 string
+CGen.beginForLoop = function(self, p0, p1, p2)
+  self:appendIndentation()
+  self.buffer:put(
+    "for (",
+    p0 or "", ";",
+    p1 or "", ";",
+    p2 or "", ")\n")
+  self:beginScope()
+end
+
+--- Ends a for loop.
+CGen.endForLoop = CGen.endScope
 
 --- Appends the given args as a line of C code.
 ---@param ... any
