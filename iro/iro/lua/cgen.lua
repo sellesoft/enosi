@@ -7,6 +7,8 @@ local List = require "list"
 ---@field buffer any
 --- The current indentation depth.
 ---@field depth number
+--- Disable setting default values on struct members.
+---@field disable_struct_member_defaults boolean
 local CGen = {}
 CGen.__index = CGen
 
@@ -17,6 +19,7 @@ CGen.new = function()
   setmetatable(o, CGen)
   o.buffer = buffer.new()
   o.depth = 0
+  o.disable_struct_member_defaults = false
   return o
 end
 
@@ -207,7 +210,7 @@ end
 CGen.appendStructMember = function(self, type, name, default_value)
   self:appendIndentation()
   self.buffer:put(type, " ", name)
-  if default_value then
+  if not self.disable_struct_member_defaults and default_value then
     self.buffer:put(" = ", default_value)
   end
   self.buffer:put ";\n"
@@ -272,6 +275,15 @@ end
 
 --- Ends a for loop.
 CGen.endForLoop = CGen.endScope
+
+--- Begins a for each loop.
+---@param var string
+---@param cont string
+CGen.beginForEachLoop = function(self, var, cont)
+  self:appendIndentation()
+  self.buffer:put("for (",var,":",cont,")\n")
+  self:beginScope()
+end
 
 --- Appends the given args as a line of C code.
 ---@param ... any
