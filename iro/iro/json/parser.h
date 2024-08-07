@@ -40,8 +40,6 @@ struct Parser
 
   // Initializes the parser with the stream to parse
   // and a JSON object to fill with information.
-  // The given JSON is assumed to not be initialized and to contain
-  // no information!
   // 'stream_name' is used in error reporting
   b8 init(
       io::IO*  input_stream, 
@@ -50,8 +48,6 @@ struct Parser
       jmp_buf* failjmp = nullptr);
   void deinit();
 
-  // Returns a pointer to a JSON object on success,
-  // nullptr otherwise.
   b8 start();
 
 private:

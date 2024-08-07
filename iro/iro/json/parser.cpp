@@ -56,9 +56,6 @@ b8 Parser::init(
   this->json = json;
   this->failjmp = failjmp;
 
-  if (!json->init())
-    return false;
-
   value_stack = ValueStack::create();
 
   return true;
