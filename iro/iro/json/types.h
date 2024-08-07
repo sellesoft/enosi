@@ -34,6 +34,7 @@ struct Array
    */
 
 
+  // TODO(sushi) this should prob take an allocator
   b8   init();
   void deinit();
 
@@ -104,8 +105,35 @@ struct Value
    */
 
 
-  b8   init();
-  void deinit();
+  b8 init()
+  {
+    switch (kind)
+    {
+    case Kind::Null: 
+    case Kind::Boolean:
+    case Kind::Number:
+    case Kind::String:
+      return true;
+    case Kind::Object:
+      return object.init();
+    case Kind::Array:
+      return array.init();
+    }
+    return false;
+  }
+
+  void deinit()
+  {
+    switch (kind)
+    {
+    case Kind::Object:
+      object.deinit();
+      break;
+    case Kind::Array:
+      array.deinit();
+      break;
+    }
+  }
 
   void print();
 };
