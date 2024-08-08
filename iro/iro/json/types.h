@@ -135,7 +135,12 @@ struct Value
     }
   }
 
-  void print();
+  b8 isNull() { return kind == Kind::Null; }
+  b8 isBoolean() { return kind == Kind::Boolean; }
+  b8 isObject() { return kind == Kind::Object; }
+  b8 isArray() { return kind == Kind::Array; }
+  b8 isNumber() { return kind == Kind::Number; }
+  b8 isString() { return kind == Kind::String; }
 };
 
 /* ----------------------------------------------------------------------------
