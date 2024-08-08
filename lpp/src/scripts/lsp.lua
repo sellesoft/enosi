@@ -1,4 +1,3 @@
-
 -- Script for generating C types and de/serializers for those types
 -- based on JSON schemas. Currently built specifically for lpp's language
 -- server, but it may be useful to pull out and make more general later on.
@@ -10,585 +9,53 @@ local buffer = require "string.buffer"
 local List = require "list"
 local CGen = require "cgen"
 
-local Schema,
-      StringedEnum,
-      NumericEnum,
-      Table,
-      SchemaArray
+---@class JSONSchemas
+--- Mapping from type names to their definition
+---@field map table
+--- Ordered list of schemas as they are declared.
+---@field list List
 
+---@class json
+---@field schemas JSONSchemas
 local json = {}
-json.user_schema =
+
+json.schemas =
 {
   map = {},
   list = List{},
 }
 
----@param c CGen
-local newValue = function(c, name, kind, obj, f)
-  local vname = name.."Value"
-  c:beginIf("Value* "..vname.." = json->newValue(Value::Kind::"..kind..")")
-    c:beginIf("!"..vname.."->init()")
-      c:append('ERROR("failed to init value ',vname,'\\n");')
-      c:append("return false;")
-    c:endIf()
-    c:append(obj.."->addMember(\"",name,"\"_str, ",vname,");")
-    f(vname)
-  c:beginElse()
-    c:append("ERROR(\"failed to create value for ",name,"\\n\");")
-    c:append("return false;")
-  c:endIf()
-end
+local Schema,
+      Object
 
----@param c CGen
-local newArrayValue = function(c, name, kind, arr, f)
-  local vname = name.."Value"
-  c:beginIf("Value* "..vname.." = json->newValue(Value::Kind::"..kind..")")
-    c:beginIf("!"..vname.."->init()")
-      c:append('ERROR("failed to init value ',vname,'\\n");')
-      c:append("return false;")
-    c:endIf()
-    c:append(arr.."->push(",vname,");")
-    f(vname)
-  c:beginElse()
-    c:append("ERROR(\"failed to create value for ",name,"\\n\");")
-    c:append("return false;")
-  c:endIf()
-end
-
----@param c CGen
-local getValue = function(c, name, kind, obj, f)
-  local vname = name.."Value"
-  c:beginIf("Value* "..vname.." = "..obj.."->findMember(\""..name.."\"_str)")
-    c:beginIf(vname.."->kind != Value::Kind::"..kind)
-      c:append(
-        "ERROR(\"unexpected type for value '"..name.."' "..
-        "wanted "..kind..", got \", getValueKindString("..
-        vname.."->kind), \"\\n\");")
-      c:append("return false;")
-    c:endIf()
-    f(vname)
-  c:endIf()
-end
-
--- debug.sethook(function(event, line)
---   local s = debug.getinfo(2).short_src
---   print(s..":"..line)
--- end, "l")
-
-local Union = {}
-
-Union.handlers = {}
-
-Union.new = function(prev, json)
-  return setmetatable(
-  {
-    json = json,
-    prev = prev,
-    types = {}
-  }, Union)
-end
-
----@param c CGen
-Union.toC = function(self, c, name)
-  c:appendStructMember("json::Value::Kind", name.."_kind")
-  c:beginUnion()
-  do
-    -- will break if there's a nested union for whatever reason
-    -- ugh! add a thing that tracks nesting eventually
-    c.disable_struct_member_defaults = true
-    for value_kind,type in pairs(self.types) do
-      type:toC(c, name.."_"..value_kind)
-    end
-    c.disable_struct_member_defaults = false
-  end
-  c:endUnion()
-end
-
----@param c CGen
-Union.writeDeserializer = function(self, c, name, obj, out)
-  local vname = name.."Value"
-  c:beginIf("Value* "..vname.." = "..obj.."->findMember(\""..name.."\"_str)")
-  do
-    c:beginSwitch(vname.."->kind")
-    do
-      for value_kind,type in pairs(self.types) do
-        local handlers =
-        {
-          boolean = function()
-            c:beginCase("Value::Kind::Boolean")
-            type:writeUnionDeserializerCase(c, name.."_boolean", vname, out)
-            c:endCase()
-          end,
-          number = function()
-            c:beginCase("Value::Kind::Number")
-            type:writeUnionDeserializerCase(c, name.."_number", vname, out)
-            c:endCase()
-          end,
-          table = function()
-            c:beginCase("Value::Kind::Object")
-            do
-              c:beginScope()
-              type:writeUnionDeserializerCase(c, name.."_table", vname, out)
-              c:endScope()
-            end
-            c:endCase()
-          end,
-          string = function()
-            c:beginCase("Value::Kind::String")
-            type:writeUnionDeserializerCase(c, name.."_string", vname, out)
-            c:endCase()
-          end,
-        }
-
-        local handler = handlers[value_kind]
-        if handler then
-          handler()
-        else
-          error("no handler for union value kind '"..value_kind.."'")
+setmetatable(json,
+{
+  __index = function(self, key)
+    local handlers =
+    {
+      Schema = function()
+        return function(name)
+          return Schema.new(self, name)
         end
       end
-    end
-    c:endSwitch()
-  end
-  c:endIf()
-end
+    }
 
----@param c CGen
-Union.writeSerializer = function(self, c, name, obj, invar)
-  local handlers =
-  {
-    boolean = function()
-      c:beginCase("Value::Kind::Boolean")
-      do
-        newValue(c, name, "Boolean", obj, function(vname)
-          c:append(vname,"->boolean = ",invar,".",name,"_boolean;")
-        end)
-      end
-      c:endCase()
-    end,
-    number = function()
-      c:beginCase("Value::Kind::Number")
-      do
-        newValue(c, name, "Number", obj, function(vname)
-          c:append(vname,"->number = ",invar,".",name,"_number;")
-        end)
-      end
-      c:endCase()
-    end,
-    string = function()
-      c:beginCase("Value::Kind::String")
-      do
-        newValue(c, name, "String", obj, function(vname)
-          c:append(
-            vname,"->string = ",invar,".",name,
-            "_string.allocateCopy(&json->string_buffer);")
-        end)
-      end
-      c:endCase()
-    end,
-    table = function(type)
-      c:beginCase("Value::Kind::Object")
-        type:writeUnionSerializerCase(
-          c,
-          name.."_table",
-          obj,
-          invar)
-      c:endCase()
-    end,
-  }
-  c:beginSwitch(invar.."."..name.."_kind")
-  do
-    for value_kind,type in pairs(self.types) do
-      local handler = handlers[value_kind]
-      if handler then
-        handler(type)
-      else
-        error("no handler for union value kind '"..value_kind.."'")
-      end
+    local handler = handlers[key]
+    if handler then
+      return handler()
     end
-  end
-  c:endSwitch()
-end
 
-Union.__call = function(self, name)
-  self.name = name
-  if self.prev then
-    self.prev.member.list:push{ name=name,type=self }
-    self.prev.member.map[name] = self
-  end
-  return self
-end
-
-Union.__index = function(self, key)
-  local handler = Union.handlers[key]
-  if handler then
-    return handler(self)
-  end
-
-  local member = rawget(Union, key)
-  if member then
-    return member
-  end
-end
-
-Union.done = function(self)
-  return self.prev
-end
-
-local TableType = setmetatable({},
-{
-  __newindex = function(self, key, value)
-    local T = {}
-    T.name = key
-    T.new = function(tbl)
-      return setmetatable({tbl=tbl}, T)
-    end
-    T.__call = function(self, name)
-      self.tbl.member.list:push{name=name,type=self}
-      self.tbl.member.map[name] = self
-      return self.tbl
-    end
-    T.isTypeOf = function(x)
-      return T == getmetatable(x)
-    end
-    T.toC = value.toC
-    T.writeDeserializer = value.writeDeserializer
-    T.writeSerializer = value.writeSerializer
-    T.writeUnionDeserializerCase = value.writeUnionDeserializerCase
-    T.writeUnionSerializerCase = value.writeUnionSerializerCase
-    T.__index = T
-    Union.handlers[key] = function(union)
-      -- i think this is wrong? 
-      if union.types[value.union_json_kind] then
-        error(
-          "the json kind "..value.union_json_kind.." has already been "..
-          "assigned to this union")
-      end
-      union.types[value.union_json_kind] = T
-      return union
-    end
-    rawset(self, key, T)
+    print(debug.traceback())
+    error("no handler for key '"..key.."'")
   end
 })
 
-TableType.Bool =
-{
-  union_json_kind = "boolean",
-  ---@param c CGen
-  writeUnionDeserializerCase = function(self, c, name, obj, out)
-    c:append(out.."->"..name.." = "..obj.."->boolean;")
-  end,
-  ---@param c CGen
-  writeUnionSerializerCase = function(self, c, name, obj, invar)
-    newValue(c, name, "Boolean", obj, function(vname)
-      c:append(vname,"->boolean = ",invar,".",name,";")
-    end)
-  end,
-  ---@param c CGen
-  toC = function(_, c, name)
-    c:appendStructMember("b8", name, "false")
-  end,
-  ---@param c CGen
-  writeDeserializer = function(_, c, name, obj, out)
-    local vname = name.."Value"
-    c:beginIf(
-      "Value* "..vname.." = "..obj.."->findMember(\""..name.."\"_str)")
-    do
-      c:beginIf(vname.."->kind == Value::Kind::Boolean")
-      do
-        c:append(out.."->"..name.." = "..vname.."->boolean;")
-      end
-      c:beginElse()
-      do
-        c:append(
-          "ERROR(\"unexpected type for value '"..name.."' "..
-          "wanted boolean, got \", getValueKindString("..
-          vname.."->kind), \"\\n\");")
-        c:append("return false;")
-      end
-      c:endIf()
-    end
-    c:endIf()
-  end,
-  ---@param c CGen
-  writeSerializer = function(_, c, name, obj, invar)
-    newValue(c, name, "Boolean", obj, function(vname)
-      c:append(vname,"->boolean = ",invar,".",name,";")
-    end)
-  end,
-}
-TableType.Int =
-{
-  union_json_kind = "number",
-  ---@param c CGen
-  toC = function(_, c, name)
-    c:appendStructMember("s32", name, "0")
-  end,
-  ---@param c CGen
-  writeDeserializer = function(_, c, name, obj, out)
-    local vname = name.."Value"
-    c:beginIf(
-      "Value* "..vname.." = "..obj.."->findMember(\""..name.."\"_str)")
-    do
-      c:beginIf(vname.."->kind != Value::Kind::Number")
-      do
-        c:append(
-          "ERROR(\"unexpected type for value '"..name.."' "..
-          "wanted number, got \", getValueKindString("..
-          vname.."->kind), \"\\n\");")
-        c:append("return false;")
-      end
-      c:endIf()
-      c:append(out.."->"..name.." = (s32)"..vname.."->number;")
-    end
-    c:endIf()
-  end,
-  ---@param c CGen
-  writeSerializer = function(_, c, name, obj, invar)
-    newValue(c, name, "Number", obj, function(vname)
-      c:append(vname,"->number = ",invar,".",name,";")
-    end)
-  end,
-}
-TableType.UInt =
-{
-  union_json_kind = "number",
-  ---@param c CGen
-  toC = function(_, c, name)
-    c:appendStructMember("u32", name, "0")
-  end,
-  ---@param c CGen
-  writeDeserializer = function(_, c, name, obj, out)
-    local vname = name.."Value"
-    c:beginIf(
-      "Value* "..vname.." = "..obj.."->findMember(\""..name.."\"_str)")
-    do
-      c:beginIf(vname.."->kind != Value::Kind::Number")
-      do
-        c:append(
-          "ERROR(\"unexpected type for value '"..name.."' "..
-          "wanted number, got \", getValueKindString("..
-          vname.."->kind), \"\\n\");")
-        c:append("return false;")
-      end
-      c:endIf()
-      c:append(out.."->"..name.." = (u32)"..vname.."->number;")
-    end
-    c:endIf()
-  end,
-  ---@param c CGen
-  writeSerializer = function(_, c, name, obj, invar)
-    newValue(c, name, "Number", obj, function(vname)
-      c:append(vname,"->number = ",invar,".",name,";")
-    end)
-  end,
-}
-TableType.String =
-{
-  union_json_kind = "string",
-  ---@param c CGen
-  writeUnionDeserializerCase = function(self, c, name, obj, out)
-    c:append(out.."->"..name.." = "..obj.."->string.allocateCopy(allocator);")
-  end,
-  ---@param c CGen
-  writeUnionSerializerCase = function(self, c, name, obj, invar)
-    newValue(c, name, "String", obj, function(vname)
-      c:append(
-        vname,"->string = ",invar,".",name,
-        ".allocateCopy(&json->string_buffer);")
-    end)
-  end,
-  ---@param c CGen
-  toC = function(_, c, name)
-    c:appendStructMember("str", name, "nil")
-  end,
-  ---@param c CGen
-  writeDeserializer = function(_, c, name, obj, out)
-    local vname = name.."Value"
-    c:beginIf(
-      "Value* "..vname.." = "..obj.."->findMember(\""..name.."\"_str)")
-    do
-      c:beginIf(vname.."->kind != Value::Kind::String")
-      do
-        c:append(
-          "ERROR(\"unexpected type for value '"..name.."' "..
-          "wanted string, got \", getValueKindString("..
-          vname.."->kind), \"\\n\");")
-        c:append("return false;")
-      end
-      c:endIf()
-      c:append(out.."->"..name.." = "..vname.."->string;")
-    end
-    c:endIf()
-  end,
-  ---@param c CGen
-  writeSerializer = function(_, c, name, obj, invar)
-    newValue(c, name, "String", obj, function(vname)
-      c:append(vname,"->string = ",invar,".",name,";")
-    end)
-  end,
-}
-TableType.StringArray =
-{
-  union_json_kind = "array",
-  ---@param c CGen
-  toC = function(_, c, name)
-    c:appendStructMember("Array<str>", name, "nil")
-  end,
-  ---@param c CGen
-  writeDeserializer = function(_, c, name, obj, out)
-    local vname = name.."Value"
-    c:beginIf(
-      "Value* "..vname.." = "..obj.."->findMember(\""..name.."\"_str)")
-    do
-      local len = name.."_len"
-      local values = vname.."->array.values"
-
-      c:append("s32 "..len.." = "..values..".len();")
-
-      c:beginIf("!"..out.."->"..name..".init("..len..", allocator)")
-      do
-        c:append(
-          "ERROR(\"failed to initialize array for value '"..name.."'\");")
-        c:append("return false;")
-      end
-      c:endIf()
-
-      local idx = name.."_idx"
-      local elem = name.."_elem"
-      c:beginForLoop(
-        "s32 "..idx.." = 0",
-        idx.." < "..len,
-        "++"..idx)
-      do
-        c:append("Value* ", elem, " = ", values, "[", idx, "];")
-        c:beginIf(elem.."->kind != Value::Kind::String")
-        do
-          c:append(
-            "ERROR(\"unexpected type in string array, got \", ",
-            "getValueKindString(", elem, "->kind), \"\\n\");")
-          c:append("return false;")
-        end
-        c:endIf()
-        c:append(
-          out,"->",name,".push(",elem,"->string.allocateCopy(allocator));")
-      end
-      c:endForLoop()
-    end
-    c:endIf()
-  end,
-  ---@param c CGen
-  writeSerializer = function(_, c, name, obj, invar)
-    c:beginIf("notnil("..invar.."."..name..")")
-    do
-      newValue(c, name, "Array", obj, function(vname)
-        c:append("json::Array* arr = &",vname,"->array;")
-        c:beginForEachLoop("str& s", invar.."."..name)
-        do
-          newArrayValue(c, "elem", "String", "arr", function(vname)
-            c:append(vname.."->string = s.allocateCopy(&json->string_buffer);")
-          end)
-        end
-        c:endForLoop()
-      end)
-    end
-    c:endIf()
-  end,
-}
-
-SchemaArray = {}
-SchemaArray.new = function(json, tbl)
-  return function(schema_name)
-    local o = {}
-    local T = assert(json.user_schema.map[schema_name], 
-      "no schema named "..schema_name)
-
-    local instance = T.new()
-
-    ---@param c CGen
-    o.toC = function(_, c, name)
-      c:appendStructMember("Array<"..schema_name..">", name)
-    end
-
-    ---@param c CGen
-    o.writeDeserializer = function(_, c, name, obj, out)
-      getValue(c, name, "Array", obj, function(vname)
-        local len = name.."_len"
-        local values = vname.."->array.values"
-
-        c:append("s32 "..len.." = "..values..".len();")
-
-        c:beginIf("!"..out.."->"..name..".init("..len..", allocator)")
-        do
-          c:append(
-            "ERROR(\"failed to initialize array for value '"..name.."'\");")
-          c:append("return false;")
-        end
-        c:endIf()
-
-        local idx = name.."_idx"
-        local elem = name.."Elem"
-        c:beginForLoop(
-          "s32 "..idx.." = 0",
-          idx.." < "..len,
-          "++"..idx)
-        do
-          c:append("Value* ", elem, " = ", values, "[", idx, "];")
-
-          c:append(schema_name,"* out_elem = out->",name,".push();")
-          c:beginIf(
-            "!deserialize"..schema_name.."(allocator,&"..elem..
-            "->object,out_elem)")
-          do
-            c:append(
-              'ERROR("failed to deserialize element ", ',idx,', "\\n");')
-            c:append("return false;")
-          end
-          c:endIf()
-        end
-        c:endForLoop()
-      end)
-    end
-
-    ---@param c CGen
-    o.writeSerializer = function(_, c, name, obj, invar)
-      newValue(c, name, "Array", obj, function(vname)
-        c:append("json::Array* arr = &",vname,"->array;")
-
-        local len = "arr->values.len()"
-        local idx = name.."_idx"
-        local elem = name.."Elem"
-        c:beginForLoop(
-          "s32 "..idx.." = 0",
-          idx.." < "..len,
-          "++"..idx)
-        newArrayValue(c, name, "Object", "arr", function(vname)
-          c:beginIf(
-            "!serialize"..schema_name.."(json,&"..vname.."->object,"..invar..
-            "."..name.."["..idx.."], allocator)")
-          do
-            c:append(
-              'ERROR("failed to serialize ',invar,'.',name,
-              '[",',idx,',"]\\n");')
-            c:append("return false;")
-          end
-          c:endIf()
-        end)
-        c:endForLoop()
-      end)
-    end
-
-    return setmetatable(o,
-    {
-      __call = function(self, name)
-        tbl.member.list:push{name=name,type=self}
-        tbl.member.map[name] = self
-        return tbl
-      end,
-    })
-  end
-end
-
+--- A json Schema, eg. a named Object that can be used to build other Scehma.
+---@class Schema
+--- The name of this Schema.
+---@field name string
+--- The object that defines the structure of this Schema.
+---@field obj Object
 Schema = {}
 Schema.__index = Schema
 
@@ -845,341 +312,42 @@ StringedEnum.new = function(json)
 
   o.new = enumNew(o,
   {
-    ---@param c CGen
-    writeDeserializer = function(_, c, name, obj, out)
-      local vname = name.."Value"
-      c:beginIf(
-        "Value* "..vname.." = "..obj.."->findMember(\""..name.."\"_str)")
-      do
-        c:beginIf(vname.."->kind != Value::Kind::String")
-        do
-          c:append(
-            "ERROR(\"unexpected type for value '"..name.."' wanted string "..
-            "but got\", getValueKindString("..vname.."->kind), \"\\n\");")
-          c:append("return false;")
-        end
-        c:endIf()
+    name = name,
+    obj = Object.new(json),
+  }
 
-        c:append(
-          out.."->"..name.." = "..getFromStringName(o.name).."("..vname..
-          "->string);")
-      end
-      c:endIf()
-    end,
-    ---@param c CGen
-    writeSetDeserializer = function(self, c, name, obj, out)
-      local vname = name.."Value"
-      c:beginIf(
-        "Value* "..vname.." = "..obj.."->findMember(\""..name.."\"_str)")
-      do
-        c:beginIf(vname.."->kind != Value::Kind::Array")
-        do
-          c:append(
-            "ERROR(\"unexpected type for value '"..name.."' wanted array "..
-            "but got \", getValueKindString("..vname.."->kind), \"\\n\");")
-          c:append("return false;")
-        end
-        c:endIf()
+  json.schemas.map[name] = o
+  json.schemas.list:push(o)
 
-        local values = vname.."->array.values"
-        local idx = name.."_idx"
-        local elem = name.."_elem"
-        local from_string_name = getFromStringName(o.name)
-        c:beginForLoop(
-          "s32 "..idx.." = 0",
-          idx.." < "..values..".len()",
-          "++"..idx)
-        do
-          c:append("Value* "..elem.." = "..values.."["..idx.."];")
-          c:beginIf(elem.."->kind != Value::Kind::String")
-          do
-            c:append(
-              "ERROR(\"unexpected type in string enum set, wanted string "..
-              "got \", getValueKindString("..elem.."->kind), \"\\n\");")
-            c:append("return false;")
-          end
-          c:endIf()
-          c:append(
-            out.."->"..name..".set("..from_string_name.."("..elem..
-            "->string));")
-        end
-        c:endForLoop()
-      end
-      c:endIf()
-    end,
-    ---@param c CGen
-    writeSerializer = function(self, c, name, obj, invar)
-      local from_enum_name = getFromEnumName(o.name)
-      newValue(c, name, "String", obj, function(vname)
-        c:append(
-          vname,"->string = ",from_enum_name,"(",invar,".",name,
-          ").allocateCopy(&json->string_buffer);")
-      end)
-    end,
-    ---@param c CGen
-    writeSetSerializer = function(self, c, name, obj, invar)
-      newValue(c, name, "Array", obj, function(vname)
-        local from_enum_name = getFromEnumName(o.name)
-        c:append("json::Array* arr = &",vname,"->array;")
-        c:beginForLoop(
-          o.name.." kind = ("..o.name..")0",
-          "(u32)kind < (u32)"..o.name.."::COUNT",
-          "kind = ("..o.name..")((u32)kind + 1)")
-        do
-          newArrayValue(c, name, "String", "arr", function(vname)
-            c:append(
-              vname,"->string = ",from_enum_name,
-              "(kind).allocateCopy(&json->string_buffer);")
-          end)
-        end
-        c:endForLoop()
-      end)
-    end,
-  })
-  return setmetatable(o, StringedEnum)
+  return o.obj
 end
-StringedEnum.__call = enumCall
 
-NumericEnum = {}
-NumericEnum.new = function(json)
-  local o = {}
-  o.json = json
-  o.elems = List{}
-  o.new = enumNew(o,
-  {
-    ---@param c CGen
-    -- deserializer
-    writeDeserializer = function(_, c, name, obj, out)
-      local vname = name.."Value"
-      c:beginIf(
-        "Value* "..vname.." = "..obj.."->findMember(\""..name.."\"_str)")
-      do
-        c:beginIf(vname.."->kind != Value::Kind::Number")
-        do
-          c:append(
-            "ERROR(\"unexpected type for value '"..name.."' wanted number "..
-            "but got\", getValueKindString("..vname.."->kind), \"\\n\");")
-          c:append("return false;")
-        end
-        c:endIf()
+--- Creates a new 'instance' of this schema to be 
+Schema.newInstance = function()
 
-        c:append(out.."->"..name.." = ("..o.name..")("..vname.."->number);")
-      end
-      c:endIf()
-    end,
-    ---@param c CGen
-    writeSetDeserializer = function(_, c, name, obj, out)
-      local vname = name.."Value"
-      c:beginIf(
-        "Value* "..vname.." = "..obj.."->findMember(\""..name.."\"_str)")
-      do
-        c:beginIf(vname.."->kind != Value::Kind::Array")
-        do
-          c:append(
-            "ERROR(\"unexpected type for value '"..name.."' wanted array "..
-            "but got \", getValueKindString("..vname.."->kind), \"\\n\");")
-          c:append("return false;")
-        end
-        c:endIf()
-
-        local values = vname.."->array.values"
-        local idx = name.."_idx"
-        local elem = name.."_elem"
-        c:beginForLoop(
-          "s32 "..idx.." = 0",
-          idx.." < "..values..".len()",
-          "++"..idx)
-        do
-          c:append("Value* "..elem.." = "..values.."["..idx.."];")
-          c:beginIf(elem.."->kind != Value::Kind::Number")
-          do
-            c:append(
-              "ERROR(\"unexpected type in numeric enum set, wanted number "..
-              "got \", getValueKindString("..elem.."->kind), \"\\n\");")
-            c:append("return false;")
-          end
-          c:endIf()
-          c:append(out,"->",name,".set((",o.name,")(",elem,"->number));")
-        end
-        c:endForLoop()
-      end
-      c:endIf()
-    end,
-    ---@param c CGen
-    writeSerializer = function(_, c, name, obj, invar)
-      newValue(c, name, "Number", obj, function(vname)
-        c:append(vname,"->number = (s32)",invar,".",name,";")
-      end)
-    end,
-    ---@param c CGen
-    writeSetSerializer = function(_, c, name, obj, invar)
-      newValue(c, name, "Array", obj, function(vname)
-        c:append("json::Array* arr = &",vname,"->array;")
-        c:beginForLoop(
-          o.name.." kind = ("..o.name..")0",
-          "(u32)kind < (u32)"..o.name.."::COUNT",
-          "kind = ("..o.name..")((u32)kind + 1)")
-        do
-          c:beginIf(invar.."."..name..".test(kind)")
-          do
-            newArrayValue(c, "elem", "Number", "arr", function(vname)
-              c:append(vname,"->number = (s32)kind;")
-            end)
-          end
-          c:endIf()
-        end
-        c:endForLoop()
-      end)
-    end,
-  })
-
-  ---@param c CGen
-  o.toCDef = function(self, c)
-    c:beginEnum(self.name)
-    do
-      self.elems:each(function(elem)
-        c:appendEnumElement(elem)
-      end)
-      c:appendEnumElement "COUNT"
-    end
-    c:endEnum()
-    c:typedef("Flags<"..self.name..">", self.name.."Flags")
-  end
-  return setmetatable(o, NumericEnum)
 end
-NumericEnum.__call = enumCall
 
----@class TableMembers
+---@class ObjectMembers
 ---@field list List
 ---@field map table
 
---- A collection of members each with some Type.
----@class Table
---- A list and map of the members belonging to this Table.
----@field member TableMembers
---- The table this one is nested in, if any.
----@field prev Table?
---- The json module all of this is stored in.
+--- A json Object
+---@class Object
+--- A list and map of the members belonging to this Object.
+---@field member ObjectMembers
+--- The object this table exists in, if any.
+---@field prev Object?
+--- A reference to the json module.
 ---@field json json
-Table = {}
-Table.new = function(prev, json)
-  return setmetatable(
+--- If this Object instance has been added to 'prev' already.
+---@field added boolean
+Object = {}
+Object.__index = function(self, key)
+  local handlers = 
   {
-    json = json,
-    prev = prev,
-    member =
-    {
-      list = List{},
-      map = {}
-    }
-  }, Table)
-end
-
-Table.__call = function(self, name)
-  if self.prev then
-    local member = { name=name,type=self }
-    self.prev.member.list:push(member)
-    self.prev.member.map[name] = self
-  end
-  return self
-end
-
-Table.done = function(self)
-  return self.prev
-end
-
-Union.handlers["Table"] = function(union)
-  local t = Table.new(union, union.json)
-  union.types["table"] = t
-  return t
-end
-
----@param c CGen
-Table.toC = function(self, c, name)
-  if name then c:beginStruct() end
-  do
-    self.member.list:each(function(member)
-      member.type:toC(c, member.name)
-    end)
-  end
-  if name then c:endStruct(name) end
-end
-
----@param c CGen
-local writeTableDeserializer = function(self, c, name, vname, out)
-
-  local nuobj = name.."Obj"
-
-  c:append("Object* "..nuobj.." = &"..vname.."->object;")
-  local nuout = "(&"..out.."->"..name..")"
-
-  self.member.list:each(function(member)
-    if member.type.writeDeserializer then
-      member.type:writeDeserializer(c, member.name, nuobj, nuout)
-    else
-      print("missing deserializer for member '"..member.name.."' of table "..
-            "'"..name.."'!")
-    end
-  end)
-end
-
----@param c CGen
-Table.writeDeserializer = function(self, c, name, obj, out)
-  local vname = name.."Value"
-  c:beginIf(
-    "Value* "..vname.." = "..obj.."->findMember(\""..name.."\"_str)")
-  do
-    c:beginIf(vname.."->kind != Value::Kind::Object")
-    do
-      c:append(
-        "ERROR(\"unexpected type for value '"..name.."' expected a table "..
-        "but got \", getValueKindString("..vname.."->kind), \"\\n\");")
-      c:append("return false;")
-    end
-    c:endIf()
-    writeTableDeserializer(self, c, name, vname, out)
-  end
-  c:endIf()
-end
-
----@param c CGen
-Table.writeUnionDeserializerCase = function(self, c, name, obj, out)
-  writeTableDeserializer(self, c, name, obj, out)
-end
-
-Table.writeUnionSerializerCase = function(self, c, name, obj, invar)
-  self:writeSerializer(c, name, obj, invar)
-end
-
-Table.writeSerializer = function(self, c, name, obj, invar)
-  newValue(c, name, "Object", obj, function(vname)
-    local oname = name.."Obj"
-    local nuin = invar.."."..name
-    c:append("Object* ",oname," = &",vname,"->object;")
-    self.member.list:each(function(member)
-      if member.type.writeSerializer then
-        member.type:writeSerializer(c, member.name, oname, nuin)
-      else
-        print(
-          "missing serializer for member "..member.name.." of table "..
-          name.."!")
-      end
-    end)
-  end)
-end
-
-Table.__index = function(self, key)
-  local handlers =
-  {
-    Table = function()
-      return Table.new(self, self.json)
+    Object = function()
+      return Object.new(self, self.json)
     end,
-    Union = function()
-      return Union.new(self, self.json)
-    end,
-    SchemaArray = function()
-      return SchemaArray.new(self.json, self)
-    end
   }
 
   local handler = handlers[key]
@@ -1187,50 +355,40 @@ Table.__index = function(self, key)
     return handler()
   end
 
-  local table_type = TableType[key]
-  if table_type then
-    return table_type.new(self)
-  end
-
-  local user_schema = rawget(self, "json").user_schema.map[key]
-  if user_schema then
-    return user_schema.new(self)
-  end
-
-  local member = rawget(Table, key)
-  if member then
-    return member
-  end
+  
 end
 
-local jsonIndex = function(self, key)
-  local handlers =
+---@param prev Object?
+---@param json json
+---@return Object
+Object.new = function(prev, json)
+  ---@type Object
+  local o =
   {
-    Schema = function()
-      return Schema.new(self)
-    end,
-    StringedEnum = function()
-      return StringedEnum.new(self)
-    end,
-    NumericEnum = function()
-      return NumericEnum.new(self)
-    end
+    json = json,
+    prev = prev,
+    added = false,
+    member =
+    {
+      list = List{},
+      map = {}
+    }
   }
-
-  local handler = handlers[key]
-  if not handler then
-    return rawget(self, key)
-  end
-
-  return handler()
+  return setmetatable(o, Object)
 end
 
-setmetatable(json, {__index = jsonIndex})
+Object.__call = function(self, name)
+  assert(not self.added, "this object was called twice")
+  self.added = true
+  if self.prev then
+    self.prev.member.list:push{name=name,type=self}
+    self.prev.member.map[name] = self
+  end
+  return self
+end
 
--- helper that just appends 'ClientCapabilities' to the end
--- of the given name bc i am lazy
-local CC = function(name)
-  return json.Schema(name.."ClientCapabilities")
+Object.done = function(self)
+  return self.prev
 end
 
 -- helper for client capability schemas that only define dynamicRegistration
