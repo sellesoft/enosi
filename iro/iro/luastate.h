@@ -16,7 +16,7 @@ namespace iro
 
 namespace io { struct IO; }
 
-/* ================================================================================================ LuaState
+/* ============================================================================
  */
 struct LuaState
 {
@@ -24,10 +24,11 @@ struct LuaState
   lua_State* L;
 
 
-  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-   =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
+  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
+   =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
 
-  static LuaState fromExistingState(lua_State* L) { LuaState out; out.L = L; return out; }
+  static LuaState fromExistingState(lua_State* L) 
+    { LuaState out; out.L = L; return out; }
   
   b8 init();
   void deinit();
@@ -83,18 +84,20 @@ struct LuaState
   b8 isnil(s32 idx = -1);
   b8 isstring(s32 idx = -1);
   b8 isboolean(s32 idx = -1);
+  b8 istable(s32 idx = -1);
+  b8 isnumber(s32 idx = -1);
 
   b8 dump(io::IO* dest);
 
   
-  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
    |  Helper API
    |  Following this are functions that are not a part of the lua api.
-   =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
+   =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-= */
 
 
-  // Call Lua's (or whatever require is available..) require to import 'modname'.
-  // Leaves the return values of the module at the top of the stack.
+  // Call Lua's (or whatever require is available..) require to import 
+  // 'modname'.Leaves the return values of the module at the top of the stack.
   // If 'nret' is given, the number of values returned will be written to it.
   b8 require(str modname, u32* out_nret = nullptr);
 
@@ -127,6 +130,15 @@ struct LuaState
     }
   }
 };
+
+}
+
+/* ============================================================================
+ */
+extern "C"
+{
+
+int iro__lua_inspect(lua_State* L);
 
 }
 

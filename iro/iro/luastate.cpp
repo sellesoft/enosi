@@ -26,6 +26,14 @@ b8 LuaState::init()
   L = lua_open();
   luaL_openlibs(L);
 
+#define addGlobalCFunc(name) \
+  pushcfunction(name); \
+  setglobal(STRINGIZE(name));
+
+  addGlobalCFunc(iro__lua_inspect);
+
+#undef addGlobalCFunc
+
   return true;
 }
 
@@ -331,6 +339,20 @@ b8 LuaState::isboolean(s32 idx)
 
 /* ----------------------------------------------------------------------------
  */
+b8 LuaState::istable(s32 idx)
+{
+  return lua_istable(L, idx);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 LuaState::isnumber(s32 idx)
+{
+  return lua_isnumber(L, idx);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 LuaState::dump(io::IO* dest)
 {
   auto writer = [](lua_State* L, const void* p, size_t sz, void* ud) ->int
@@ -344,6 +366,26 @@ b8 LuaState::dump(io::IO* dest)
 
   if (lua_dump(L, writer, dest))
     return false;
+  return true;
+}
+
+/* ------------------------------------------------------------------------------------------------
+ */
+b8 LuaState::require(str modname, u32* out_ret)
+{
+  u32 top = gettop();
+
+  getglobal("require");
+  pushstring(modname);
+  if (!pcall(1, LUA_MULTRET))
+  {
+    ERROR("failed to require module '", modname, "':\n", tostring());
+    return false;
+  }
+
+  if (out_ret)
+    *out_ret = gettop() - top;
+
   return true;
 }
 
@@ -409,7 +451,7 @@ static void writeLuaTable(
   io::format(dest, '\n');
   indent(-1);
   io::format(dest, "{\n");
-  defer { indent(-1); io::format(dest, '}'); };
+  defer { indent(-1); io::format(dest, "}\n"); };
 
 
   L->pushvalue(idx);
@@ -443,26 +485,6 @@ static void writeLuaTable(
     L->pop();
   }
   L->pop();
-}
-
-/* ------------------------------------------------------------------------------------------------
- */
-b8 LuaState::require(str modname, u32* out_ret)
-{
-  u32 top = gettop();
-
-  getglobal("require");
-  pushstring(modname);
-  if (!pcall(1, LUA_MULTRET))
-  {
-    ERROR("failed to require module '", modname, "':\n", tostring());
-    return false;
-  }
-
-  if (out_ret)
-    *out_ret = gettop() - top;
-
-  return true;
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -530,6 +552,47 @@ void LuaState::installDebugHook()
   {
     ERROR("failed to install debug hook!\n");
   }
+}
+
+/* ============================================================================
+ */
+extern "C"
+{
+
+/* ----------------------------------------------------------------------------
+ *  Used by utils.lua to dump lua values.
+ *
+ *  params:
+ *    1: the value to print
+ *    2: the max depth to print tables (optional, default 1)
+ */
+EXPORT_DYNAMIC
+int iro__lua_inspect(lua_State* L)
+{
+  LuaState lua = LuaState::fromExistingState(L);
+
+  if (lua.isnil(1))
+  {
+    ERROR("iro_lua_inspect(): expected a value as first argument \n");
+    return 0;
+  }
+
+  s32 max_depth = 1;
+  if (lua.isnumber(2))
+    max_depth = lua.tonumber(2);
+
+  if (lua.istable(1))
+  {
+    writeLuaTable(&lua, &fs::stdout, 1, 1, max_depth);
+  }
+  else
+  {
+    writeLuaValue(&lua, &fs::stdout, 1);
+  }
+
+  return 0;
+}
+
 }
 
 }

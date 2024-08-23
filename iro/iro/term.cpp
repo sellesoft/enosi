@@ -4,6 +4,8 @@
 #include "stdlib.h"
 #include "fs/file.h"
 
+#if IRO_NOTCURSES
+
 #include "notcurses/notcurses.h"
 
 namespace iro
@@ -13,7 +15,6 @@ static Logger logger = Logger::create("term"_str, Logger::Verbosity::Trace);
 
 void Term::test()
 {
-#if IRO_NOTCURSES
   struct notcurses* nc;
   notcurses_options opts = {};
   if (!(nc = notcurses_core_init(&opts, nullptr)))
@@ -59,11 +60,9 @@ void Term::test()
   }
 
   notcurses_stop(nc);
-#else
-  FATAL("iro was not built with TERM enabled\n");
-  exit(1);
-#endif
 }
 
 }
+
+#endif
 
