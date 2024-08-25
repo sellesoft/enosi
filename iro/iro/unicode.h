@@ -71,6 +71,7 @@ struct Codepoint
 //             if we're ever confident we're dealing with proper utf8 strings
 Codepoint decodeCharacter(u8* s, s32 slen);
 
+inline u64 stringHash(const struct str* x);
 
 /* ================================================================================================ utf8::str
  *  A string encoded in utf8.
@@ -83,14 +84,15 @@ struct str
   operator Bytes() { return {bytes, len}; }
 
   // where 'end' is a pointer to the byte AFTER the last of the range desired
-  static inline str from(u8* start, u8* end) { assert(start >= end); return {start, u64(end - start)}; }
+  static inline str from(u8* start, u8* end) 
+    { assert(start <= end); return {start, u64(end - start)}; }
   static inline str from(u8* start, u64 len) { return {start, len}; }
   static inline str from(Slice<u8> slice) { return {slice.ptr, slice.len}; }
   static str fromCStr(const char* s);
 
   b8 isEmpty() { return len == 0; }
 
-  u64 hash();
+  u64 hash() { return stringHash(this); }
 
   // Advances this str by 'n' codepoints and returns the last codepoint passed.
   // This may return invalid codepoints if this str is not valid utf8!
@@ -103,8 +105,17 @@ struct str
   // Otherwise return false;
   b8 nullTerminate(u8* buffer, s32 buffer_len);
 
-  str sub(s32 start) { assert(start >= 0 && start < len); return {bytes + start, len - start}; }
-  str sub(s32 start, s32 end) { assert(start >= 0 && start <= end && end <= len); return {bytes + start, u64(end - start)};  }
+  str sub(s32 start) 
+  { 
+    assert(start >= 0 && start < len); 
+    return {bytes + start, len - start}; 
+  }
+  
+  str sub(s32 start, s32 end) 
+  { 
+    assert(start >= 0 && start <= end && end <= len); 
+    return {bytes + start, u64(end - start)};  
+  }
 
   b8 operator ==(str s);
 
@@ -194,6 +205,17 @@ struct str
     return out;
   }
 };
+
+inline u64 stringHash(const str* x)
+{
+  u64 seed = 14695981039;
+  for (s32 i = 0; i < x->len; i++)
+  {
+    seed ^= (u8)x->bytes[i];
+    seed *= 1099511628211; //64bit FNV_prime
+  }
+  return seed;
+}
 
 }
 

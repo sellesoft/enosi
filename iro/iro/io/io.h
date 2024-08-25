@@ -151,7 +151,7 @@ private:
  *  to 0.
  *
  *  Currently the buffer is always overwritten on writes. Initially this 
- *  tracked the write (and read) pos properly but that would up being pretty
+ *  tracked the write (and read) pos properly but that wound up being pretty
  *  useless. This is to be used for temporary stuff.
  *
  */ 

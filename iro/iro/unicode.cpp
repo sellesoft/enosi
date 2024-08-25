@@ -250,20 +250,6 @@ b8 str::operator==(str s)
 }
 
 /* ------------------------------------------------------------------------------------------------
- *  REMEMBER: this needs to be exactly the same as staticStringHash!!!!
- */
-u64 str::hash()
-{
-  u64 seed = 14695981039;
-  for (s32 i = 0; i < len; i++)
-  {
-    seed ^= (u8)bytes[i];
-    seed *= 1099511628211; //64bit FNV_prime
-  }
-  return seed;
-}
-
-/* ------------------------------------------------------------------------------------------------
  */
 b8 str::nullTerminate(u8* buffer, s32 buffer_len)
 {

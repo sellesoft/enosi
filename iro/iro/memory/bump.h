@@ -63,7 +63,7 @@ struct LenientBump : public Allocator
   u8* start = nullptr;
   u8* cursor = nullptr;
 
-  Slab* slabs;
+  Slab* slabs = nullptr;
 
   b8   init();
   void deinit();

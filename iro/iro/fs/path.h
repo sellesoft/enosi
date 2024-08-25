@@ -71,7 +71,7 @@ struct Path
 
   Path& appendDir(str dir) { append("/"_str, dir); return *this; }
   Path& appendDir(Slice<u8> dir) 
-    { append("/"_str, str{dir.ptr, dir.len}); return *this; }
+    { append("/"_str, str::from(dir)); return *this; }
   Path& append(io::Formattable auto... args) 
     { io::formatv(&buffer, args...); return *this; }
 
