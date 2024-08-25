@@ -33,6 +33,7 @@ compiler_flags :=   \
 	-Iinclude         \
 	-Isrc             \
 	-I../iro          \
+	-I../luajit/include \
 	-DIRO_LINUX       \
 	-Wall             \
 	-Wno-switch       \

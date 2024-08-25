@@ -23,10 +23,10 @@ if enosi.getProject "notcurses" then
 end
 
 proj:dependsOn "luajit"
-
 proj:reportSharedLib "explain"
-
 proj:reportIncludeDir(cwd)
+
+cpp_driver.include_dirs:push { "src", proj:collectIncludeDirs() }
 
 if mode == "debug" then
   cpp_driver.opt = "none"
