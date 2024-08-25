@@ -21,7 +21,7 @@ struct Value;
 
 /* ============================================================================
  *  An array of json::Values, or really, references to json::Values. The 
- *  objects are expected not to move in memory.
+ *  values are expected to not move in memory.
  */
 struct Array
 {
@@ -34,8 +34,9 @@ struct Array
    */
 
 
-  // TODO(sushi) this should prob take an allocator
-  b8   init();
+  b8 init(
+    s32 init_space = 8, 
+    mem::Allocator* allocator = &mem::stl_allocator);
   void deinit();
 
   void   push(Value* o);
@@ -66,7 +67,7 @@ struct Object
    */
 
 
-  b8   init();
+  b8   init(mem::Allocator* allocator = &mem::stl_allocator);
   void deinit();
 
   b8 addMember(str name, Value* value);
@@ -105,7 +106,7 @@ struct Value
    */
 
 
-  b8 init()
+  b8 init(mem::Allocator* allocator = &mem::stl_allocator)
   {
     switch (kind)
     {

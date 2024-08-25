@@ -6,9 +6,9 @@ namespace iro::json
 
 /* ------------------------------------------------------------------------------------------------
  */
-b8 Array::init()
+b8 Array::init(s32 init_space, mem::Allocator* allocator)
 {
-  values = ValueArray::create(4);
+  values = ValueArray::create(init_space, allocator);
   return true;
 }
 
@@ -37,10 +37,10 @@ Value* Array::pop()
 
 /* ------------------------------------------------------------------------------------------------
  */
-b8 Object::init()
+b8 Object::init(mem::Allocator* allocator)
 {
-  members = MemberMap::create();
-  pool = MemberPool::create();
+  members = MemberMap::create(allocator);
+  pool = MemberPool::create(allocator);
 
   return true;
 }
@@ -153,13 +153,20 @@ void prettyPrintRecur(io::IO* out, Value* value, s32 depth)
     return;
   case Object:
     out->write("{\n"_str);
-    for (auto& member : value->object.members)
+    if (value->object.members.root)
     {
-      for (s32 i = 0; i < depth + 1; i++)
-        out->write(" "_str);
-      io::formatv(out, "\"", member.name, "\": ");
-      prettyPrintRecur(out, member.value, depth + 2);
-      out->write("\n"_str);
+      auto last = // incredible
+        value->object.members.maximum(value->object.members.root)->data;
+      for (auto& member : value->object.members)
+      {
+        for (s32 i = 0; i < depth + 1; i++)
+          out->write(" "_str);
+        io::formatv(out, "\"", member.name, "\": ");
+        prettyPrintRecur(out, member.value, depth + 2);
+        if (&member != last)
+          out->write(","_str);
+        out->write("\n"_str);
+      }
     }
     for (s32 i = 0; i < depth-1; i++)
       out->write(" "_str);

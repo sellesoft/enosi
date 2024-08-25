@@ -62,17 +62,17 @@ namespace iro::json
  */
 struct Lexer
 {
-  str stream_name;
+  str stream_name = nil;
 
-  io::Memory cache;
-  io::IO* in;
+  io::Memory cache = nil;
+  io::IO* in = nullptr;
 
-  utf8::Codepoint current_codepoint;
-  u64 current_offset;
+  utf8::Codepoint current_codepoint = nil;
+  u64 current_offset = 0;
 
-  b8 at_end;
+  b8 at_end = false;
 
-  jmp_buf* failjmp;
+  jmp_buf* failjmp = nullptr;
 
   b8 init(io::IO* input_stream, str stream_name, jmp_buf* failjmp);
   void deinit();
@@ -83,7 +83,7 @@ struct Lexer
 
 private:
 
-  Token curt;
+  Token curt = nil;
 
   b8 readStreamIfNeeded();
   b8 decodeCurrent();
