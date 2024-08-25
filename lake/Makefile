@@ -39,16 +39,17 @@ compiler     := clang++
 linker       := clang++
 preprocessor := cpp
 
-compiler_flags :=     \
-	-std=c++20        \
-	-Iinclude         \
-	-Isrc             \
-	-I../iro          \
-	-DIRO_LINUX       \
-	-Wall             \
-	-Wno-switch       \
-	-Wno-\#warnings   \
-	-Wno-unused-function \
+compiler_flags :=        \
+	-std=c++20             \
+	-Iinclude              \
+	-Isrc                  \
+	-I../iro               \
+	-I../luajit/include/   \
+	-DIRO_LINUX            \
+	-Wall                  \
+	-Wno-switch            \
+	-Wno-\#warnings        \
+	-Wno-unused-function   \
 	-fno-caret-diagnostics \
 	-fvisibility=hidden
 
@@ -58,12 +59,12 @@ else ifeq ($(mode),release)
 	compiler_flags += -O2 -ggdb3
 endif
 
-linker_flags := \
-	-L../luajit/lib       \
-	-lluajit    \
-	-lexplain   \
-	-fuse-ld=mold \
-	-lm         \
+linker_flags :=   \
+	-L../luajit/lib \
+	-l:libluajit.a  \
+	-lexplain       \
+	-fuse-ld=mold   \
+	-lm             \
 	-Wl,-E
 
 # print a success message
