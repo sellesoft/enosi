@@ -56,15 +56,25 @@ struct AVL
   static Self create(mem::Allocator* allocator = &mem::stl_allocator)
   {
     Self out = {};
-    out.pool = Pool<Node>::create(allocator);
+    out.init(allocator);
     return out;
   }
 
   /* --------------------------------------------------------------------------
    */
-  void destroy()
+  b8 init(mem::Allocator* allocator = &mem::stl_allocator)
   {
-    pool.destroy();
+    if (!pool.init(allocator))
+      return false;
+    root = nullptr;
+    return true;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void deinit()
+  {
+    pool.deinit();
     root = nullptr;
   }
 

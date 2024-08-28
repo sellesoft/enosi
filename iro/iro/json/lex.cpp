@@ -30,16 +30,16 @@ b8 Lexer::readStreamIfNeeded()
   if (current_offset < cache.len)
     return true;
 
-  TRACE("reading more bytes from stream... ");
+  TRACE("reading more bytes from stream... \n");
 
-  auto reserved = cache.reserve(128);
+  auto reserved = cache.reserve(16);
   if (reserved.len == 0)
   {
     ERROR("failed to reserve space in stream cache\n");
     return false;
   }
   auto bytes_read = in->read(reserved);
-  TRACE(bytes_read, " bytes read... ");
+  TRACE(bytes_read, " bytes read... \n");
   if (bytes_read == -1)
   {
     current_codepoint = nil;
@@ -48,7 +48,7 @@ b8 Lexer::readStreamIfNeeded()
   }
   else if (bytes_read == 0) // || reserved.end()[-1] == 0)
   {
-    TRACE("0 bytes read found, must be the end of the file...\n");
+    TRACE("0 bytes read, must be the end of the file...\n");
     at_end = true;
     current_codepoint = nil;
     return false;
@@ -167,7 +167,7 @@ void Lexer::finishCurt(Token::Kind kind, s32 len_offset)
   s32 len = len_offset + current_offset - curt.loc;
   curt.kind = kind;
   curt.len  = len;
-  TRACE("finished ", getRaw(curt), "\n");
+  TRACE("finished ", getRaw(curt).sub(0, curt.len > 16 ? 16 : curt.len), "\n");
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -202,7 +202,11 @@ Token Lexer::nextToken()
     {
       // skip anything after an escape 
       if (at('\\'))
+      {
         advance(2);
+        continue;
+      }
+
       if (at('"'))
         break;
       if (eof())

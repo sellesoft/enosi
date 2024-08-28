@@ -36,7 +36,7 @@ struct SLinkedPool
 
   void deinit()
   {
-    pool.destroy();
+    pool.deinit();
     list.destroy();
   }
 
@@ -100,7 +100,7 @@ struct DLinkedPool
 
   void deinit()
   {
-    pool.destroy();
+    pool.deinit();
     list.destroy();
   }
 

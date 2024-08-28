@@ -18,6 +18,7 @@ namespace iro::json
 {
 
 struct Value;
+struct JSON;
 
 /* ============================================================================
  *  An array of json::Values, or really, references to json::Values. The 
@@ -41,6 +42,8 @@ struct Array
 
   void   push(Value* o);
   Value* pop();
+
+  b8 pushNumber(JSON* json, f32 number);
 };
 
 /* ============================================================================
@@ -72,6 +75,19 @@ struct Object
 
   b8 addMember(str name, Value* value);
   Value* findMember(str name);
+
+  Array* addArray(
+    JSON* json, 
+    str name,
+    s32 init_space = 8,
+    mem::Allocator* allocator = &mem::stl_allocator);
+
+  Object* addObject(
+    JSON* json, 
+    str name,
+    mem::Allocator* allocator = &mem::stl_allocator);
+
+  b8 addString(JSON* json, str name, str string); 
 };
 
 /* ============================================================================

@@ -21,7 +21,7 @@ Globber Globber::create(str pattern, mem::Allocator* allocator)
 void Globber::destroy()
 {
   allocator->free(pattern.bytes);
-  part_pool.destroy();
+  part_pool.deinit();
   part_list.destroy();
 }
 

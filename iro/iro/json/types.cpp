@@ -37,11 +37,26 @@ Value* Array::pop()
 
 /* ------------------------------------------------------------------------------------------------
  */
+b8 Array::pushNumber(JSON* json, f32 number)
+{
+  Value* v = json->newValue(Value::Kind::Number);
+  if (!v)
+    return false;
+
+  v->number = number;
+  push(v);
+
+  return true;
+}
+
+/* ------------------------------------------------------------------------------------------------
+ */
 b8 Object::init(mem::Allocator* allocator)
 {
-  members = MemberMap::create(allocator);
-  pool = MemberPool::create(allocator);
-
+  if (!members.init(allocator))
+    return false;
+  if (!pool.init(allocator))
+    return false;
   return true;
 }
 
@@ -49,8 +64,8 @@ b8 Object::init(mem::Allocator* allocator)
  */
 void Object::deinit()
 {
-  members.destroy();
-  pool.destroy();
+  members.deinit();
+  pool.deinit();
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -81,6 +96,78 @@ Value* Object::findMember(str name)
 
 /* ------------------------------------------------------------------------------------------------
  */
+Array* Object::addArray(
+    JSON* json, 
+    str name,
+    s32 init_space,
+    mem::Allocator* allocator)
+{
+  Value* v = json->newValue(Value::Kind::Array);
+  if (!v) 
+    return nullptr;
+
+  if (!v->array.init(init_space, allocator))
+  {
+    json->pool.remove(v);
+    return nullptr;
+  }
+
+  if (!addMember(name, v))
+  {
+    json->pool.remove(v);
+    return nullptr;
+  }
+
+  return &v->array;
+}
+
+/* ------------------------------------------------------------------------------------------------
+ */
+Object* Object::addObject(
+    JSON* json,
+    str name,
+    mem::Allocator* allocator)
+{
+  Value* v = json->newValue(Value::Kind::Object);
+  if (!v)
+    return nullptr;
+
+  if (!v->object.init(allocator))
+  {
+    json->pool.remove(v);
+    return nullptr;
+  }
+
+  if (!addMember(name, v))
+  {
+    json->pool.remove(v);
+    return nullptr;
+  }
+
+  return &v->object;
+}
+
+/* ------------------------------------------------------------------------------------------------
+ */
+b8 Object::addString(JSON* json, str name, str string)
+{
+  Value* v = json->newValue(Value::Kind::String);
+  if (!v)
+    return false;
+
+  if (!addMember(name, v))
+  {
+    json->pool.remove(v);
+    return false;
+  }
+
+  v->string = string;
+
+  return true;
+}
+
+/* ------------------------------------------------------------------------------------------------
+ */
 b8 JSON::init()
 {
   if (!string_buffer.init())
@@ -94,7 +181,7 @@ b8 JSON::init()
  */
 void JSON::deinit()
 {
-  pool.destroy();
+  pool.deinit();
   root = nullptr;
 }
 

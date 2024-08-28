@@ -67,9 +67,13 @@ CGen.endEnum = function(self)
 end
 
 --- Adds an enum element, literally just ''<name>,'
-CGen.appendEnumElement = function(self, name)
+CGen.appendEnumElement = function(self, name, value)
   self:appendIndentation()
-  self.buffer:put(name, ",\n")
+  self.buffer:put(name)
+  if value then
+    self.buffer:put(" = ", value)
+  end
+  self.buffer:put(",\n")
 end
 
 --- Begins a switch statement on the given 'cond'.

@@ -63,17 +63,24 @@ struct Pool
   static Self create(mem::Allocator* allocator = &mem::stl_allocator)
   {
     Self out = {};
-    
-    out.allocator = allocator;
-    out.newChunk();
-    out.free_slot = out.current_chunk->slots;
-
+    out.init(allocator);
     return out;
+  }
+
+  /* -------------------------------------------------------------------------------------------- create
+   */ 
+  b8 init(mem::Allocator* allocator = &mem::stl_allocator)
+  {
+    this->allocator = allocator;
+    newChunk();
+    free_slot = current_chunk->slots;
+
+    return true;
   }
 
   /* -------------------------------------------------------------------------------------------- destroy
    */ 
-  void destroy()
+  void deinit()
   {
     while (current_chunk) 
     {

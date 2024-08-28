@@ -49,7 +49,7 @@ struct SList
    */
   void destroy()
   {
-    pool.destroy();
+    pool.deinit();
     head = nullptr;
   }
 
@@ -199,7 +199,7 @@ struct DList
    */
   void destroy()
   {
-    pool.destroy();
+    pool.deinit();
     head = tail = nullptr;
   }
 
