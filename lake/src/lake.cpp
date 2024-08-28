@@ -143,14 +143,14 @@ void Lake::deinit()
   for (auto& t : targets)
     t.deinit();
   targets.destroy();
-  target_pool.destroy();
+  target_pool.deinit();
 
   cwd_stack.destroy();
-  active_process_pool.destroy();
+  active_process_pool.deinit();
   lua_cli_args.destroy();
   for (auto& action : action_queue)
     mem::stl_allocator.free(action.bytes);
-  action_pool.destroy();
+  action_pool.deinit();
   action_queue.destroy();
 
   // TODO(sushi) this needs to be done using some platform on exit thing.

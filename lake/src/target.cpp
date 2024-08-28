@@ -20,8 +20,8 @@ u64 hashTarget(const Target* t)
  */
 void Target::initCommon()
 {
-  prerequisites = TargetSet::create();
-  dependents = TargetSet::create();
+  prerequisites.init();
+  dependents.init();
   build_node = nullptr;
 }
 
@@ -71,10 +71,10 @@ void Target::initGroup()
  */
 void Target::deinit()
 {
-  prerequisites.destroy();
-  dependents.destroy();
+  prerequisites.deinit();
+  dependents.deinit();
   if (kind == Kind::Group)
-    group.targets.destroy();
+    group.targets.deinit();
   else
     single.path.destroy();
   recipe_working_directory.destroy();
