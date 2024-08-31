@@ -27,10 +27,25 @@ CGen.__tostring = function(self)
   return tostring(self.buffer)
 end
 
+--- Indents by n levels.
+CGen.indent = function(self, n)
+  n = n or 1
+  self.depth = self.depth + n
+end
+
+--- Detents by n levels.
+CGen.detent = function(self, n)
+  n = n or 1
+  self.depth = self.depth - n
+  if self.depth < 0 then 
+    self.depth = 0
+  end
+end
+
 --- Appends indentation upto self.depth
 CGen.appendIndentation = function(self)
   for _=1,self.depth do
-    self.buffer:put " "
+    self.buffer:put "  "
   end
 end
 
@@ -287,6 +302,19 @@ CGen.beginForEachLoop = function(self, var, cont)
   self:appendIndentation()
   self.buffer:put("for (",var,":",cont,")\n")
   self:beginScope()
+end
+
+--- Begins a namespace. 
+---@param name string
+CGen.beginNamespace = function(self, name)
+  self:appendIndentation()
+  self.buffer:put("namespace ",name,"\n{\n")
+end
+
+--- Ends a namespace.
+CGen.endNamespace = function(self)
+  self:appendIndentation()
+  self.buffer:put("}\n")
 end
 
 --- Appends the given args as a line of C code.
