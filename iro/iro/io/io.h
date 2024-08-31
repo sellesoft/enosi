@@ -188,6 +188,43 @@ struct StaticBuffer : public IO
   }
 };
 
+
+/* ============================================================================
+ *  IO view over a str.
+ */
+struct StringView : public IO
+{
+  str s = nil;
+  s32 pos = 0;
+
+  static StringView from(str s)
+  {
+    StringView out;
+    out.s = s;
+    out.pos = 0;
+    return out;
+  }
+
+  virtual s64 write(Bytes slice) override 
+  {
+    assert(!"cannot write to a StringView");
+    return 0;
+  }
+
+  virtual s64 read(Bytes slice) override
+  {
+    if (pos == s.len)
+      return 0;
+
+    s64 bytes_remaining = s.len - pos;
+    s64 bytes_to_read = 
+      (bytes_remaining > slice.len ? slice.len : bytes_remaining);
+    mem::copy(slice.ptr, s.bytes + pos, bytes_to_read);
+    pos += bytes_to_read;
+    return bytes_to_read;
+  }
+};
+
 }
 
 }

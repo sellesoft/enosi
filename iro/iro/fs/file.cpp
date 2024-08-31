@@ -6,7 +6,8 @@
 namespace iro::fs
 {
 
-static Logger logger = Logger::create("iro.fs.file"_str, Logger::Verbosity::Warn);
+static Logger logger = 
+  Logger::create("iro.fs.file"_str, Logger::Verbosity::Notice);
 
 /* ------------------------------------------------------------------------------------------------
  */

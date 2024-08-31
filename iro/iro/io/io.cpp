@@ -113,7 +113,8 @@ s64 Memory::read(Bytes outbuffer)
     return 0;
 
   s64 bytes_remaining = len - pos;
-  s64 bytes_to_read = (bytes_remaining > outbuffer.len ? outbuffer.len : bytes_remaining);
+  s64 bytes_to_read = 
+    (bytes_remaining > outbuffer.len ? outbuffer.len : bytes_remaining);
   mem::copy(outbuffer.ptr, buffer + pos, bytes_to_read);
   pos += bytes_to_read;
   return bytes_to_read;
