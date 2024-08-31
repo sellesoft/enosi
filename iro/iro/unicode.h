@@ -30,9 +30,9 @@ u8 bytesNeededToEncodeCharacter(u32 codepoint);
 
 b8 isContinuationByte(u8 c);
 
-/* ================================================================================================ utf8::Char
- *  Representation of an encoded character with enough space for a 4 byte character and a count
- *  of how many bytes were used.
+/* ============================================================================
+ *  Representation of an encoded character with enough space for a 4 byte 
+ *  character and a count of how many bytes were used.
  */
 struct Char
 {
@@ -47,9 +47,9 @@ struct Char
 // Returns false if failure occurs for any reason.
 Char encodeCharacter(u32 codepoint);
 
-/* ================================================================================================ utf8::Codepoint
- *  Representation of a decoded unicode codepoint along with the number of bytes needed it to
- *  represent it in utf8
+/* ============================================================================
+ *  Representation of a decoded unicode codepoint along with the number of 
+ *  bytes needed it to represent it in utf8.
  */
 struct Codepoint
 {
@@ -73,7 +73,7 @@ Codepoint decodeCharacter(u8* s, s32 slen);
 
 inline u64 stringHash(const struct str* x);
 
-/* ================================================================================================ utf8::str
+/* ============================================================================
  *  A string encoded in utf8.
  */
 struct str
@@ -221,7 +221,8 @@ inline u64 stringHash(const str* x)
 
 namespace iro
 {
-// since we only use utf8 internally, just bring the string type into the global namespace
+// since we only use utf8 internally, just bring the string type into the 
+// global namespace
 using str  = utf8::str;
 
 static str operator ""_str (const char* s, size_t len)
