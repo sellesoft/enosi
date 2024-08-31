@@ -71,7 +71,9 @@ setmetatable(json,
         return StringedEnum.new(self)
       end,
       NumericEnum = function()
-        return NumericEnum.new(self)
+        return function(start_value)
+          return NumericEnum.new(self, start_value)
+        end
       end,
     }
 
@@ -845,13 +847,23 @@ Schema.writeStruct = function(self, c)
   c:beginFunction(
     "b8", "deserialize", "json::Object* obj", "mem::Allocator* allocator")
   do
-    c:append("using namespace json;")
-    self.obj.member.list:each(function(member)
-      if member.type.writeDeserializer then
-        member.type:writeDeserializer(c, member.name, "this")
+    local writeDeserializer = function(type, name)
+      if type.writeDeserializer then
+        type:writeDeserializer(c, name, "this")
       else
-        print("missing deserializer for member "..member.name.."!")
+        print("missing deserializer for member "..name.."!")
       end
+    end
+      
+    c:append("using namespace json;")
+    self.obj.bases:each(function(base)
+      base.obj.member.list:each(function(member)
+        writeDeserializer(member.type, member.name)
+      end)
+    end)
+
+    self.obj.member.list:each(function(member)
+      writeDeserializer(member.type, member.name)
     end)
     c:append("return true;")
   end
@@ -861,13 +873,23 @@ Schema.writeStruct = function(self, c)
     "b8", "serialize", 
     "json::JSON* json", "json::Object* obj","mem::Allocator* allocator")
   do
-    c:append("using namespace json;")
-    self.obj.member.list:each(function(member)
-      if member.type.writeSerializer then
-        member.type:writeSerializer(c, member.name)
+    local writeSerializer = function(type, name)
+      if type.writeSerializer then
+        type:writeSerializer(c, name)
       else
-        print("missing serializer for member "..member.name.."!")
+        print("missing serializer for member "..name.."!")
       end
+    end
+
+    c:append("using namespace json;")
+    self.obj.bases:each(function(base)
+      base.obj.member.list:each(function(member)
+        writeSerializer(member.type, member.name)
+      end)
+    end)
+
+    self.obj.member.list:each(function(member)
+      writeSerializer(member.type, member.name)
     end)
     c:append("return true;")
   end
@@ -1416,8 +1438,6 @@ end
 NumericEnum = {}
 NumericEnum.__call = enumCall
 NumericEnum.new = function(json, init_value)
-  init_value = init_value or 0
-
   local o = {}
   o.json = json
   o.elems = List{}
@@ -1489,7 +1509,7 @@ NumericEnum.new = function(json, init_value)
     c:beginEnum(self.name)
     do
       self.elems:eachWithIndex(function(elem, i)
-        c:appendEnumElement(elem, i)
+        c:appendEnumElement(elem, init_value + i - 1)
       end)
       c:appendEnumElement "COUNT"
     end
@@ -1646,7 +1666,6 @@ Object.__index = function(self, key)
       return setmetatable(o,
       {
         __index = function(_, key)
-          print("adding base "..key)
           local schema = json.schemas.map[key]
           if not schema then
             error("'extends' expects a schema name")
@@ -1824,7 +1843,7 @@ json.StringedEnum "MarkupKind"
   { PlainText = "plaintext" }
   { Markdown = "markdown" }
 
-json.NumericEnum "SymbolKind"
+json.NumericEnum(1) "SymbolKind"
   "File"
   "Module"
   "Namespace"
@@ -1852,11 +1871,11 @@ json.NumericEnum "SymbolKind"
   "Operator"
   "TypeParameter"
 
-json.NumericEnum "InsertTextMode"
+json.NumericEnum(1) "InsertTextMode"
   "AsIs"
   "AdjustIndentation"
 
-json.NumericEnum "CompletionItemKind"
+json.NumericEnum(1) "CompletionItemKind"
   "Text"
   "Method"
   "Function"
@@ -2016,7 +2035,7 @@ CCdynReg "Rename"
   .Bool "prepareSupport"
   .Bool "honorsChangeAnnotations"
 
-json.NumericEnum "DiagnosticTag"
+json.NumericEnum(1) "DiagnosticTag"
   "Unnecessary"
   "Deprecated"
 
@@ -2188,7 +2207,7 @@ json.Schema "InitializeParams"
   .ClientCapabilities "capabilities"
   :done()
 
-json.NumericEnum "TextDocumentSyncKind"
+json.NumericEnum(0) "TextDocumentSyncKind"
   "None"
   "Full"
   "Incremental"
@@ -2267,9 +2286,13 @@ json.Schema "FileOperationFilter"
 json.Schema "FileOperationRegistrationOptions"
   .SchemaArray "FileOperationFilter" "filters"
 
+json.Schema "TextDocumentSyncOptions"
+  .Bool "openClose"
+  .TextDocumentSyncKind "change"
+
 json.Schema "ServerCapabilities"
   .PositionEncodingKind "positionEncoding"
-  .TextDocumentSyncKind "textDocumentSync"
+  .TextDocumentSyncOptions "textDocumentSync"
   .CompletionOptions "completionProvider"
   .SignatureHelpOptions "signatureHelpProvider"
   .CodeLensOptions "codeLensProvider"
