@@ -75,6 +75,8 @@ struct LuaState
   void pushnil();
   void pushcfunction(int (*cfunc)(lua_State*)); 
 
+  // Concatenates the n values on the top of the stack.
+  void concat(s32 n);
 
   int type(s32 idx);
   const char* typeName(s32 idx);

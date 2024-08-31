@@ -297,6 +297,13 @@ void LuaState::pushcfunction(int (*cfunc)(lua_State*))
 
 /* ----------------------------------------------------------------------------
  */
+void LuaState::concat(s32 n)
+{
+  lua_concat(L, n);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 int LuaState::type(s32 idx)
 {
   return lua_type(L, idx);
