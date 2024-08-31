@@ -32,7 +32,7 @@ local recipe_table = { next = 1 }
 local actions = {}
 
 local Target,
-    TargetGroup
+      TargetGroup
 
 --- Table containing variables specified on command line. 
 --- For example if lake is invoked:
