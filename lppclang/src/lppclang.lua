@@ -69,71 +69,77 @@ typedef struct ParseExprResult
   Expr* expr;
   s64 offset;
 } ParseExprResult;
+typedef struct ParseIdentifierResult
+{
+  str id;
+  s64 offset;
+} ParseIdentifierResult;
 typedef struct
 {
   str raw;
   u64 start_offset;
   u64 end_offset;
 } TokenRawAndLoc;
-void addIncludeDir(Context* ctx, str s);
-Type* lookupType(Context* ctx, str name);
-ParseStmtResult parseStatement(Context* ctx);
-Decl* getStmtDecl(Context* ctx, Stmt* stmt);
-ParseTypeNameResult parseTypeName(Context* ctx);
-ParseDeclResult parseTopLevelDecl(Context* ctx);
-ParseTopLevelDeclsResult parseTopLevelDecls(Context* ctx);
-ParseExprResult parseExpr(Context* ctx);
-Decl* lookupName(Context* ctx, str s);
-b8 loadString(Context* ctx, str s);
-Context* createContext(str* args, u64 argc);
-void destroyContext(Context*);
-Lexer* createLexer(Context* ctx, str s);
-Token* lexerNextToken(Lexer* l);
-str tokenGetRaw(Context* ctx, Lexer* l, Token* t);
-TokenKind tokenGetKind(Token* t);
-b8 createASTFromString(Context* ctx, str s);
-Decl* parseString(Context* ctx, str s);
-void dumpDecl(Decl* decl);
-Decl* getTranslationUnitDecl(Context* ctx);
-DeclIter* createDeclIter(Context* ctx, Decl* decl);
-Decl* getNextDecl(DeclIter* iter);
-DeclIter* getContextOfDecl(Context* ctx, Decl* decl);
-DeclKind getDeclKind(Decl* decl);
-str getDeclName(Decl* decl);
-Type* getDeclType(Decl* decl);
-Type* getTypeDeclType(Context* ctx, Decl* decl);
-u64 getDeclBegin(Context* ctx, Decl* decl);
-u64 getDeclEnd(Context* ctx, Decl* decl);
-Type* getFunctionReturnType(Decl* decl);
-b8 functionHasBody(Decl* decl);
-u32 getFunctionBodyBegin(Decl* decl);
-u32 getFunctionBodyEnd(Decl* decl);
-b8 tagHasBody(Decl* decl);
-u32 getTagBodyBegin(Decl* decl);
-u32 getTagBodyEnd(Decl* decl);
-b8 tagIsEmbeddedInDeclarator(Decl* decl);
-ParamIter* createParamIter(Context* ctx, Decl* decl);
-Decl* getNextParam(ParamIter* iter);
-b8 isCanonical(Type* type);
-b8 isUnqualified(Type* type);
-b8 isUnqualifiedAndCanonical(Type* type);
-b8 isConst(Type* type);
-Type* getCanonicalType(Type* type);
-Type* getUnqualifiedType(Type* type);
-Type* getUnqualifiedCanonicalType(Type* type);
-str getTypeName(Context* ctx, Type* type);
-str getCanonicalTypeName(Context* ctx, Type* type);
-str getUnqualifiedCanonicalTypeName(Context* ctx, Type* type);
-u64 getTypeSize(Context* ctx, Type* type);
-b8 typeIsBuiltin(Type* type);
-Decl* getTypeDecl(Type* type);
-FieldIter* createFieldIter(Context* ctx, Decl* decl);
-Decl* getNextField(FieldIter* iter);
-u64 getFieldOffset(Context* ctx, Decl* field);
-EnumIter* createEnumIter(Context* ctx, Decl* decl);
-Decl* getNextEnum(EnumIter* iter);
-void dumpAST(Context* ctx);
-str getClangDeclSpelling(Decl* decl);]]
+ void addIncludeDir(Context* ctx, str s);
+ Type* lookupType(Context* ctx, str name);
+ ParseStmtResult parseStatement(Context* ctx);
+ Decl* getStmtDecl(Context* ctx, Stmt* stmt);
+ ParseTypeNameResult parseTypeName(Context* ctx);
+ ParseDeclResult parseTopLevelDecl(Context* ctx);
+ ParseTopLevelDeclsResult parseTopLevelDecls(Context* ctx);
+ ParseExprResult parseExpr(Context* ctx);
+ ParseIdentifierResult parseIdentifier(Context* ctx);
+ Decl* lookupName(Context* ctx, str s);
+ b8 loadString(Context* ctx, str s);
+ Context* createContext(str* args, u64 argc);
+ void destroyContext(Context*);
+ Lexer* createLexer(Context* ctx, str s);
+ Token* lexerNextToken(Lexer* l);
+ str tokenGetRaw(Context* ctx, Lexer* l, Token* t);
+ TokenKind tokenGetKind(Token* t);
+ b8 createASTFromString(Context* ctx, str s);
+ Decl* parseString(Context* ctx, str s);
+ void dumpDecl(Decl* decl);
+ Decl* getTranslationUnitDecl(Context* ctx);
+ DeclIter* createDeclIter(Context* ctx, Decl* decl);
+ Decl* getNextDecl(DeclIter* iter);
+ DeclIter* getContextOfDecl(Context* ctx, Decl* decl);
+ DeclKind getDeclKind(Decl* decl);
+ str getDeclName(Decl* decl);
+ Type* getDeclType(Decl* decl);
+ Type* getTypeDeclType(Context* ctx, Decl* decl);
+ u64 getDeclBegin(Context* ctx, Decl* decl);
+ u64 getDeclEnd(Context* ctx, Decl* decl);
+ Type* getFunctionReturnType(Decl* decl);
+ b8 functionHasBody(Decl* decl);
+ u32 getFunctionBodyBegin(Decl* decl);
+ u32 getFunctionBodyEnd(Decl* decl);
+ b8 tagHasBody(Decl* decl);
+ u32 getTagBodyBegin(Decl* decl);
+ u32 getTagBodyEnd(Decl* decl);
+ b8 tagIsEmbeddedInDeclarator(Decl* decl);
+ ParamIter* createParamIter(Context* ctx, Decl* decl);
+ Decl* getNextParam(ParamIter* iter);
+ b8 isCanonical(Type* type);
+ b8 isUnqualified(Type* type);
+ b8 isUnqualifiedAndCanonical(Type* type);
+ b8 isConst(Type* type);
+ Type* getCanonicalType(Type* type);
+ Type* getUnqualifiedType(Type* type);
+ Type* getUnqualifiedCanonicalType(Type* type);
+ str getTypeName(Context* ctx, Type* type);
+ str getCanonicalTypeName(Context* ctx, Type* type);
+ str getUnqualifiedCanonicalTypeName(Context* ctx, Type* type);
+ u64 getTypeSize(Context* ctx, Type* type);
+ b8 typeIsBuiltin(Type* type);
+ Decl* getTypeDecl(Type* type);
+ FieldIter* createFieldIter(Context* ctx, Decl* decl);
+ Decl* getNextField(FieldIter* iter);
+ u64 getFieldOffset(Context* ctx, Decl* field);
+ EnumIter* createEnumIter(Context* ctx, Decl* decl);
+ Decl* getNextEnum(EnumIter* iter);
+ void dumpAST(Context* ctx);
+ str getClangDeclSpelling(Decl* decl);]]
 
 -- set to the lpp object when loaded
 local lpp = require "lpp"
@@ -178,21 +184,29 @@ end
 --- parsing C++ code.
 ---
 ---@class Ctx
+---@field lpp lpp
 ---@field handle userdata Handle to the internal representation of this Ctx
 Ctx = makeStruct()
 
 --- Create a new lppclang context.
 ---
+---@param args List Compiler arguments to pass to clang.
 ---@return Ctx
-Ctx.new = function()
+Ctx.new = function(args)
   local o = setmetatable({}, Ctx)
 
-  o.handle = assert(lppclang.createContext(),
+  local carr = ffi.new("str["..args:len().."]")
+
+  args:eachWithIndex(function(arg, i)
+    carr[i-1] = make_str(arg)
+  end)
+    
+  o.handle = assert(lppclang.createContext(carr, args:len()),
     "failed to create lppclang context!")
 
   -- automatically clean up the context
   ffi.gc(o.handle, function(self)
-    lppclang.destroyContext(self.handle)
+    lppclang.destroyContext(self)
   end)
 
   return o
@@ -251,9 +265,11 @@ end
 ---@return ParseDeclResult
 Ctx.parseTopLevelDecls = function(self)
   local res = lppclang.parseTopLevelDecls(self.handle)
-  if nil == res.iter then
+  if 0 == res.iter then
+    print("no iter")
     return {offset=0,iter=nil}
   end
+  print("has iter")
   return {offset=tonumber(res.offset),iter=DeclIter.new(self, res.iter)}
 end
 
@@ -311,6 +327,24 @@ Ctx.parseTypeName = function(self)
   return {offset=tonumber(res.offset),type=Type.new(self, res.type)}
 end
 
+---@class ParseIdentifierResult
+--- Offset into the current string where parsing stopped or -1 
+--- if the end of the buffer was reached.
+---@field offset number
+--- The identifier parsed.
+---@field id string
+
+--- Parses a single C++ identifier.
+---
+---@return ParseIdentifierResult?
+Ctx.parseIdentifier = function(self)
+  local res = lppclang.parseIdentifier(self.handle)
+  if 0 == res.id.s then
+    return nil
+  end
+  return {offset =  tonumber(res.offset), id = strToLua(res.id)}
+end
+
 --- Lex a given string using this context. Note that this does NOT parse
 --- the string. This uses a 'raw' lexer, which means that it literally 
 --- just gives tokens, no preprocessing or anything like that is done.
@@ -343,6 +377,17 @@ end
 ---@param path string
 Ctx.addIncludeDir = function(self, path)
   lppclang.addIncludeDir(self.handle, make_str(path))
+end
+
+--- Looks up a type by name.
+---
+---@param typename string
+Ctx.lookupType = function(self, typename)
+  local result = lppclang.lookupType(self.handle, make_str(typename))
+  if 0 == result then
+    return nil
+  end
+  return Type.new(self, result)
 end
 
 --- A parsed declaration.
@@ -477,7 +522,6 @@ Decl.asFunction = function(self)
   end
 end
 
-
 --- An iterator over a sequence of declarations.
 ---
 ---@class DeclIter
@@ -503,7 +547,6 @@ end
 ---
 ---@return Decl?
 DeclIter.next = function(self)
-  print(self.handle)
   if self.handle == nil then
     error(debug.traceback()..
       "\n  DeclIter.next() called on an iter with a nil handle")
@@ -799,8 +842,9 @@ clang.parseString = function(str, options)
   return AST.new(ctx)
 end
 
-clang.createContext = function()
-  return Ctx.new()
+---@param args List
+clang.createContext = function(args)
+  return Ctx.new(args)
 end
 
 local loaded = false

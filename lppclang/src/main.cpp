@@ -6,6 +6,8 @@
 
 #include "lppclang.h"
 
+#include "stdio.h"
+
 using namespace iro;
 
 #define DEFINE_GDB_PY_SCRIPT(script_name) \
@@ -18,7 +20,8 @@ using namespace iro;
 
 DEFINE_GDB_PY_SCRIPT("lpp-gdb.py");
 
-static Logger logger = Logger::create("main"_str, Logger::Verbosity::Trace);
+static Logger logger = 
+  Logger::create("main"_str, Logger::Verbosity::Trace);
 
 void printEnum(Context* ctx, Decl* decl)
 {
@@ -208,8 +211,8 @@ int testLookup()
 
     int main() 
     {
-      int a = 
-    
+      int a = 1;
+    }
   )"_str);
 
   parseString(ctx, R"cpp(
@@ -217,9 +220,11 @@ int testLookup()
   )cpp"_str);
 
   
-  Type* type = lookupType(ctx, "Apple<@dep(int)> @dep"_str);
+  Type* type = lookupType(ctx, "Apple<int>"_str);
+  
+  str name = getTypeName(ctx, type);
 
-  INFO(getTypeName(ctx, type));
+  printf("%s\n", name.bytes);
   
   return 0;
 }
@@ -470,11 +475,11 @@ int main()
 
   // return testContext();
   // return testLexer();
-  // return testLookup();
+  return testLookup();
   // return testMultipleParses();
   // return testParseStmt();
   // return testParsePartialStmt();
   // return testLookupName();
-  return testArgs();
+  // return testArgs();
 }
 

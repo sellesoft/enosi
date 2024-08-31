@@ -32,6 +32,13 @@
 
 #undef stdout
 
+#ifndef ENOSI_CLANG_EXECUTABLE
+// We need to know the path to the locally built clang executable 
+// so that we can get the proper resource directory. Otherwise things
+// like 'stddef.h' won't exsit.
+#error "ENOSI_CLANG_EXECUTABLE not defined"
+#endif
+
 template<typename T>
 using Rc = llvm::IntrusiveRefCntPtr<T>;
 
@@ -44,7 +51,8 @@ inline Up<T> makeUnique(Args&&... args) { return std::make_unique<T>(args...); }
 template<typename T>
 using Sp = std::shared_ptr<T>;
 
-Logger logger = Logger::create("lppclang"_str, Logger::Verbosity::Trace);
+static Logger logger = 
+  Logger::create("lppclang"_str, Logger::Verbosity::Trace);
 
 // implement a llvm raw ostream to capture output from clang/llvm stuff
 struct LLVMIO : llvm::raw_ostream
@@ -64,11 +72,15 @@ struct LLVMIO : llvm::raw_ostream
   }
 };
 
+/* ----------------------------------------------------------------------------
+ */
 inline llvm::StringRef strRef(str s)
 {
   return llvm::StringRef((char*)s.bytes, s.len);
 }
 
+/* ----------------------------------------------------------------------------
+ */
 template<typename To, typename From>
 inline To* tryAs(From* ptr)
 {
@@ -227,6 +239,8 @@ struct Lexer
   b8 at_end;
 };
 
+/* ----------------------------------------------------------------------------
+ */
 inline static u64 getTokenStartOffset(
     clang::SourceManager& srcmgr, 
     const clang::Token& token)
@@ -234,6 +248,8 @@ inline static u64 getTokenStartOffset(
   return srcmgr.getDecomposedSpellingLoc(token.getLocation()).second;
 }
 
+/* ----------------------------------------------------------------------------
+ */
 inline static u64 getTokenEndOffset(
     clang::SourceManager& srcmgr, 
     const clang::Token& token)
@@ -329,6 +345,8 @@ struct Context
       : parser(parser), 
         printer(printer) {}
 
+  /* --------------------------------------------------------------------------
+   */
     void HandleDiagnostic(
         clang::DiagnosticsEngine::Level diag_level, 
         const clang::Diagnostic& info)
@@ -346,6 +364,8 @@ struct Context
 
   Up<DiagConsumer> diag_consumer;
 
+  /* --------------------------------------------------------------------------
+   */
   b8 init(Slice<str> args)
   {
     using namespace clang;
@@ -365,20 +385,18 @@ struct Context
 
     std::vector<const char*> driver_args;
 
-    std::string main_exe_name = 
-      llvm::sys::fs::getMainExecutable(nullptr, nullptr);
-
-    driver_args.push_back(main_exe_name.c_str());
-    driver_args.push_back("-xc++");
-    driver_args.push_back("-Xclang");
-    driver_args.push_back("-fincremental-extensions");
-    driver_args.push_back("-c");
-    driver_args.push_back("lppclang-inputs");
+    driver_args.push_back(ENOSI_CLANG_EXECUTABLE);
 
     for (auto arg : args)
     {
       driver_args.push_back((char*)arg.bytes);
     }
+
+    driver_args.push_back("-xc++");
+    driver_args.push_back("-Xclang");
+    driver_args.push_back("-fincremental-extensions");
+    driver_args.push_back("-c");
+    driver_args.push_back("lppclang-inputs");
 
     // Temp diags buffer to properly catch anything that might go wrong in the 
     // driver. Probaby not very useful atm, but if user args are ever supported
@@ -428,10 +446,15 @@ struct Context
 
     CompilerInvocation& invocation = clang.getInvocation();
 
-    if (clang.getHeaderSearchOpts().UseBuiltinIncludes &&
-      clang.getHeaderSearchOpts().ResourceDir.empty())
+    auto& header_search = clang.getHeaderSearchOpts();
+
+    b8 use_builtin = header_search.UseBuiltinIncludes;
+    auto resource_dir = header_search.ResourceDir;
+
+    if (header_search.UseBuiltinIncludes &&
+        header_search.ResourceDir.empty())
     {
-      clang.getHeaderSearchOpts().ResourceDir =
+      header_search.ResourceDir =
         clang::CompilerInvocation::GetResourcesPath(
           driver_args[0], nullptr);
     }
@@ -480,6 +503,8 @@ struct Context
     return true;
   }
 
+  /* --------------------------------------------------------------------------
+   */
   void deinit()
   {
     diagprinter->EndSourceFile();
@@ -506,22 +531,75 @@ struct Context
     allocator.deinit();
   }
 
+  /* --------------------------------------------------------------------------
+   */
   template<typename T>
   T* allocate()
   {
     return (T*)allocator.allocate(sizeof(T));
   }
 
+  /* --------------------------------------------------------------------------
+   */
   void takeAST(ASTUnitPtr& ptr)
   {
     ptr.swap(ast_unit);
   }
 
+  /* --------------------------------------------------------------------------
+   */
   clang::ASTContext* getASTContext()
   {
     return &ast_unit->getASTContext();
   }
 };
+
+/* ----------------------------------------------------------------------------
+ */
+static b8 startNewBuffer(
+    clang::SourceManager& srcmgr, 
+    clang::Preprocessor& preprocessor,
+    str s)
+{
+  using namespace clang;
+
+  SourceLocation new_loc = srcmgr.getLocForEndOfFile(srcmgr.getMainFileID());
+
+  FileID fileid = 
+    srcmgr.createFileID(
+      std::move(
+        llvm::MemoryBuffer::getMemBuffer(
+          llvm::StringRef((char*)s.bytes, s.len))),
+      SrcMgr::C_User, 
+      0, 0, new_loc);
+
+  if (preprocessor.EnterSourceFile(fileid, nullptr, new_loc))
+    return false;
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static void maybeResetParser(
+    clang::Parser& parser,
+    clang::Sema& sema)
+{
+  using namespace clang;
+
+  ASTContext& astctx = sema.getASTContext();
+  if (!astctx.getTranslationUnitDecl())
+    astctx.addTranslationUnitDecl();
+
+  if (parser.getCurToken().is(tok::annot_repl_input_end))
+  {
+    // reset parser from last incremental parse
+    parser.ConsumeAnyToken();
+    parser.ExitScope();
+    sema.CurContext = nullptr;
+    parser.EnterScope(Scope::DeclScope);
+    sema.ActOnTranslationUnitScope(parser.getCurScope());
+  }
+}
 
 namespace clang{
 // This class is declared a 'friend' of clang's Parser so that we may hook into
@@ -541,6 +619,8 @@ public:
       parser(parser),
       ctx(ctx) {}
 
+  /* --------------------------------------------------------------------------
+   */
   s64 getParseResultOffset(SourceManager& srcmgr)
   {
     const Token& curt = parser.getCurToken();
@@ -550,6 +630,8 @@ public:
       return getTokenStartOffset(srcmgr, curt);
   }
 
+  /* --------------------------------------------------------------------------
+   */
   ParseStmtResult parseStatement()
   {
     SourceManager&     srcmgr = clang.getSourceManager();
@@ -578,10 +660,12 @@ public:
     return {nullptr, 0};
   }
 
-  str consumeIdentifier()
+  /* --------------------------------------------------------------------------
+   */
+  ParseIdentifierResult parseIdentifier()
   {
     if (parser.expectIdentifier())
-      return nil;
+      return {nil, 0};
 
     const Token& tok = parser.getCurToken();
     SourceManager& srcmgr = clang.getSourceManager();
@@ -593,9 +677,11 @@ public:
     auto membuf = srcmgr.getBufferOrFake(fileid);
     auto buf = membuf.getBuffer().substr(beginoffset, endoffset-beginoffset);
     parser.ConsumeToken();
-    return {(u8*)buf.data(), buf.size()};
+    return {{(u8*)buf.data(), buf.size()}, getParseResultOffset(srcmgr)};
   }
 
+  /* --------------------------------------------------------------------------
+   */
   Decl* lookupName(str s)
   {
     Preprocessor& preprocessor = clang.getPreprocessor();
@@ -607,6 +693,8 @@ public:
     return result.front();
   }
 
+  /* --------------------------------------------------------------------------
+   */
   ParseTypeNameResult parseTypeName()
   {
     SourceManager&     srcmgr = clang.getSourceManager();
@@ -621,6 +709,8 @@ public:
     return {(::Type*)TR.get().getAsOpaquePtr(), getParseResultOffset(srcmgr)};
   }
 
+  /* --------------------------------------------------------------------------
+   */
   ParseDeclResult parseTopLevelDecl()
   {
     SourceManager&     srcmgr = clang.getSourceManager();
@@ -642,16 +732,40 @@ public:
       };
   }
 
+  /* --------------------------------------------------------------------------
+   */
   ParseTopLevelDeclsResult parseTopLevelDecls()
   {
     SourceManager&     srcmgr = clang.getSourceManager();
     DiagnosticsEngine& diags = clang.getDiagnostics();
+    ASTContext&        astctx = clang.getASTContext();
 
     diags.Reset(true);
 
     Parser::DeclGroupPtrTy decl_group;
     Sema::ModuleImportState import_state;
-    parser.ParseTopLevelDecl(decl_group, import_state);
+
+    INFO("parsing top level decls\n");
+
+    std::vector<Decl*> decls;
+
+    for (b8 eof = parser.ParseFirstTopLevelDecl(decl_group, import_state);
+        !eof;
+        eof = parser.ParseTopLevelDecl(decl_group, import_state))
+    {
+      auto ref = decl_group.get();
+      if (ref.isSingleDecl())
+      {
+        decls.push_back(ref.getSingleDecl());
+      }
+      else
+      {
+        for (auto& decl : ref)
+        {
+          decls.push_back(decl);
+        }
+      }
+    }
 
     if (diags.hasErrorOccurred())
     {
@@ -666,8 +780,15 @@ public:
       return {nullptr, 0};
     }
 
+    if (decl_group.get().isNull())
+      ERROR("decl group is null");
+
+    auto group_ref = DeclGroupRef::Create(astctx, decls.data(), decls.size());
+
     auto dctx = ctx->allocate<DeclIterator>();
-    dctx->initGroup(decl_group.get());
+    dctx->initGroup(group_ref);
+
+    astctx.getTranslationUnitDecl()->dump();
 
     return 
       {
@@ -676,6 +797,8 @@ public:
       };
   }
 
+  /* --------------------------------------------------------------------------
+   */
   ParseExprResult parseExpr()
   {
     SourceManager&     srcmgr = clang.getSourceManager();
@@ -902,53 +1025,6 @@ b8 createASTFromString(Context* ctx, str s)
 
 /* ----------------------------------------------------------------------------
  */
-static b8 startNewBuffer(
-    clang::SourceManager& srcmgr, 
-    clang::Preprocessor& preprocessor,
-    str s)
-{
-  using namespace clang;
-
-  SourceLocation new_loc = srcmgr.getLocForEndOfFile(srcmgr.getMainFileID());
-
-  FileID fileid = 
-    srcmgr.createFileID(
-      std::move(
-        llvm::MemoryBuffer::getMemBuffer(
-          llvm::StringRef((char*)s.bytes, s.len))),
-      SrcMgr::C_User, 
-      0, 0, new_loc);
-
-  if (preprocessor.EnterSourceFile(fileid, nullptr, new_loc))
-    return false;
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-static void maybeResetParser(
-    clang::Parser& parser,
-    clang::Sema& sema)
-{
-  using namespace clang;
-
-  ASTContext& astctx = sema.getASTContext();
-  if (!astctx.getTranslationUnitDecl())
-    astctx.addTranslationUnitDecl();
-
-  if (parser.getCurToken().is(tok::annot_repl_input_end))
-  {
-    // reset parser from last incremental parse
-    parser.ConsumeAnyToken();
-    parser.ExitScope();
-    sema.CurContext = nullptr;
-    parser.EnterScope(Scope::DeclScope);
-    sema.ActOnTranslationUnitScope(parser.getCurScope());
-  }
-}
-
-/* ----------------------------------------------------------------------------
- */
 Decl* parseString(Context* ctx, str s)
 {
   assert(ctx);
@@ -965,21 +1041,10 @@ Decl* parseString(Context* ctx, str s)
   if (!startNewBuffer(srcmgr, preprocessor, s))
     return nullptr;
 
-  astctx.addTranslationUnitDecl();
-
-  if (parser.getCurToken().is(tok::annot_repl_input_end))
-  {
-    // reset parser from last incremental parse
-    parser.ConsumeAnyToken();
-    parser.ExitScope();
-    sema.CurContext = nullptr;
-    parser.EnterScope(Scope::DeclScope);
-    sema.ActOnTranslationUnitScope(parser.getCurScope());
-  }
+  maybeResetParser(parser, sema);
 
   Parser::DeclGroupPtrTy decl_group;
   Sema::ModuleImportState import_state;
-
   for (b8 at_eof = parser.ParseFirstTopLevelDecl(decl_group, import_state);
      !at_eof;
      at_eof = parser.ParseTopLevelDecl(decl_group, import_state))
@@ -1078,6 +1143,21 @@ ParseExprResult parseExpr(Context* ctx)
 
   LppParser lppparser(clang, parser, ctx);
   return lppparser.parseExpr();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+ParseIdentifierResult parseIdentifier(Context* ctx)
+{
+  assert(ctx);
+
+  using namespace clang;
+
+  CompilerInstance& clang = *ctx->clang;
+  Parser&           parser = *ctx->parser;
+
+  LppParser lppparser(clang, parser, ctx);
+  return lppparser.parseIdentifier();
 }
 
 /* ----------------------------------------------------------------------------
@@ -1220,7 +1300,12 @@ str getDeclName(Decl* decl)
     return {};
 
   auto ndecl = (clang::NamedDecl*)cdecl;
-  auto name = ndecl->getName();
+  llvm::StringRef name;
+  if (ndecl->getDeclName().isIdentifier())
+    name = ndecl->getName();
+  else
+    name = llvm::StringRef(ndecl->getNameAsString());
+
   return {(u8*)name.data(), name.size()};
 }
 
@@ -1264,11 +1349,13 @@ Type* getTypeDeclType(Context* ctx, Decl* decl)
  */
 u64 getDeclBegin(Context* ctx, Decl* decl)
 {
+  using namespace clang;
+
+  CompilerInstance& clang = *ctx->clang;
+  SourceManager&    srcmgr = clang.getSourceManager();
+
   auto [_, offset] = 
-    ctx->
-    getASTContext()->
-    getSourceManager().
-    getDecomposedSpellingLoc(
+    srcmgr.getDecomposedSpellingLoc(
         getClangDecl(decl)->getBeginLoc());
   return offset;
 }
@@ -1277,12 +1364,14 @@ u64 getDeclBegin(Context* ctx, Decl* decl)
  */
 u64 getDeclEnd(Context* ctx, Decl* decl)
 {
+  using namespace clang;
+
+  CompilerInstance& clang = *ctx->clang;
+  SourceManager&    srcmgr = clang.getSourceManager();
+
   auto [_, offset] = 
-    ctx->
-    getASTContext()->
-    getSourceManager().
-      getDecomposedSpellingLoc(
-          getClangDecl(decl)->getEndLoc());
+    srcmgr.getDecomposedSpellingLoc(
+        getClangDecl(decl)->getEndLoc());
   return offset;
 }
 
@@ -1454,6 +1543,7 @@ str getTypeName(Context* ctx, Type* type)
 {
   assert(ctx && type);
 
+  // Not sure why I have to get the canonical type here.
   auto ctype = getClangType(type);
 
   // yeah this kiiiinda sucks.
@@ -1596,6 +1686,8 @@ Decl* getNextEnum(EnumIter* iter)
  */
 Type* lookupType(Context* ctx, str name)
 {
+  assert(ctx && notnil(name));
+
   using namespace clang;
 
   CompilerInstance& clang = *ctx->clang;
@@ -1605,44 +1697,12 @@ Type* lookupType(Context* ctx, str name)
   Sema&             sema = clang.getSema();
   ASTContext&       astctx = sema.getASTContext();
 
-  SourceLocation new_loc = srcmgr.getLocForStartOfFile(srcmgr.getMainFileID());
+  loadString(ctx, name);
 
-  FileID fileid = 
-    srcmgr.createFileID(
-      std::move(
-        llvm::MemoryBuffer::getMemBuffer(
-          llvm::StringRef((char*)name.bytes, name.len))),
-      SrcMgr::C_User, 
-      0, 0, new_loc);
-      
-  if (preprocessor.EnterSourceFile(fileid, nullptr, new_loc))
-    return nullptr;
+  LppParser lppparser(clang, parser, ctx);
+  ParseTypeNameResult result = lppparser.parseTypeName();
 
-  sema.CurContext->dumpLookups();
-  sema.CurContext->dumpAsDecl();
-  parser.getCurScope()->dump();
-
-  // astctx.addTranslationUnitDecl();
-
-  if (parser.getCurToken().is(tok::annot_repl_input_end))
-  {
-    // reset parser from last incremental parse
-    parser.ConsumeAnyToken();
-    parser.ExitScope();
-    sema.CurContext = nullptr;
-    parser.EnterScope(Scope::DeclScope);
-    sema.ActOnTranslationUnitScope(parser.getCurScope());
-  }
-
-  auto Tr = parser.ParseTypeName();
-  if (Tr.isInvalid())
-    return nullptr;
-
-  auto T = Tr.get().get();
-
-  T.getCanonicalType().dump();
-
-  return nullptr;
+  return (::Type*)result.type;
 }
 
 /* ----------------------------------------------------------------------------
@@ -1681,16 +1741,5 @@ void playground()
   Preprocessor&     preprocessor = clang.getPreprocessor();
 
   LppParser lppparser(clang, parser, ctx);
-
-  startNewBuffer(srcmgr, preprocessor, R"cpp(
-    hello there
-  )cpp"_str);
-
-  maybeResetParser(parser, sema);
-
-  for (s32 i = 0; i < 3; ++i)
-  {
-    INFO("id: ", lppparser.consumeIdentifier(), "\n");
-  }
 }
 

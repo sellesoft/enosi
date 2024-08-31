@@ -32,8 +32,11 @@ else
   cpp_driver.opt = "speed"
 end
 
+proj:reportDefine { "ENOSI_CLANG_EXECUTABLE", 
+  '"'..enosi.getProject("llvm"):getExecutables()[1]..'"' }
+
 -- need to export everything since we're compiling to a shared lib
-cpp_driver.export_all = true
+cpp_driver.export_all = false
 
 -- llvm does not compile with rtti enabled
 cpp_driver.nortti = true

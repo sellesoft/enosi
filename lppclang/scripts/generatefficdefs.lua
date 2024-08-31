@@ -27,6 +27,10 @@ while true do
   end
 
   if take then
+    local prefix = "LPPCFUNC "
+    if line:sub(1,#prefix) == prefix then
+      line = line:sub(#prefix)
+    end
     api = api..line
   end
 

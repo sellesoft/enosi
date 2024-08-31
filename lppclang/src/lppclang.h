@@ -11,6 +11,10 @@
 
 using namespace iro;
 
+// Shorthand so that im not extending the line length of each function
+// by so many characters
+#define LPPCFUNC EXPORT_DYNAMIC
+
 //!ffiapi start
 
 typedef enum
@@ -151,6 +155,14 @@ typedef struct ParseExprResult
 
 /* ============================================================================
  */
+typedef struct ParseIdentifierResult
+{
+  str id;
+  s64 offset;
+} ParseIdentifierResult;
+
+/* ============================================================================
+ */
 typedef struct
 {
   str raw;
@@ -159,66 +171,68 @@ typedef struct
 } TokenRawAndLoc;
 
 // **** EXPERIMENTAL ****
-void addIncludeDir(Context* ctx, str s);
-Type* lookupType(Context* ctx, str name);
-ParseStmtResult parseStatement(Context* ctx);
+LPPCFUNC void addIncludeDir(Context* ctx, str s);
+LPPCFUNC Type* lookupType(Context* ctx, str name);
+LPPCFUNC ParseStmtResult parseStatement(Context* ctx);
 // Returns the declaration of the given statement, or nullptr if the given
 // stmt is not a declaration.
-Decl* getStmtDecl(Context* ctx, Stmt* stmt);
-ParseTypeNameResult parseTypeName(Context* ctx);
-ParseDeclResult parseTopLevelDecl(Context* ctx);
-ParseTopLevelDeclsResult parseTopLevelDecls(Context* ctx);
-ParseExprResult parseExpr(Context* ctx);
-Decl* lookupName(Context* ctx, str s);
-b8 loadString(Context* ctx, str s);
+LPPCFUNC Decl* getStmtDecl(Context* ctx, Stmt* stmt);
+LPPCFUNC ParseTypeNameResult parseTypeName(Context* ctx);
+LPPCFUNC ParseDeclResult parseTopLevelDecl(Context* ctx);
+LPPCFUNC ParseTopLevelDeclsResult parseTopLevelDecls(Context* ctx);
+LPPCFUNC ParseExprResult parseExpr(Context* ctx);
+LPPCFUNC ParseIdentifierResult parseIdentifier(Context* ctx);
+LPPCFUNC Decl* lookupName(Context* ctx, str s);
+LPPCFUNC b8 loadString(Context* ctx, str s);
 // **** EXPERIMENTAL ****
 
 /* ----------------------------------------------------------------------------
  |  Create/destroy an lppclang context. This keeps track of clang's ASTUnit and 
  |  also various things that we must dynamically allocate.
  */
-Context* createContext(str* args, u64 argc);
-void     destroyContext(Context*);
+
+LPPCFUNC Context* createContext(str* args, u64 argc);
+LPPCFUNC void     destroyContext(Context*);
 
 /* ----------------------------------------------------------------------------
  |  Create a lexer over the given string.
  */
-Lexer* createLexer(Context* ctx, str s);
+LPPCFUNC Lexer* createLexer(Context* ctx, str s);
 
 /* ----------------------------------------------------------------------------
  |  Returns a pointer to the next token in the string or nullptr if none are 
  |  left.
  */
-Token* lexerNextToken(Lexer* l);
+LPPCFUNC Token* lexerNextToken(Lexer* l);
 
 /* ----------------------------------------------------------------------------
  |  Returns a str representing the raw text the given token spans.
  */ 
-str tokenGetRaw(Context* ctx, Lexer* l, Token* t);
+LPPCFUNC str tokenGetRaw(Context* ctx, Lexer* l, Token* t);
 
 /* ----------------------------------------------------------------------------
  |  Get the kind of a token.
  */
-TokenKind tokenGetKind(Token* t);
+LPPCFUNC TokenKind tokenGetKind(Token* t);
 
 /* ----------------------------------------------------------------------------
  |  Create an AST from the given string for the given Context.
  */ 
-b8 createASTFromString(Context* ctx, str s);
+LPPCFUNC b8 createASTFromString(Context* ctx, str s);
 
 /* ----------------------------------------------------------------------------
  */
-Decl* parseString(Context* ctx, str s);
+LPPCFUNC Decl* parseString(Context* ctx, str s);
 
 /* ----------------------------------------------------------------------------
  |  Prints clang's textual representation of the given decl to stdout
  */ 
-void dumpDecl(Decl* decl);
+LPPCFUNC void dumpDecl(Decl* decl);
 
 /* ----------------------------------------------------------------------------
  |  Retrieves the toplevel declaration of the given context.
  */
-Decl* getTranslationUnitDecl(Context* ctx);
+LPPCFUNC Decl* getTranslationUnitDecl(Context* ctx);
 
 /* ----------------------------------------------------------------------------
  |  Given that 'decl' is also a declaration context, creates and returns an 
@@ -229,64 +243,64 @@ Decl* getTranslationUnitDecl(Context* ctx);
  |  If the given decl is not a declaration context or is empty, nullptr is 
  |  returned.
  */
-DeclIter* createDeclIter(Context* ctx, Decl* decl);
-Decl*     getNextDecl(DeclIter* iter);
+LPPCFUNC DeclIter* createDeclIter(Context* ctx, Decl* decl);
+LPPCFUNC Decl*     getNextDecl(DeclIter* iter);
 
 /* ----------------------------------------------------------------------------
  |  Returns an iterator over the declaration context that the given Decl
  |  belongs to. This starts at the beginning of the context!
  */
-DeclIter* getContextOfDecl(Context* ctx, Decl* decl);
+LPPCFUNC DeclIter* getContextOfDecl(Context* ctx, Decl* decl);
 
 /* ----------------------------------------------------------------------------
  |  Returns the kind of declaration 'decl' represents, if it is known to this 
  |  api.
  */
-DeclKind getDeclKind(Decl* decl);
+LPPCFUNC DeclKind getDeclKind(Decl* decl);
 
 /* ----------------------------------------------------------------------------
  |  Assuming 'decl' is a named declaration, retrieve its name
  */ 
-str getDeclName(Decl* decl);
+LPPCFUNC str getDeclName(Decl* decl);
 
 /* ----------------------------------------------------------------------------
  |  Assuming 'decl' is a value declaration (eg. a declaration with an 
  |  underlying type), retrieve its type.
  */ 
-Type* getDeclType(Decl* decl);
+LPPCFUNC Type* getDeclType(Decl* decl);
 
 // retrieves the Type representation of a Type declaration.
 // This does not give the type of the declaraion!!
-Type* getTypeDeclType(Context* ctx, Decl* decl);
+LPPCFUNC Type* getTypeDeclType(Context* ctx, Decl* decl);
 
 /* ----------------------------------------------------------------------------
  |  Gets the offset into the provided string where the given declaration 
  |  begins and ends.
  */
-u64 getDeclBegin(Context* ctx, Decl* decl);
-u64 getDeclEnd(Context* ctx, Decl* decl);
+LPPCFUNC u64 getDeclBegin(Context* ctx, Decl* decl);
+LPPCFUNC u64 getDeclEnd(Context* ctx, Decl* decl);
 
 /* ----------------------------------------------------------------------------
  |  If the given decl is a function declaration, retrieve its return type. 
  |  Otherwise nullptr is returned.
  */
-Type* getFunctionReturnType(Decl* decl);
+LPPCFUNC Type* getFunctionReturnType(Decl* decl);
 
 /* ----------------------------------------------------------------------------
  |  Helpers for determining if the given function or method has a body and 
  |  where that body begins and ends.
  */
-b8  functionHasBody(Decl* decl);
-u32 getFunctionBodyBegin(Decl* decl);
-u32 getFunctionBodyEnd(Decl* decl);
+LPPCFUNC b8  functionHasBody(Decl* decl);
+LPPCFUNC u32 getFunctionBodyBegin(Decl* decl);
+LPPCFUNC u32 getFunctionBodyEnd(Decl* decl);
 
 /* ----------------------------------------------------------------------------
  |  Helpers for determining if the given tag declaration (a struct, class, 
  |  enum, etc.) has a body and where that body begins and ends.
  */
-b8  tagHasBody(Decl* decl);
-u32 getTagBodyBegin(Decl* decl);
-u32 getTagBodyEnd(Decl* decl);
+LPPCFUNC b8  tagHasBody(Decl* decl);
+LPPCFUNC u32 getTagBodyBegin(Decl* decl);
+LPPCFUNC u32 getTagBodyEnd(Decl* decl);
 
 /* ----------------------------------------------------------------------------
  |  Determine if this tag declaration (a struct, class, enum, etc.) is embedded 
@@ -295,46 +309,46 @@ u32 getTagBodyEnd(Decl* decl);
  |  
  |  struct Apple {...} apple;
  */
-b8 tagIsEmbeddedInDeclarator(Decl* decl);
+LPPCFUNC b8 tagIsEmbeddedInDeclarator(Decl* decl);
 
 /* ----------------------------------------------------------------------------
  |  Given that decl is a function declaration, create and return an iterator 
  |  over its parameters via getNextParam().
  */
-ParamIter* createParamIter(Context* ctx, Decl* decl);
-Decl*      getNextParam(ParamIter* iter);
+LPPCFUNC ParamIter* createParamIter(Context* ctx, Decl* decl);
+LPPCFUNC Decl*      getNextParam(ParamIter* iter);
 
 /* ----------------------------------------------------------------------------
  |  Helpers for determining if the given type is canonical/unqualified.
  */
-b8 isCanonical(Type* type);
-b8 isUnqualified(Type* type);
-b8 isUnqualifiedAndCanonical(Type* type);
+LPPCFUNC b8 isCanonical(Type* type);
+LPPCFUNC b8 isUnqualified(Type* type);
+LPPCFUNC b8 isUnqualifiedAndCanonical(Type* type);
 
-b8 isConst(Type* type);
+LPPCFUNC b8 isConst(Type* type);
 
 /* ----------------------------------------------------------------------------
  |  Retrieves the canonical type of the given type, eg. the underlying type 
  |  with syntax sugar removed. This will still have type qualifiers (such as 
  |  'const').
  */
-Type* getCanonicalType(Type* type);
+LPPCFUNC Type* getCanonicalType(Type* type);
 
 /* ----------------------------------------------------------------------------
  |  Retrieves the type with qualifiers removed.
  */
-Type* getUnqualifiedType(Type* type);
+LPPCFUNC Type* getUnqualifiedType(Type* type);
 
 /* ----------------------------------------------------------------------------
  |  Combination of getCanonicalType and getUnqualifiedType.
  */
-Type* getUnqualifiedCanonicalType(Type* type);
+LPPCFUNC Type* getUnqualifiedCanonicalType(Type* type);
 
 /* ----------------------------------------------------------------------------
  |  Returns a string representing the name of the given type. What is returned 
  |  depends on the sugar and qualifications present on the type. 
  */
-str getTypeName(Context* ctx, Type* type);
+LPPCFUNC str getTypeName(Context* ctx, Type* type);
 
 /* ----------------------------------------------------------------------------
  |  Returns a string containing the 'canonical' spelling of 
@@ -361,45 +375,45 @@ str getTypeName(Context* ctx, Type* type);
  |  To get the typename as it is written in source code
  |  use getTypeName().
  */
-str getCanonicalTypeName(Context* ctx, Type* type);
+LPPCFUNC str getCanonicalTypeName(Context* ctx, Type* type);
 
 /* ----------------------------------------------------------------------------
  |  Same as getCanonicalTypeName but with qualifiers removed.
  */
-str getUnqualifiedCanonicalTypeName(Context* ctx, Type* type);
+LPPCFUNC str getUnqualifiedCanonicalTypeName(Context* ctx, Type* type);
 
 // Retrieve the size in BITS of the given type.
-u64 getTypeSize(Context* ctx, Type* type);
+LPPCFUNC u64 getTypeSize(Context* ctx, Type* type);
 
-b8 typeIsBuiltin(Type* type);
+LPPCFUNC b8 typeIsBuiltin(Type* type);
 
 // Get the declaration of this type if applicable.
 // Returns nullptr if this is not possible, eg. 
 // if this is a builtin type.
-Decl* getTypeDecl(Type* type);
+LPPCFUNC Decl* getTypeDecl(Type* type);
 
-FieldIter* createFieldIter(Context* ctx, Decl* decl);
-Decl*      getNextField(FieldIter* iter);
+LPPCFUNC FieldIter* createFieldIter(Context* ctx, Decl* decl);
+LPPCFUNC Decl*      getNextField(FieldIter* iter);
 
-u64 getFieldOffset(Context* ctx, Decl* field);
+LPPCFUNC u64 getFieldOffset(Context* ctx, Decl* field);
 
-EnumIter* createEnumIter(Context* ctx, Decl* decl);
-Decl*     getNextEnum(EnumIter* iter);
+LPPCFUNC EnumIter* createEnumIter(Context* ctx, Decl* decl);
+LPPCFUNC Decl*     getNextEnum(EnumIter* iter);
 
 /* ----------------------------------------------------------------------------
  |  Asks clang to dump the loaded ast to stdout for debug purposes.
  */
-void dumpAST(Context* ctx);
+LPPCFUNC void dumpAST(Context* ctx);
 
 /* ----------------------------------------------------------------------------
  |  Retrieves clang's internal naming of the given decl for debugging decl 
  |  kinds unknown to the api.
  */
-str getClangDeclSpelling(Decl* decl);
+LPPCFUNC str getClangDeclSpelling(Decl* decl);
 
 //!ffiapi end
 
-void playground();
+LPPCFUNC void playground();
 
 }
 
