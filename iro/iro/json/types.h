@@ -87,7 +87,9 @@ struct Object
     str name,
     mem::Allocator* allocator = &mem::stl_allocator);
 
-  b8 addString(JSON* json, str name, str string); 
+  b8 addString(JSON* json, str name, str string);
+
+  b8 addNull(JSON* json, str name);
 };
 
 /* ============================================================================

@@ -168,6 +168,23 @@ b8 Object::addString(JSON* json, str name, str string)
 
 /* ------------------------------------------------------------------------------------------------
  */
+b8 Object::addNull(JSON* json, str name)
+{
+  Value* v = json->newValue(Value::Kind::Null);
+  if (!v)
+    return false;
+
+  if (!addMember(name, v))
+  {
+    json->pool.remove(v);
+    return false;
+  }
+
+  return true;
+}
+
+/* ------------------------------------------------------------------------------------------------
+ */
 b8 JSON::init()
 {
   if (!string_buffer.init())
