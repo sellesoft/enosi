@@ -47,7 +47,7 @@ struct Window
   // Initializes whatever backend is being used to display windows.
   static b8 initializeBackend();
 
-  b8   init(str title);
+  b8 init(str title);
   void deinit();
 
   b8 update();

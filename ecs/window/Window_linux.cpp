@@ -4,42 +4,19 @@
 
 #if ECS_LINUX || 1
 
-#include "Window.h"
-
 #include "iro/logger.h"
+
+#include "Window.h"
+#include "Window_linux.h"
 
 #include "../math/util.h"
 
-#define Window X11Window
-#define Font X11Font
-#define Time X11Time
-#define KeyCode X11KeyCode
-#include "X11/Xlib.h" // TODO(sushi) Wayland implementation, maybe
-#include "X11/Xatom.h"
-#include "X11/Xresource.h"
-#include "X11/cursorfont.h"
-#include "X11/Xcursor/Xcursor.h"
-#include "X11/Xutil.h"
-#include "X11/Xos.h"
-#include "X11/extensions/Xrandr.h"
-#undef Window
-#undef Font
-#undef Time
-#undef KeyCode
+#include "../platform/PlatformLinux.h"
 
 static Logger logger = 
   Logger::create("ecs.window"_str, Logger::Verbosity::Notice);
 
-static struct 
-{
-  Display* display;
-  int screen;
-  X11Window root;
-  XContext context;
-
-  Cursor default_cursor;
-  Cursor hidden_cursor;
-} x11;
+X11Stuff x11;
 
 template<typename... Args>
 b8 error(Args... args)
@@ -164,10 +141,7 @@ b8 Window::init(str title)
   int res = XSelectInput(display, window, window_event_masks);
   
   if (res == BadWindow)
-  {
-    ERROR("XSelectInput failed with BadWindow\n");
-    return false;
-  }
+    return error("XSelectInput failed with BadWindow\n");
 
   context = XCreateGC(display, window, 0, 0);
   XSetBackground(display, (GC)context, black);
