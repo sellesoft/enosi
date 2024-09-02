@@ -16,7 +16,9 @@ struct Renderer
     b8   init(Window* window);
     void deinit();
 
-    b8 update(Window* window);
+    b8 update(
+      Window* window,
+      f64 time);
 
     b8 compileShaders();
 

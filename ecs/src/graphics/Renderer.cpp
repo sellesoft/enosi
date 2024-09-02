@@ -95,9 +95,9 @@ b8 Renderer::init(Window* window)
   
   f32 vertices[] = 
   { 
-    -0.5f, -0.5f, 0.f,
-     0.5f, -0.5f, 0.f,
-     0.0f,  0.5f, 0.f,
+    -0.5f, -0.5f,
+     0.5f, -0.5f,
+     0.0f,  0.5f,
   };
 
   glGenVertexArrays(1, &vao);
@@ -107,7 +107,7 @@ b8 Renderer::init(Window* window)
 
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
   glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), nullptr);
+  glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
   glEnableVertexAttribArray(0);
 
   glBindBuffer(GL_ARRAY_BUFFER, 0);
@@ -120,13 +120,24 @@ b8 Renderer::init(Window* window)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Renderer::update(Window* window)
+b8 Renderer::update(
+    Window* window,
+    f64 time)
 {
 
   glClearColor(0.f, 0.f, 0.f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT);
 
   glUseProgram(shader_program);
+
+  u32 scale_loc = glGetUniformLocation(shader_program, "scale");
+  u32 translation = glGetUniformLocation(shader_program, "translation");
+  u32 rotation = glGetUniformLocation(shader_program, "rotation");
+
+  glUniform2f(scale_loc, 1.f * sin(time), 1.f);
+  glUniform2f(translation, 0.f, 0.f);
+  glUniform1f(rotation, 0.f);
+
   glBindVertexArray(vao);
   glDrawArrays(GL_TRIANGLES, 0, 3);
 
@@ -166,7 +177,8 @@ static b8 compileShader(str path, int kind, u32* out_shader_id)
   {
     u8 buffer[512];
     glGetShaderInfoLog(id, 512, nullptr, (char*)buffer);
-    return ERROR("failed to compile shader ", path, ":\n", buffer, "\n");
+    return ERROR("failed to compile shader ", path, ":\n", 
+        (char*)buffer, "\n");
   }
 
   return true;
@@ -179,17 +191,16 @@ b8 Renderer::compileShaders()
   INFO("compiling shaders\n");
 
   if (!compileShader(
-        "graphics/shaders/frag.glsl"_str, 
+        "src/graphics/shaders/frag.glsl"_str, 
         GL_FRAGMENT_SHADER,
         &frag_shader))
     return false;
   
   if (!compileShader(
-        "graphics/shaders/vertex.glsl"_str, 
+        "src/graphics/shaders/vertex.glsl"_str, 
         GL_VERTEX_SHADER,
         &vertex_shader))
     return false;
-
 
   shader_program = glCreateProgram();
 

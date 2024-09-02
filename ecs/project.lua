@@ -33,7 +33,36 @@ end
 
 cpp_driver.defines = proj:collectDefines()
 
-lake.find("**/*.cpp"):each(function(cfile)
+local lpp_driver = Driver.Lpp.new()
+
+lpp_driver.cpp = cpp_driver
+lpp_driver.requires:push(cwd.."/src")
+
+if true then
+lake.find("src/**/*.lpp"):each(function(lfile)
+  local cfile = builddir..lfile..".cpp"
+  local ofile = cfile..".o"
+  lfile = cwd.."/"..lfile
+
+  lpp_driver.input = lfile
+  lpp_driver.output = cfile
+
+  lake.target(cfile)
+    :dependsOn(lfile)
+    :recipe(recipes.lpp(lpp_driver, proj))
+
+  proj:reportObjFile(ofile)
+
+  cpp_driver.input = cfile
+  cpp_driver.output = ofile
+
+  lake.target(ofile)
+    :dependsOn(cfile)
+    :recipe(recipes.objFile(cpp_driver, proj))
+end)
+end
+
+lake.find("src/**/*.cpp"):each(function(cfile)
   local ofile = builddir..cfile..".o"
   local dfile = builddir..cfile..".d"
   cfile = cwd.."/"..cfile

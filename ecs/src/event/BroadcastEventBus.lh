@@ -1,0 +1,46 @@
+$ local lpp = require "lpp"
+$ local event = require "event.Event"
+$ local beb = require "event.BroadcastEventBus"
+
+struct BroadcastEventBusData
+{
+$ for e,d in pairs(event.events) do
+  struct $(e)Subscriber
+  {
+    void* subscriber;
+    void (*callback)(void*, $(e)& event);
+  };
+  Pool<$(e)Subscriber> $(e)Subscriber_pool;
+  SList<$(e)Subscriber> $(e)Subscriber_list;
+$ end
+};
+
+$for e,d in pairs(event.events) do
+template<>
+void BroadcastEventBus::subscribeTo<$(e)>(
+  void* subscriber, 
+  void (*callback)(void*, $(e)&))
+{
+  auto* sub = data->$(e)Subscriber_pool.add();
+  sub->subscriber = subscriber;
+  sub->callback = callback;
+  data->$(e)Subscriber_list.push(sub);
+}
+template<>
+void BroadcastEventBus::raise<$(e)>($(e)&& event) const
+{
+  for (auto& sub : data->$(e)Subscriber_list)
+  {
+    sub.callback(sub.subscriber, event);
+  }
+}
+$ end
+
+b8 BroadcastEventBus::init()
+{
+$ for e,d in pairs(event.events) do
+  if (!data->$(e)Subscriber_list.init()) return false;
+  if (!data->$(e)Subscriber_pool.init()) return false;
+$ end
+  return true;
+}

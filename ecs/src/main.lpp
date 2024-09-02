@@ -1,20 +1,31 @@
-#include "stdio.h"
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
 
 #include "iro/logger.h"
 #include "iro/fs/fs.h"
+#include "iro/time/time.h"
 
 #include "window/Window.h"
 #include "graphics/Renderer.h"
 
-#define DEFINE_GDB_PY_SCRIPT(script_name) \
-  asm("\
-.pushsection \".debug_gdb_scripts\", \"MS\",@progbits,1\n\
-.byte 1 /* Python */\n\
-.asciz \"" script_name "\"\n\
-.popsection \n\
-");
+#include "Engine.h"
 
-DEFINE_GDB_PY_SCRIPT("lpp-gdb.py");
+#include "iro/gdbscriptdef.h"
+
+@lpp.import "input/Input.lpp"
+@lpp.import "event/BroadcastEventBus.lh"
+
+static Logger logger = Logger::create("ecs"_str, Logger::Verbosity::Trace);
+
+void onKeyPressed(void* me, KeyPressed& event)
+{
+  INFO("pressed: ", getKeyStr(event.key), "\n");
+}
+
+void onKeyReleased(void* me, KeyReleased& event)
+{
+  INFO("released: ", getKeyStr(event.key), "\n");
+}
 
 int main()
 {
@@ -49,6 +60,15 @@ int main()
     iro::log.newDestination("stderr"_str, &fs::stderr, flags);
   }
 
+  Engine engine;
+  if (!engine.init())
+    return 1;
+
+  engine.eventbus.broadcast.subscribeTo<KeyPressed>(nullptr, &onKeyPressed);
+  engine.eventbus.broadcast.subscribeTo<KeyReleased>(nullptr, &onKeyReleased);
+
+  auto program_start_time = TimePoint::now();
+
   if (!Window::initializeBackend())
     return 1;
 
@@ -62,7 +82,9 @@ int main()
 
   for (;;) 
   {
-    window.update();
-    renderer.update(&window);
+    window.update(engine);
+    renderer.update(
+      &window,
+      (TimePoint::now() - program_start_time).toSeconds());
   }
 }

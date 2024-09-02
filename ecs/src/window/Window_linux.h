@@ -5,6 +5,8 @@
 #ifndef _ecs_window_linux_h
 #define _ecs_window_linux_h
 
+#include "../input/Keys.h"
+
 #define Window X11Window
 #define Font X11Font
 #define Time X11Time
@@ -34,5 +36,7 @@ struct X11Stuff
 };
 
 extern X11Stuff x11;
+
+Key keysymToKey(KeySym k);
 
 #endif

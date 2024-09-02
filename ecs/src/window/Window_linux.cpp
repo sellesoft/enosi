@@ -5,13 +5,13 @@
 #if ECS_LINUX || 1
 
 #include "iro/logger.h"
+#include "../math/util.h"
+#include "../input/Keys.h"
 
 #include "Window.h"
 #include "Window_linux.h"
 
-#include "../math/util.h"
-
-#include "../platform/PlatformLinux.h"
+#include "../Engine.h"
 
 static Logger logger = 
   Logger::create("ecs.window"_str, Logger::Verbosity::Notice);
@@ -166,7 +166,7 @@ b8 Window::init(str title)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Window::update()
+b8 Window::update(const Engine& engine)
 {
   XEvent event;
   for (;;)
@@ -188,6 +188,20 @@ b8 Window::update()
       break;
     case FocusOut:
       focused = false;
+      break;
+    case KeyPress:
+      {
+        KeySym ks = XLookupKeysym(&event.xkey, 0);
+        Key key = keysymToKey(ks);
+        dispatchKeyPressed(engine, key);
+      }
+      break;
+    case KeyRelease:
+      {
+        KeySym ks = XLookupKeysym(&event.xkey, 0);
+        Key key = keysymToKey(ks);
+        dispatchKeyReleased(engine, key);
+      } 
       break;
     }
   }

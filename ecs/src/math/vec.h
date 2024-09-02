@@ -13,10 +13,8 @@
 /* ============================================================================
  */
 template<typename T>
-struct vec2T
+struct vec2
 {
-  typedef vec2T<T> vec2;
-
   union
   {
     T arr[2];
@@ -25,8 +23,8 @@ struct vec2T
     struct { T u; T v; };
   };
 
-  vec2T<T>() { x = 0; y = 0; }
-  vec2T<T>(T x, T y) { this->x = x; this->y = y; }
+  vec2() { x = 0; y = 0; }
+  vec2(T x, T y) { this->x = x; this->y = y; }
 
   /* --------------------------------------------------------------------------
    */
@@ -39,10 +37,8 @@ struct vec2T
    */
   inline void operator+= (const vec2& rhs) const
   {
-    x += rhs.x;
-    y += rhs.y;
+    *this = *this + rhs;
   }
-
 
   /* --------------------------------------------------------------------------
    */
@@ -55,8 +51,7 @@ struct vec2T
    */
   inline void operator-= (const vec2& rhs) const
   {
-    x -= rhs.x;
-    y -= rhs.y;
+    *this = *this - rhs;
   }
 
   /* --------------------------------------------------------------------------
@@ -70,8 +65,7 @@ struct vec2T
    */
   inline void operator*= (T rhs) const
   {
-    x *= rhs;
-    y *= rhs;
+    *this = *this * rhs;
   }
 
   /* --------------------------------------------------------------------------
@@ -85,8 +79,7 @@ struct vec2T
    */
   inline void operator/= (T rhs) const
   {
-    x /= rhs;
-    y /= rhs;
+    *this = *this / rhs;
   }
 
   /* --------------------------------------------------------------------------
@@ -187,7 +180,135 @@ struct vec2T
   }
 };
 
-typedef vec2T<s32> vec2i;
-typedef vec2T<f32> vec2;
+typedef vec2<s32> vec2i;
+typedef vec2<f32> vec2f;
+
+/* ============================================================================
+ */
+template<typename T>
+struct vec4
+{
+  union
+  {
+    f32 arr[4];
+    struct { f32 x, y, z, w; };
+  };
+
+  /* --------------------------------------------------------------------------
+   */
+  inline vec4 operator+ (const vec4& rhs) const
+  {
+    return
+    {
+      x + rhs.x,
+      y + rhs.y,
+      z + rhs.z,
+      w + rhs.w,
+    };
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  inline void operator+= (const vec4& rhs)
+  {
+    *this = *this + rhs;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  inline vec4 operator- (const vec4& rhs) const
+  {
+    return
+    {
+      x - rhs.x,
+      y - rhs.y,
+      z - rhs.z,
+      w - rhs.w,
+    };
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  inline void operator-= (const vec4& rhs)
+  {
+    *this = *this - rhs;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  inline vec4 operator* (T rhs) const
+  {
+    return
+    {
+      x * rhs,
+      y * rhs,
+      z * rhs,
+      w * rhs,
+    };
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  inline void operator*= (T rhs)
+  {
+    *this = *this * rhs;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  inline vec4 operator/ (T rhs) const
+  {
+    return
+    {
+      x / rhs,
+      y / rhs,
+      z / rhs,
+      w / rhs,
+    };
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  inline void operator/= (T rhs)
+  {
+    *this = *this / rhs;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  inline vec4 operator- () const
+  {
+    return { -x, -y, -z, -w };
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  inline vec4& set(f32 x, f32 y, f32 z, f32 w) 
+  {
+    *this = { x, y, z, w };
+    return *this;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  inline vec4& setX(f32 v) { x = v; return *this; }
+  inline vec4& setY(f32 v) { y = v; return *this; }
+  inline vec4& setZ(f32 v) { z = v; return *this; }
+  inline vec4& setW(f32 v) { w = v; return *this; }
+
+  /* --------------------------------------------------------------------------
+   */
+  inline f32 dot(const vec4& rhs) const
+  {
+    return 
+      x * rhs.x + 
+      y * rhs.y + 
+      z * rhs.z + 
+      w * rhs.w;
+  }
+};
+
+typedef vec4<s32> vec4i;
+typedef vec4<f32> vec4f;
 
 #endif

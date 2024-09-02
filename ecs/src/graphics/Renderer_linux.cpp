@@ -71,7 +71,7 @@ b8 rendererPlatformInit(Window* window)
 	  GLX_ALPHA_SIZE, 8,
 	  GLX_DEPTH_SIZE, 24,
 	  GLX_STENCIL_SIZE, 8,
-	  GLX_FRAMEBUFFER_SRGB_CAPABLE_ARB, GL_TRUE,
+	  GLX_FRAMEBUFFER_SRGB_CAPABLE_EXT, GL_TRUE,
 	  0, //terminate  
   };
 
@@ -136,16 +136,22 @@ b8 rendererPlatformInit(Window* window)
       best_visual->visual,
       AllocNone);
 
+  int attributes_context[] =
+  {
+    0
+  };
+
   // Create the context.
   GLXContext context = 
-    glXCreateContext(
+    glXCreateContextAttribsARB(
       x11.display,
-      best_visual,
-      NULL,
-      True);
+      best_fbcfg,
+      nullptr,
+      True,
+      attributes_context);
 
   if (!context)
-    return ERROR("failed to make GLX context\n");
+    return ERROR("failed to create GLX context\n");
 
   XFree(best_visual);
 

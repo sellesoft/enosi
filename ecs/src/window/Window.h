@@ -8,9 +8,13 @@
 #include "iro/common.h"
 #include "iro/unicode.h"
 
+#include "../input/Keys.h"
+
 #include "../math/vec.h"
 
 using namespace iro;
+
+struct Engine;
 
 /* ============================================================================
  */
@@ -50,12 +54,15 @@ struct Window
   b8 init(str title);
   void deinit();
 
-  b8 update();
+  b8 update(const Engine& engine);
   
   void setCursorPosition(s32 x, s32 y);
 
   void setDisplayMode(DisplayMode mode);
   void setCursorMode(CursorMode mode);
+
+  void dispatchKeyPressed(const Engine& engine, Key key);
+  void dispatchKeyReleased(const Engine& engine, Key key);
 };
 
 #endif

@@ -1,0 +1,127 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local CGen = require "cgen"
+$ local List = require "list"
+
+@lpp.import "input/Input.lpp"
+
+#include "Engine.h"
+#include "window/Window.h"
+#include "window/Window_linux.h"
+
+
+$$$
+
+local cases = function()
+  local a = string.byte "a"
+  local z = string.byte "z"
+
+  local c = CGen.new()
+  c:indent()
+
+  for i=a,z do
+    local char = string.char(i)
+    c:beginCase("XK_"..char)
+    c:append("return Key::",string.upper(char),";")
+    c:endCase()
+  end
+
+  for i=0,9 do
+    local n = tostring(i)
+    c:beginCase("XK_"..n)
+    c:append("return Key::N",n,";")
+    c:endCase()
+  end
+
+  for i=1,12 do
+    local n = tostring(i)
+    c:beginCase("XK_F"..n)
+    c:append("return Key::F",n,";")
+    c:endCase()
+  end
+
+  List{ "Up", "Down", "Left", "Right" }:each(function(dir)
+    c:beginCase("XK_"..dir)
+    c:append("return Key::",dir,";")
+    c:endCase()
+  end)
+
+  local odd = function(from)
+    c:beginCase("XK_"..from)
+    return function(to)
+      c:append("return Key::",to,";")
+      c:endCase()
+    end
+  end
+
+  for i=0,9 do
+    local n = tostring(i)
+    c:beginCase("XK_KP_"..n)
+    c:append("return Key::NP",n,";")
+    c:endCase()
+  end
+
+  odd "Escape" "Escape"
+  odd "asciitilde" "Backquote"
+  odd "Tab" "Tab"
+  odd "Caps_Lock" "CapsLock"
+  odd "Shift_L" "LShift"
+  odd "Control_L" "LCtrl"
+  odd "Alt_L" "LAlt"
+  odd "Shift_R" "RShift"
+  odd "Control_R" "RCtrl"
+  odd "Alt_R" "RAlt"
+  odd "BackSpace" "Backspace"
+  odd "Return" "Enter"
+  odd "minus" "Minus"
+  odd "equal" "Equals"
+  odd "bracketleft" "LBracket"
+  odd "bracketright" "RBracket"
+  odd "slash" "ForwardSlash"
+  odd "semicolon" "Semicolon"
+  odd "apostrophe" "Apostrophe"
+  odd "comma" "Comma"
+  odd "period" "Period"
+  odd "backslash" "BackSlash"
+  odd "space" "Space"
+  odd "Insert" "Insert"
+  odd "Delete" "Delete"
+  odd "Home" "Home"
+  odd "End" "End"
+  odd "Prior" "PageUp"
+  odd "Page_Down" "PageDown"
+  odd "Pause" "Pause"
+  odd "Scroll_Lock" "ScrollLock"
+  odd "Meta_L" "LMeta"
+  odd "Meta_R" "RMeta"
+  odd "Print" "PrintScreen"
+  odd "KP_Multiply" "NPMultiply"
+  odd "KP_Divide" "NPDivide"
+  odd "KP_Add" "NPPlus"
+  odd "KP_Subtract" "NPMinus"
+  odd "KP_Decimal" "NPPeriod"
+  odd "Num_Lock" "NPNumLock"
+ 
+  return c.buffer:get()
+end
+
+$$$
+
+Key keysymToKey(KeySym k)
+{
+  switch(k)
+  {
+  @cases
+  }
+  return Key::Invalid;
+}
+
+void Window::dispatchKeyPressed(const Engine& engine, Key key)
+{
+  engine.eventbus.broadcast.raise<KeyPressed>({key});
+}
+
+void Window::dispatchKeyReleased(const Engine& engine, Key key)
+{
+  engine.eventbus.broadcast.raise<KeyReleased>({key});
+}
