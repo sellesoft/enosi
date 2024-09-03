@@ -83,7 +83,6 @@ struct TimeSpan
   f64 toDays() const;
 };
 
-
 struct WithUnits
 {
   const TimeSpan& x;

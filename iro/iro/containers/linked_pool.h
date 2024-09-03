@@ -37,7 +37,7 @@ struct SLinkedPool
   void deinit()
   {
     pool.deinit();
-    list.destroy();
+    list.deinit();
   }
 
   b8 isEmpty()

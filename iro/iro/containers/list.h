@@ -40,14 +40,23 @@ struct SList
   static SList<T> create(mem::Allocator* allocator = &mem::stl_allocator)
   {
     SList<T> out = {};
-    out.pool = Pool<Node>::create(allocator);
-    out.head = nullptr;
+    out.init(allocator);
     return out;
   }
 
   /* -------------------------------------------------------------------------------------------- destroy
    */
-  void destroy()
+  b8 init(mem::Allocator* allocator = &mem::stl_allocator)
+  {
+    if (!pool.init(allocator))
+      return false;
+    head = nullptr;
+    return true;
+  }
+
+  /* -------------------------------------------------------------------------------------------- destroy
+   */
+  void deinit()
   {
     pool.deinit();
     head = nullptr;
