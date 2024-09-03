@@ -24,6 +24,25 @@ typedef float    f32;
 typedef double   f64;
 typedef u8       b8; // booean type
 
+static const u8  MAX_U8  = 0xff;
+static const u16 MAX_U16 = 0xffff;
+static const u32 MAX_U32 = 0xffffffff;
+static const u64 MAX_U64 = 0xffffffffffffff;
+
+static const s8  MAX_S8  = 127;
+static const s8  MIN_S8  = -MAX_S8 - 1;
+static const s16 MAX_S16 = 32767;
+static const s16 MIN_S16 = -MAX_S16 - 1;
+static const s32 MAX_S32 = 2147483647;
+static const s32 MIN_S32 = -MAX_S32 - 1;
+static const s64 MAX_S64 = 9223372036854775807;
+static const s64 MIN_S64 = -MAX_S64 - 1;
+
+static const f32 MAX_F32 = 3.402823466e+38f;
+static const f32 MIN_F32 = -MAX_F32;
+static const f64 MAX_F64 = 1.79769313486231e+308;
+static const f64 MIN_F64 = -MAX_F64;
+
 // TODO(sushi) move these string things elsewhere
 consteval s64 constevalStrlen(const char* s) {
     s64 i = 0;
