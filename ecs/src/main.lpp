@@ -45,7 +45,6 @@ int main()
           AllowColor
         | ShowCategoryName
         | ShowVerbosity
-        | TrackLongestName
         | PadVerbosity
         | PrefixNewlines;
     }
