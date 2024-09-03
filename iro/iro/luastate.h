@@ -64,9 +64,16 @@ struct LuaState
   void getfenv(s32 idx);
   b8   setfenv(s32 idx);
 
-  str tostring(s32 idx = -1);
-  f32 tonumber(s32 idx = -1);
-  b8  toboolean(s32 idx = -1);
+  str   tostring(s32 idx = -1);
+  f32   tonumber(s32 idx = -1);
+  b8    toboolean(s32 idx = -1);
+  void* tolightuserdata(s32 idx = -1);
+
+  template<typename T>
+  T* tolightuserdata(s32 idx = -1)
+  {
+    return (T*)tolightuserdata(idx);
+  }
 
   void pushstring(str s);
   void pushlightuserdata(void* data);

@@ -254,6 +254,13 @@ b8 LuaState::toboolean(s32 idx)
 
 /* ----------------------------------------------------------------------------
  */
+void* LuaState::tolightuserdata(s32 idx)
+{
+  return lua_touserdata(L, idx);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 void LuaState::pushstring(str s)
 {
   // TODO(sushi) handle non-temrinated input
