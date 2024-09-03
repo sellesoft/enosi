@@ -22,17 +22,17 @@
 #include "io/io.h"
 #include "io/format.h"
 
-#define __HELPER(v, ...) \
-  (((u32)logger.verbosity <= (u32)Logger::Verbosity::v) && \
-   (logger.log(Logger::Verbosity::v, __VA_ARGS__), true))
+#define __HELPER(v, r, ...) \
+  ((((u32)logger.verbosity <= (u32)Logger::Verbosity::v) && \
+   (logger.log(Logger::Verbosity::v, __VA_ARGS__), true)), r)
 
-#define TRACE(...) __HELPER(Trace, __VA_ARGS__)
-#define DEBUG(...) __HELPER(Debug, __VA_ARGS__)
-#define INFO(...) __HELPER(Info, __VA_ARGS__)
-#define NOTICE(...) __HELPER(Notice, __VA_ARGS__)
-#define WARN(...) __HELPER(Warn, __VA_ARGS__)
-#define ERROR(...) __HELPER(Error, __VA_ARGS__)
-#define FATAL(...) __HELPER(Fatal, __VA_ARGS__)
+#define TRACE(...) __HELPER(Trace, true, __VA_ARGS__)
+#define DEBUG(...) __HELPER(Debug, true, __VA_ARGS__)
+#define INFO(...) __HELPER(Info, true, __VA_ARGS__)
+#define NOTICE(...) __HELPER(Notice, true, __VA_ARGS__)
+#define WARN(...) __HELPER(Warn, true, __VA_ARGS__)
+#define ERROR(...) __HELPER(Error, false, __VA_ARGS__)
+#define FATAL(...) __HELPER(Fatal, false, __VA_ARGS__)
 
 #define __SCOPED_INDENT(line) iro::ScopedIndent __scoped_indent##line
 #define _SCOPED_INDENT(line) __SCOPED_INDENT(line)
