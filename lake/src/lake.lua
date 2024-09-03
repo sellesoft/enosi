@@ -186,7 +186,7 @@ end
 ---
 --- Currently this just returns whatever luajit reports from its os() function.
 --- This could be one of: 
----   Windows
+---     Windows
 ---     Linux
 ---     OSX
 ---     BSD
@@ -195,7 +195,7 @@ end
 ---
 -- TODO(sushi) make this return the target operating system if I ever get 
 --             around to supporting
----             cross-compilation.
+--             cross-compilation.
 ---
 ---@return string
 lake.os = function()

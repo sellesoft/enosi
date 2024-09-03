@@ -1086,7 +1086,7 @@ b8 lua__rm(str path, b8 recursive, b8 force)
         path.destroy();
 
       for (auto& dir : dirpool.list)
-        dir.files.destroy();
+        dir.files.deinit();
       // NOTE(sushi) the rest of the mem SHOULD be handled by bump.deinit
     };
 
