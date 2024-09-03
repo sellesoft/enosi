@@ -491,7 +491,10 @@ end
 Decl.getEnumIter = function(self)
   assert(self:isEnum(), "Decl.getEnumIter called on a decl that is not an enum")
 
-  return EnumIter.new(self.ctx, assert(lppclang.createEnumIter(self.ctx.handle, self.handle), "failed to create an enum iter!"))
+  return EnumIter.new(
+    self.ctx, 
+    assert(lppclang.createEnumIter(self.ctx.handle, self.handle), 
+      "failed to create an enum iter!"))
 end
 
 --- Dumps clang's pretty printing of this Decl to stdout.
@@ -640,7 +643,11 @@ Type.isBuiltin = function(self)
 end
 
 Type.getDecl = function(self)
-  return lppclang.getTypeDecl(self.handle)
+  local result = lppclang.getTypeDecl(self.handle)
+  if nil == result then
+    return nil
+  end
+  return Decl.new(self.ctx, result)
 end
 
 Type.getTypeName = function(self)

@@ -345,8 +345,8 @@ struct Context
       : parser(parser), 
         printer(printer) {}
 
-  /* --------------------------------------------------------------------------
-   */
+    /* ------------------------------------------------------------------------
+     */
     void HandleDiagnostic(
         clang::DiagnosticsEngine::Level diag_level, 
         const clang::Diagnostic& info)
@@ -1608,11 +1608,17 @@ Decl* getTypeDecl(Type* type)
   assert(type);
 
   auto ctype = getClangType(type);
+
+  if (clang::LocInfoType::classof(ctype.getTypePtr()))
+    ctype = ((clang::LocInfoType*)ctype.getTypePtr())->getType();
+
+  auto unsugared = ctype->getUnqualifiedDesugaredType();
+
   // TODO(sushi) not sure if any other types have decls
-  if (!clang::TagType::classof(ctype.getTypePtr())) 
+  if (!clang::TagType::classof(unsugared))
     return nullptr;
 
-  return (Decl*)ctype->getAsTagDecl();
+  return (Decl*)unsugared->getAsTagDecl();
 }
 
 /* ----------------------------------------------------------------------------
