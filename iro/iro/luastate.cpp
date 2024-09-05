@@ -304,6 +304,13 @@ void LuaState::pushcfunction(int (*cfunc)(lua_State*))
 
 /* ----------------------------------------------------------------------------
  */
+void LuaState::pushboolean(b8 v)
+{
+  lua_pushboolean(L, v);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 void LuaState::concat(s32 n)
 {
   lua_concat(L, n);

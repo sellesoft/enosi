@@ -80,7 +80,8 @@ struct LuaState
   void pushinteger(s32 i);
   void pushvalue(s32 idx);
   void pushnil();
-  void pushcfunction(int (*cfunc)(lua_State*)); 
+  void pushcfunction(int (*cfunc)(lua_State*));
+  void pushboolean(b8 v);
 
   // Concatenates the n values on the top of the stack.
   void concat(s32 n);
