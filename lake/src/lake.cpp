@@ -410,6 +410,11 @@ b8 Lake::run()
   }
   lua.pop();
 
+  // for (auto& target : targets)
+  // {
+  //   ERROR(target, "\n");
+  // }
+
   if (0) // TODO(sushi) maybe make into a cli arg not very useful tho
   {
     using namespace fs;
