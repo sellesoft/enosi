@@ -34,21 +34,34 @@ end
 cpp_driver.defines = proj:collectDefines()
 
 local lpp_driver = Driver.Lpp.new()
+local lppdep_driver = Driver.LppDepFile.new()
 
 lpp_driver.cpp = cpp_driver
 lpp_driver.requires:push(cwd.."/src")
+lppdep_driver.cpp = cpp_driver
+lppdep_driver.requires:push(cwd.."/src")
+
+local lppclang = enosi.getProject("lppclang")
 
 if true then
 lake.find("src/**/*.lpp"):each(function(lfile)
   local cfile = builddir..lfile..".cpp"
   local ofile = cfile..".o"
+  local dfile = cfile..".d"
   lfile = cwd.."/"..lfile
+
+  lppdep_driver.input = lfile
+  lppdep_driver.output = dfile
+
+  lake.target(dfile)
+    :dependsOn { cfile, lppclang.lib_path }
+    :recipe(recipes.depfileLpp(lppdep_driver, proj, ofile, dfile))
 
   lpp_driver.input = lfile
   lpp_driver.output = cfile
 
   lake.target(cfile)
-    :dependsOn(lfile)
+    :dependsOn { lfile, lppclang.lib_path }
     :recipe(recipes.lpp(lpp_driver, proj))
 
   proj:reportObjFile(ofile)

@@ -1,8 +1,6 @@
 -- Reflection 'system'.
-
-local List = require "list"
-
 local lpp = require "lpp"
+local List = require "list"
 
 -- Load lppclang.
 -- TODO(sushi) the lib needs to be loaded in a better way.
@@ -61,6 +59,30 @@ lpp.import = function(path)
       path, 0, 0, result))
 
   return result
+end
+
+if lpp.generating_dep_file then
+  lpp.registerFinal(function(result)
+    local makedeps = 
+      lpp.clang.generateMakeDepFile(result, args)
+
+    local count = 0
+    for f in makedeps:gmatch("%S+") do
+      -- NOTE(sushi) skip the first two since they are they the phony 
+      --             cpp file passed to clang and its obj file.
+      -- TODO(sushi) write a custom dependency consumer thing so that 
+      --             we dont have to do this and can instead directly
+      --             output a newline delimited list.
+      if count < 2 or f:sub(-1) == ":" or f == "\\" then
+        count = count + 1
+        goto continue
+      end
+
+      lpp.addDependency(f)
+
+      ::continue::
+    end
+  end)
 end
 
 return Reflect
