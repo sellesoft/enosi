@@ -184,6 +184,8 @@ LPPCFUNC ParseExprResult parseExpr(Context* ctx);
 LPPCFUNC ParseIdentifierResult parseIdentifier(Context* ctx);
 LPPCFUNC Decl* lookupName(Context* ctx, str s);
 LPPCFUNC b8 loadString(Context* ctx, str s);
+LPPCFUNC str getDependencies(str file, str* args, u64 argc);
+LPPCFUNC void destroyDependencies(str deps);
 // **** EXPERIMENTAL ****
 
 /* ----------------------------------------------------------------------------

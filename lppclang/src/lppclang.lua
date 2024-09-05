@@ -91,6 +91,8 @@ typedef struct
  ParseIdentifierResult parseIdentifier(Context* ctx);
  Decl* lookupName(Context* ctx, str s);
  b8 loadString(Context* ctx, str s);
+ str getDependencies(str file, str* args, u64 argc);
+ void destroyDependencies(str deps);
  Context* createContext(str* args, u64 argc);
  void destroyContext(Context*);
  Lexer* createLexer(Context* ctx, str s);
@@ -852,6 +854,26 @@ end
 ---@param args List
 clang.createContext = function(args)
   return Ctx.new(args)
+end
+
+clang.generateMakeDepFile = function(file, args)
+  local carr = ffi.new("str["..args:len().."]")
+
+  args:eachWithIndex(function(arg, i)
+    carr[i-1] = make_str(arg)
+  end)
+
+  local result = lppclang.getDependencies(
+      make_str(file), 
+      carr,
+      args:len())
+
+  local out = strToLua(result)
+
+  -- kinda dumb
+  lppclang.destroyDependencies(result)
+
+  return out
 end
 
 local loaded = false

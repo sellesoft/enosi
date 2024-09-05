@@ -9,6 +9,8 @@
 #include "iro/containers/linked_pool.h"
 
 #include "clang/Tooling/Tooling.h"
+#include "clang/Tooling/CompilationDatabase.h"
+#include "clang/Tooling/DependencyScanning/DependencyScanningTool.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclGroup.h"
 #include "clang/Sema/Sema.h"
@@ -18,6 +20,7 @@
 #include "clang/Frontend/TextDiagnosticPrinter.h"
 #include "clang/Frontend/TextDiagnosticBuffer.h"
 #include "clang/Frontend/FrontendActions.h"
+#include "clang/Frontend/DependencyOutputOptions.h"
 #include "clang/FrontendTool/Utils.h"
 #include "clang/Parse/Parser.h"
 #include "clang/Lex/Lexer.h"
@@ -427,7 +430,6 @@ struct Context
     diag_consumer = makeUnique<DiagConsumer>( *parser, diagprinter);
 
     clang.createDiagnostics(diagprinter, false);
-    // clang.createDiagnostics();
     clang.getDiagnostics().setShowColors(true);
 
     clang.getPCHContainerOperations()->registerWriter(
@@ -1732,20 +1734,116 @@ void addIncludeDir(Context* ctx, str s)
 }
 
 /* ----------------------------------------------------------------------------
+ */
+str getDependencies(str file, str* args, u64 argc)
+{
+  using namespace clang;
+  using namespace clang::tooling::dependencies;
+
+  std::vector<std::string> compilation = 
+  { 
+    ENOSI_CLANG_EXECUTABLE,
+    "-c",
+    "__dependent_file.cpp",
+  };
+
+  for (u64 i = 0; i < argc; ++i)
+  {
+    compilation.push_back(std::string(
+          (char*)args[i].bytes, (char*)args[i].bytes + args[i].len));
+  }
+
+  auto ofs = new llvm::vfs::OverlayFileSystem(llvm::vfs::getRealFileSystem());
+  auto vfs = new llvm::vfs::InMemoryFileSystem;
+  ofs->pushOverlay(vfs);
+
+  auto cwd_path = iro::fs::Path::cwd();
+  defer { cwd_path.destroy(); };
+
+  llvm::StringRef cwd((char*)cwd_path.buffer.buffer, cwd_path.buffer.len);
+
+  vfs->addFile(
+      llvm::Twine(cwd) + "/__dependent_file.cpp", 
+      0,
+      llvm::MemoryBuffer::getMemBuffer(
+        llvm::StringRef((char*)file.bytes, file.len)));
+
+  DependencyScanningService service(
+      ScanningMode::DependencyDirectivesScan,
+      ScanningOutputFormat::Full);
+  DependencyScanningTool tool(service, ofs);
+
+  auto result_or_err = tool.getDependencyFile(compilation, cwd);
+  if (auto err = 
+        llvm::handleErrors(result_or_err.takeError(), 
+          [](const llvm::StringError& e)
+          {
+            printf("dep scanning failed: %s\n", e.getMessage().data());
+          }))
+  {
+    exit(1);
+  }
+
+  std::string result = *result_or_err;
+
+  str out;
+  out.bytes = (u8*)mem::stl_allocator.allocate(result.size());
+  mem::copy(out.bytes, result.data(), result.size());
+  out.len = result.size();
+
+  return out;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void destroyDependencies(str deps)
+{
+  mem::stl_allocator.free(deps.bytes);
+}
+
+/* ----------------------------------------------------------------------------
  *  Miscellaneous experimenting with clang directly.
  */
 void playground()
 {
   using namespace clang;
+  using namespace tooling::dependencies;
 
-  auto ctx = createContext(nullptr, 0);
+  std::vector<std::string> compilation = { "-c", "-E", "-MT", "test.cpp" };
 
-  CompilerInstance& clang = *ctx->clang;
-  Parser&           parser = *ctx->parser;
-  Sema&             sema = clang.getSema();
-  SourceManager&    srcmgr = clang.getSourceManager();
-  Preprocessor&     preprocessor = clang.getPreprocessor();
+  auto vfs = new llvm::vfs::InMemoryFileSystem();
 
-  LppParser lppparser(clang, parser, ctx);
+  vfs->addFile("/root/stuff/apple.h", 0, 
+      llvm::MemoryBuffer::getMemBuffer("\n"));
+
+  vfs->addFile("/root/test.cpp", 0,
+      llvm::MemoryBuffer::getMemBuffer(
+          "#include \"stuff/apple.h\""));
+
+  DependencyScanningService service(
+      ScanningMode::DependencyDirectivesScan,
+      ScanningOutputFormat::Full);
+  DependencyScanningTool tool(service, vfs);
+
+  auto result_or_err = tool.getDependencyFile(
+      {
+        "clang++",
+        "-c",
+        "test.cpp",
+        "-o",
+        "test.cpp.o"
+      }, "/root");
+
+  if (auto err = 
+        llvm::handleErrors(result_or_err.takeError(), 
+          [](const llvm::StringError& e)
+          {
+            printf("failed: %s\n", e.getMessage().data());
+          }))
+  {
+    exit(1);
+  }
+
+  printf("%s\n", (*result_or_err).data());
 }
 

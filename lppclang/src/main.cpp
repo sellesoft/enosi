@@ -454,6 +454,25 @@ int testArgs()
   return 0;
 }
 
+int testDepedencies()
+{
+  str args[] = 
+  {
+    "-Iiro"_str,
+  };
+
+  getDependencies(R"cpp(
+    #include "iro/containers/array.h"
+
+    int main()
+    {
+      Array<int> array;
+    }
+  )cpp"_str, args, 1);
+
+  return 0;
+}
+
 int main()
 {
 
@@ -471,15 +490,14 @@ int main()
           AllowColor));
   }
 
-  // playground();
-
   // return testContext();
   // return testLexer();
-  return testLookup();
+  // return testLookup();
   // return testMultipleParses();
   // return testParseStmt();
   // return testParsePartialStmt();
   // return testLookupName();
   // return testArgs();
+  return testDepedencies();
 }
 
