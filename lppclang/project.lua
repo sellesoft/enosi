@@ -20,6 +20,8 @@ proj:dependsOn("llvm", "iro")
 local lib = lake.target(builddir..enosi.getSharedLibName("lppclang"))
 local exe = lake.target(builddir.."lppclang")
 
+proj.lib_path = lib.path
+
 local cpp_driver = Driver.Cpp.new()
 
 cpp_driver.include_dirs:push { "src", proj:collectIncludeDirs() }
