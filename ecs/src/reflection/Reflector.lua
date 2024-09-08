@@ -50,6 +50,20 @@ Reflect.include = function(path)
   return formed
 end
 
+Reflect.beginNamespace = function(name)
+  Reflect.ctx:beginNamespace(name)
+  return "namespace "..name.."\n{\n"
+end
+
+Reflect.endNamespace = function()
+  Reflect.ctx:endNamespace()
+  return "}\n"
+end
+
+Reflect.lookupType = function(name)
+  return Reflect.ctx:lookupType(name)
+end
+
 lpp.import = function(path)
   local result = lpp.processFile("src/"..path)
 

@@ -1,0 +1,162 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+#include "math/vec.h"
+#include "Color.h"
+
+namespace ui
+{
+
+struct Vertex
+{
+  vec2f pos;
+  vec2f uv;
+  u32   color;
+};
+
+typedef u32 Index;
+
+/* ----------------------------------------------------------------------------
+ */
+static inline vec2i putLineCounts() { return { 4, 6 }; }
+
+/* ----------------------------------------------------------------------------
+ */
+static vec2i putLine(
+    Vertex* putverts, 
+    Index*  putindices, 
+    vec2i   offsets, 
+    vec2f   start,
+    vec2f   end,
+    f32     thickness,
+    Color   color)
+{
+  if (color.a == 0)
+    return {0, 0};
+
+  u32 col = color.rgba;
+
+  Vertex* vp = putverts + offsets.x;
+  Index* ip = putindices + offsets.y;
+
+  vec2f ott = end - start;
+  vec2f norm = vec2f(ott.y, -ott.x).normalized();
+
+  ip[0] = offsets.x; ip[1] = offsets.x + 1; ip[2] = offsets.x + 2;
+  ip[3] = offsets.x; ip[4] = offsets.x + 2; ip[5] = offsets.x + 3;
+  vp[0] = { { start.x, start.y }, { 0, 0 }, col };
+  vp[1] = { { end.x,   end.y },   { 0, 0 }, col };
+  vp[2] = { { end.x,   end.y },   { 0, 0 }, col };
+  vp[3] = { { start.x, start.y }, { 0, 0 }, col };
+
+  vp[0].pos += norm * thickness / 2.f;
+  vp[1].pos += norm * thickness / 2.f;
+  vp[2].pos -= norm * thickness / 2.f;
+  vp[3].pos -= norm * thickness / 2.f;
+
+  return putLineCounts();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static inline vec2i putFilledTriangleCounts() { return { 3, 3 }; }
+
+/* ----------------------------------------------------------------------------
+ */
+static vec2i putFilledTriangle(
+    Vertex* putverts,
+    Index*  putindices,
+    vec2i   offsets,
+    vec2f   p1,
+    vec2f   p2,
+    vec2f   p3,
+    Color   color)
+{
+  if (color.a == 0)
+    return { 0, 0 };
+
+  u32 col = color.rgba;
+
+  Vertex* vp = putverts + offsets.x;
+  Index*  ip = putindices + offsets.y;
+
+  ip[0] = offsets.x; ip[1] = offsets.x + 1; ip[2] = offsets.x + 2;
+  vp[0] = { p1, { 0, 0 }, col };
+  vp[1] = { p2, { 0, 0 }, col };
+  vp[2] = { p3, { 0, 0 }, col };
+
+  return putFilledTriangleCounts();
+
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static inline vec2i putTriangleCounts() { return { 12, 18 }; }
+
+/* ----------------------------------------------------------------------------
+ */
+static vec2i putTriangle(
+    Vertex* putverts,
+    Index* putindices,
+    vec2i offsets,
+    vec2f p0,
+    vec2f p1,
+    vec2f p2,
+    f32 thickness,
+    Color color)
+{
+  if (color.a == 0)
+    return { 0, 0 };
+
+  // TODO(sushi) ref the old deshi code and remove this function's 
+  //             dependency on putLine.
+
+  vec2i sum = {};
+
+  Index* ip = putindices + offsets.y;
+  
+  sum += putLine(putverts, ip, sum, p0, p1, thickness, color);
+  sum += putLine(putverts, ip, sum, p1, p2, thickness, color);
+  sum += putLine(putverts, ip, sum, p2, p0, thickness, color);
+
+  return sum;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static inline vec2i putFilledRectCounts() { return { 4, 6 }; }
+
+/* ----------------------------------------------------------------------------
+ */
+static vec2i putFilledRect(
+    Vertex* putverts,
+    Index*  putindices,
+    vec2i   offsets,
+    vec2f   pos,
+    vec2f   dim,
+    Color   color)
+{
+  if (color.a == 0)
+    return { 0, 0 };
+
+  u32 col = color.rgba;
+
+  Vertex* vp = putverts + offsets.x;
+  Index*  ip = putindices + offsets.y;
+
+  vec2f tl = pos;
+  vec2f br = pos + dim;
+  vec2f bl = pos + vec2f{ 0, dim.y };
+  vec2f tr = pos + vec2f{ dim.x, 0 };
+
+  ip[0] = offsets.x; ip[1] = offsets.x + 1; ip[2] = offsets.x + 2;
+  ip[3] = offsets.x; ip[4] = offsets.x + 2; ip[5] = offsets.x + 3;
+  vp[0] = { tl, { 0, 1 }, col };
+  vp[1] = { tr, { 1, 1 }, col };
+  vp[2] = { br, { 1, 1 }, col };
+  vp[3] = { bl, { 0, 0 }, col };
+
+  return putFilledRectCounts();
+}
+
+}

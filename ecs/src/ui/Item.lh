@@ -1,0 +1,56 @@
+/*
+ *  The basis of all things in the UI system.
+ */ 
+
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+
+#include "iro/unicode.h"
+#include "math/vec.h"
+@reflect.include "ui/Style.h"
+
+using namespace iro;
+
+namespace ui
+{
+
+enum class ActionTrigger
+{
+  Never,
+  MouseHover,
+  MouseHoverChildren,
+  MousePressed,
+  MouseReleased,
+  MouseDown,
+  MouseScroll,
+  Always,
+};
+
+struct Item
+{
+  str name;
+  Style* style;
+
+  vec2f pos_local;
+  vec2f pos_screen;
+
+  // Size that the item visually takes up on the screen.
+  vec2f size;
+  
+  ActionTrigger update_trigger;
+
+  // Called according to the update trigger.
+  virtual void update();
+
+  // Determines how this item is sized and positioned relative to other items.
+  virtual void evaluate();
+
+  // Generates draw information for rendering this item.
+  virtual void generate();
+
+  // Cleans up any dynamic memory this item may have allocated in its lifetime.
+  virtual void cleanup();
+};
+
+}

@@ -3,4 +3,38 @@
  *
  */
 
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+@lpp.import "ui/Item.lh"
+@lpp.import "ui/DrawCmd.lh"
+
+#include "iro/containers/list.h"
+#include "iro/containers/pool.h"
+#include "iro/containers/linked_pool.h"
+
+namespace ui
+{
+
+struct Context
+{
+  // Root item of anything in the item tree.
+  Item root;
+
+  Pool<Item> item_pool;
+  SList<Item> item_stack;
+
+  SList<DrawCmd> free_drawcmds;
+
+  // TODO(sushi) maybe these should be lists, could also be AVL?
+  Array<DrawCmd*> free_drawcmds_vertex_sorted;
+  Array<DrawCmd*> free_drawcmds_index_sorted;
+
+  
+};
+
+}
+
+
+
 

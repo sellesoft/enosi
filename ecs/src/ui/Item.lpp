@@ -1,3 +1,23 @@
 $ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+ 
+@lpp.import "ui/Item.lh"
+
+namespace ui
+{
+
+// Do nothing by default.
+void Item::update() {}
+
+void Item::evaluate() {}
+
+void Item::generate() {}
+
+void Item::cleanup() {}
+
+
+}
+
+
 
 

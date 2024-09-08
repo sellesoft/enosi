@@ -1,0 +1,23 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+#include "iro/common.h"
+#include "math/vec.h"
+
+namespace ui
+{
+
+struct DrawCmd
+{
+  u32 vertex_offset;
+  u32 index_offset;
+
+  vec2i counts_reserved;
+  vec2i counts_used;
+
+  b8 freed;
+
+  
+};
+
+}

@@ -1,5 +1,6 @@
 $ local lpp = require "lpp"
 $ local reflect = require "reflection.Reflector"
+$ local event = require "event.Event"
 
 #include "iro/logger.h"
 #include "iro/fs/fs.h"
@@ -12,6 +13,8 @@ $ local reflect = require "reflection.Reflector"
 
 #include "iro/gdbscriptdef.h"
 
+@lpp.import "ui/UI.lh"
+@lpp.import "ui/Geo.lh"
 @lpp.import "input/Input.lpp"
 @lpp.import "event/BroadcastEventBus.lh"
 
@@ -45,7 +48,6 @@ int main()
           AllowColor
         | ShowCategoryName
         | ShowVerbosity
-        | PadVerbosity
         | PrefixNewlines;
     }
     else
@@ -59,7 +61,7 @@ int main()
     iro::log.newDestination("stderr"_str, &fs::stderr, flags);
   }
 
-  Engine engine;
+  Engine engine = {};
   if (!engine.init())
     return 1;
 
@@ -75,12 +77,41 @@ int main()
   if (!window.init("hello"_str))
     return 1;
 
-  Renderer renderer;
+  gfx::Renderer renderer;
   if (!renderer.init(&window))
     return 1;
 
+  gfx::Buffer* buf = renderer.createBuffer();
+  if (!buf || !buf->init(sizeof(ui::Vertex) * 1028, sizeof(ui::Index) * 256))
+    return !ERROR("failed to initialize buffer\n");
+
+  buf->setF32AttribF32(
+      0, 2, false, sizeof(ui::Vertex), offsetof(ui::Vertex, pos));
+  buf->setF32AttribF32(
+      1, 2, false, sizeof(ui::Vertex), offsetof(ui::Vertex, uv));
+  buf->setF32AttribU8(
+      2, 4, true,  sizeof(ui::Vertex), offsetof(ui::Vertex, color));
+
   for (;;) 
   {
+    buf->map();
+    {
+      auto vp = (ui::Vertex*)buf->mapped.vp;
+      auto ip = (ui::Index*)buf->mapped.ip;
+
+      vec2i offsets = {0, 0};
+      offsets += ui::putFilledTriangle(
+          vp, ip,
+          offsets,
+          { 0.5f, 0.5f },
+          { 0.0f, 0.5f },
+          { 0.5f, 0.0f },
+          Color(255, 0, 0));
+
+      buf->num_indexes = offsets.y;
+    }
+    buf->unmap();
+
     window.update(engine);
     renderer.update(
       &window,
