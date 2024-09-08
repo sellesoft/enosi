@@ -35,7 +35,7 @@ struct vec2
 
   /* --------------------------------------------------------------------------
    */
-  inline void operator+= (const vec2& rhs) const
+  inline void operator+= (const vec2& rhs)
   {
     *this = *this + rhs;
   }
@@ -49,7 +49,7 @@ struct vec2
 
   /* --------------------------------------------------------------------------
    */
-  inline void operator-= (const vec2& rhs) const
+  inline void operator-= (const vec2& rhs)
   {
     *this = *this - rhs;
   }
@@ -63,7 +63,7 @@ struct vec2
 
   /* --------------------------------------------------------------------------
    */
-  inline void operator*= (T rhs) const
+  inline void operator*= (T rhs)
   {
     *this = *this * rhs;
   }
@@ -77,7 +77,7 @@ struct vec2
 
   /* --------------------------------------------------------------------------
    */
-  inline void operator/= (T rhs) const
+  inline void operator/= (T rhs)
   {
     *this = *this / rhs;
   }
@@ -154,7 +154,7 @@ struct vec2
   inline vec2 normalized() const
   {
     if (x || y)
-      return *this /= mag();
+      return *this / mag();
     else
       return *this;
   }
