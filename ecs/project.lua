@@ -55,7 +55,7 @@ lake.find("src/**/*.lpp"):each(function(lfile)
 
   lake.target(dfile)
     :dependsOn { cfile, lppclang.lib_path }
-    :recipe(recipes.depfileLpp(lppdep_driver, proj, ofile, dfile))
+    :recipe(recipes.depfileLpp(lppdep_driver, proj, ofile, cfile, dfile))
 
   lpp_driver.input = lfile
   lpp_driver.output = cfile
