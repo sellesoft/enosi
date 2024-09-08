@@ -26,9 +26,9 @@ struct SList
     operator T&() { return *data; }
   };
 
-  Pool<Node> pool;
+  Pool<Node> pool = {};
 
-  Node* head;
+  Node* head = nullptr;
 
 
   /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
