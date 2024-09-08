@@ -186,6 +186,8 @@ LPPCFUNC Decl* lookupName(Context* ctx, str s);
 LPPCFUNC b8 loadString(Context* ctx, str s);
 LPPCFUNC str getDependencies(str file, str* args, u64 argc);
 LPPCFUNC void destroyDependencies(str deps);
+LPPCFUNC b8 beginNamespace(Context* ctx, str name);
+LPPCFUNC void endNamespace(Context* ctx);
 // **** EXPERIMENTAL ****
 
 /* ----------------------------------------------------------------------------

@@ -93,6 +93,8 @@ typedef struct
  b8 loadString(Context* ctx, str s);
  str getDependencies(str file, str* args, u64 argc);
  void destroyDependencies(str deps);
+ b8 beginNamespace(Context* ctx, str name);
+ void endNamespace(Context* ctx);
  Context* createContext(str* args, u64 argc);
  void destroyContext(Context*);
  Lexer* createLexer(Context* ctx, str s);
@@ -390,6 +392,19 @@ Ctx.lookupType = function(self, typename)
     return nil
   end
   return Type.new(self, result)
+end
+
+--- Begins a namespace with the given name.
+--- 
+---@param name string
+Ctx.beginNamespace = function(self, name)
+  lppclang.beginNamespace(self.handle, make_str(name))
+end
+
+--- Ends a namespace.
+---
+Ctx.endNamespace = function(self)
+  lppclang.endNamespace(self.handle)
 end
 
 --- A parsed declaration.

@@ -473,9 +473,38 @@ int testDepedencies()
   return 0;
 }
 
+int testFakeNamespace()
+{
+  auto ctx = createContext(nullptr, 0);
+  if (!ctx)
+    return 1;
+  defer { destroyContext(ctx); };
+
+  beginNamespace(ctx, "Test"_str);
+  beginNamespace(ctx, "Test2"_str);
+
+  parseString(ctx, R"cpp(
+    int test()
+    {
+      return 1 + 2;
+    }
+  )cpp"_str);
+
+  endNamespace(ctx);
+  endNamespace(ctx);
+
+  parseString(ctx, R"cpp(
+    int main()
+    {
+      Test::Test2::test();
+    }
+  )cpp"_str);
+
+  return 0;
+}
+
 int main()
 {
-
   if (!log.init())
     return 1;
   defer { log.deinit(); };
@@ -490,6 +519,8 @@ int main()
           AllowColor));
   }
 
+  // playground();
+
   // return testContext();
   // return testLexer();
   // return testLookup();
@@ -498,6 +529,7 @@ int main()
   // return testParsePartialStmt();
   // return testLookupName();
   // return testArgs();
-  return testDepedencies();
+  // return testDepedencies();
+  return testFakeNamespace();
 }
 

@@ -259,6 +259,7 @@ inline static u64 getTokenEndOffset(
 {
   return srcmgr.getDecomposedSpellingLoc(token.getEndLoc()).second;
 }
+
 struct Context
 {
   ASTUnitPtr ast_unit;
@@ -283,6 +284,10 @@ struct Context
 
   Up<clang::Parser> parser;
 
+  DLinkedPool<clang::Parser::ParseScope*> parse_scopes;
+
+  DLinkedPool<clang::Decl*> namespace_decls;
+
   // Allocate things into a bump allocator to avoid burdening
   // the user with the responsibility of cleaning stuff up.
   // Later on the api might be redesigned to allow the user 
@@ -291,6 +296,11 @@ struct Context
   //             should probably be changed to a conventional allocator
   //             and resources can be properly tracked via luajit's finalizers.
   mem::Bump allocator;
+
+  // For allocating strings used in 'fake code' we hand to clang so that
+  // if it needs to print some kinda error message about them we won't have 
+  // just deallocated the data.
+  mem::LenientBump string_allocator;
 
   // NOTE(sushi) This is pretty much copied directly from the clang-repl thing
   //             and i originally added it cause i thought it would solve a 
@@ -376,7 +386,12 @@ struct Context
     if (!allocator.init())
       return false;
 
+    if (!string_allocator.init())
+      return false;
+
     lexers.init(&allocator);
+    parse_scopes.init(&allocator);
+    namespace_decls.init(&allocator);
 
     // not sure if putting this stuff into the bump allocator is ok
     overlayfs = 
@@ -401,7 +416,7 @@ struct Context
     driver_args.push_back("-c");
     driver_args.push_back("lppclang-inputs");
 
-    // Temp diags buffer to properly catch anything that might go wrong in the 
+    // Temp diags buffer to properly catch anything that might go wrong in the
     // driver. Probaby not very useful atm, but if user args are ever supported
     // this may become more important.
     Rc<DiagnosticIDs> diagids(new DiagnosticIDs);
@@ -526,6 +541,11 @@ struct Context
     clang->setSourceManager(nullptr);
     clang->setFileManager(nullptr);
 
+    parse_scopes.deinit();
+    namespace_decls.deinit();
+
+    string_allocator.deinit();
+
     delete io;
     delete diagprinter;
     for (auto& l : lexers)
@@ -603,6 +623,14 @@ static void maybeResetParser(
   }
 }
 
+/* ----------------------------------------------------------------------------
+ */
+static void maybeSkipReplInputEndToken(clang::Parser& parser)
+{
+  if (parser.getCurToken().getKind() == clang::tok::annot_repl_input_end)
+    parser.ConsumeAnyToken();
+}
+
 namespace clang{
 // This class is declared a 'friend' of clang's Parser so that we may hook into
 // it and call its private functions.
@@ -660,6 +688,38 @@ public:
         removeDecl(declstmt->getSingleDecl());
 
     return {nullptr, 0};
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  const clang::Token consumeAndGetToken()
+  {
+    parser.ConsumeToken();
+    return parser.getCurToken();
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  const SourceLocation consumeBrace()
+  {
+    return parser.ConsumeBrace();
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  const clang::Token consumeAndGetBraceToken()
+  {
+    consumeBrace();
+    return parser.getCurToken();
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  Parser::DeclGroupPtrTy parseExternalDeclaration()
+  {
+    ParsedAttributes attrs(parser.getAttrFactory());
+    ParsedAttributes declspecattrs(parser.getAttrFactory());
+    return parser.ParseExternalDeclaration(attrs, declspecattrs);
   }
 
   /* --------------------------------------------------------------------------
@@ -1043,7 +1103,7 @@ Decl* parseString(Context* ctx, str s)
   if (!startNewBuffer(srcmgr, preprocessor, s))
     return nullptr;
 
-  maybeResetParser(parser, sema);
+  maybeSkipReplInputEndToken(parser);
 
   Parser::DeclGroupPtrTy decl_group;
   Sema::ModuleImportState import_state;
@@ -1072,7 +1132,7 @@ b8 loadString(Context* ctx, str s)
   if (!startNewBuffer(srcmgr, preprocessor, s))
     return false;
 
-  maybeResetParser(parser, sema);
+  maybeSkipReplInputEndToken(parser);
 
   return true;
 }
@@ -1112,6 +1172,9 @@ ParseDeclResult parseTopLevelDecl(Context* ctx)
 
   CompilerInstance& clang = *ctx->clang;
   Parser&           parser = *ctx->parser;
+
+  if (parser.getCurToken().getKind() == tok::annot_repl_input_end)
+    parser.ConsumeAnyToken();
 
   LppParser lppparser(clang, parser, ctx);
   return lppparser.parseTopLevelDecl();
@@ -1204,8 +1267,14 @@ void dumpDecl(Decl* decl)
  */
 void dumpAST(Context* ctx)
 {
+  using namespace clang;
+
   assert(ctx);
-  getClangDecl(getTranslationUnitDecl(ctx))->dumpColor();
+
+  CompilerInstance& clang = *ctx->clang;
+  ASTContext&       astctx = clang.getASTContext();
+
+  astctx.getTranslationUnitDecl()->dumpColor();
 }
 
 /* ----------------------------------------------------------------------------
@@ -1802,48 +1871,210 @@ void destroyDependencies(str deps)
 }
 
 /* ----------------------------------------------------------------------------
+ */
+b8 beginNamespace(Context* ctx, str name)
+{
+  using namespace clang;
+
+  CompilerInstance& clang = *ctx->clang;
+  Parser&           parser = *ctx->parser;
+  Sema&             sema = clang.getSema();
+  SourceManager&    srcmgr = clang.getSourceManager();
+  Preprocessor&     preprocessor = clang.getPreprocessor();
+
+  // create a fake buffer containing the namespace declaration.
+  io::Memory buffer;
+  if (!buffer.open(&ctx->string_allocator))
+    return ERROR("failed to open buffer for fake namespace decl\n");    
+  io::formatv(&buffer, "namespace ", name, " {\n");
+
+  if (!startNewBuffer(srcmgr, preprocessor, buffer.asStr()))
+    return ERROR("failed to upload fake namespace decl buffer to clang\n");
+
+  parser.ConsumeAnyToken();
+  clang::Token ns_tok = parser.getCurToken();
+
+  parser.ConsumeToken();
+  clang::Token id_tok = parser.getCurToken();
+
+  parser.ConsumeToken();
+  clang::Token lb_tok = parser.getCurToken();
+
+  auto ns_scope = new Parser::ParseScope(&parser, Scope::DeclScope);
+  ctx->parse_scopes.pushTail(ns_scope);
+
+  ParsedAttributes attrs(parser.getAttrFactory());
+
+  UsingDirectiveDecl* implicit_using = nullptr;
+  clang::Decl* namespace_decl = 
+    parser.getActions().ActOnStartNamespaceDef(
+      parser.getCurScope(),
+      SourceLocation(),
+      ns_tok.getLocation(),
+      id_tok.getLocation(),
+      id_tok.getIdentifierInfo(),
+      lb_tok.getLocation(),
+      attrs,
+      implicit_using,
+      !ctx->namespace_decls.isEmpty());
+
+  ctx->namespace_decls.pushTail(namespace_decl);
+
+  parser.ConsumeAnyToken();
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void endNamespace(Context* ctx)
+{
+  using namespace clang;
+
+  CompilerInstance& clang = *ctx->clang;
+  Parser&           parser = *ctx->parser;
+  Sema&             sema = clang.getSema();
+  SourceManager&    srcmgr = clang.getSourceManager();
+  Preprocessor&     preprocessor = clang.getPreprocessor();
+
+  Parser::ParseScope* ns_scope = ctx->parse_scopes.popTail();
+  delete ns_scope;
+
+  static const str endstr = "}\n"_str;
+
+  startNewBuffer(srcmgr, preprocessor, endstr);
+  parser.ConsumeAnyToken();
+
+  auto namespace_decl = ctx->namespace_decls.popTail();
+
+  INFO("is: ", tok::getTokenName(parser.getCurToken().getKind()), "\n");
+
+  parser.getActions().ActOnFinishNamespaceDef(
+      namespace_decl,
+      parser.getCurToken().getLocation());
+
+  parser.ConsumeAnyToken();
+}
+
+/* ----------------------------------------------------------------------------
  *  Miscellaneous experimenting with clang directly.
  */
 void playground()
 {
   using namespace clang;
-  using namespace tooling::dependencies;
+  
+  auto ctx = createContext(nullptr, 0);
+  if (!ctx)
+    return;
+  defer { destroyContext(ctx); };
 
-  std::vector<std::string> compilation = { "-c", "-E", "-MT", "test.cpp" };
+  CompilerInstance& clang = *ctx->clang;
+  Parser&           parser = *ctx->parser;
+  Sema&             sema = clang.getSema();
+  SourceManager&    srcmgr = clang.getSourceManager();
+  Preprocessor&     preprocessor = clang.getPreprocessor();
+  ASTContext&       astctx = clang.getASTContext();
 
-  auto vfs = new llvm::vfs::InMemoryFileSystem();
+  LppParser lppparser(clang, parser, ctx);
 
-  vfs->addFile("/root/stuff/apple.h", 0, 
-      llvm::MemoryBuffer::getMemBuffer("\n"));
+  beginNamespace(ctx, "Test"_str);
 
-  vfs->addFile("/root/test.cpp", 0,
-      llvm::MemoryBuffer::getMemBuffer(
-          "#include \"stuff/apple.h\""));
+  loadString(ctx, R"cpp(
+    int test()
+    {
+      return 1 + 2;
+    }
+  )cpp"_str);
 
-  DependencyScanningService service(
-      ScanningMode::DependencyDirectivesScan,
-      ScanningOutputFormat::Full);
-  DependencyScanningTool tool(service, vfs);
+  parser.ConsumeAnyToken();
 
-  auto result_or_err = tool.getDependencyFile(
+  lppparser.parseExternalDeclaration();
+
+  endNamespace(ctx);
+
+  parseString(ctx, R"cpp(
+    int main()
+    {
+      test();
+    }
+  )cpp"_str);
+
+
+#if 0 
+
+  maybeResetParser(parser, sema);
+  startNewBuffer(srcmgr, preprocessor,
+      "namespace Test {\n"_str);
+
+  parser.ConsumeAnyToken();
+  clang::Token ns_tok = parser.getCurToken();
+  
+  INFO("is: ", tok::getTokenName(parser.getCurToken().getKind()), "\n");
+
+  parser.ConsumeToken();
+  clang::Token id_tok = parser.getCurToken();
+
+  INFO("is: ", tok::getTokenName(parser.getCurToken().getKind()), "\n");
+
+  parser.ConsumeToken();
+  clang::Token lb_tok = parser.getCurToken();
+
+  INFO("is: ", tok::getTokenName(parser.getCurToken().getKind()), "\n");
+
+  Parser::ParseScope ns_scope(&parser, Scope::DeclScope);
+
+  ParsedAttributes attrs(parser.getAttrFactory());
+
+  IdentifierInfo* ii = id_tok.getIdentifierInfo();
+
+  UsingDirectiveDecl* implicit_using = nullptr;
+  clang::Decl* namespace_decl = 
+    parser.getActions().ActOnStartNamespaceDef(
+        parser.getCurScope(), 
+        SourceLocation(), 
+        ns_tok.getLocation(),
+        id_tok.getLocation(),
+        id_tok.getIdentifierInfo(),
+        lb_tok.getLocation(),
+        attrs,
+        implicit_using,
+        false);
+  
+  startNewBuffer(srcmgr, preprocessor,
+      "void test() {}"_str);
+  parser.ConsumeAnyToken();
+
+  lppparser.parseExternalDeclaration();
+
+  ns_scope.Exit();
+
+  startNewBuffer(srcmgr, preprocessor,
+      "}\n"_str);
+  parser.ConsumeAnyToken();
+
+  parser.getActions().ActOnFinishNamespaceDef(
+      namespace_decl,
+      lppparser.consumeBrace());
+
+  namespace_decl->dump();
+  
+  startNewBuffer(srcmgr, preprocessor, R"cpp(
+      int main()
       {
-        "clang++",
-        "-c",
-        "test.cpp",
-        "-o",
-        "test.cpp.o"
-      }, "/root");
+        Test::test();
+      }
+    )cpp"_str);
 
-  if (auto err = 
-        llvm::handleErrors(result_or_err.takeError(), 
-          [](const llvm::StringError& e)
-          {
-            printf("failed: %s\n", e.getMessage().data());
-          }))
-  {
-    exit(1);
-  }
+  maybeResetParser(parser, sema);
 
-  printf("%s\n", (*result_or_err).data());
+  Parser::DeclGroupPtrTy decl_group;
+  Sema::ModuleImportState import_state;
+  for (b8 at_eof = parser.ParseFirstTopLevelDecl(decl_group, import_state);
+       !at_eof;
+       at_eof = parser.ParseTopLevelDecl(decl_group, import_state))
+  {/* dont do anything idk yet */}
+
+  astctx.getTranslationUnitDecl()->dump();
+#endif
 }
 
