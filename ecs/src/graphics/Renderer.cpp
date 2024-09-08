@@ -7,6 +7,9 @@
 
 #include "glad/gl.h"
 
+namespace gfx
+{
+
 // platform specific initialization defined in Renderer_<platform>.cpp
 extern b8 rendererPlatformInit(Window* window);
 extern b8 rendererPlatformSwapBuffers(Window* window);
@@ -92,27 +95,9 @@ b8 Renderer::init(Window* window)
   if (!compileShaders())
     return false;
 
+  if (!buffers.init())
+    return ERROR("failed to initialize buffer pool\n");
   
-  f32 vertices[] = 
-  { 
-    -0.5f, -0.5f,
-     0.5f, -0.5f,
-     0.0f,  0.5f,
-  };
-
-  glGenVertexArrays(1, &vao);
-  glGenBuffers(1, &vbo);
-
-  glBindVertexArray(vao);
-
-  glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-  glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(float), nullptr);
-  glEnableVertexAttribArray(0);
-
-  glBindBuffer(GL_ARRAY_BUFFER, 0);
-  glBindVertexArray(0);
-
   INFO("done!\n");
   
   return true;
@@ -124,7 +109,6 @@ b8 Renderer::update(
     Window* window,
     f64 time)
 {
-
   glClearColor(0.f, 0.f, 0.f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT);
 
@@ -134,14 +118,21 @@ b8 Renderer::update(
   u32 translation = glGetUniformLocation(shader_program, "translation");
   u32 rotation = glGetUniformLocation(shader_program, "rotation");
 
-  glUniform2f(scale_loc, 1.f * sin(time), 1.f);
+  glUniform2f(scale_loc, 1.f,  1.f);
   glUniform2f(translation, 0.f, 0.f);
   glUniform1f(rotation, 0.f);
 
-  glBindVertexArray(vao);
-  glDrawArrays(GL_TRIANGLES, 0, 3);
+  for (Buffer& buffer : buffers)
+  {
+    glBindVertexArray(buffer.vao);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer.ibo);
+    glDrawElements(GL_TRIANGLES, buffer.num_indexes, GL_UNSIGNED_INT, nullptr);
+    glBindVertexArray(0);
+  }
 
   rendererPlatformSwapBuffers(window);
+
+  frame += 1;
 
   return true;
 };
@@ -184,7 +175,7 @@ static b8 compileShader(str path, int kind, u32* out_shader_id)
   return true;
 }
 
-/* ----------------------------------------------------------------------------
+/*----------------------------------------------------------------------------
  */
 b8 Renderer::compileShaders()
 {
@@ -222,4 +213,110 @@ b8 Renderer::compileShaders()
   glDeleteShader(frag_shader);
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Buffer* Renderer::createBuffer()
+{
+  return buffers.push()->data;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Buffer::init(u64 vsize, u64 isize)
+{
+  glGenBuffers(1, &vbo);
+  glGenBuffers(1, &ibo);
+  glGenVertexArrays(1, &vao);
+
+  glBindVertexArray(vao);
+  glBindBuffer(GL_ARRAY_BUFFER, vbo);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+
+  vertex_size = vsize;
+  index_size = isize;
+
+  glNamedBufferStorage(vbo, vertex_size, nullptr, GL_MAP_WRITE_BIT);
+  glNamedBufferStorage(ibo, index_size, nullptr, GL_MAP_WRITE_BIT);
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static void setAttrib(
+    u32 bufferidx, 
+    u32 idx, 
+    u32 len, 
+    u32 type, 
+    b8 normalized,
+    u64 stride,
+    u64 offset)
+{
+  glBindBuffer(GL_ARRAY_BUFFER, bufferidx);
+  u8* baseOffset = 0;
+  glVertexAttribPointer(
+    idx, 
+    len, 
+    type, 
+    normalized, 
+    stride, 
+    (void*)(baseOffset+offset));
+  glEnableVertexAttribArray(idx);
+  glBindBuffer(GL_ARRAY_BUFFER, 0);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Buffer::setF32AttribF32(
+    u32 idx, 
+    u32 len, 
+    b8 normalized, 
+    u64 stride,
+    u64 offset)
+{
+  glBindVertexArray(vao);
+  setAttrib(vbo, idx, len, GL_FLOAT, normalized, stride, offset);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Buffer::setF32AttribU8(
+    u32 idx, 
+    u32 len, 
+    b8 normalized, 
+    u64 stride,
+    u64 offset)
+{
+  glBindVertexArray(vao);
+  setAttrib(vbo, idx, len, GL_UNSIGNED_BYTE, normalized, stride, offset);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Buffer::map()
+{
+  assert(!mapped.vp && !mapped.ip && "buffer is already mapped");
+  
+  glBindVertexArray(vao);
+  mapped.vp = glMapNamedBuffer(vbo, GL_WRITE_ONLY);
+  mapped.ip = glMapNamedBuffer(ibo, GL_WRITE_ONLY);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Buffer::unmap()
+{
+  assert(mapped.vp && mapped.ip && "buffer is not mapped");
+
+  assert(glUnmapNamedBuffer(vbo));
+  assert(glUnmapNamedBuffer(ibo));
+
+  mapped.vp = mapped.ip = nullptr;
+}
+
+
 }

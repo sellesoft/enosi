@@ -17,6 +17,9 @@
 #undef Time
 #undef KeyCode
 
+namespace gfx
+{
+
 static Logger logger = 
   Logger::create("ecs.renderer.linux"_str, Logger::Verbosity::Info);
 
@@ -170,4 +173,6 @@ b8 rendererPlatformSwapBuffers(Window* window)
 {
   glXSwapBuffers(x11.display, (X11Window)window->handle);
   return true;
+}
+
 }
