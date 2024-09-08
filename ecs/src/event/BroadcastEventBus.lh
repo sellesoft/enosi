@@ -38,6 +38,8 @@ $ end
 
 b8 BroadcastEventBus::init()
 {
+  data = (BroadcastEventBusData*)mem::stl_allocator.allocate(
+    sizeof(BroadcastEventBusData));
 $ for e,d in pairs(event.events) do
   if (!data->$(e)Subscriber_list.init()) return false;
   if (!data->$(e)Subscriber_pool.init()) return false;
