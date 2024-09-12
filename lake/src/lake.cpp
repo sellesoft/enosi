@@ -280,7 +280,10 @@ b8 processArgSingleDash(Lake* lake, str arg, str* initfile, ArgIter* iter)
   {
   case "v"_hashed:
     logger.verbosity = Logger::Verbosity::Debug;
-    DEBUG("Logger verbosity set to Debug via command line argument.\n");
+    break;
+
+  case "t"_hashed:
+    logger.verbosity = Logger::Verbosity::Trace;
     break;
 
   case "j"_hashed:

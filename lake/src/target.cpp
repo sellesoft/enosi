@@ -146,14 +146,14 @@ b8 Target::needsBuilt()
     case Kind::Single: {
       if (flags.test(Flags::PrerequisiteJustBuilt))
       {
-        TRACE("Target '", single.path, "' needs built because the "
+        TRACE("target '", single.path, "' needs built because the "
               "'PrerequisiteJustBuilt' flag was set.\n");
         return true;
       }
 
       if (!exists())
       {
-        TRACE("Target '", single.path, "' needs built because it does not "
+        TRACE("target '", single.path, "' needs built because it does not "
               "exist on disk.\n");
         return true;
       }
@@ -163,11 +163,11 @@ b8 Target::needsBuilt()
       {
         if (prereq.isNewerThan(this))
         {
-          TRACE("Target '", single.path, "' needs built because its "
+          TRACE("target '", single.path, "' needs built because its "
                 "prerequisite, '", prereq.name(), "', is newer.\n");
           return true;
         }
-        TRACE("Prereq '", prereq.name(), "' is older than the target.\n");
+        TRACE("prereq '", prereq.name(), "' is older than the target.\n");
       }
 
     } break;
