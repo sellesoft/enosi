@@ -1,0 +1,63 @@
+/*
+ *  Tracker of input state.
+ */
+
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+#include "input/Keys.h"
+
+#include "iro/containers/EnumArray.h"
+
+using namespace iro;
+
+struct Engine;
+
+struct InputMgr
+{
+  // TODO(sushi) these need to be bit arrays.
+  typedef EnumArray<Key, b8> KeyMap;
+  typedef EnumArray<MouseButton, b8> MouseButtonMap;
+  
+  KeyMap keys_old;
+  KeyMap keys_new;
+  KeyMap keys_real;
+
+  MouseButtonMap mouse_old;
+  MouseButtonMap mouse_new;
+  MouseButtonMap mouse_real;
+
+  b8   init(Engine& engine);
+  void deinit();
+
+  b8 update(Engine& engine);
+
+  template<typename E>
+  void on(E&);
+
+  b8 isKeyDown(Key key)
+  {
+    return keys_new[key];
+  }
+  b8 wasKeyPressed(Key key)
+  {
+    return keys_new[key] && !keys_old[key];
+  }
+  b8 wasKeyReleased(Key key)
+  {
+    return !keys_new[key] && keys_old[key];
+  }
+  b8 isMouseButtonDown(MouseButton button) 
+  {
+    return mouse_new[button];
+  }
+  b8 wasMouseButtonPressed(MouseButton button)
+  {
+    return mouse_new[button] && !mouse_old[button];
+  }
+  b8 wasMouseButtonReleased(MouseButton button)
+  {
+    return !mouse_new[button] && mouse_old[button];
+  }
+};  
+ 

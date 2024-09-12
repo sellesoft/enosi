@@ -23,3 +23,23 @@ $ end
   @gen
 }
 
+str getMouseButtonStr(MouseButton button)
+{
+$local gen = function()
+$  local type = 
+$    assert(reflect.ctx:lookupType "MouseButton", 
+$      "failed to lookup type")
+$  local decl = assert(type:getDecl(), "failed to get decl of type")
+$  local elems = decl:getEnumIter()
+  switch (button)
+  {
+$ while true do
+$   local elem = elems:next()
+$   if not elem then break end
+  case MouseButton::$(elem:name()): return "$(elem:name())"_str;
+$ end
+  }
+$ end
+  @gen
+}
+

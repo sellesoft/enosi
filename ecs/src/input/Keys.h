@@ -38,6 +38,8 @@ enum class Key
 
   NP0, NP1, NP2, NP3, NP4, NP5, NP6, NP7, NP8, NP9,
   NPMultiply, NPDivide, NPPlus, NPMinus, NPPeriod, NPNumLock,
+
+  COUNT,
 };
 
 str getKeyStr(Key key);
@@ -50,5 +52,16 @@ enum class Mod
   LShift, RShift,
   LAlt, RAlt,
 };
+
+enum class MouseButton
+{
+  Invalid,
+
+  Left, Right, Middle,
+
+  COUNT,
+};
+
+str getouseButtonStr(MouseButton button);
 
 #endif
