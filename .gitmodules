@@ -2,11 +2,10 @@
 	path = luajit/src
 	url = https://github.com/LuaJIT/LuaJIT
 	shallow = true
-[submodule "llvm"]
-	path = llvm/src
-	url = https://github.com/llvm/llvm-project
-	shallow = true
 [submodule "notcurses/src"]
 	path = notcurses/src
 	url = https://github.com/dankamongmen/notcurses
     shallow = true
+[submodule "llvm/src"]
+	path = llvm/src
+	url = https://github.com/agudbrand/llvm-project
