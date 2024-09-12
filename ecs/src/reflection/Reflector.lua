@@ -64,8 +64,15 @@ Reflect.lookupType = function(name)
   return Reflect.ctx:lookupType(name)
 end
 
+local imported = {}
+
 lpp.import = function(path)
+  if imported[path] then
+    return ""
+  end
+
   local result = lpp.processFile("src/"..path)
+  imported[path] = true
 
   local expansion = lpp.MacroExpansion.new()
   expansion:pushBack(
