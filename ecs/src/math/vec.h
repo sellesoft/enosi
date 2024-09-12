@@ -6,6 +6,7 @@
 #define _ecs_vec_h
 
 #include "iro/common.h"
+#include "iro/io/format.h"
 
 // Not a fan of doing this, but whatever.
 #include "cmath"
@@ -25,6 +26,9 @@ struct vec2
 
   vec2() { x = 0; y = 0; }
   vec2(T x, T y) { this->x = x; this->y = y; }
+  
+  template<typename X>
+  vec2(const vec2<X>& in) { x = in.x; y = in.y; }
 
   /* --------------------------------------------------------------------------
    */
@@ -182,6 +186,34 @@ struct vec2
 
 typedef vec2<s32> vec2i;
 typedef vec2<f32> vec2f;
+
+namespace iro::io
+{
+
+template<typename T>
+s64 format(io::IO* io, vec2<T>& v)
+{
+  return io::formatv(io, '(', v.x, ',', v.y, ')');
+}
+
+}
+
+/* ----------------------------------------------------------------------------
+ */
+inline vec2f floor(const vec2f& x)
+{
+  return vec2f(floor(x.x), floor(x.y));
+}
+
+inline vec2f max(const vec2f& x, const vec2f& y)
+{
+  return vec2f(max(x.x, y.x), max(x.y, y.y));
+}
+
+inline vec2f min(const vec2f& x, const vec2f& y)
+{
+  return vec2f(min(x.x, y.x), min(x.y, y.y));
+}
 
 /* ============================================================================
  */

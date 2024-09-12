@@ -23,7 +23,6 @@ inline static b8 pointInRect(vec2i p, vec2i rect_pos, vec2i rect_dim)
     p.y <= rect_pos.y + rect_dim.y;
 }
 
-
 }
 
 #endif

@@ -1,0 +1,47 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+@lpp.import "window/Window.lh"
+@lpp.import "graphics/Renderer.lh"
+@lpp.import "ui/UI.lh"
+
+@lpp.import "input/InputMgr.lh"
+@lpp.import "input/InputEvents.lh"
+@lpp.import "window/Window.lh"
+
+#include "event/BroadcastEventBus.h"
+
+struct Engine
+{
+  struct
+  {
+    BroadcastEventBus broadcast;
+  } eventbus;
+
+  Window window;
+
+  gfx::Renderer renderer;
+
+  ui::Context ui;
+
+  InputMgr input;
+
+  b8 init();
+  void deinit();
+
+  b8 update();
+
+  template<typename E, typename S>
+  void subscribeToBroadcast(S* sub, void (S::* in)(E&))
+  {
+    // Evil magic necessary to convince clang that passing this
+    // as the sub of the callback is ok.
+    static union
+    {
+      void (S::* x)(E&);
+      void (*y)(void*, E&);
+    } x { in };
+
+    eventbus.broadcast.subscribeTo<E>(sub, x.y);
+  }
+};

@@ -1,0 +1,64 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+@lpp.import "Engine.lh"
+
+#include "iro/logger.h"
+#include "iro/time/time.h"
+using namespace iro;
+
+// Introduce events and the event bus definitions.
+@lpp.import "input/InputEvents.lh"
+@lpp.import "event/BroadcastEventBus.lh"
+
+static Logger logger = 
+  Logger::create("ecs.eng"_str, Logger::Verbosity::Info);
+
+/* ----------------------------------------------------------------------------
+ */ 
+b8 Engine::init()
+{
+  INFO("initializing engine...\n");
+  auto start = TimePoint::now();
+
+  if (!eventbus.broadcast.init())
+    return ERROR("failed to initialize broadcast event bus\n");
+
+  if (!Window::initializeBackend())
+    return ERROR("failed to initialize window backend\n");
+
+  if (!window.init("ecs"_str))
+    return ERROR("failed to initialize window\n");
+
+  if (!renderer.init(&window))
+    return ERROR("failed to initialize renderer\n");
+
+  if (!input.init(*this))
+    return ERROR("failed to initialize input\n");
+
+  if (!ui.init(*this))
+    return ERROR("failed to initialize ui\n");
+
+  INFO("done initializing in ", (TimePoint::now() - start).toSeconds(), "s\n");
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */ 
+b8 Engine::update()
+{
+  if (!window.update(*this))
+    return ERROR("failed to update window\n");
+
+  if (!renderer.update(*this))
+    return ERROR("failed to update renderer\n");
+
+  if (!input.update(*this))
+    return ERROR("failed to update input\n");
+
+  if (!ui.update(*this))
+    return ERROR("failed to update ui\n");
+
+  return true;
+}

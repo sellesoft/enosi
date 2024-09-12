@@ -6,29 +6,12 @@ $ local event = require "event.Event"
 #include "iro/fs/fs.h"
 #include "iro/time/time.h"
 
-#include "window/Window.h"
-#include "graphics/Renderer.h"
-
-#include "Engine.h"
+@lpp.import "Engine.lh"
 
 #include "iro/gdbscriptdef.h"
 
-@lpp.import "ui/UI.lh"
-@lpp.import "ui/Geo.lh"
-@lpp.import "input/Input.lpp"
-@lpp.import "event/BroadcastEventBus.lh"
-
-static Logger logger = Logger::create("ecs"_str, Logger::Verbosity::Trace);
-
-void onKeyPressed(void* me, KeyPressed& event)
-{
-  INFO("pressed: ", getKeyStr(event.key), "\n");
-}
-
-void onKeyReleased(void* me, KeyReleased& event)
-{
-  INFO("released: ", getKeyStr(event.key), "\n");
-}
+static Logger logger = 
+  Logger::create("ecs"_str, Logger::Verbosity::Trace);
 
 int main()
 {
@@ -63,58 +46,19 @@ int main()
 
   Engine engine = {};
   if (!engine.init())
-    return 1;
-
-  engine.eventbus.broadcast.subscribeTo<KeyPressed>(nullptr, &onKeyPressed);
-  engine.eventbus.broadcast.subscribeTo<KeyReleased>(nullptr, &onKeyReleased);
+    return ERROR("failed to initialize engine\n");
 
   auto program_start_time = TimePoint::now();
 
-  if (!Window::initializeBackend())
-    return 1;
-
-  Window window;
-  if (!window.init("hello"_str))
-    return 1;
-
-  gfx::Renderer renderer;
-  if (!renderer.init(&window))
-    return 1;
-
-  gfx::Buffer* buf = renderer.createBuffer();
-  if (!buf || !buf->init(sizeof(ui::Vertex) * 1028, sizeof(ui::Index) * 256))
-    return !ERROR("failed to initialize buffer\n");
-
-  buf->setF32AttribF32(
-      0, 2, false, sizeof(ui::Vertex), offsetof(ui::Vertex, pos));
-  buf->setF32AttribF32(
-      1, 2, false, sizeof(ui::Vertex), offsetof(ui::Vertex, uv));
-  buf->setF32AttribU8(
-      2, 4, true,  sizeof(ui::Vertex), offsetof(ui::Vertex, color));
-
   for (;;) 
   {
-    buf->map();
-    {
-      auto vp = (ui::Vertex*)buf->mapped.vp;
-      auto ip = (ui::Index*)buf->mapped.ip;
+    f32 time_elapsed = (TimePoint::now() - program_start_time).toSeconds();
 
-      vec2i offsets = {0, 0};
-      offsets += ui::putFilledTriangle(
-          vp, ip,
-          offsets,
-          { 0.5f, 0.5f },
-          { 0.0f, 0.5f },
-          { 0.5f, 0.0f },
-          Color(255, 0, 0));
+    auto frame_start = TimePoint::now();
 
-      buf->num_indexes = offsets.y;
-    }
-    buf->unmap();
+    engine.update();
 
-    window.update(engine);
-    renderer.update(
-      &window,
-      (TimePoint::now() - program_start_time).toSeconds());
+    INFO("frame took: ", 
+      (TimePoint::now() - frame_start).toMilliseconds(), "\n");
   }
 }
