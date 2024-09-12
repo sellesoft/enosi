@@ -161,4 +161,10 @@ deferrer_with_cancel<F> operator*(defer_with_cancel_dummy, F f) { return {false,
 #define GLUE_(a,b) a##b
 #define GLUE(a,b) GLUE_(a,b)
 
+template<typename T>
+inline T max(T a, T b) { return a > b? a : b; }
+
+template<typename T>
+inline T min(T a, T b) { return a > b? b : a; }
+
 #endif // _iro_common_h
