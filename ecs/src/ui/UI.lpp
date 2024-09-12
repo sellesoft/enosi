@@ -1,0 +1,382 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+@lpp.import "ui/UI.lh"
+@lpp.import "ui/Geo.lh"
+@lpp.import "Engine.lh"
+@lpp.import "graphics/Renderer.lh"
+@lpp.import "window/Window.lh"
+
+#include "iro/logger.h"
+
+using namespace iro;
+
+namespace ui
+{
+
+static Logger logger = 
+  Logger::create("ecs.ui"_str, Logger::Verbosity::Info);
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Context::init(Engine& engine)
+{
+  gfx::Renderer& renderer = engine.renderer;
+  Window& window = engine.window;
+
+
+  if (!item_stack.init())
+    return ERROR("failed to init item stack\n");
+  if (!item_tree.init())
+    return ERROR("failed to init item tree\n");
+  if (!free_drawcmds.init())
+    return ERROR("failed to init free drawcmds list\n");
+  if (!free_drawcmds_vertex_sorted.init())
+    return ERROR("failed to init vertex sorted free drawcmds array\n");
+  if (!free_drawcmds_index_sorted.init())
+    return ERROR("failed to init index sorted free drawcmds array\n");
+  
+  buffer = renderer.createBuffer();
+  if (!buffer)
+    return ERROR("failed to create gfx::Buffer\n");
+  if (!buffer->init(sizeof(ui::Vertex) * 1028, sizeof(ui::Index) * 512))
+    return ERROR("failed to init gfx::Buffer\n");
+
+  buffer->setF32AttribF32(
+      0, 2, false, sizeof(ui::Vertex), offsetof(ui::Vertex, pos));
+  buffer->setF32AttribF32(
+      1, 2, false, sizeof(ui::Vertex), offsetof(ui::Vertex, uv));
+  buffer->setF32AttribU8(
+      2, 4, true,  sizeof(ui::Vertex), offsetof(ui::Vertex, color));
+
+  root = mem::stl_allocator.construct<Item>();
+  root->node = &item_tree.add(root);
+  root->name = "root"_str;
+  root->style.pos = {0,0};
+  root->style.size = vec2f(window.size);
+  root->visible_start = {0,0};
+  root->visible_size = root->size;
+  root->drawcmds.init();
+  root->dirty = true;
+
+  item_stack.push(root);
+
+  vertex_next = index_next = 0;
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Context::update(Engine& engine)
+{
+  if (item_stack.head->data != root)
+    return ERROR("items left on stack!\n");
+
+  buffer->map();
+
+  updateTree(root->node, engine);
+  
+  buffer->unmap();
+
+  // idk
+  buffer->num_indexes = buffer->index_size / sizeof(Index);
+  
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static ItemNode* findStaticSizedParent(
+    Context* ctx, 
+    ItemNode* node, 
+    ItemNode* child)
+{
+  if (node == ctx->root->node)
+    return node;
+
+  Item* item = node->data;
+  if (child == nullptr)
+    return findStaticSizedParent(ctx, node->parent, node);
+  if (!item->style.sizing.testAny<
+        Sizing::AutoX,
+        Sizing::AutoY,
+        Sizing::Flex>())
+    return node;
+  else
+    return findStaticSizedParent(ctx, node->parent, node);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Context::updateTree(ItemNode* node, Engine& engine)
+{
+  gfx::Renderer renderer = engine.renderer;
+  Window& window = engine.window;
+  
+  Item* item = node->data;
+  Item* parent = (node->parent? node->parent->data : nullptr);
+
+  if (item->dirty)
+  {
+    item->dirty = false;
+    ItemNode* sspar = findStaticSizedParent(this, node, nullptr);
+    evalItemBranch(sspar);
+    genItemBranch(sspar);
+  }
+
+  vec2f scoff;
+  vec2f scext;
+
+  Style& style = item->style;
+  if (parent)
+  {
+    vec2f cpos = item->pos_screen + style.margintl + style.bordertl;
+    vec2f csiz = item->getBorderedArea();
+
+    scoff = 
+      max(
+        vec2f(0,0), 
+        max(
+          parent->visible_start, 
+          min(
+            item->pos_screen,
+            parent->visible_start + parent->visible_size)));
+    vec2f br = 
+      max(
+        parent->visible_start,
+        min(
+          item->pos_screen + item->size,
+          parent->visible_start + parent->visible_size));
+    scext = max(vec2f(0,0), br - scoff);
+    item->visible_start = 
+      max(
+        vec2f(0,0),
+        max(
+          parent->visible_start,
+          min(
+            cpos, 
+            parent->visible_start + parent->visible_size)));
+    br = 
+      max(
+        parent->visible_start, 
+        min(
+          cpos + csiz,
+          parent->visible_start + parent->visible_size));
+
+    item->visible_size = br - item->visible_start;
+  }
+  else
+  {
+    scoff = max(vec2f(0,0), item->pos_screen);
+    scext = 
+      max(
+        vec2f(0,0), 
+        min(
+          item->pos_screen + item->size, 
+          vec2f(window.size)));
+    item->visible_start = item->pos_screen;
+    item->visible_size = item->size;
+  }
+
+  if (scoff.x < window.size.x && scoff.y < window.size.y &&
+      scext.x != 0.f          && scext.y != 0.f          && 
+      scoff.x + scext.x > 0.f && scoff.y + scext.y > 0.f)
+  {
+    for (DrawCmd& drawcmd : item->drawcmds)
+    {
+      auto gfxdc = renderer.drawcmds.push();
+      gfxdc->buffer = buffer;
+      gfxdc->index_start = drawcmd.index_offset;
+      gfxdc->index_count = drawcmd.counts_used.y;
+      gfxdc->vertex_start = drawcmd.vertex_offset;
+      gfxdc->scale = { 2.f / window.size.x, -2.f / window.size.y };
+      gfxdc->translation = { -1.f, 1.f };
+    }
+  }
+
+  for (ItemNode* child = node->first_child; child; child = child->next)
+  {
+    updateTree(child, engine);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Context::evalItemBranch(ItemNode* node)
+{
+  Item* item = node->data;
+  Item* parent = (node->parent? node->parent->data : nullptr);
+
+  Style& style = item->style;
+
+  vec2f size = style.size;
+  SizingFlags sizing = style.sizing;
+  b8 hauto = sizing.test(Sizing::AutoY);
+  b8 wauto = sizing.test(Sizing::AutoX);
+
+  SizingFlags parent_sizing = (parent? parent->style.sizing : SizingFlags{});
+
+  if (!hauto)
+  {
+    if (sizing.test(Sizing::PercentY))
+    {
+      if (size.y < 0.f)
+        ERROR("Sizing::PercentY set but height set (", size.y, ") is "
+              "negative\n");
+      else if (parent_sizing.test(Sizing::PercentY))
+        item->size.y = size.y/100.f * parent->getPaddedHeight();
+      else if (parent->style.size.y >= 0.f)
+        item->size.y = size.y/100.f * parent->getPaddedStyleHeight();
+      else
+      {
+        ERROR("Sizing::PercentY is set but this item's parent's height is "
+              "not explicitly sized\n");
+        hauto = true;
+      }
+    }
+    else
+      item->size.y = item->getMarginedStyleHeight();
+  }
+  else
+    item->size.y = 0.f;
+
+  if (!wauto)
+  {
+    if (sizing.test(Sizing::PercentX))
+    {
+      if (size.x < 0.f)
+        ERROR("Sizing::PercentX set but width set (", size.x, ") is "
+              "negative\n");
+      else if (parent_sizing.test(Sizing::PercentX))
+        item->size.x = size.x/100.f * parent->getPaddedWidth();
+      else if (parent->style.size.y >= 0.f)
+        item->size.x = size.x/100.f * parent->getPaddedStyleWidth();
+      else
+      {
+        ERROR("Sizing::PercentX is set but this item's parent's width is "
+              "not explicitly sized\n");
+        wauto = true;
+      }
+    }
+    else
+      item->size.x = item->getPaddedStyleWidth();
+  }
+  else
+    item->size.x = 0.f;
+
+
+  // Evaluate children.
+  
+  vec2f cursor = style.margintl + style.paddingtl + style.bordertl;
+  ItemNode* it = node->first_child;
+  u32 idx = 0;
+  while (it)
+  {
+    Item* child = it->data;
+
+    if (child->style.display.test(Display::Hidden))
+    {
+      idx += 1;
+      assert(it != it->next);
+      it = it->next;
+      continue;
+    }
+
+    evalItemBranch(child->node);
+
+    switch (child->style.positioning)
+    {
+    case Positioning::Static:
+      child->pos_local = cursor;
+      if (style.display.test(Display::Horizontal))
+        cursor.x = child->pos_local.x + child->size.x;
+      else
+        cursor.y = child->pos_local.y + child->size.y;
+
+      child->pos_local.x += child->style.pos.x;
+      child->pos_local.y += child->style.pos.y;
+      break;
+    }
+
+    child->pos_local = floor(child->pos_local);
+
+    idx += 1;
+    assert(it != it->next);
+    it = it->next;
+  }
+
+  if (wauto)
+  {
+    item->size.x += 
+      style.padding_right +
+      style.margin_right +
+      style.border_right;
+  }
+
+  if (hauto)
+  {
+    item->size.y +=
+      style.padding_bottom +
+      style.margin_bottom +
+      style.border_bottom;
+  }
+
+  item->pos_local = floor(item->pos_local);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Context::genItemBranch(ItemNode* node)
+{
+  Item* item = node->data;
+  if (item->style.display.test(Display::Hidden))
+    return;
+
+  if (item != root)
+  {
+    item->pos_screen = node->parent->data->pos_screen + item->pos_local;
+  }
+
+  if (item->drawcmds.len() != 0)
+    item->generate(this);
+
+  for (ItemNode* child = node->first_child; child; child = child->next)
+    genItemBranch(child);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+Item* Context::make<Item>(str id, Style* style)
+{
+  Item* item = mem::stl_allocator.construct<Item>();
+  item->node = &item_tree.addLast(item_stack.head->data->node, item);
+  if (style)
+    item->style = *style;
+  if (!item->drawcmds.init(4))
+    return nullptr;
+  item->drawcmds.push();
+  item->drawcmds[0].alloc(this, putFilledRectCounts());
+  item->dirty = true;
+  return item;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+Item* Context::begin<Item>(str id, Style* style)
+{
+  Item* item = make<Item>(id, style);
+  item_stack.push(item);
+  return item;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Context::endItem()
+{
+  item_stack.pop();
+}
+
+}

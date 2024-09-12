@@ -1,0 +1,241 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+@lpp.import "ui/UI.lh"
+@lpp.import "ui/DrawCmd.lh"
+
+@lpp.import "graphics/Renderer.lh"
+
+namespace ui
+{
+
+/* ----------------------------------------------------------------------------
+ */
+Pair<s32, b8> DrawCmd::findVertex(Context* ctx)
+{
+  auto& varr = ctx->free_drawcmds_vertex_sorted;
+
+  if (0 == varr.len())
+    return { 0, false };
+
+  s32 l = 0, 
+      m = 0, 
+      r = varr.len() - 1;
+
+  while (l <= r)
+  {
+    m = l + (r - l) / 2;
+    if (varr[m]->vertex_offset == vertex_offset)
+      return { m, true };
+    else if (varr[m]->vertex_offset < vertex_offset)
+      l = m + 1;
+    else 
+      r = m - 1;
+  }
+
+  return { m, false };
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Pair<s32, b8> DrawCmd::findIndex(Context* ctx)
+{
+  auto& varr = ctx->free_drawcmds_index_sorted;
+
+  if (0 == varr.len())
+    return { 0, false };
+
+  s32 l = 0, 
+      m = 0, 
+      r = varr.len() - 1;
+
+  while (l <= r)
+  {
+    m = l + (r - l) / 2;
+    if (varr[m]->index_offset == index_offset)
+      return { m, true };
+    else if (varr[m]->index_offset < index_offset)
+      l = m + 1;
+    else 
+      r = m - 1;
+  }
+
+  return { m, false };
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void DrawCmd::alloc(Context* ctx, vec2i counts)
+{
+  u32 v_next = -1;
+  u32 i_next = -1;
+
+  auto& fvsorted = ctx->free_drawcmds_vertex_sorted;
+  auto& fisorted = ctx->free_drawcmds_index_sorted;
+
+  for (s32 i = 0; i < fvsorted.len(); ++i)
+  {
+    DrawCmd* dc = fvsorted[i];
+
+    s64 vremain = dc->counts_reserved.x - counts.x;
+    if (vremain >= 0)
+    {
+      v_next = dc->vertex_offset;
+      if (vremain == 0)
+      {
+        fvsorted.remove(i);
+        dc->counts_reserved.x = 0;
+        if (dc->counts_reserved.y == 0)
+        {
+          auto [index, found] = dc->findIndex(ctx);
+          if (found)
+            fisorted.remove(index);
+          dc->destroy();
+        }
+      }
+      else
+      {
+        dc->vertex_offset += counts.x;
+        dc->counts_reserved.x -= counts.x;
+      }
+    }
+  }
+
+  for (s32 i = 0; i < fisorted.len(); ++i)
+  {
+    DrawCmd* dc = fisorted[i];
+
+    s64 iremain = dc->counts_reserved.y - counts.y;
+    if (iremain >= 0)
+    {
+      i_next = dc->index_offset;
+      if (iremain == 0)
+      {
+        fisorted.remove(i);
+        dc->counts_reserved.y = 0;
+        if (dc->counts_reserved.x == 0)
+          dc->destroy();
+      }
+      else
+      {
+        dc->index_offset += counts.y;
+        dc->counts_reserved.y -= counts.y;
+      }
+    }
+  }
+
+  if (v_next == -1)
+  {
+    vertex_offset = ctx->vertex_next;
+    ctx->vertex_next += counts.x;
+  }
+  else
+    vertex_offset = v_next;
+  
+  if (i_next == -1)
+  {
+    index_offset = ctx->index_next;
+    ctx->index_next += counts.y;
+  }
+  else
+    index_offset = i_next;
+
+  counts_reserved = counts;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void DrawCmd::remove(Context* ctx)
+{
+  if (counts_reserved.x == 0 &&
+      counts_reserved.y == 0)
+  {
+    destroy();
+    return;
+  }
+
+  auto& varr = ctx->free_drawcmds_vertex_sorted;
+  auto& iarr = ctx->free_drawcmds_index_sorted;
+
+  if (0 != varr.len())
+  {
+    auto [index, found] = findVertex(ctx);
+    assert(!found && "this drawcmd should not already be in the list");
+
+    varr.insert(index, this);
+
+    if (index != varr.len())
+    {
+      DrawCmd* right = varr[index+1];
+      if (right->vertex_offset - counts_reserved.x == vertex_offset)
+      {
+        counts_reserved.x += right->counts_reserved.x;
+        right->counts_reserved.x = 0;
+        varr.remove(index+1);
+        if (right->counts_reserved.y == 0)
+          right->destroy();
+      }
+    }
+    if (index != 0)
+    {
+      DrawCmd* left = varr[index-1];
+      if (left->vertex_offset + left->counts_reserved.x == vertex_offset)
+      {
+        left->counts_reserved.x += counts_reserved.x;
+        counts_reserved.x = 0;
+        varr.remove(index);
+      }
+    }
+  }
+  else
+    varr.push(this);
+
+  if (0 != iarr.len())
+  {
+    auto [index, found] = findIndex(ctx);
+    assert(!found && "this drawcmd should not already be in the list");
+
+    iarr.insert(index, this);
+
+    if (index != iarr.len()-1)
+    {
+      DrawCmd* right = iarr[index+1];
+      if (right->index_offset - counts_reserved.y == index_offset)
+      {
+        counts_reserved.y += right->counts_reserved.y;
+        right->counts_reserved.y = 0;
+        iarr.remove(index+1);
+        if (right->counts_reserved.x == 0)
+          right->destroy();
+      }
+    }
+    if (index != 0)
+    {
+      DrawCmd* left = iarr[index-1];
+      if (left->index_offset + left->counts_reserved.y == index_offset)
+      {
+        left->counts_reserved.y += counts_reserved.y;
+        counts_reserved.y = 0;
+        iarr.remove(index);
+        if (counts_reserved.x == 0)
+          destroy();
+      }
+    }
+  }
+  else
+    iarr.push(this);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Pair<Vertex*, Index*> DrawCmd::getPtrs(Context* ctx)
+{
+  return
+  {
+    (Vertex*)ctx->buffer->mapped.vp + vertex_offset,
+    (Index*)ctx->buffer->mapped.ip + index_offset
+  };
+}
+
+
+}

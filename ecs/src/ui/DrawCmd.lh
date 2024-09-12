@@ -2,10 +2,18 @@ $ local lpp = require "lpp"
 $ local reflect = require "reflection.Reflector"
 
 #include "iro/common.h"
+#include "iro/memory/allocator.h"
+#include "iro/Pair.h"
 #include "math/vec.h"
+
+@lpp.import "ui/Geo.lh"
+
+using namespace iro;
 
 namespace ui
 {
+
+struct Context;
 
 struct DrawCmd
 {
@@ -16,7 +24,25 @@ struct DrawCmd
   vec2i counts_used;
 
   b8 freed;
+  
+  // TODO(sushi) maybe allocate these better later!
+  static DrawCmd* create(u64 count)
+  {
+    return (DrawCmd*)mem::stl_allocator.allocate(sizeof(DrawCmd)*count);
+  }
 
+  void destroy()
+  {
+    mem::stl_allocator.free(this);
+  }
+
+  Pair<s32, b8> findVertex(Context* ctx);
+  Pair<s32, b8> findIndex(Context* ctx);
+
+  void alloc(Context* ctx, vec2i counts);
+  void remove(Context* ctx);
+
+  Pair<Vertex*, Index*> getPtrs(Context* ctx);
   
 };
 

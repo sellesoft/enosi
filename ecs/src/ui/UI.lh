@@ -12,6 +12,16 @@ $ local reflect = require "reflection.Reflector"
 #include "iro/containers/list.h"
 #include "iro/containers/pool.h"
 #include "iro/containers/linked_pool.h"
+#include "iro/containers/Tree.h"
+
+namespace gfx
+{
+  struct Buffer;
+  struct Renderer;
+}
+
+struct Window;
+struct Engine;
 
 namespace ui
 {
@@ -19,10 +29,11 @@ namespace ui
 struct Context
 {
   // Root item of anything in the item tree.
-  Item root;
+  Item* root;
 
-  Pool<Item> item_pool;
+  // TODO(sushi) the stack prob does not need to be a whole list!
   SList<Item> item_stack;
+  Tree<Item>  item_tree;
 
   SList<DrawCmd> free_drawcmds;
 
@@ -30,7 +41,44 @@ struct Context
   Array<DrawCmd*> free_drawcmds_vertex_sorted;
   Array<DrawCmd*> free_drawcmds_index_sorted;
 
-  
+  gfx::Buffer* buffer;
+  u64 vertex_next;
+  u64 index_next;
+
+  b8 init(Engine& engine);
+  void deinit();
+
+  b8 update(Engine& engine);
+
+  template<typename TItem>
+  TItem* make(str id, Style* style = nullptr);
+
+  template<typename TItem>
+  TItem* make(Style* style = nullptr) 
+  { 
+    return make<TItem>(nil, style);
+  }
+
+  template<typename TItem>
+  TItem* begin(str id, Style* style = nullptr);
+
+  template<typename TItem>
+  TItem* begin(Style* style = nullptr) 
+  { 
+    return begin<TItem>(nil, style); 
+  }
+
+  void endItem();
+
+  template<typename TItem>
+  void end() { endItem(); }
+
+private:
+
+  void updateTree(ItemNode* node, Engine& engine);
+
+  void evalItemBranch(ItemNode* node);
+  void genItemBranch(ItemNode* node);
 };
 
 }

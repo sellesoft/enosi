@@ -2,22 +2,44 @@ $ local lpp = require "lpp"
 $ local reflect = require "reflection.Reflector"
  
 @lpp.import "ui/Item.lh"
+@lpp.import "ui/DrawCmd.lh"
 
 namespace ui
 {
 
-// Do nothing by default.
+/* ----------------------------------------------------------------------------
+ */
 void Item::update() {}
 
+/* ----------------------------------------------------------------------------
+ */
 void Item::evaluate() {}
 
-void Item::generate() {}
+void Item::generate(Context* ctx) 
+{
 
+  DrawCmd* dc = &drawcmds[0];
+
+  auto [vp, ip] = dc->getPtrs(ctx);
+
+  vec2i sum = {0,0};
+
+  sum += 
+    putFilledRect(
+      vp, 
+      ip,
+      sum,
+      pos_screen, 
+      size, 
+      style.background_color);
+
+  dc->counts_used = sum;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 void Item::cleanup() {}
 
 
 }
-
-
-
 
