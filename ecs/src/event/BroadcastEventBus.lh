@@ -27,7 +27,7 @@ void BroadcastEventBus::subscribeTo<$(e)>(
   data->$(e)Subscriber_list.push(sub);
 }
 template<>
-void BroadcastEventBus::raise<$(e)>($(e)&& event) const
+void BroadcastEventBus::raise<$(e)>($(e)& event) const
 {
   for (auto& sub : data->$(e)Subscriber_list)
   {

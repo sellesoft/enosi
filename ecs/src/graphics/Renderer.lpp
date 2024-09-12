@@ -1,11 +1,14 @@
-#include "Renderer.h"
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
 
-#include "../window/Window.h"
+@lpp.import "graphics/Renderer.lh"
+@lpp.import "Engine.lh"
+@lpp.import "window/Window.lh"
 
 #include "iro/logger.h"
 #include "iro/fs/file.h"
 
-#include "glad/gl.h"
+#include "graphics/glad/gl.h"
 
 namespace gfx
 {
@@ -97,6 +100,9 @@ b8 Renderer::init(Window* window)
 
   if (!buffers.init())
     return ERROR("failed to initialize buffer pool\n");
+
+  if (!drawcmds.init())
+    return ERROR("failed to initialize draw cmd array\n");
   
   INFO("done!\n");
   
@@ -105,9 +111,7 @@ b8 Renderer::init(Window* window)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Renderer::update(
-    Window* window,
-    f64 time)
+b8 Renderer::update(Engine& engine)
 {
   glClearColor(0.f, 0.f, 0.f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT);
@@ -118,19 +122,32 @@ b8 Renderer::update(
   u32 translation = glGetUniformLocation(shader_program, "translation");
   u32 rotation = glGetUniformLocation(shader_program, "rotation");
 
-  glUniform2f(scale_loc, 1.f,  1.f);
-  glUniform2f(translation, 0.f, 0.f);
-  glUniform1f(rotation, 0.f);
-
-  for (Buffer& buffer : buffers)
+  Buffer* last_buff = nullptr;
+  for (DrawCmd& cmd : drawcmds)
   {
-    glBindVertexArray(buffer.vao);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer.ibo);
-    glDrawElements(GL_TRIANGLES, buffer.num_indexes, GL_UNSIGNED_INT, nullptr);
-    glBindVertexArray(0);
+    if (cmd.buffer != last_buff)
+    {
+      last_buff = cmd.buffer;
+      glBindVertexArray(cmd.buffer->vao);
+      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cmd.buffer->ibo);
+    }
+        
+    glUniform2f(scale_loc, cmd.scale.x, cmd.scale.y);
+    glUniform2f(translation, cmd.translation.x, cmd.translation.y);
+
+    glDrawRangeElementsBaseVertex(
+      GL_TRIANGLES, 
+      cmd.index_start, 
+      cmd.buffer->num_indexes, 
+      cmd.index_count,
+      GL_UNSIGNED_INT,
+      nullptr,
+      cmd.vertex_start);
   }
 
-  rendererPlatformSwapBuffers(window);
+  drawcmds.clear();
+
+  rendererPlatformSwapBuffers(&engine.window);
 
   frame += 1;
 

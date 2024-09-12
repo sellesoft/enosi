@@ -13,7 +13,10 @@ struct BroadcastEventBus
   void subscribeTo(void* subscriber, void (*callback)(void*, T&));
 
   template<typename T>
-  void raise(T&& event) const;
+  void raise(T&& event) const { raise<T>(event); }
+
+  template<typename T>
+  void raise(T& event) const;
 
   b8 init();
 };

@@ -27,7 +27,7 @@ setmetatable(Event,
 
     local declname = decl:name()
         
-    print("registering event "..declname)
+    -- print("registering event "..declname)
 
     self.events[declname] = decl
   end

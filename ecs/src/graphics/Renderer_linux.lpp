@@ -1,9 +1,11 @@
-#include "Renderer.h"
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+@lpp.import "graphics/Renderer.lh"
+@lpp.import "window/Window.lh"
 
 #include "iro/logger.h"
-
-#include "../window/Window.h"
-#include "../window/Window_linux.h"
+@lpp.import "window/Window_linux.lh"
 
 #define Window X11Window
 #define Font X11Font
@@ -11,7 +13,7 @@
 #define KeyCode X11KeyCode
 #define GLAD_GL_IMPLEMENTATION
 #define GLAD_GLX_IMPLEMENTATION
-#include "glad/glx.h"
+#include "graphics/glad/glx.h"
 #undef Window
 #undef Font
 #undef Time

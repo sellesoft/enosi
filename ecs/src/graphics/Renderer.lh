@@ -2,12 +2,18 @@
  *  For drawing things to the screen.
  */
 
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
 #ifndef _ecs_renderer_h
 #define _ecs_renderer_h
 
 #include "iro/common.h"
 #include "iro/containers/linked_pool.h"
 
+#include "math/vec.h"
+
+struct Engine;
 struct Window;
 
 namespace gfx
@@ -55,6 +61,18 @@ struct Buffer
 
 /* ============================================================================
  */
+struct DrawCmd
+{
+  Buffer* buffer;
+  u64 index_start;
+  u64 index_count;
+  u64 vertex_start;
+  vec2f scale;
+  vec2f translation;
+};
+
+/* ============================================================================
+ */
 struct Renderer
 {
   u64 frame;
@@ -64,13 +82,12 @@ struct Renderer
   u32 shader_program;
 
   iro::SLinkedPool<Buffer> buffers;
+  iro::Array<DrawCmd> drawcmds;
 
   b8   init(Window* window);
   void deinit();
 
-  b8 update(
-    Window* window,
-    f64 time);
+  b8 update(Engine& engine);
 
   b8 compileShaders();
 
