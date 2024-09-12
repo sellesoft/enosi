@@ -8,9 +8,9 @@
 #include "iro/common.h"
 #include "iro/unicode.h"
 
-#include "../input/Keys.h"
+#include "input/Keys.h"
 
-#include "../math/vec.h"
+#include "math/vec.h"
 
 using namespace iro;
 
@@ -61,8 +61,11 @@ struct Window
   void setDisplayMode(DisplayMode mode);
   void setCursorMode(CursorMode mode);
 
-  void dispatchKeyPressed(const Engine& engine, Key key);
-  void dispatchKeyReleased(const Engine& engine, Key key);
+  template<typename E>
+  void raise(const Engine& eng, E&& event) { raise<E>(eng, event); }
+
+  template<typename E>
+  void raise(const Engine& eng, E& event);
 };
 
 #endif
