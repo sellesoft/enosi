@@ -13,6 +13,7 @@
 #include "clang/Tooling/DependencyScanning/DependencyScanningTool.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclGroup.h"
+#include "clang/AST/LocInfoType.h"
 #include "clang/Sema/Sema.h"
 #include "clang/CodeGen/ObjectFilePCHContainerOperations.h"
 #include "clang/Frontend/CompilerInstance.h"
