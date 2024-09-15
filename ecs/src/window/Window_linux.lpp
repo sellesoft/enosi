@@ -11,7 +11,7 @@ $ local List = require "list"
 #include "input/Keys.h"
 
 @lpp.import "window/Window.lh"
-@lpp.import "window/Window_linux.h"
+@lpp.import "window/Window_linux.lh"
 
 static Logger logger = 
   Logger::create("ecs.window"_str, Logger::Verbosity::Notice);
