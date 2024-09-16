@@ -208,16 +208,18 @@ b8 Window::update(const Engine& engine)
         XButtonEvent bev = event.xbutton;
         switch (bev.button)
         {
-#define map(x, y) \
-          case x: \
-            (event.type == ButtonPress? \
-               raise<MousePressed>(engine, {y}) : \
-               raise<MouseReleased>(engine, {y})); \
+$ local map = function(x, y)
+        case $(x):
+          (event.type == ButtonPress?
+            raise<MousePressed>(engine, {MouseButton::$(y)}) :
+            raise<MouseReleased>(engine,{MouseButton::$(y)}));
             break;
-        map(Button1, MouseButton::Left);
-        map(Button2, MouseButton::Middle);
-        map(Button3, MouseButton::Right);
-#undef map
+$ end
+        @map(Button1, Left)
+        @map(Button2, Middle)
+        @map(Button3, Right)
+$ map = nil
+
         case Button4: raise<MouseScroll>(engine, { 1.f}); break;
         case Button5: raise<MouseScroll>(engine, {-1.f}); break;
         default:

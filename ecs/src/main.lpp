@@ -41,7 +41,7 @@ int main()
         | PrefixNewlines;
     }
 
-    iro::log.newDestination("stderr"_str, &fs::stderr, flags);
+    iro::log.newDestination("stdout"_str, &fs::stdout, flags);
   }
 
   Engine engine = {};
@@ -52,13 +52,7 @@ int main()
 
   for (;;) 
   {
-    f32 time_elapsed = (TimePoint::now() - program_start_time).toSeconds();
-
-    auto frame_start = TimePoint::now();
-
-    engine.update();
-
-    INFO("frame took: ", 
-      (TimePoint::now() - frame_start).toMilliseconds(), "\n");
+    if (!engine.update())
+      break;
   }
 }

@@ -10,7 +10,7 @@ $ local reflect = require "reflection.Reflector"
 #include "math/vec.h"
 #include "iro/containers/Tree.h"
 #include "iro/containers/array.h"
-@reflect.include "ui/Style.h"
+@lpp.import "ui/Style.lh"
 
 using namespace iro;
 
