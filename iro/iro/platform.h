@@ -277,6 +277,16 @@ b8 touchFile(str path);
  */ 
 b8 openptty();
 
+/* ----------------------------------------------------------------------------
+ *  Check if the process is running under a debugger.
+ */
+b8 isRunningUnderDebugger();
+
+/* ----------------------------------------------------------------------------
+ *  Breaks the program for a debuggger.
+ */
+void debugBreak();
+
 } // namespace iro::platform
 
 #endif

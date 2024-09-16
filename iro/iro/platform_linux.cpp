@@ -17,6 +17,7 @@
 #include "sys/uio.h"
 #include "sys/stat.h"
 #include "sys/wait.h"
+#include "sys/ptrace.h"
 #include "sys/sendfile.h"
 
 // Lib providing detailed explanations for various errors
@@ -861,6 +862,25 @@ b8 touchFile(str path)
     return reportErrno(explain_utime((char*)path.bytes, &newtimes));
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 isRunningUnderDebugger()
+{
+  if (ptrace(PTRACE_TRACEME, 0, 1, 0) < 0)
+    return true;
+  else
+    ptrace(PTRACE_DETACH, 0, 1, 0);
+
+  return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void debugBreak()
+{
+  raise(SIGTRAP);
 }
 
 }
