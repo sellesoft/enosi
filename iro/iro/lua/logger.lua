@@ -75,11 +75,14 @@ end
 local createLogger = function(name, verbosity)
   local logger = ffi.new(logger_type)
 
-  C.iro_initLogger(logger, ffi.new("str", name, #name), verbosity)
+  local name = ffi.new("str", name, #name)
+
+  C.iro_initLogger(logger, name, verbosity)
 
   return setmetatable(
   {
-    handle = logger
+    handle = logger,
+    name = name
   }, Logger)
 end
 

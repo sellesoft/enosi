@@ -165,7 +165,7 @@ b8 iro_logFirst(Logger* logger, u32 verbosity, str s)
   if ((u32)logger->verbosity > verbosity)
     return false;
 
-  logger->log(Logger::Verbosity(verbosity), s);
+  logger->log(Logger::Verbosity(verbosity), false, s);
 
   return true;
 }
@@ -178,7 +178,7 @@ void iro_logTrail(Logger* logger, u32 verbosity, str s)
 {
   // no check for verbosity as the call to logFirst tells us if we should 
   // continue
-  logger->log(Logger::Verbosity(verbosity), s);
+  logger->log(Logger::Verbosity(verbosity), false, s);
 }
 
 }

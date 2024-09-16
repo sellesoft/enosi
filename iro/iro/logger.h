@@ -22,17 +22,19 @@
 #include "io/io.h"
 #include "io/format.h"
 
-#define __HELPER(v, r, ...) \
+#define __HELPER(v, r, nf, ...) \
   ((((u32)logger.verbosity <= (u32)Logger::Verbosity::v) && \
-   (logger.log(Logger::Verbosity::v, __VA_ARGS__), true)), r)
+   (logger.log(Logger::Verbosity::v, nf, __VA_ARGS__), true)), r)
 
-#define TRACE(...) __HELPER(Trace, true, __VA_ARGS__)
-#define DEBUG(...) __HELPER(Debug, true, __VA_ARGS__)
-#define INFO(...) __HELPER(Info, true, __VA_ARGS__)
-#define NOTICE(...) __HELPER(Notice, true, __VA_ARGS__)
-#define WARN(...) __HELPER(Warn, true, __VA_ARGS__)
-#define ERROR(...) __HELPER(Error, false, __VA_ARGS__)
-#define FATAL(...) __HELPER(Fatal, false, __VA_ARGS__)
+#define TRACE(...) __HELPER(Trace, true, false, __VA_ARGS__)
+#define DEBUG(...) __HELPER(Debug, true, false, __VA_ARGS__)
+#define INFO(...) __HELPER(Info, true, false, __VA_ARGS__)
+#define NOTICE(...) __HELPER(Notice, true, false, __VA_ARGS__)
+#define WARN(...) __HELPER(Warn, true, false, __VA_ARGS__)
+#define ERROR(...) __HELPER(Error, false, false, __VA_ARGS__)
+#define FATAL(...) __HELPER(Fatal, false, false, __VA_ARGS__)
+// Alternatives for logging w/o most formatting. This still handles colors.
+#define ERROR_NOFMT(...) __HELPER(Error, false, true, __VA_ARGS__)
 
 #define __SCOPED_INDENT(line) iro::ScopedIndent __scoped_indent##line
 #define _SCOPED_INDENT(line) __SCOPED_INDENT(line)
@@ -251,68 +253,79 @@ struct Logger
   b8 init(str name, Verbosity verbosity);
 
   template<io::Formattable... T>
-  void log(Verbosity v, T&... args)
+  void log(Verbosity v, b8 nofmt, T&... args)
   {
     if (isnil(iro::log.destinations))
       return;
 
-    for (Log::Dest& destination : iro::log.destinations)
+    if (nofmt)
     {
-      if (destination.flags.test(Log::Dest::Flag::PrefixNewlines))
+      for (Log::Dest& destination : iro::log.destinations)
       {
-        struct Intercept : io::IO
-        {
-          Log::Dest& dest;
-          Logger& logger;
-          Verbosity v;
-
-          Intercept(Log::Dest& dest, Logger& logger, Verbosity v) : 
-            dest(dest), logger(logger), v(v) {}
-
-          s64 write(Bytes slice) override
-          {
-            u64 linelen = 0;
-            for (u64 i = 0; i < slice.len; ++i)
-            {
-              if (logger.need_prefix)
-              {
-                logger.writePrefix(v, dest);
-                logger.need_prefix = false;
-              }
-
-              if (slice.ptr[i] == '\n')
-              {
-                dest.io->write({slice.ptr+i-linelen,linelen+1});
-                logger.need_prefix = true;
-                linelen = 0;
-              }
-              else
-                linelen += 1;
-
-            }
-
-            if (linelen)
-              dest.io->write({slice.ptr+slice.len-linelen,linelen});
-            return slice.len;
-          }
-
-          s64 read(Bytes bytes) override { return 0; }
-        };
-
-        auto intercept = Intercept(destination, *this, v);
-        io::formatv(&intercept, args...);
-      }
-      else
-      {
-        writePrefix(v, destination);
         io::formatv(destination.io, 
             color::sanitizeColored(args, destination)...);
+      }
+    }
+    else
+    {
+      for (Log::Dest& destination : iro::log.destinations)
+      {
+        if (destination.flags.test(Log::Dest::Flag::PrefixNewlines))
+        {
+          struct Intercept : io::IO
+          {
+            Log::Dest& dest;
+            Logger& logger;
+            Verbosity v;
+
+            Intercept(Log::Dest& dest, Logger& logger, Verbosity v) : 
+              dest(dest), logger(logger), v(v) {}
+
+            s64 write(Bytes slice) override
+            {
+              u64 linelen = 0;
+              for (u64 i = 0; i < slice.len; ++i)
+              {
+                if (logger.need_prefix)
+                {
+                  logger.writePrefix(v, dest);
+                  logger.need_prefix = false;
+                }
+
+                if (slice.ptr[i] == '\n')
+                {
+                  dest.io->write({slice.ptr+i-linelen,linelen+1});
+                  logger.need_prefix = true;
+                  linelen = 0;
+                }
+                else
+                  linelen += 1;
+
+              }
+
+              if (linelen)
+                dest.io->write({slice.ptr+slice.len-linelen,linelen});
+              return slice.len;
+            }
+
+            s64 read(Bytes bytes) override { return 0; }
+          };
+
+          auto intercept = Intercept(destination, *this, v);
+          io::formatv(&intercept, args...);
+        }
+        else
+        {
+          writePrefix(v, destination);
+          io::formatv(destination.io, 
+              color::sanitizeColored(args, destination)...);
+        }
       }
     }
   }
 
   template<io::Formattable... T>
-  void log(Verbosity v, T&&... args) { log(v, args...); }
+  void log(Verbosity v, b8 nofmt, T&&... args) { log(v, nofmt, args...); }
 
 private:
 
