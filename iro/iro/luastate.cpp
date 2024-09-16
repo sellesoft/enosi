@@ -575,6 +575,22 @@ void LuaState::installDebugHook()
   }
 }
 
+/* ------------------------------------------------------------------------------------------------
+ */
+void LuaState::tableInsert(s32 table_idx, s32 value_idx)
+{
+  getglobal("table");
+  const s32 I_table = gettop();
+  pushstring("insert"_str);
+  gettable(I_table);
+  const s32 I_table_insert = gettop();
+  pushvalue(table_idx);
+  pushvalue(value_idx);
+  if (!pcall(2, 0))
+    ERROR("failed to insert value into table:\n", tostring(), "\n");
+  pop();
+}
+
 /* ============================================================================
  */
 extern "C"

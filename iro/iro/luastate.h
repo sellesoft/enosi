@@ -139,6 +139,8 @@ struct LuaState
       pop();
     }
   }
+
+  void tableInsert(s32 table_idx, s32 value_idx);
 };
 
 }
