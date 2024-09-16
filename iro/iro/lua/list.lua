@@ -89,6 +89,12 @@ end
 
 List.pushFront = function(self, elem)
   table.insert(self.arr, 1, elem)
+  return self
+end
+
+List.pushList = function(self, l)
+  l:each(function(elem) self:push(elem) end)
+  return self
 end
 
 List.insert = function(self, idx, elem)
