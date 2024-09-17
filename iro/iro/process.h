@@ -22,8 +22,15 @@ struct Process
 {
   typedef void* Handle;
 
+  enum class Status
+  {
+    Running,
+    ExitedNormally,
+    ExitedFatally,
+  };
+
   Handle handle;
-  b8 terminated;
+  Status status;
   b8 ispty;
   s32 exit_code;
 
@@ -59,8 +66,8 @@ struct Process
 
   static Process spawnpty(str file, Slice<str> args, fs::File* stream);
 
-  // Checks the status of this process and sets 'terminated' and 'exit_code'
-  // if the process has finished.
+  // Checks the status of this process and sets the status of the process.
+  // If the process exits, 'exit_code' is set.
   void checkStatus();
 };
 

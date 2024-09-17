@@ -28,13 +28,16 @@ void Process::checkStatus()
 {
   assert(handle);
 
-  if (!terminated)
+  if (status == Status::Running)
   {
     switch (platform::processCheck(handle, &exit_code))
     {
     case platform::ProcessCheckResult::Exited:
+      status = Status::ExitedNormally;
+      break;
     case platform::ProcessCheckResult::Error:
-      terminated = true;
+      status = Status::ExitedFatally;
+      break;
     }
   }
 }

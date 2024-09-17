@@ -53,11 +53,6 @@ struct Pool
 
   mem::Allocator* allocator = nullptr;
 
-
-  /* -------------------------------------------------------------------------------------------- 
-   */
-
-
   /* -------------------------------------------------------------------------------------------- create
    */ 
   static Self create(mem::Allocator* allocator = &mem::stl_allocator)
@@ -154,7 +149,8 @@ struct NilValue<iro::Pool<T>>
 {
   constexpr static iro::Pool<T> Value = {};
   
-  static inline bool isNil(const iro::Pool<T>& x) { return x.free_slot == nullptr; }
+  static inline bool isNil(const iro::Pool<T>& x) 
+    { return x.free_slot == nullptr; }
 };
 
 // DefineExpandableContainerT(iro::Pool, { self->add(value); return true; });

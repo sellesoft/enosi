@@ -50,7 +50,7 @@ struct IO
   // bytes written.
   virtual s64 write(Bytes slice) = 0;
 
-  // Reads the contents of this IO into the buffer at 'buffer.bytes' up to 
+  // Reads the contents of this IO into the buffer at 'buffer.ptr' up to 
   // 'buffer.len' and returns the number of bytes read.
   virtual s64 read(Bytes buffer) = 0;
 
