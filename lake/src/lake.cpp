@@ -863,9 +863,15 @@ b8 lua__processCheck(ActiveProcess* proc, s32* out_exit_code)
   assert(proc and out_exit_code);
   
   proc->process.checkStatus();
-  if (proc->process.terminated)
+  if (proc->process.status == Process::Status::ExitedNormally)
   {
     *out_exit_code = proc->process.exit_code;
+    return true;
+  }
+  else if (proc->process.status == Process::Status::ExitedFatally)
+  {
+    // Set exit code to one for the process since it crashed.
+    *out_exit_code = 1;
     return true;
   }
   return false;
