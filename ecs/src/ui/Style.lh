@@ -9,6 +9,7 @@ $ local reflect = require "reflection.Reflector"
 $ local ctx = reflect.ctx
 $ local List = require "list"
 $ local buffer = require "string.buffer"
+$ local ui = require "ui.UI"
 
 #include "math/vec.h"
 #include "Color.h"
@@ -28,77 +29,32 @@ $$$
 -- * --------------------------------------------------------------------------
 
 local prop_kinds = List{}
-local stylePropKind = function(kindkind, ...)
-$$$
-$ local handlers = 
-$ {
-$   enum = function(name, def)
-enum class $(name)
-$(def);
-$   end,
-$   flags = function(name, def)
-enum class $(name)
-$(def);
-typedef Flags<$(name)> $(name)Flags;
-$   end,
-$ }
-$$$
-
-  prop_kinds:push { kind=kindkind, {...} }
-
-  local handler = handlers[kindkind]
-  if handler then
-    handler(...)
-  end
+local stylePropKind = function(typename, unionname, kindname)
+  prop_kinds:push 
+  { 
+    typename=typename,
+    unionname=unionname,
+    kindname=kindname,
+  }
 end
 
 -- * --------------------------------------------------------------------------
 
 local placePropKindEnums = function()
-$$$
-$ local handlers =
-$ {
-$   enum = function(name)
-      $(name),
-$   end,
-$   flags = function(name)
-      $(name),
-$   end,
-$   type = function(ctypename, _, unionname)
-      $(unionname or ctypename),
-$   end
-$ }
-$$$
   prop_kinds:each(function(pk)
-    local handler = handlers[pk.kind]
-    assert(handler, "no handler defined for prop kind kind "..pk.kind)
-    handler(unpack(pk[1]))
+$$$
+    $(pk.kindname),
+$$$
   end)
 end
 
 -- * --------------------------------------------------------------------------
 
 local placePropKindUnionMembers = function()
-
-$$$
-$ local handlers = 
-$ {
-$   enum = function(name, _, unionname)
-      $(name) $(unionname);
-$   end,
-$   flags = function(name, _, unionname)
-      $(name)Flags $(unionname);
-$   end,
-$   type = function(typename, unionname)
-      $(typename) $(unionname);
-$   end,
-$ }
-$$$
-
   prop_kinds:each(function(pk)
-    local handler = assert(handlers[pk.kind],
-      "no handler defined for prop kind kind "..pk.kind)
-    handler(unpack(pk[1]))
+$$$
+    $(pk.typename) $(pk.unionname);
+$$$
   end)
 end
 
@@ -106,60 +62,11 @@ $$$
 
 /* ============================================================================
  */
-@stylePropKind(enum, Positioning,
-{
-  Static,
-  Relative,
-  Absolute,
-  Fixed,
-}, positioning)
-
-/* ============================================================================
- */
-@stylePropKind(enum, Anchor,
-{
-  TopLeft,
-  TopRight,
-  BottomRight,
-  BottomLeft,
-}, anchor)
-
-/* ============================================================================
- */
-@stylePropKind(flags, Sizing,
-{
-  Normal,
-  AutoX,
-  AutoY,
-  PercentX,
-  PercentY,
-  Square,
-  Flex,
-}, sizing)
-
-/* ============================================================================
- */
-@stylePropKind(enum, Border,
-{
-  None,
-  Solid,
-}, border)
-
-/* ============================================================================
- */
-@stylePropKind(flags, Display, 
-{
-  Horizontal,
-  Flex,
-  Reverse,
-  Hidden,
-}, display)
-
-/* ============================================================================
- */
-@stylePropKind(type, Color, color)
-@stylePropKind(type, vec2f, v2, Vec2f)
-@stylePropKind(type, vec4f, v4, Vec4f)
+@stylePropKind(u32, enum_value, Enum)
+@stylePropKind(u64, flag_value, Flags)
+@stylePropKind(Color, color, Color)
+@stylePropKind(vec2f, v2, Vec2f)
+@stylePropKind(vec4f, v4, Vec4f)
 
 /* ============================================================================
  */
@@ -177,7 +84,7 @@ struct StyleMap
     union
     {
     @placePropKindUnionMembers
-    };
+    } value;
 
     u64 hash;
     str name;
@@ -191,98 +98,12 @@ struct StyleMap
 
   b8   init();
   void deinit();
-};
 
-struct Style
-{
-  Positioning positioning;
-  Anchor anchor;
-  SizingFlags sizing;
-  DisplayFlags display;
+  template<typename T>
+  T getAs(str name, T def = {});
 
-  vec2f pos;
-  vec2f size;
-  
-  union
-  {
-    vec4f margin;
-    struct
-    {
-      union
-      {
-        struct { f32 margin_left, margin_top; };
-        vec2f margintl;
-      };
-    };
-    struct
-    {
-      union
-      {
-        struct { f32 margin_right, margin_bottom; };
-        vec2f marginbr;
-      };
-    };
-  };
-
-  union
-  {
-    vec4f padding;
-    struct
-    {
-      union
-      {
-        struct { f32 padding_left, padding_top; };
-        vec2f paddingtl;
-      };
-    };
-    struct
-    {
-      union
-      {
-        struct { f32 padding_right, padding_bottom; };
-        vec2f paddingbr;
-      };
-    };
-  };
-
-  vec2f scale;
-  vec2f scroll;
-
-  Border border_style;
-  union
-  {
-    vec4f border;
-    struct
-    {
-      union 
-      {  
-        struct { f32 border_left, border_top; };
-        vec2f bordertl;
-      };
-    };
-    struct
-    {
-      union
-      {
-        struct { f32 border_right, border_bottom; };
-        vec2f borderbr;
-      };
-    };
-  };
-
-  Color background_color;
-
-  Style() { iro::mem::zeroStruct(this); }
-
-  b8 hasBorder() 
-  { 
-    return 
-      border_style != Border::None &&
-      (border.x != 0.f ||
-       border.y != 0.f ||
-       border.z != 0.f ||
-       border.w != 0.f);
-  }
+  template<typename T>
+  void setAs(str name, T val);
 };
 
 }

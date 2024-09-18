@@ -1,5 +1,6 @@
 $ local lpp = require "lpp"
 $ local reflect = require "reflection.Reflector"
+$ local ui = require "ui.UI"
 
 @lpp.import "Engine.lh"
 
@@ -10,6 +11,13 @@ using namespace iro;
 // Introduce events and the event bus definitions.
 @lpp.import "input/InputEvents.lh"
 @lpp.import "event/BroadcastEventBus.lh"
+
+@lpp.import "ui/Item.lh"
+
+$$$
+  print(ui)
+  print(ui.schemas.Item)
+$$$
 
 static Logger logger = 
   Logger::create("ecs.eng"_str, Logger::Verbosity::Info);

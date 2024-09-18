@@ -223,7 +223,16 @@ struct vec4
   union
   {
     f32 arr[4];
-    struct { f32 x, y, z, w; };
+    struct
+    {
+      vec2<T> xy;
+      struct { f32 x, y; };
+    };
+    struct
+    {
+      vec2<T> wz;
+      struct { f32 z, w; };
+    };
   };
 
   /* --------------------------------------------------------------------------

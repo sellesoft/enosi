@@ -33,5 +33,4 @@ setmetatable(Event,
   end
 })
 
-
 return Event

@@ -4,13 +4,81 @@
 
 $ local lpp = require "lpp"
 $ local reflect = require "reflection.Reflector"
-
+$ local ui = require "ui.UI"
 
 #include "iro/unicode.h"
 #include "math/vec.h"
 #include "iro/containers/Tree.h"
 #include "iro/containers/array.h"
-@lpp.import "ui/Style.lh"
+
+@@lpp.import "ui/Style.lh"
+
+@@ui.defineSchema(Item,
+{
+  pos: vec2f = {0, 0};
+
+  positioning: enum
+  {
+    static,
+    relative,
+    absolute,
+    fixed,
+  } = static;
+
+  size: vec2f = {0, 0}
+    alias
+      width: f32 = "%.x",
+      height: f32 = "%.y";
+
+  sizing: flags
+  {
+    normal,
+    auto-x,
+    auto-y,
+    square,
+    flex,
+  } = normal;
+
+  margin: vec4f = { 0, 0, 0, 0 }
+    alias
+      margintl: vec2f = "%.xy",
+      marginbr: vec2f = "%.wz",
+      margin_top: f32 = "%.y",
+      margin_left: f32 = "%.x",
+      margin_right: f32 = "%.z",
+      margin_bottom: f32 = "%.w";
+  
+
+  padding: vec4f = { 0, 0, 0, 0 }
+    alias
+      paddingtl: vec2f = "%.xy",
+      paddingbr: vec2f = "%.zw",
+      padding_top: f32 = "%.y",
+      padding_left: f32 = "%.x",
+      padding_right: f32 = "%.z",
+      padding_bottom: f32 = "%.w";
+
+  anchor: enum
+  {
+    top-left,
+    top-right,
+    bottom-right,
+    bottom-left,
+  } = top-left;
+
+  border: vec4f = { 0, 0, 0, 0 }
+    alias
+      bordertl: vec2f = "%.xy",
+      borderbr: vec2f = "%.zw",
+      border_top: f32 = "%.y",
+      border_left: f32 = "%.x",
+      border_right: f32 = "%.z",
+      border_bottom: f32 = "%.w";
+
+  border_color: Color = { 255, 255, 255, 255 };
+
+  background_color: Color = { 0, 0, 0, 0 };
+})
 
 using namespace iro;
 
@@ -38,7 +106,7 @@ enum class ActionTrigger
 struct Item
 {
   str name;
-  Style style;
+  StyleMap style;
 
   ItemNode* node;
 
@@ -62,71 +130,82 @@ struct Item
   ActionTrigger update_trigger;
 
   // Called according to the update trigger.
-  virtual void update();
+  virtual void update() {}
 
   // Determines how this item is sized and positioned relative to other items.
-  virtual void evaluate();
+  virtual void evaluate() {}
 
   // Generates draw information for rendering this item.
   virtual void generate(Context* ctx);
 
   // Cleans up any dynamic memory this item may have allocated in its lifetime.
-  virtual void cleanup();
+  virtual void cleanup() {}
+
+  $ local style = ui.getStyleContext("Item", "style")
+
+  b8 hasBorder()
+  {
+    return 
+      @style.border_left ||
+      @style.border_right ||
+      @style.border_top ||
+      @style.border_bottom;
+  }
 
   f32 getMarginedWidth() 
-    { return size.x - style.margin_left - style.margin_right; }
+    { return size.x - @style.margin_left - @style.margin_right; }
 
   f32 getMarginedHeight()
-    { return size.y - style.margin_top - style.margin_bottom; }
+    { return size.y - @style.margin_top - @style.margin_bottom; }
 
   vec2f getMarginedArea()
     { return { getMarginedWidth(), getMarginedHeight() }; }
 
   f32 getMarginedStyleWidth()
-    { return style.size.x - style.margin_left - style.margin_right; }
+    { return @style.size.x - @style.margin_left - @style.margin_right; }
 
   f32 getMarginedStyleHeight()
-    { return style.size.y - style.margin_top - style.margin_bottom; }
+    { return @style.size.y - @style.margin_top - @style.margin_bottom; }
 
   vec2f getMarginedStyleArea()
     { return { getMarginedStyleWidth(), getMarginedStyleHeight() }; }
 
   f32 getBorderedWidth()
     { return getMarginedWidth() - 
-        (style.hasBorder()? style.border_left + style.border_right : 0.f); }
+        (hasBorder()? @style.border_left + @style.border_right : 0.f); }
 
   f32 getBorderedHeight()
     { return getMarginedHeight() -
-       ( style.hasBorder()? style.border_top + style.border_bottom : 0.f ); }
+       (hasBorder()? @style.border_top + @style.border_bottom : 0.f ); }
 
   vec2f getBorderedArea()
     { return { getBorderedWidth(), getBorderedHeight() }; }
 
   f32 getBorderedStyleWidth()
-    { return style.size.x - 
-        (style.hasBorder()? style.border_left + style.border_right : 0.f); }
+    { return @style.size.x - 
+        (hasBorder()? @style.border_left + @style.border_right : 0.f); }
 
   f32 getBorderedStyleHeight()
-    { return style.size.y - 
-        (style.hasBorder()? style.border_top + style.border_bottom : 0.f ); }
+    { return @style.size.y - 
+        (hasBorder()? @style.border_top + @style.border_bottom : 0.f ); }
 
   vec2f getBorderedStyleArea()
     { return { getBorderedStyleWidth(), getBorderedStyleHeight() }; }
 
   f32 getPaddedWidth()
-    { return getBorderedWidth() - style.padding_top - style.padding_bottom; }
+    { return getBorderedWidth() - @style.padding_top - @style.padding_bottom; }
 
   f32 getPaddedHeight()
-    { return getBorderedHeight() - style.padding_left - style.padding_right; }
+    { return getBorderedHeight() - @style.padding_left - @style.padding_right; }
 
   vec2f getPaddedArea()
     { return { getPaddedWidth(), getPaddedHeight() }; }
 
   f32 getPaddedStyleWidth()
-    { return style.size.x - style.padding_left - style.padding_right; }
+    { return @style.size.x - @style.padding_left - @style.padding_right; }
 
   f32 getPaddedStyleHeight()
-    { return style.size.y - style.padding_top - style.padding_bottom; }
+    { return @style.size.y - @style.padding_top - @style.padding_bottom; }
 
   vec2f getPaddedStyleArea()
     { return { getPaddedStyleWidth(), getPaddedStyleHeight() }; }

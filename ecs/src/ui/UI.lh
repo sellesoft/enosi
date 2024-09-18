@@ -5,9 +5,10 @@
 
 $ local lpp = require "lpp"
 $ local reflect = require "reflection.Reflector"
+$ local ui = require "ui.UI"
 
-@lpp.import "ui/Item.lh"
-@lpp.import "ui/DrawCmd.lh"
+@@lpp.import "ui/Item.lh"
+@@lpp.import "ui/DrawCmd.lh"
 
 #include "iro/containers/list.h"
 #include "iro/containers/pool.h"
