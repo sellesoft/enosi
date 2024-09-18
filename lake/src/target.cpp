@@ -215,7 +215,6 @@ Target::RecipeResult Target::resumeRecipe(LuaState& lua)
   // this explicitly.
   if (!lua.pcall(1, 2))
   {
-    ERROR_NOFMT(lua.tostring(), "\n");
     return RecipeResult::Error;
   }
 
@@ -224,7 +223,6 @@ Target::RecipeResult Target::resumeRecipe(LuaState& lua)
   if (!coroutine_success)
   {
     // the second arg is the message given by whatever failure occured
-    ERROR_NOFMT(lua.tostring(), "\n");
     return RecipeResult::Error;
   }
 
