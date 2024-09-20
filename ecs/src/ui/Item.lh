@@ -26,58 +26,119 @@ $ local ui = require "ui.UI"
   } = static;
 
   size: vec2f = {0, 0}
-    alias
-      width: f32 = "%.x",
-      height: f32 = "%.y";
+    accessors
+      width = "%.x",
+      height = "%.y";
 
   sizing: flags
   {
     normal,
-    auto-x,
-    auto-y,
+    auto_x,
+    auto_y,
+    percent_x,
+    percent_y,
     square,
     flex,
   } = normal;
 
   margin: vec4f = { 0, 0, 0, 0 }
-    alias
-      margintl: vec2f = "%.xy",
-      marginbr: vec2f = "%.wz",
-      margin_top: f32 = "%.y",
-      margin_left: f32 = "%.x",
-      margin_right: f32 = "%.z",
-      margin_bottom: f32 = "%.w";
+    accessors
+      top_left = "%.xy",
+      bottom_right = "%.wz",
+      top = "%.y",
+      left = "%.x",
+      right = "%.z",
+      bottom = "%.w";
   
+  display: flags
+  {
+    vertical,
+    horizontal,
+    flex,
+    reverse,
+    hidden,
+  } = vertical;
 
   padding: vec4f = { 0, 0, 0, 0 }
-    alias
-      paddingtl: vec2f = "%.xy",
-      paddingbr: vec2f = "%.zw",
-      padding_top: f32 = "%.y",
-      padding_left: f32 = "%.x",
-      padding_right: f32 = "%.z",
-      padding_bottom: f32 = "%.w";
+    accessors
+      top_left = "%.xy",
+      bottom_right = "%.zw",
+      top = "%.y",
+      left = "%.x",
+      right = "%.z",
+      bottom = "%.w";
 
   anchor: enum
   {
-    top-left,
-    top-right,
-    bottom-right,
-    bottom-left,
-  } = top-left;
+    top_left,
+    top_right,
+    bottom_right,
+    bottom_left,
+  } = top_left;
 
   border: vec4f = { 0, 0, 0, 0 }
-    alias
-      bordertl: vec2f = "%.xy",
-      borderbr: vec2f = "%.zw",
-      border_top: f32 = "%.y",
-      border_left: f32 = "%.x",
-      border_right: f32 = "%.z",
-      border_bottom: f32 = "%.w";
+    accessors
+      top_left = "%.xy",
+      bottom_right = "%.zw",
+      top = "%.y",
+      left = "%.x",
+      right = "%.z",
+      bottom = "%.w";
 
   border_color: Color = { 255, 255, 255, 255 };
 
   background_color: Color = { 0, 0, 0, 0 };
+
+  func hasBorder 
+  {
+    %.border.left ||
+    %.border.right ||
+    %.border.top ||
+    %.border.bottom
+  }
+
+  func getMarginedWidth 
+    { $.size.x - %.margin.left - %.margin.right }
+  func getMarginedHeight 
+    { $.size.y - %.margin.top - %.margin.bottom }
+  func getMarginedArea 
+    { { $.getMarginedWidth, $.getMarginedHeight } }
+
+  func getMarginedStyleWidth 
+    { %.size.width - %.margin.left - %.margin.right }
+  func getMarginedStyleHeight 
+    { %.size.height - %.margin.top - %.margin.bottom }
+  func getMarginedStyleArea 
+    { { $.getMarginedStyleWidth, $.getMarginedStyleHeight } }
+
+  func getBorderedWidth
+    { $.getMarginedWidth - %.border.left - %.border.right }
+  func getBorderedHeight
+    { $.getMarginedHeight - %.border.top - %.border.bottom } 
+  func getBorderedArea
+    { { $.getBorderedWidth, $.getBorderedHeight } }
+
+  func getBorderedStyleWidth 
+    { %.size.width - %.border.left - %.border.right } 
+  func getBorderedStyleHeight
+    { %.size.height - %.border.top - %.border.bottom }
+  func getBorderedStyleArea
+    { { $.getBorderedStyleWidth, $.getBorderedStyleHeight } }
+
+  func getPaddedWidth
+    { $.getBorderedWidth - %.padding.left - %.padding.right }
+  func getPaddedHeight
+    { $.getBorderedHeight - %.padding.top - %.padding.bottom }
+  func getPaddedArea
+    { { $.getPaddedWidth, $.getPaddedHeight } }
+
+  func getPaddedStyleWidth
+    { %.size.width - %.padding.left - %.padding.right }
+  func getPaddedStyleHeight
+    { %.size.height - %.padding.top - %.padding.bottom }
+  func getPaddedStyleArea
+    { { $.getPaddedStyleWidth, $.getPaddedStyleHeight } }
+    
 })
 
 using namespace iro;
@@ -140,76 +201,6 @@ struct Item
 
   // Cleans up any dynamic memory this item may have allocated in its lifetime.
   virtual void cleanup() {}
-
-  $ local style = ui.getStyleContext("Item", "style")
-
-  b8 hasBorder()
-  {
-    return 
-      @style.border_left ||
-      @style.border_right ||
-      @style.border_top ||
-      @style.border_bottom;
-  }
-
-  f32 getMarginedWidth() 
-    { return size.x - @style.margin_left - @style.margin_right; }
-
-  f32 getMarginedHeight()
-    { return size.y - @style.margin_top - @style.margin_bottom; }
-
-  vec2f getMarginedArea()
-    { return { getMarginedWidth(), getMarginedHeight() }; }
-
-  f32 getMarginedStyleWidth()
-    { return @style.size.x - @style.margin_left - @style.margin_right; }
-
-  f32 getMarginedStyleHeight()
-    { return @style.size.y - @style.margin_top - @style.margin_bottom; }
-
-  vec2f getMarginedStyleArea()
-    { return { getMarginedStyleWidth(), getMarginedStyleHeight() }; }
-
-  f32 getBorderedWidth()
-    { return getMarginedWidth() - 
-        (hasBorder()? @style.border_left + @style.border_right : 0.f); }
-
-  f32 getBorderedHeight()
-    { return getMarginedHeight() -
-       (hasBorder()? @style.border_top + @style.border_bottom : 0.f ); }
-
-  vec2f getBorderedArea()
-    { return { getBorderedWidth(), getBorderedHeight() }; }
-
-  f32 getBorderedStyleWidth()
-    { return @style.size.x - 
-        (hasBorder()? @style.border_left + @style.border_right : 0.f); }
-
-  f32 getBorderedStyleHeight()
-    { return @style.size.y - 
-        (hasBorder()? @style.border_top + @style.border_bottom : 0.f ); }
-
-  vec2f getBorderedStyleArea()
-    { return { getBorderedStyleWidth(), getBorderedStyleHeight() }; }
-
-  f32 getPaddedWidth()
-    { return getBorderedWidth() - @style.padding_top - @style.padding_bottom; }
-
-  f32 getPaddedHeight()
-    { return getBorderedHeight() - @style.padding_left - @style.padding_right; }
-
-  vec2f getPaddedArea()
-    { return { getPaddedWidth(), getPaddedHeight() }; }
-
-  f32 getPaddedStyleWidth()
-    { return @style.size.x - @style.padding_left - @style.padding_right; }
-
-  f32 getPaddedStyleHeight()
-    { return @style.size.y - @style.padding_top - @style.padding_bottom; }
-
-  vec2f getPaddedStyleArea()
-    { return { getPaddedStyleWidth(), getPaddedStyleHeight() }; }
-
 };
 
 // struct Text : public Item

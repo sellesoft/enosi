@@ -8,12 +8,16 @@ local List = require "list"
 local util = require "util"
 local CGen = require "cgen"
 local lpp = require "lpp"
+local buffer = require "string.buffer"
 
 local Schema,
+      View,
       Property,
+      Lookup,
       Enum,
       Flags,
-      CType
+      CType,
+      Func
 
 local makeType = function()
   local o = {}
@@ -35,9 +39,10 @@ Schema = makeType()
 Schema.new = function(name, def, file_offset)
   local o = setmetatable({}, Schema)
   o.name = name
-  o.member = {}
-  o.member.list = List{}
-  o.member.map = {}
+  o.property = {}
+  o.property.list = List{}
+  o.property.map = {}
+  o.funcs = {}
   o:parse(def, file_offset)
   return o
 end
@@ -45,7 +50,19 @@ end
 -- * --------------------------------------------------------------------------
 
 Schema.findMember = function(self, name)
-  return self.member.map[name]
+  return self.property.map[name]
+end
+
+-- * --------------------------------------------------------------------------
+
+Schema.__index = function(self, key)
+  local raw = Schema[key]
+  if raw then
+    return raw
+  end
+
+  return assert(self.property.map[key],
+    "no property named '"..key.."' in schema '"..self.name.."'")
 end
 
 -- * --------------------------------------------------------------------------
@@ -132,7 +149,7 @@ Schema.parse = function(self, def, file_offset)
     end
   end
 
-  local parseProperty = function(is_alias)
+  local parseProperty = function()
     local id = expectIdentifier()
     expectToken ":"
    
@@ -172,18 +189,10 @@ Schema.parse = function(self, def, file_offset)
           "default value specified as '"..elem.."' but this is not "..
           "defined")
       end
-      defval = elem
+      defval = type.elems.map[elem]
     else
-      if is_alias then
-        defval = expectPattern('".-"', "string for alias")
-        defval = defval:sub(2,-2)
-        if not defval:find("%%", 0) then
-          errorHere("alias string must contain % to replace with style lookup")
-        end
-      else
-        defval = 
-          expectPattern("%b{}", "a braced initializer list (eg. {...})")
-      end
+      defval = 
+        expectPattern("%b{}", "a braced initializer list (eg. {...})")
     end
 
     return id, type, defval
@@ -191,31 +200,52 @@ Schema.parse = function(self, def, file_offset)
 
   expectToken "{"
   while true do
-    local id, type, defval = parseProperty(false)
+    if checkToken "func" then
+      local id = expectIdentifier()
+      local def = expectPattern("%b{}", "braced function definition")
+      def = def:sub(2,-2)
+      Func.new(id, def, self, errorHere)
+    else
+      local id, type, defval = parseProperty(false)
 
-    local property = Property.new(id, type, defval, nil, self, errorHere)
+      local property = Property.new(id, type, defval, self, errorHere)
 
-    local need_semicolon = true
+      local need_semicolon = true
 
-    if checkPattern "alias" then
-      while true do
-        local id, type, defval = parseProperty(true)
+      if checkPattern "accessors" then
+        if not type.allows_accessors then
+          errorHere("this property type does not allow defining accessors")
+        end
 
-        Property.new(id, type, defval, property, self, errorHere)
+        while true do
+          local id = expectIdentifier()
 
-        if not checkToken "," then
-          if checkToken ";" then
-            need_semicolon = false
-            break
-          else
-            errorHere("expected a ';' or ',' after alias definition")  
+          expectToken "="
+
+          accessor = expectPattern('".-"', "string for accessor pattern")
+          accessor = accessor:sub(2,-2)
+          if not accessor:find("%%") then
+            errorHere(
+              "accessor pattern must contain at least one '%' to replace "..
+              "with the lookup")
+          end
+
+          property:addAccessor(id, accessor, errorHere)
+
+          if not checkToken "," then
+            if checkToken ";" then
+              need_semicolon = false
+              break
+            else
+              errorHere("expected a ';' or ',' after accessor definition")
+            end
           end
         end
       end
-    end
 
-    if need_semicolon then
-      expectToken ";"
+      if need_semicolon then
+        expectToken ";"
+      end
     end
 
     if checkToken "}" then
@@ -227,6 +257,33 @@ Schema.parse = function(self, def, file_offset)
 end
 
 -- * ==========================================================================
+-- *   View 
+-- * ==========================================================================
+
+--- Provides a 'view' of a schema for use by code needing to inspect the 
+--- values of schema properties.
+View = makeType()
+Schema.View = View
+
+-- * --------------------------------------------------------------------------
+
+View.new = function(schema)
+  local o = {}
+  o.schema = schema
+  return setmetatable(o, View)
+end
+
+-- * --------------------------------------------------------------------------
+
+View.__index = function(self, key)
+  local property = 
+    assert(self.schema.property.map[key],
+      "no property named '"..key.."' in schema "..self.schema.name)
+
+  return property.type:viewIndex(property)
+end
+
+-- * ==========================================================================
 -- *   Property
 -- * ==========================================================================
 
@@ -235,13 +292,20 @@ Schema.Property = Property
 
 -- * --------------------------------------------------------------------------
 
-Property.new = function(name, type, defval, aliased_property, schema, errcb)
+Property.new = function(
+    name, 
+    type, 
+    defval, 
+    schema, 
+    errcb)
   local o = {}
   o.name = name
   o.type = type
   o.defval = defval
-  o.aliased_property = aliased_property
-  if schema.member.map[name] then
+  if type.allows_accessors then
+    o.accessors = {}
+  end
+  if schema.property.map[name] then
     if aliased_property then
       errcb(
         "cannot alias as '"..name.."' as a property with this name already "..
@@ -250,9 +314,48 @@ Property.new = function(name, type, defval, aliased_property, schema, errcb)
       errcb("a property with name '"..name.."' already exists")
     end
   end
-  schema.member.map[name] = o
-  schema.member.list:push(o)
+  schema.property.map[name] = o
+  schema.property.list:push(o)
   return setmetatable(o, Property)
+end
+
+-- * --------------------------------------------------------------------------
+
+Property.addAccessor = function(self, name, val, errcb)
+  if self.accessors[name] then
+    errcb("an accessor with name '"..name.."' was already defined")
+  end
+
+  self.accessors[name] = val
+end
+
+-- * ==========================================================================
+-- *   Lookup
+-- * ==========================================================================
+
+--- The result of looking up a property.
+Lookup = makeType()
+Schema.Lookup = Lookup
+
+-- * --------------------------------------------------------------------------
+
+Lookup.new = function(property, varname)
+  local o = {}
+  o.property = property
+  o.varname = varname
+  return setmetatable(o, Lookup)
+end
+
+-- * --------------------------------------------------------------------------
+
+Lookup.__index = function(self, key)
+  return self.property.type:lookupIndex(self, key)
+end
+
+-- * --------------------------------------------------------------------------
+
+Lookup.__call = function(self, ...)
+  return self.property.type:lookupCall(self, ...)
 end
 
 -- * ==========================================================================
@@ -269,10 +372,45 @@ Enum.new = function(elems)
   o.elems = {}
   o.elems.list = elems
   o.elems.map = {}
-  o.elems.list:each(function(elem)
-    o.elems.map[elem] = true
+  o.elems.list:eachWithIndex(function(elem,i)
+    o.elems.map[elem] = i-1
   end)
   return setmetatable(o, Enum)
+end
+
+-- * --------------------------------------------------------------------------
+
+Enum.getTypeName = function()
+  return "u32"
+end
+
+-- * --------------------------------------------------------------------------
+
+Enum.viewIndex = function(self, property)
+  local index = function(_, key)
+    local elem = 
+      assert(self.elems.map[key],
+        "no element named '"..key.."' in property "..property.name)
+    return function()
+      return tostring(elem)
+    end
+  end
+  return setmetatable({}, { __index=index })
+end
+
+-- * --------------------------------------------------------------------------
+
+Enum.lookupCall = function(self, lookup)
+  return lookup.varname
+end
+
+-- * --------------------------------------------------------------------------
+
+Enum.set = function(self, property, val)
+  local elem = 
+    assert(self.elems.map[val],
+      "no element named '"..val.."' in property "..property.name)
+  return 'setAs<u64>("'..property.name..'"_str, '..elem..')'
 end
 
 -- * ==========================================================================
@@ -289,18 +427,86 @@ Flags.new = function(elems)
   o.elems = {}
   o.elems.list = elems
   o.elems.map = {}
-  o.elems.list:each(function(elem)
-    o.elems.map[elem] = true
+  o.elems.list:eachWithIndex(function(elem,i)
+    o.elems.map[elem] = "1 << "..(i-1)
   end)
   return setmetatable(o, Flags)
 end
 
+-- * --------------------------------------------------------------------------
+
+Flags.getTypeName = function()
+  return "u64"
+end
+
+-- * --------------------------------------------------------------------------
+
+Flags.lookupIndex = function(self, lookup, key)
+  local getElem = function(name)
+    return assert(self.elems.map[name],
+      "no element named '"..name.."' in property '"..lookup.property.name.."'")
+  end
+  local checkFlag = function(vname, name)
+    return "(("..vname..") & ("..elem.."))"
+  end
+  if key == "test" then
+    return function(name)
+      return "(("..lookup.varname..") & ("..getElem(name).."))"
+    end
+  elseif key == "testAny" then
+    return function(...)
+      local buf = buffer.new()
+      buf:put("((",lookup.varname,") & (")
+      local first = true
+      List{...}:each(function(name)
+        if not first then
+          buf:put(" | ")
+        end
+        buf:put("(", getElem(name), ")")
+        first = false
+      end)
+      buf:put("))")
+      return buf:get()
+    end
+  end
+end
+
+-- * --------------------------------------------------------------------------
+
+Flags.viewIndex = function(self, property)
+  local index = function(_, key)
+    local elem = 
+      assert(self.elems.map[key],
+        "no element named '"..key.."' in property '"..property.name)
+    return function()
+      return elem
+    end
+  end
+  return setmetatable({}, { __index=index })
+end
+
+-- * --------------------------------------------------------------------------
+
+Flags.lookupCall = function(self, lookup)
+  return lookup.varname
+end
+
+-- * --------------------------------------------------------------------------
+
+Flags.set = function(self, property, val)
+  local elem = 
+    assert(self.elems.map[val],
+      "no element named '"..val.."' in property "..property.name)
+  return 'setAs<u32>("'..property.name..'"_str, '..elem..')'
+end
+
 -- * ==========================================================================
--- *   Type
+-- *   CType
 -- * ==========================================================================
 
 CType = makeType()
 Schema.CType = CType
+CType.allows_accessors = true
 
 -- * --------------------------------------------------------------------------
 
@@ -312,8 +518,108 @@ end
 
 -- * --------------------------------------------------------------------------
 
-CType.getUnionName = function(self)
-  return "_"..self.name
+CType.getTypeName = function(self)
+  return self.name
+end
+
+-- * --------------------------------------------------------------------------
+
+CType.lookupIndex = function(self, lookup, key)
+  local property = lookup.property 
+  local accessor = property.accessors[key] 
+  return function()
+    if accessor then
+      return accessor:gsub("%%", lookup.varname)
+    else
+      -- Assume accessing some var on the ctype
+      return lookup.varname.."."..key
+    end
+  end
+end
+
+-- * --------------------------------------------------------------------------
+
+CType.lookupCall = function(self, lookup)
+  return lookup.varname
+end
+
+-- * --------------------------------------------------------------------------
+
+CType.set = function(self, property, val)
+  return 'setAs<'..self.name..'>("'..property.name..'"_str, '..val..')'
+end
+
+-- * ==========================================================================
+-- *   Func
+-- * ==========================================================================
+
+Func = makeType()
+Schema.Func = Func
+
+-- * --------------------------------------------------------------------------
+
+Func.new = function(id, def, schema, errcb)
+  local o = {}
+  o.id = id
+  o.def = def
+  if schema.funcs[id] then
+    errcb("function with name '"..id.."' already exists")
+  end
+  schema.funcs[id] = o
+  return setmetatable(o, Func)
+end
+
+-- * --------------------------------------------------------------------------
+
+Func.call = function(self, item)
+  local style = item.style
+  local def = self.def
+  local schema = item.schema
+  
+  -- This is black magic that I feel will break sooner or later.
+  -- But its kinda awesome that it works.
+  local buf = buffer.new()
+  local first = def:find("[%%%$]")
+  buf:put(def:sub(1, first-1))
+  local prev_stop
+  for start, kind, term, stop in self.def:gmatch "()([%%%$])%.([%w%.]+)()" do
+    if kind == "$" then
+      if prev_stop then
+        buf:put(def:sub(prev_stop, start-1))
+      end
+
+      prev_stop = stop
+
+      local st, sp = term:find("%w+")
+      local func = schema.funcs[term:sub(st,sp)]
+      if func then
+        local res = func:call(item)
+        buf:put(res)
+      end
+
+      if not func then
+        buf:put(item.varname, "->", term)
+      end
+    else
+      local res = style
+      for prop in term:gmatch "(%w+)%.?" do
+        res = res[prop]
+      end
+      res = res()
+      
+      if prev_stop then
+        buf:put(def:sub(prev_stop, start-1))
+      end
+
+      prev_stop = stop
+
+      buf:put(res)
+    end
+  end
+
+  buf:put(def:sub(prev_stop))
+
+  return buf:get()
 end
 
 return Schema

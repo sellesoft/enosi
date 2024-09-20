@@ -10,6 +10,7 @@ $ local ctx = reflect.ctx
 $ local List = require "list"
 $ local buffer = require "string.buffer"
 $ local ui = require "ui.UI"
+$ local Style = require "ui.Style"
 
 #include "math/vec.h"
 #include "Color.h"
@@ -28,20 +29,8 @@ $$$
 
 -- * --------------------------------------------------------------------------
 
-local prop_kinds = List{}
-local stylePropKind = function(typename, unionname, kindname)
-  prop_kinds:push 
-  { 
-    typename=typename,
-    unionname=unionname,
-    kindname=kindname,
-  }
-end
-
--- * --------------------------------------------------------------------------
-
 local placePropKindEnums = function()
-  prop_kinds:each(function(pk)
+  Style.prop_kinds:each(function(pk)
 $$$
     $(pk.kindname),
 $$$
@@ -51,7 +40,7 @@ end
 -- * --------------------------------------------------------------------------
 
 local placePropKindUnionMembers = function()
-  prop_kinds:each(function(pk)
+  Style.prop_kinds:each(function(pk)
 $$$
     $(pk.typename) $(pk.unionname);
 $$$
@@ -62,20 +51,13 @@ $$$
 
 /* ============================================================================
  */
-@stylePropKind(u32, enum_value, Enum)
-@stylePropKind(u64, flag_value, Flags)
-@stylePropKind(Color, color, Color)
-@stylePropKind(vec2f, v2, Vec2f)
-@stylePropKind(vec4f, v4, Vec4f)
-
-/* ============================================================================
- */
 struct StyleMap
 {
   struct Elem
   {
     enum class Kind
     {
+      Invalid,
     @placePropKindEnums
     };
 
@@ -88,6 +70,8 @@ struct StyleMap
 
     u64 hash;
     str name;
+
+    Elem() : hash(0), name(), kind(Kind::Invalid), value(0) {}
   };
 
   typedef AVL<Elem, [](const Elem* e) { return e->hash; }> ElemMap;
@@ -105,5 +89,6 @@ struct StyleMap
   template<typename T>
   void setAs(str name, T val);
 };
+
 
 }

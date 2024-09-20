@@ -51,23 +51,12 @@ struct Context
 
   b8 update(Engine& engine);
 
+  // TODO(sushi) someway to reuse styles if I ever need it.
   template<typename TItem>
-  TItem* make(str id, Style* style = nullptr);
+  TItem* make(str id = nil);
 
   template<typename TItem>
-  TItem* make(Style* style = nullptr) 
-  { 
-    return make<TItem>(nil, style);
-  }
-
-  template<typename TItem>
-  TItem* begin(str id, Style* style = nullptr);
-
-  template<typename TItem>
-  TItem* begin(Style* style = nullptr) 
-  { 
-    return begin<TItem>(nil, style); 
-  }
+  TItem* begin(str id = nil);
 
   void endItem();
 

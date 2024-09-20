@@ -1,11 +1,12 @@
 $ local lpp = require "lpp"
 $ local reflect = require "reflection.Reflector"
+$ local ui = require "ui.UI"
 
-@lpp.import "ui/UI.lh"
-@lpp.import "ui/Geo.lh"
-@lpp.import "Engine.lh"
-@lpp.import "graphics/Renderer.lh"
-@lpp.import "window/Window.lh"
+@@lpp.import "ui/UI.lh"
+@@lpp.import "ui/Geo.lh"
+@@lpp.import "Engine.lh"
+@@lpp.import "graphics/Renderer.lh"
+@@lpp.import "window/Window.lh"
 
 #include "iro/logger.h"
 
@@ -19,11 +20,44 @@ static Logger logger =
 
 /* ----------------------------------------------------------------------------
  */
+template<>
+Item* Context::make<Item>(str id)
+{
+  Item* item = mem::stl_allocator.construct<Item>();
+  item->node = &item_tree.addLast(item_stack.head->data->node, item);
+  if (!item->style.init())
+    return nullptr;
+  if (!item->drawcmds.init(4))
+    return nullptr;
+  item->drawcmds.push();
+  item->drawcmds[0].alloc(this, putFilledRectCounts());
+  item->dirty = true;
+  return item;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+Item* Context::begin<Item>(str id)
+{
+  Item* item = make<Item>(id);
+  item_stack.push(item);
+  return item;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Context::endItem()
+{
+  item_stack.pop();
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 Context::init(Engine& engine)
 {
   gfx::Renderer& renderer = engine.renderer;
   Window& window = engine.window;
-
 
   if (!item_stack.init())
     return ERROR("failed to init item stack\n");
@@ -49,15 +83,23 @@ b8 Context::init(Engine& engine)
   buffer->setF32AttribU8(
       2, 4, true,  sizeof(ui::Vertex), offsetof(ui::Vertex, color));
 
+  // NOTE(sushi) I do not like making root manually here but in order
+  //             to not have to put a branch in make just to handle this
+  //             case we have to.
   root = mem::stl_allocator.construct<Item>();
   root->node = &item_tree.add(root);
-  root->name = "root"_str;
-  root->style.pos = {0,0};
-  root->style.size = vec2f(window.size);
+  if (!root->style.init())
+    return ERROR("failed to initialize root style\n");
+  if (!root->drawcmds.init())
+    return ERROR("failed to initialize root drawcmds\n");
+  root->dirty = true;
   root->visible_start = {0,0};
   root->visible_size = root->size;
-  root->drawcmds.init();
-  root->dirty = true;
+
+  $ local root = ui.createItemContext("Item", "root")
+
+  @root.style.set.pos({0,0});
+  @root.style.set.size(vec2f(window.size));
 
   item_stack.push(root);
 
@@ -96,12 +138,13 @@ static ItemNode* findStaticSizedParent(
     return node;
 
   Item* item = node->data;
+
+  $ local item = ui.createItemContext("Item", "item")
+  @@item.style:lookup(sizing)
+
   if (child == nullptr)
     return findStaticSizedParent(ctx, node->parent, node);
-  if (!item->style.sizing.testAny<
-        Sizing::AutoX,
-        Sizing::AutoY,
-        Sizing::Flex>())
+  if (@item.style.sizing.testAny(auto_x, auto_y, flex))
     return node;
   else
     return findStaticSizedParent(ctx, node->parent, node);
@@ -128,11 +171,18 @@ void Context::updateTree(ItemNode* node, Engine& engine)
   vec2f scoff;
   vec2f scext;
 
-  Style& style = item->style;
+  $ local item = ui.createItemContext("Item", "item")
+  $ local style = item.style
+
+  @@style:lookup(margin, border)
+
   if (parent)
   {
-    vec2f cpos = item->pos_screen + style.margintl + style.bordertl;
-    vec2f csiz = item->getBorderedArea();
+    vec2f cpos = 
+      item->pos_screen + 
+      @style.margin.top_left + 
+      @style.border.top_left;
+    vec2f csiz = @item.getBorderedArea;
 
     scoff = 
       max(
@@ -208,95 +258,199 @@ void Context::evalItemBranch(ItemNode* node)
   Item* item = node->data;
   Item* parent = (node->parent? node->parent->data : nullptr);
 
-  Style& style = item->style;
+  $ local schema = ui.schemas.Item
+  $ local item = ui.createItemContext("Item", "item")
+  $ local style = item.style
 
-  vec2f size = style.size;
-  SizingFlags sizing = style.sizing;
-  b8 hauto = sizing.test(Sizing::AutoY);
-  b8 wauto = sizing.test(Sizing::AutoX);
+  $ local parent = ui.createItemContext("Item", "parent", true)
 
-  SizingFlags parent_sizing = (parent? parent->style.sizing : SizingFlags{});
+  @@style:lookup(
+    margin,
+    sizing,
+    size,
+    padding,
+    border,
+    display)
+
+  @@parent.style:lookup(
+    sizing,
+    size,
+    padding,
+    margin,
+    border)
+
+  vec2f area = @item.getMarginedArea;
+
+  b8 hauto = @style.sizing.test(auto_y);
+  b8 wauto = @style.sizing.test(auto_x);
 
   if (!hauto)
   {
-    if (sizing.test(Sizing::PercentY))
+    if (@style.sizing.test(percent_y))
     {
-      if (size.y < 0.f)
-        ERROR("Sizing::PercentY set but height set (", size.y, ") is "
+      if (@style.size.height < 0.f)
+        ERROR("percent_y is set but height (", @style.size.height, ") is "
               "negative\n");
-      else if (parent_sizing.test(Sizing::PercentY))
-        item->size.y = size.y/100.f * parent->getPaddedHeight();
-      else if (parent->style.size.y >= 0.f)
-        item->size.y = size.y/100.f * parent->getPaddedStyleHeight();
+      else if (@parent.style.sizing.test(percent_y))
+        item->size.y = @style.size.height/100.f * 
+                       @parent.getPaddedHeight;
+      else if (@parent.style.size.height >= 0.f)
+        item->size.y = @style.size.height/100.f * 
+                       @parent.getPaddedStyleHeight;
       else
       {
-        ERROR("Sizing::PercentY is set but this item's parent's height is "
-              "not explicitly sized\n");
+        ERROR("precent_y set is set but this item's parent's height is not "
+              "explicitly sized\n");
         hauto = true;
       }
     }
     else
-      item->size.y = item->getMarginedStyleHeight();
+      item->size.y = @item.getMarginedStyleHeight;
   }
   else
     item->size.y = 0.f;
 
   if (!wauto)
   {
-    if (sizing.test(Sizing::PercentX))
+    if (@style.sizing.test(percent_x))
     {
-      if (size.x < 0.f)
-        ERROR("Sizing::PercentX set but width set (", size.x, ") is "
-              "negative\n");
-      else if (parent_sizing.test(Sizing::PercentX))
-        item->size.x = size.x/100.f * parent->getPaddedWidth();
-      else if (parent->style.size.y >= 0.f)
-        item->size.x = size.x/100.f * parent->getPaddedStyleWidth();
+      if (@style.size.width < 0.f)
+        ERROR("percent_x set but width set (", @style.size.width, ") is "
+        "negative\n");
+      else if (@parent.style.sizing.test(percent_x))
+        item->size.x = @style.size.width/100.f * @parent.getPaddedWidth;
+      else if (@parent.style.size.width >= 0.f)
+        item->size.x = @style.size.width/100.f * @parent.getPaddedStyleWidth;
       else
       {
-        ERROR("Sizing::PercentX is set but this item's parent's width is "
-              "not explicitly sized\n");
+        ERROR("percent_x is set but this item's parent's width is not "
+              "explicitly sized\n");
         wauto = true;
       }
     }
     else
-      item->size.x = item->getPaddedStyleWidth();
+      item->size.x = @item.getPaddedStyleWidth;
   }
   else
     item->size.x = 0.f;
 
-
   // Evaluate children.
   
-  vec2f cursor = style.margintl + style.paddingtl + style.bordertl;
-  ItemNode* it = node->first_child;
+  vec2f cursor = 
+    @style.margin.top_left + 
+    @style.padding.top_left + 
+    @style.border.top_left;
+
+  ItemNode* it = 
+    (@style.display.test(reverse)? 
+      node->first_child :
+      node->last_child);
+
   u32 idx = 0;
-  while (it)
+  while (it) 
   {
     Item* child = it->data;
 
-    if (child->style.display.test(Display::Hidden))
+    $ local child = ui.createItemContext("Item", "child", true)
+
+    @@child.style:lookup(
+      display,
+      positioning,
+      pos,
+      anchor,
+      margin)
+
+    if (@child.style.display.test(hidden))
     {
       idx += 1;
       assert(it != it->next);
-      it = it->next;
+      it = 
+        (@style.display.test(reverse)? 
+          it->prev :
+          it->next);
       continue;
     }
 
     evalItemBranch(child->node);
 
-    switch (child->style.positioning)
+$ local placeAnchorSwitch = function(var)
+$   local style = child.style
+    switch (@style.anchor)
     {
-    case Positioning::Static:
+    case @schema.anchor.top_left:
+      child->pos_local.x += @style.pos.x;
+      child->pos_local.y += @style.pos.y;
+      break;
+
+    case @schema.anchor.top_right:
+      if (!wauto)
+        child->pos_local.x = 
+          @item.getPaddedWidth - child->size.x - @style.pos.x;
+      else
+        ERROR("item's anchor was specified as top_right but the item's width "
+              "is set to auto\n");
+      child->pos_local.y += @style.pos.y;
+      break;
+
+    case @schema.anchor.bottom_right:
+      if (!wauto)
+        child->pos_local.x = 
+          @item.getPaddedWidth - child->size.x - @style.pos.x;
+      else
+        ERROR("item's anchor was specified as bottom_right but the item's "
+              "width is set to auto\n");
+      if (!hauto)
+        child->pos_local.y = 
+          @item.getPaddedHeight - child->size.y - @style.pos.y;
+      else
+        ERROR("item's anchor was specified as bottom_right but the item's "
+              "height is set to auto\n");
+      break;
+
+    case @schema.anchor.bottom_left:
+      child->pos_local.x += @style.pos.x;
+      if (!hauto)
+        child->pos_local.y =
+          @item.getPaddedHeight - child->size.y - @style.pos.y;
+      else
+        ERROR("item's anchor was specified as bottom_left but the item's "
+              "height is set to auto\n");
+      break;
+    }
+$ end
+
+    switch (@child.style.positioning)
+    {
+    case @schema.positioning.static:
       child->pos_local = cursor;
-      if (style.display.test(Display::Horizontal))
+      if (@style.display.test(horizontal))
         cursor.x = child->pos_local.x + child->size.x;
       else
         cursor.y = child->pos_local.y + child->size.y;
 
-      child->pos_local.x += child->style.pos.x;
-      child->pos_local.y += child->style.pos.y;
+      @placeAnchorSwitch
+
       break;
+
+    case @schema.positioning.relative:
+      child->pos_local = 
+        @child.style.margin.top_left +
+        @style.border.top_left;
+
+      if (@style.display.test(horizontal))
+        cursor.x += child->pos_local.x + child->size.x;
+      else
+        cursor.y += child->pos_local.y + child->size.y;
+
+      @placeAnchorSwitch
+
+      break;
+
+    case @schema.positioning.absolute:
+      @placeAnchorSwitch
+      break;
+
+    // NOTE(sushi) fixed positioning is handled in gen item branch
     }
 
     child->pos_local = floor(child->pos_local);
@@ -309,17 +463,17 @@ void Context::evalItemBranch(ItemNode* node)
   if (wauto)
   {
     item->size.x += 
-      style.padding_right +
-      style.margin_right +
-      style.border_right;
+      @style.padding.right +
+      @style.margin.right +
+      @style.border.right;
   }
 
   if (hauto)
   {
     item->size.y +=
-      style.padding_bottom +
-      style.margin_bottom +
-      style.border_bottom;
+      @style.padding.bottom +
+      @style.margin.bottom +
+      @style.border.bottom;
   }
 
   item->pos_local = floor(item->pos_local);
@@ -330,7 +484,12 @@ void Context::evalItemBranch(ItemNode* node)
 void Context::genItemBranch(ItemNode* node)
 {
   Item* item = node->data;
-  if (item->style.display.test(Display::Hidden))
+
+  $ local item = ui.createItemContext("Item", "item")
+
+  @@item.style:lookup(display)
+
+  if (@item.style.display.test(hidden))
     return;
 
   if (item != root)
@@ -345,38 +504,6 @@ void Context::genItemBranch(ItemNode* node)
     genItemBranch(child);
 }
 
-/* ----------------------------------------------------------------------------
- */
-template<>
-Item* Context::make<Item>(str id, Style* style)
-{
-  Item* item = mem::stl_allocator.construct<Item>();
-  item->node = &item_tree.addLast(item_stack.head->data->node, item);
-  if (style)
-    item->style = *style;
-  if (!item->drawcmds.init(4))
-    return nullptr;
-  item->drawcmds.push();
-  item->drawcmds[0].alloc(this, putFilledRectCounts());
-  item->dirty = true;
-  return item;
-}
 
-/* ----------------------------------------------------------------------------
- */
-template<>
-Item* Context::begin<Item>(str id, Style* style)
-{
-  Item* item = make<Item>(id, style);
-  item_stack.push(item);
-  return item;
-}
-
-/* ----------------------------------------------------------------------------
- */
-void Context::endItem()
-{
-  item_stack.pop();
-}
 
 }

@@ -2,23 +2,16 @@ $ local lpp = require "lpp"
 $ local reflect = require "reflection.Reflector"
 $ local ui = require "ui.UI"
  
-@lpp.import "ui/Item.lh"
-@lpp.import "ui/DrawCmd.lh"
-
+@@lpp.import "ui/Item.lh"
+@@lpp.import "ui/DrawCmd.lh"
 
 namespace ui
 {
 
-/* ----------------------------------------------------------------------------
- */
-void Item::update() {}
-
-/* ----------------------------------------------------------------------------
- */
-void Item::evaluate() {}
-
 void Item::generate(Context* ctx) 
 {
+  $ local this = ui.createItemContext("Item", "this")
+  @@this.style:lookup(background_color)
 
   DrawCmd* dc = &drawcmds[0];
 
@@ -33,15 +26,10 @@ void Item::generate(Context* ctx)
       sum,
       pos_screen, 
       size, 
-      style.background_color);
+      @this.style.background_color);
 
   dc->counts_used = sum;
 }
-
-/* ----------------------------------------------------------------------------
- */
-void Item::cleanup() {}
-
 
 }
 

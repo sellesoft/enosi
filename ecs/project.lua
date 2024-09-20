@@ -45,6 +45,7 @@ local lppclang = enosi.getProject("lppclang")
 
 if true then
 lake.find("src/**/*.lpp"):each(function(lfile)
+  local mfile = builddir..lfile..".meta"
   local cfile = builddir..lfile..".cpp"
   local ofile = cfile..".o"
   local dfile = cfile..".d"
@@ -59,6 +60,7 @@ lake.find("src/**/*.lpp"):each(function(lfile)
 
   lpp_driver.input = lfile
   lpp_driver.output = cfile
+  lpp_driver.metafile = mfile
 
   lake.target(cfile)
     :dependsOn { lfile, lppclang.lib_path }

@@ -1,0 +1,69 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local Style = require "ui.Style"
+
+@@lpp.import "ui/Style.lh"
+
+$$$
+
+-- * --------------------------------------------------------------------------
+
+local placePropKindMethods = function()
+  Style.prop_kinds:each(function(pk)
+$$$
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+$(pk.typename) StyleMap::getAs(str name, $(pk.typename) def)
+{
+  Elem* elem = map.find(name.hash());
+  if (!elem)
+    return def;
+  assert(elem->kind == Elem::Kind::$(pk.kindname));
+  return elem->value.$(pk.unionname);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+void StyleMap::setAs(str name, $(pk.typename) val)
+{
+  u64 hashed = name.hash();
+  Elem* elem = map.find(hashed);
+  if (!elem)
+  {
+    elem = pool.add();
+    elem->hash = hashed;
+    map.insert(elem);
+  }
+  elem->kind = Elem::Kind::$(pk.kindname);
+  elem->value.$(pk.unionname) = val;
+}
+$$$
+  end)
+end
+
+$$$
+
+namespace ui
+{
+
+/* ----------------------------------------------------------------------------
+ */
+@placePropKindMethods
+
+/* ----------------------------------------------------------------------------
+ */
+b8 StyleMap::init()
+{
+  if (!map.init())
+    return false;
+
+  if (!pool.init())
+    return false;
+
+  return true;
+}
+
+}
