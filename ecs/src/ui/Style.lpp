@@ -3,6 +3,7 @@ $ local reflect = require "reflection.Reflector"
 $ local Style = require "ui.Style"
 
 @@lpp.import "ui/Style.lh"
+@@lpp.import "ui/Item.lh"
 
 $$$
 
@@ -15,9 +16,11 @@ $$$
 /* ----------------------------------------------------------------------------
  */
 template<>
-$(pk.typename) StyleMap::getAs(str name, $(pk.typename) def)
+$(pk.typename) StyleMap::getAs(u64 id, $(pk.typename) def)
 {
-  Elem* elem = map.find(name.hash());
+  // TODO(sushi) maybe also add the elem to the map here? Not sure if that
+  //             would be good behavior or not.
+  Elem* elem = map.find(id);
   if (!elem)
     return def;
   assert(elem->kind == Elem::Kind::$(pk.kindname));
@@ -27,19 +30,39 @@ $(pk.typename) StyleMap::getAs(str name, $(pk.typename) def)
 /* ----------------------------------------------------------------------------
  */
 template<>
-void StyleMap::setAs(str name, $(pk.typename) val)
+void StyleMap::setAs(u64 id, $(pk.typename) val, Item* item)
 {
-  u64 hashed = name.hash();
-  Elem* elem = map.find(hashed);
+  Elem* elem = map.find(id);
   if (!elem)
   {
     elem = pool.add();
-    elem->hash = hashed;
+    elem->hash = id;
     map.insert(elem);
   }
   elem->kind = Elem::Kind::$(pk.kindname);
   elem->value.$(pk.unionname) = val;
+  // TODO(sushi) see if clang optimizes out this branch if it knows that
+  //             item == nullptr.
+  if (item)
+    item->dirty = true;
 }
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+$(pk.typename) StyleMap::getAs(str name, $(pk.typename) def)
+{
+  return getAs(name.hash(), def);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+void StyleMap::setAs(str name, $(pk.typename) val, Item* item)
+{
+  return setAs(name.hash(), val, item);
+}
+
 $$$
   end)
 end

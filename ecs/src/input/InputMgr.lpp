@@ -18,6 +18,8 @@ $ end
 @on(KeyReleased, keys_real[event.key] = false)
 @on(MousePressed, mouse_real[event.button] = true)
 @on(MouseReleased, mouse_real[event.button] = false)
+@on(MouseMoved, mouse.screen = event.screen_pos; 
+                mouse.window = event.window_pos;)
 
 b8 InputMgr::init(Engine& engine)
 {
@@ -30,7 +32,8 @@ $ end
     KeyPressed,
     KeyReleased,
     MousePressed,
-    MouseReleased)
+    MouseReleased,
+    MouseMoved);
 
   return true;
 }

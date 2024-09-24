@@ -10,8 +10,12 @@ $ local reflect = require "reflection.Reflector"
 @@lpp.import "input/InputMgr.lh"
 @@lpp.import "input/InputEvents.lh"
 @@lpp.import "window/Window.lh"
+@@lpp.import "asset/AssetMgr.lh"
+@@lpp.import "asset/Font.lh"
 
 #include "event/BroadcastEventBus.h"
+
+struct Font;
 
 struct Engine
 {
@@ -24,11 +28,15 @@ struct Engine
 
   gfx::Renderer renderer;
 
+  AssetMgr assetmgr;
+
   ui::Context ui;
 
   InputMgr input;
 
   ui::Item* test;
+
+  Font gohu_font;
 
   TimePoint start_time;
 

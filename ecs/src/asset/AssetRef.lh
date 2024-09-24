@@ -1,0 +1,19 @@
+/*
+ *  A counted reference to a typed asset.
+ *
+ *  TODO(sushi) make thread safe via atomics or something.
+ */
+
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+@@lpp.import "asset/AssetHandle.lh"
+
+/* ============================================================================
+ */
+template<typename T>
+struct AssetRef : public AssetHandle
+{
+  
+};
+

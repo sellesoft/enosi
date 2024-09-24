@@ -25,6 +25,8 @@ using namespace iro;
 namespace ui
 {
 
+struct Item;
+
 $$$
 
 -- * --------------------------------------------------------------------------
@@ -86,8 +88,19 @@ struct StyleMap
   template<typename T>
   T getAs(str name, T def = {});
 
+  // Optionally passed an item to set dirty after set is used.
   template<typename T>
-  void setAs(str name, T val);
+  void setAs(str name, T val, Item* item = nullptr);
+
+  // Variants for compile time hashed strings, which should be the most 
+  // likely case.
+
+  template<typename T>
+  T getAs(u64 id, T def = {});
+
+  // Optionally passed an item to set dirty after set is used.
+  template<typename T>
+  void setAs(u64 id, T val, Item* item = nullptr);
 };
 
 

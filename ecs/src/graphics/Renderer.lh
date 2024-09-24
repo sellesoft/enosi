@@ -9,12 +9,16 @@ $ local reflect = require "reflection.Reflector"
 #define _ecs_renderer_h
 
 #include "iro/common.h"
+#include "iro/unicode.h"
 #include "iro/containers/linked_pool.h"
+
+using namespace iro;
 
 #include "math/vec.h"
 
 struct Engine;
 struct Window;
+struct Texture;
 
 namespace gfx
 {
@@ -63,12 +67,45 @@ struct Buffer
  */
 struct DrawCmd
 {
-  Buffer* buffer;
-  u64 index_start;
-  u64 index_count;
-  u64 vertex_start;
-  vec2f scale;
-  vec2f translation;
+  enum class Kind
+  {
+    Invalid,
+    BindBuffer,
+    Draw,
+    BindTexture,
+    PushUniformVec2,
+    PushUniformFloat,
+    PushUniformBool,
+  };
+
+  Kind kind;
+
+  union
+  {
+    Buffer* bind_buffer;
+
+    struct 
+    {
+      u64 index_start;
+      u64 index_count;
+      u64 vertex_start;
+    } draw;
+
+    Texture* bind_texture;
+    
+    struct
+    {
+      str name;
+      union
+      {
+        vec2f v;
+        f32 f;
+        b8 b;
+      };
+    } push_uniform;
+  };
+
+  DrawCmd() : kind(Kind::Invalid), bind_buffer() {}
 };
 
 /* ============================================================================
@@ -81,8 +118,67 @@ struct Renderer
   u32 frag_shader;
   u32 shader_program;
 
-  iro::SLinkedPool<Buffer> buffers;
-  iro::Array<DrawCmd> drawcmds;
+  SLinkedPool<Buffer> buffers;
+  Array<DrawCmd> drawcmds;
+
+  void pushBindBuffer(Buffer* buffer)
+  {
+    DrawCmd cmd;
+    cmd.kind = DrawCmd::Kind::BindBuffer;
+    cmd.bind_buffer = buffer;
+    drawcmds.push(cmd);
+  }
+
+  void pushDraw(
+    u64 index_start, 
+    u64 index_count, 
+    u64 vertex_start)
+  {
+    DrawCmd cmd;
+    cmd.kind = DrawCmd::Kind::Draw;
+    cmd.draw = 
+    {
+      .index_start = index_start,
+      .index_count = index_count,
+      .vertex_start = vertex_start,
+    };
+    drawcmds.push(cmd);
+  }
+
+  void pushBindTexture(Texture* texture)
+  {
+    DrawCmd cmd;
+    cmd.kind = DrawCmd::Kind::BindTexture;
+    cmd.bind_texture = texture;
+    drawcmds.push(cmd);
+  }
+
+  void pushUniformVec2(str name, vec2f v)
+  {
+    DrawCmd cmd;
+    cmd.kind = DrawCmd::Kind::PushUniformVec2;
+    cmd.push_uniform.name = name;
+    cmd.push_uniform.v = v;
+    drawcmds.push(cmd);
+  }
+
+  void pushUniformFloat(str name, f32 f)
+  {
+    DrawCmd cmd;
+    cmd.kind = DrawCmd::Kind::PushUniformFloat;
+    cmd.push_uniform.name = name;
+    cmd.push_uniform.f = f;
+    drawcmds.push(cmd);
+  }
+
+  void pushUniformBool(str name, b8 b)
+  {
+    DrawCmd cmd;
+    cmd.kind = DrawCmd::Kind::PushUniformBool;
+    cmd.push_uniform.name = name;
+    cmd.push_uniform.b = b;
+    drawcmds.push(cmd);
+  }
 
   b8   init(Window* window);
   void deinit();
@@ -93,6 +189,10 @@ struct Renderer
 
   Buffer* createBuffer();
   void    destroyBuffer(Buffer* buffer);
+
+  // Loads a texture into opengl and sets the proper reference to it 
+  // on the given texture.
+  b8 loadTexture(Texture& texture);
 };
 
 }

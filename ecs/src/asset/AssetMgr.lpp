@@ -1,0 +1,125 @@
+
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+@@lpp.import "asset/AssetMgr.lh"
+
+#include "iro/memory/memory.h"
+#include "iro/fs/file.h"
+
+static Logger logger = 
+  Logger::create("ecs.assetmgr"_str, Logger::Verbosity::Info);
+
+/* ----------------------------------------------------------------------------
+ */
+b8 AssetMgr::init(u64 asset_capacity, mem::Allocator* allocator)
+{
+  INFO("initializing AssetMgr with capacity ", asset_capacity, "\n");
+
+  if (!asset_list.init())
+    return false;
+
+  this->allocator = allocator;
+  this->asset_capacity = asset_capacity;
+  asset_pool = (Asset*)allocator->allocate(sizeof(Asset) * asset_capacity);
+
+  INFO("finished\n");
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void AssetMgr::deinit()
+{
+  INFO("deinitializing AssetMgr\n");
+
+  for (Asset& asset : asset_list)
+  {
+    asset.path.destroy();
+    allocator->free(asset.data);
+  }
+
+  allocator->free(asset_pool);
+
+  INFO("done\n");
+}
+
+/* ----------------------------------------------------------------------------
+ */
+AssetHandle AssetMgr::loadAsset(str path)
+{
+  using namespace fs;
+
+  if (loaded_count == asset_capacity)
+  {
+    ERROR(
+      "cannot load anymore assets as we have reached capacity (", 
+      asset_capacity, ")\n");
+    return nil;
+  }
+
+  // Lazily finding a free slot for now. 
+  // TODO(sushi) setup a linked list of free slots.
+  Asset* asset = nullptr;
+  for (u64 i = 0; i < asset_capacity; ++i)
+  {
+    Asset* slot = asset_pool + i;
+
+    if (isnil(slot->path))
+    {
+      asset = slot;
+      break;
+    }
+  }
+
+  assert(asset);
+
+  if (!Path::exists(path))
+  {
+    ERROR("attempted to load asset at path '", path, "' but a file does not "
+          "exist here\n");
+    return nil;
+  }
+
+  if (Path::isDirectory(path))
+  {
+    ERROR("attempted to load asset from path '", path, "' but this is a "
+          "directory\n");
+    return nil;
+  }
+
+  auto file = File::from(path, OpenFlag::Read);
+  if (isnil(file))
+  {
+    ERROR("failed to open file at path '", path, "'\n");
+    return nil;
+  }
+  defer { file.close(); };
+
+  auto file_size = file.getInfo().byte_size;
+
+  asset->data = allocator->allocate(file_size);
+  asset->data_size = file_size;
+
+  file.read({(u8*)asset->data, asset->data_size});
+
+  // Take the path from the file.
+  move(file.path, asset->path);
+
+  asset_list.pushTail(asset);
+
+  AssetHandle handle;
+  handle.id = asset - asset_pool + 1;
+
+  return handle;
+} 
+
+/* ----------------------------------------------------------------------------
+ */
+Asset* AssetMgr::getAsset(AssetHandle handle)
+{
+  if (isnil(handle))
+    return nullptr;
+  return asset_pool + handle.id - 1;
+}

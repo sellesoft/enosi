@@ -105,6 +105,10 @@ b8 Context::init(Engine& engine)
 
   vertex_next = index_next = 0;
 
+  // Store a reference to the engine incase widgets need to access 
+  // information from it.
+  eng = &engine;
+
   return true;
 }
 
@@ -114,6 +118,16 @@ b8 Context::update(Engine& engine)
 {
   if (item_stack.head->data != root)
     return ERROR("items left on stack!\n");
+
+  engine.renderer.pushBindBuffer(buffer);
+
+  engine.renderer.pushUniformVec2(
+    "scale"_str,
+    { 2.f / engine.window.size.x, -2.f / engine.window.size.y });
+
+  engine.renderer.pushUniformVec2(
+    "translation"_str,
+    { -1.f, 1.f });
 
   buffer->map();
 
@@ -229,19 +243,21 @@ void Context::updateTree(ItemNode* node, Engine& engine)
     item->visible_size = item->size;
   }
 
+  // TODO(sushi) we can maybe pull some of these conditions into the 
+  //             calculations above to stop doing work much earlier.
   if (scoff.x < window.size.x && scoff.y < window.size.y &&
       scext.x != 0.f          && scext.y != 0.f          && 
       scoff.x + scext.x > 0.f && scoff.y + scext.y > 0.f)
   {
+    renderer.pushUniformBool("has_texture"_str, false);
+    renderer.pushBindTexture(&engine.gohu_font.texture);
+
     for (DrawCmd& drawcmd : item->drawcmds)
     {
-      auto gfxdc = renderer.drawcmds.push();
-      gfxdc->buffer = buffer;
-      gfxdc->index_start = drawcmd.index_offset;
-      gfxdc->index_count = drawcmd.counts_used.y;
-      gfxdc->vertex_start = drawcmd.vertex_offset;
-      gfxdc->scale = { 2.f / window.size.x, -2.f / window.size.y };
-      gfxdc->translation = { -1.f, 1.f };
+      renderer.pushDraw(
+        drawcmd.index_offset,
+        drawcmd.counts_used.y,
+        drawcmd.vertex_offset);
     }
   }
 
@@ -261,7 +277,6 @@ void Context::evalItemBranch(ItemNode* node)
   $ local schema = ui.schemas.Item
   $ local item = ui.createItemContext("Item", "item")
   $ local style = item.style
-
   $ local parent = ui.createItemContext("Item", "parent", true)
 
   @@style:lookup(
@@ -305,7 +320,12 @@ void Context::evalItemBranch(ItemNode* node)
       }
     }
     else
-      item->size.y = @item.getMarginedStyleHeight;
+      item->size.y = 
+        @style.size.y + 
+        @style.margin.top + 
+        @style.margin.bottom + 
+        @style.border.top +
+        @style.border.bottom;
   }
   else
     item->size.y = 0.f;
@@ -329,7 +349,12 @@ void Context::evalItemBranch(ItemNode* node)
       }
     }
     else
-      item->size.x = @item.getPaddedStyleWidth;
+      item->size.x = 
+        @style.size.x +
+        @style.margin.left +
+        @style.margin.right +
+        @style.border.left +
+        @style.border.right;
   }
   else
     item->size.x = 0.f;
@@ -454,6 +479,11 @@ $ end
     }
 
     child->pos_local = floor(child->pos_local);
+
+    if (wauto)
+      item->size.x = max(item->size.x, child->pos_local.x + child->size.x);
+    if (hauto)
+      item->size.y = max(item->size.y, child->pos_local.y + child->size.y);
 
     idx += 1;
     assert(it != it->next);

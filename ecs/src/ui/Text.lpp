@@ -1,0 +1,71 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local ui = require "ui.UI"
+
+@@lpp.import "ui/Text.lh"
+@@lpp.import "ui/UI.lh"
+@@lpp.import "Engine.lh"
+
+static Logger logger = 
+  Logger::create("ui.text"_str, Logger::Verbosity::Notice);
+
+namespace ui
+{
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+Text* Context::make<Text>(str id)
+{
+  Text* text = mem::stl_allocator.construct<Text>();
+  text->node = &item_tree.addLast(item_stack.head->data->node, text);
+  if (!text->style.init())
+    return nullptr;
+  if (!text->drawcmds.init(1))
+    return nullptr;
+  if (!text->buffer.open())
+    return nullptr;
+  text->drawcmds.push();
+  text->dirty = true;
+  return text;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Text::evaluate(Context* ctx)
+{
+  $ local text = ui.createItemContext("Text", "this")
+  $ local style = text.style
+
+  auto& assetmgr = ctx->eng->assetmgr;
+
+  if (font == nullptr)
+  {
+    // We have not yet loaded the font request so do so now.
+    @@style:lookup(font);
+
+    if (@style.font == "null"_str)
+    {
+      WARN("evaluate called on a Text item with a null font set\n");
+      return;
+    }
+
+    
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Text::generate(Context* ctx)
+{
+  
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Text::cleanup()
+{
+  buffer.close();
+}
+
+}

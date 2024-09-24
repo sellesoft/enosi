@@ -48,7 +48,7 @@ struct vec2
    */
   inline vec2 operator- (const vec2& rhs) const
   {
-    return { x - rhs.x, y - rhs.x };
+    return { x - rhs.x, y - rhs.y };
   }
 
   /* --------------------------------------------------------------------------

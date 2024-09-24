@@ -12,6 +12,8 @@ using namespace iro;
 @@lpp.import "input/InputEvents.lh"
 @@lpp.import "event/BroadcastEventBus.lh"
 
+@@lpp.import "asset/Font.lh"
+
 static Logger logger = 
   Logger::create("ecs.eng"_str, Logger::Verbosity::Info);
 
@@ -33,6 +35,9 @@ b8 Engine::init()
 
   if (!renderer.init(&window))
     return ERROR("failed to initialize renderer\n");
+
+  if (!assetmgr.init(4096, &mem::stl_allocator))
+    return ERROR("failed to initialize assetmgr\n");
 
   if (!input.init(*this))
     return ERROR("failed to initialize input\n");
@@ -65,12 +70,33 @@ b8 Engine::init()
   //   }
   // }
 
-  test = ui.make<ui::Item>();
+  Font font;
+
+  if (!Font::load(
+        &gohu_font,
+        "gohufont11"_str,
+        &mem::stl_allocator,
+        assetmgr))
+    return false;
+
+  renderer.loadTexture(gohu_font.texture);
+
+  test = ui.begin<ui::Item>();
 
   $ local item = ui.createItemContext("Item", "test")
 
-  @item.style.set.size({10, 10});
+  @item.style.set.size({30, 30});
   @item.style.set.background_color({255, 0, 0, 255});
+  @item.style.set.padding({5, 5, 5, 5});
+
+  ui::Item* test2 = ui.make<ui::Item>();
+
+  $ local test2 = ui.createItemContext("Item", "test2")
+
+  @test2.style.set.size({20, 20});
+  @test2.style.set.background_color({0, 255, 0, 255});
+
+  ui.end<ui::Item>();
 
   return true;
 }
@@ -91,10 +117,14 @@ b8 Engine::update()
   if (!ui.update(*this))
     return ERROR("failed to update ui\n");
 
-  @item.style.set.pos(
-    { sinf((TimePoint::now() - start_time).toSeconds()) * 10.f, 
-      cosf((TimePoint::now() - start_time).toSeconds()) * 10.f });
-  test->dirty = true;
+  @@item.style:lookup(pos);
+
+  if (input.isMouseButtonDown(MouseButton::Left))
+  {
+    @item.style.set.pos(
+      { input.mouse.window.x, input.mouse.window.y });
+
+  }
 
   return true;
 }

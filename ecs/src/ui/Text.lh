@@ -1,0 +1,54 @@
+/*
+ *  Widget for drawing text.
+ */
+
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local ui = require "ui.UI"
+
+@@lpp.import "ui/Item.lh"
+
+@@ui.defineSchema(Text,
+{
+  inherit Item;
+
+  font: str = "null";
+  font_height: f32 = 11;
+  text_color: Color = { 255,255,255,255 };
+  wrap: enum
+  {
+    none,
+    char,
+    word,
+  } = none;
+})
+
+using namespace iro;
+
+struct Font;
+
+namespace ui
+{
+
+struct Text : public Item
+{
+  // The loaded font for this Text item.
+  Font* font;
+  
+  // The name of the loaded font so we may reload it if the user changes
+  // it.
+  str font_name;
+
+  // TODO(sushi) replace with text manipulation helper like 
+  //             we have in deshi.
+  io::Memory buffer;
+
+  virtual void evaluate(Context* ctx) override;
+
+  virtual void generate(Context* ctx) override;
+
+  virtual void cleanup() override;
+};
+
+}
+

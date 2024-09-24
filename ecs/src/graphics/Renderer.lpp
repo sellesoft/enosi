@@ -4,6 +4,7 @@ $ local reflect = require "reflection.Reflector"
 @lpp.import "graphics/Renderer.lh"
 @lpp.import "Engine.lh"
 @lpp.import "window/Window.lh"
+@lpp.import "asset/Texture.lh"
 
 #include "iro/logger.h"
 #include "iro/fs/file.h"
@@ -20,58 +21,23 @@ extern b8 rendererPlatformSwapBuffers(Window* window);
 static Logger logger = 
   Logger::create("ecs.renderer"_str, Logger::Verbosity::Info);
 
-static void gladDebugCallback(
-    void* ret, 
-    const char* name, 
-    GLADapiproc apiproc, 
-    s32 len_args, 
-    ...)
+/* ----------------------------------------------------------------------------
+ */
+static void GLAPIENTRY glMessageCallback(
+    GLenum source,
+    GLenum type,
+    GLuint id,
+    GLenum severity,
+    GLsizei length,
+    const GLchar* message,
+    const void* user_param)
 {
-	int opengl_error = glad_glGetError();
-	if(opengl_error != GL_NO_ERROR)
+  if (type == GL_DEBUG_TYPE_ERROR)
   {
-		const char* error_flag = 0;
-		const char* error_msg  = 0;
-		switch(opengl_error){
-    case GL_INVALID_ENUM:
-      error_flag = "GL_INVALID_ENUM";
-      error_msg  = "Set when an enumeration parameter is not legal.";
-      break;
-    case GL_INVALID_VALUE:
-      error_flag = "GL_INVALID_VALUE";
-      error_msg  = "Set when a value parameter is not legal.";
-      break;
-    case GL_INVALID_OPERATION:
-      error_flag = "GL_INVALID_OPERATION";
-      error_msg  = "Set when the state for a command is not legal for its "
-                    "given parameters.";
-      break;
-    case 1283:
-      error_flag = "GL_STACK_OVERFLOW";
-      error_msg  = "Set when a stack pushing operation causes a stack "
-                   "overflow.";
-      break;
-    case 1284:
-      error_flag = "GL_STACK_UNDERFLOW";
-      error_msg  = "Set when a stack popping operation occurs while the stack "
-                   "is at its lowest point.";
-      break;
-    case GL_OUT_OF_MEMORY:
-      error_flag = "GL_OUT_OF_MEMORY";
-      error_msg = "Set when a memory allocation operation cannot allocate "
-                  "(enough) memory.";
-      break;
-    case GL_INVALID_FRAMEBUFFER_OPERATION:
-      error_flag = "GL_INVALID_FRAMEBUFFER_OPERATION";
-      error_msg = "Set when reading or writing to a framebuffer that is not "
-                  "complete.";
-      break;
-		}
-		ERROR(
-        "opengl error ",opengl_error," '",error_flag,"' in ",name,
-        "(): ",error_msg, "\n");
-	}
+    ERROR(message, "\n");
+  }
 }
+
 
 /* ----------------------------------------------------------------------------
  */
@@ -87,8 +53,8 @@ b8 Renderer::init(Window* window)
     return ERROR("failed to load OpenGL\n");
 
 #if ECS_DEBUG
-  gladInstallGLDebug();
-  gladSetGLPostCallback(gladDebugCallback);
+  glEnable(GL_DEBUG_OUTPUT);
+  glDebugMessageCallback(glMessageCallback, 0);
 #endif
 
   INFO("loaded OpenGL ", 
@@ -101,7 +67,7 @@ b8 Renderer::init(Window* window)
   if (!buffers.init())
     return ERROR("failed to initialize buffer pool\n");
 
-  if (!drawcmds.init())
+  if (!drawcmds.init(16))
     return ERROR("failed to initialize draw cmd array\n");
   
   INFO("done!\n");
@@ -118,31 +84,69 @@ b8 Renderer::update(Engine& engine)
 
   glUseProgram(shader_program);
 
-  u32 scale_loc = glGetUniformLocation(shader_program, "scale");
-  u32 translation = glGetUniformLocation(shader_program, "translation");
-  u32 rotation = glGetUniformLocation(shader_program, "rotation");
+  glUniform1i(glGetUniformLocation(shader_program, "sampler"), 0);
 
   Buffer* last_buff = nullptr;
   for (DrawCmd& cmd : drawcmds)
   {
-    if (cmd.buffer != last_buff)
+    switch (cmd.kind)
     {
-      last_buff = cmd.buffer;
-      glBindVertexArray(cmd.buffer->vao);
-      glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cmd.buffer->ibo);
-    }
-        
-    glUniform2f(scale_loc, cmd.scale.x, cmd.scale.y);
-    glUniform2f(translation, cmd.translation.x, cmd.translation.y);
+    case DrawCmd::Kind::BindBuffer:
+      if (cmd.bind_buffer != last_buff)
+      {
+        last_buff = cmd.bind_buffer;
+        glBindVertexArray(cmd.bind_buffer->vao);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cmd.bind_buffer->ibo);
+      }
+      break;
 
-    glDrawRangeElementsBaseVertex(
-      GL_TRIANGLES, 
-      cmd.index_start, 
-      cmd.buffer->num_indexes, 
-      cmd.index_count,
-      GL_UNSIGNED_INT,
-      nullptr,
-      cmd.vertex_start);
+    case DrawCmd::Kind::Draw:
+      glDrawRangeElementsBaseVertex(
+        GL_TRIANGLES, 
+        cmd.draw.index_start, 
+        // kind scuffed
+        last_buff->num_indexes, 
+        cmd.draw.index_count,
+        GL_UNSIGNED_INT,
+        nullptr,
+        cmd.draw.vertex_start);
+      break;
+
+    case DrawCmd::Kind::BindTexture:
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, cmd.bind_texture->gfx_handle);
+      break;
+    
+    case DrawCmd::Kind::PushUniformVec2:
+      {
+        u32 loc = 
+          glGetUniformLocation(
+            shader_program, 
+            (char*)cmd.push_uniform.name.bytes);
+        glUniform2f(loc, cmd.push_uniform.v.x, cmd.push_uniform.v.y);
+      }
+      break;
+
+    case DrawCmd::Kind::PushUniformFloat:
+      {
+        u32 loc = 
+          glGetUniformLocation(
+            shader_program, 
+            (char*)cmd.push_uniform.name.bytes);
+        glUniform1f(loc, cmd.push_uniform.f);
+      }
+      break;
+
+    case DrawCmd::Kind::PushUniformBool:
+      {
+        u32 loc = 
+          glGetUniformLocation(
+            shader_program, 
+            (char*)cmd.push_uniform.name.bytes);
+        glUniform1i(loc, cmd.push_uniform.b);
+      }
+      break;
+    }
   }
 
   drawcmds.clear();
@@ -169,9 +173,8 @@ static b8 compileShader(str path, int kind, u32* out_shader_id)
   buffer.open();
   defer { buffer.close(); };
 
-  Bytes reserved = buffer.reserve(filesize);
-  file.read(reserved);
-  buffer.commit(filesize);
+  if (filesize != buffer.consume(&file, filesize))
+    return ERROR("failed to read entire shader '", path, "'\n");
 
   u32 id = *out_shader_id = glCreateShader(kind);
 
@@ -198,14 +201,15 @@ b8 Renderer::compileShaders()
 {
   INFO("compiling shaders\n");
 
+  // TODO(sushi) use the assetmgr here
   if (!compileShader(
-        "src/graphics/shaders/frag.glsl"_str, 
+        "assets/shaders/frag.glsl"_str, 
         GL_FRAGMENT_SHADER,
         &frag_shader))
     return false;
   
   if (!compileShader(
-        "src/graphics/shaders/vertex.glsl"_str, 
+        "assets/shaders/vertex.glsl"_str, 
         GL_VERTEX_SHADER,
         &vertex_shader))
     return false;
@@ -237,6 +241,93 @@ b8 Renderer::compileShaders()
 Buffer* Renderer::createBuffer()
 {
   return buffers.push()->data;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Renderer::loadTexture(Texture& texture)
+{
+  if (texture.gfx_handle != 0)
+    return ERROR("call to loadTexture with a texture that has already "
+                 "been assigned a gfx_handle\n");
+
+  glGenTextures(1, &texture.gfx_handle);
+
+  glBindTexture(GL_TEXTURE_2D, texture.gfx_handle);
+
+  TextureData* data = texture.data;
+
+  struct GLFormat { GLint internal; GLint format; };
+
+  GLFormat formats[] = 
+  {
+    { GL_R8, GL_RED },
+    { GL_RG8, GL_RG },
+    { GL_RGB8, GL_RGB },
+    { GL_RGBA8, GL_RGBA },
+  };
+
+  GLFormat format = formats[(u32)data->format];
+
+  glTexImage2D(
+    GL_TEXTURE_2D, 
+    0, 
+    format.internal,
+    data->width,
+    data->height,
+    0,
+    format.format,
+    GL_UNSIGNED_BYTE,
+    data->pixels);
+
+  GLint address_modes[] = 
+  {
+    GL_REPEAT,
+    GL_MIRRORED_REPEAT,
+    GL_CLAMP_TO_EDGE,
+  };
+
+  f32 border_colors[][4] = 
+  {
+    {},{},{},
+    { 1.f, 1.f, 1.f, 1.f },
+    { 0.f, 0.f, 0.f, 1.f },
+    { 0.f, 0.f, 0.f, 0.f },
+  };
+
+  GLint address_mode;
+
+  switch (data->address_mode)
+  {
+  case ImageAddressMode::ClampToWhite:
+  case ImageAddressMode::ClampToBlack:
+  case ImageAddressMode::ClampToTransparent:
+    address_mode = GL_CLAMP_TO_BORDER;
+    glTexParameterfv(
+      GL_TEXTURE_2D, 
+      GL_TEXTURE_BORDER_COLOR, 
+      border_colors[(u32)data->address_mode]);
+    break;
+  default:
+    address_mode = address_modes[(u32)data->address_mode];
+    break;
+  }
+
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, address_mode);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, address_mode);
+
+  GLint filters[] = 
+  {
+    GL_NEAREST,
+    GL_LINEAR,
+  };
+
+  GLint filter = filters[(u32)data->filter];
+
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
+
+  return true;
 }
 
 /* ----------------------------------------------------------------------------

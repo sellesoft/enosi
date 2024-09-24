@@ -13,20 +13,45 @@ local log = require "logger" ("ui.StyleContext", Verbosity.Notice)
 local List = require "list"
 local Schema = require "ui.Schema"
 
+-- Reusable buffer for making strings. You MUST remember to use get() when 
+-- returning the result of this! All functions are meant to be able to assume
+-- this is clear on entry. Note that this cannot be used safely in cases like 
+-- returning a function from a __index metamethod because the index will happen
+-- in phase 2, but the call could be deferred until phase 3, where sbuf will 
+-- have likely been cleared by some other invokation here.
+-- Maybe its just better to use local buffers? I don't know, this seems nice 
+-- for keeping a buffer around that will keep space to fit most strings.
+local sbuf = buffer.new()
+
+-- Reusable buffer for quick strings.
+local mbuf = buffer.new()
+
+local makeStr = function(...)
+  mbuf:put(...)
+  return mbuf:get()
+end
+
 local StyleContext = {}
 
 -- * --------------------------------------------------------------------------
 
-StyleContext.new = function(schema, varname, prefix, item_var_if_null)
+StyleContext.new = function(
+    schema, 
+    varname, 
+    prefix, 
+    itemvar, 
+    -- If itemvar is provided, it may be null.
+    itemvar_maybe_null)
   local o = {}
   o.lookups = {}
+  o.schema = schema
   o.varname = varname
   -- NOTE(sushi) because prefix is optional, we have to explicitly mark it 
   --             as non-existant so that the __index metamethod is not 
   --             invoked when we try to use it.
   o.prefix = prefix or false
-  o.schema = schema
-  o.item_var_if_null = item_var_if_null or false
+  o.itemvar = itemvar or false
+  o.itemvar_maybe_null = itemvar_maybe_null or false
   return setmetatable(o, StyleContext)
 end
 
@@ -34,30 +59,6 @@ end
 
 StyleContext.lookup = function(self, ...)
   -- Performing a lookup of some style properties.
-
-  local buf = buffer.new()
-
-  local getLookup = function(property)
-    local name = property.name
-    local defval = property.defval
-
-    local switch =
-    {
-    [Schema.Enum] = "u32",
-    [Schema.Flags] = "u64",
-    [Schema.CType] = property.type.name
-    }
-
-    local typename = 
-      assert(switch[getmetatable(property.type)],
-        "unhandled property type")
-
-    local lookup = 
-      self.varname..".getAs<"..typename..">(\""..
-      name.."\"_str, "..defval..")"
-
-    return lookup
-  end
 
   List{...}:each(function(propname)
     local property = 
@@ -72,19 +73,25 @@ StyleContext.lookup = function(self, ...)
     local lookup = 
       Schema.Lookup.new(property, name)
 
+    local get = 
+      makeStr(
+        self.varname,'.getAs<',property.type:getTypeName(),'>("',property.name,
+        '"_hashed,',property.defval,')')
+
     self.lookups[propname] = lookup
 
-    if self.item_var_if_null then
-      buf:put("auto ", name, " = (", 
-        self.item_var_if_null, "? ", getLookup(property), " : ", 
-        property.type:getTypeName(), "(", property.defval, "));\n")
-    else
-      buf:put("auto ", name, " = ", getLookup(property), ";\n")
-    end
+    sbuf:put("auto ", name, " = ")
 
+    if self.itemvar and self.itemvar_maybe_null then
+      sbuf:put(
+        "(", self.itemvar, "? ", get, " : ", property.type:getTypeName(), "(", 
+        property.defval, "));\n")
+    else
+      sbuf:put(get, ";\n")
+    end
   end)
 
-  return buf:get()
+  return sbuf:get()
 end
 
 -- * --------------------------------------------------------------------------
@@ -103,8 +110,19 @@ StyleContext.__index = function(self, key)
           assert(self.schema:findMember(key), 
             "no property '"..key.."' in schema '"..self.schema.name.."'")
 
+        local buf = buffer.new()
+
+        buf:put(
+          self.varname,'.setAs<',property.type:getTypeName(),'>("',
+          property.name,'"_hashed,')
+
         return function(val)
-          return self.varname.."."..property.type:set(property, val)
+          buf:put(property.type:set(property, val))
+          if self.itemvar then
+            buf:put(",", self.itemvar)
+          end
+          buf:put(")")
+          return buf:get()
         end
       end
     })

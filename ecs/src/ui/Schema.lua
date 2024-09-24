@@ -10,6 +10,13 @@ local CGen = require "cgen"
 local lpp = require "lpp"
 local buffer = require "string.buffer"
 
+local string_buffer = buffer.new()
+
+local makeStr = function(...)
+  string_buffer:put(...)
+  return string_buffer:get()
+end
+
 local Schema,
       View,
       Property,
@@ -17,6 +24,7 @@ local Schema,
       Enum,
       Flags,
       CType,
+      Float,
       Func
 
 local makeType = function()
@@ -62,19 +70,21 @@ Schema.__index = function(self, key)
   end
 
   return assert(self.property.map[key],
-    "no property named '"..key.."' in schema '"..self.name.."'")
+    makeStr("no property named '",key,"' in schema '",self.name,"'"))
 end
 
 -- * --------------------------------------------------------------------------
 
 --- Parses 'def' into this schema.
 Schema.parse = function(self, def, file_offset)
+  local ui = require "ui.UI"
+
   local offset = 1
 
-  local errorHere = function(msg)
+  local errorHere = function(...)
     local line, column = 
       lpp.getLineAndColumnFromOffset(file_offset + offset - 1)
-    error("\nat "..line..":"..column..": "..msg, 2)
+    error("\nat "..line..":"..column..": "..makeStr(...), 2)
   end
 
   local skipWhitespace = function()
@@ -128,7 +138,7 @@ Schema.parse = function(self, def, file_offset)
     local start, stop = def:find("^"..pattern, offset)
     if start then
       offset = stop+1
-      return true
+      return def:sub(start,stop)
     end
   end
 
@@ -165,6 +175,9 @@ Schema.parse = function(self, def, file_offset)
         local flags = Flags.new(parseEnumOrFlags())
         return flags
       end,
+      f32 = function()
+        return Float.new()
+      end
     }
 
     local type
@@ -178,7 +191,8 @@ Schema.parse = function(self, def, file_offset)
 
     local defval
 
-    -- requiring a default value for now.
+    -- Requiring a default value for now.
+    -- TODO(sushi) make this optional.
     expectToken "="
 
     if typename == "enum" or
@@ -190,6 +204,19 @@ Schema.parse = function(self, def, file_offset)
           "defined")
       end
       defval = type.elems.map[elem]
+    elseif typename == "str" then
+      defval = 
+        expectPattern('".-"', "a string")
+      defval = defval.."_str"
+    elseif typename == "f32" then
+      local attempt = checkPattern("%d+%.%d+")
+      if not attempt then
+        attempt = checkPattern("%d+")
+      end
+      if not attempt then
+        errorHere("expected an integer or float for default value")
+      end
+      defval = attempt
     else
       defval = 
         expectPattern("%b{}", "a braced initializer list (eg. {...})")
@@ -198,9 +225,30 @@ Schema.parse = function(self, def, file_offset)
     return id, type, defval
   end
 
+  local tail_loops = {}
+
+  local loop_count = 0
+
   expectToken "{"
   while true do
-    if checkToken "func" then
+    loop_count = loop_count + 1
+
+    if checkToken "inherit" then
+      local basename = expectIdentifier()
+
+      local base = ui.schema_defs[basename]
+      if not base then
+        errorHere("no schema with name '",basename,"'")
+      end
+
+      -- Take on all the properties and funcs of the base schema.
+      self.property.list:pushList(base.property.list)
+      for k,v in pairs(base.property.map) do
+        self.property.map[k] = v
+      end
+
+      expectToken ";"
+    elseif checkToken "func" then
       local id = expectIdentifier()
       local def = expectPattern("%b{}", "braced function definition")
       def = def:sub(2,-2)
@@ -210,43 +258,83 @@ Schema.parse = function(self, def, file_offset)
 
       local property = Property.new(id, type, defval, self, errorHere)
 
-      local need_semicolon = true
+      while true do
+        local found_tail = false
 
-      if checkPattern "accessors" then
-        if not type.allows_accessors then
-          errorHere("this property type does not allow defining accessors")
+        local checkTail = function(keyword, parser)
+          if checkToken(keyword) then
+            if tail_loops[keyword] == loop_count then
+              errorHere(keyword.." already parsed for this property")
+            end
+            tail_loops[keyword] = loop_count
+            found_tail = true
+            parser()
+          end
         end
 
-        while true do
-          local id = expectIdentifier()
-
-          expectToken "="
-
-          accessor = expectPattern('".-"', "string for accessor pattern")
-          accessor = accessor:sub(2,-2)
-          if not accessor:find("%%") then
-            errorHere(
-              "accessor pattern must contain at least one '%' to replace "..
-              "with the lookup")
+        checkTail("accessors", function()
+          if not type.allows_accessors then
+            errorHere("this property type does not allow defining accessors")
           end
 
-          property:addAccessor(id, accessor, errorHere)
+          while true do
+            local id = expectIdentifier()
 
-          if not checkToken "," then
-            if checkToken ";" then
-              need_semicolon = false
-              break
-            else
-              errorHere("expected a ';' or ',' after accessor definition")
+            expectToken "="
+
+            accessor = expectPattern('".-"', "string for accessor pattern")
+            accessor = accessor:sub(2,-2)
+            if not accessor:find("%%") then
+              errorHere(
+                "accessor pattern must contain at least one '%' to replace "..
+                "with the lookup")
+            end
+
+            property:addAccessor(id, accessor, errorHere)
+
+            if not checkToken "," then
+              return
             end
           end
+        end)
+
+        checkTail("values", function()
+          while true do
+            local id = expectIdentifier()
+
+            expectToken "="
+
+            local res = List
+            {
+              { '".-"', function(res) return res:sub(2,-2) end },
+              { "%b{}", function(res) return res end },
+            }
+            :findAndMap(function(handler)
+              local res = checkPattern(handler[1])
+              if res then
+                return handler[2](res)
+              end
+            end)
+
+            if not res then
+              errorHere("expected a braced list or string for value")
+            end
+
+            property:addValue(id, res, errorHere)
+
+            if not checkToken "," then
+              return
+            end
+          end
+        end)
+
+        if not found_tail then
+          expectToken ";"
+          break
         end
       end
-
-      if need_semicolon then
-        expectToken ";"
-      end
     end
+
 
     if checkToken "}" then
       break
@@ -278,7 +366,7 @@ end
 View.__index = function(self, key)
   local property = 
     assert(self.schema.property.map[key],
-      "no property named '"..key.."' in schema "..self.schema.name)
+      makeStr("no property named '",key,"' in schema ",self.schema.name))
 
   return property.type:viewIndex(property)
 end
@@ -302,6 +390,7 @@ Property.new = function(
   o.name = name
   o.type = type
   o.defval = defval
+  o.values = {}
   if type.allows_accessors then
     o.accessors = {}
   end
@@ -327,6 +416,16 @@ Property.addAccessor = function(self, name, val, errcb)
   end
 
   self.accessors[name] = val
+end
+
+-- * --------------------------------------------------------------------------
+
+Property.addValue = function(self, name, val, errcb)
+  if self.values[name] then
+    errcb("a value with name '"..name.."' was already defined")
+  end
+
+  self.values[name] = self.type:adjustValue(val)
 end
 
 -- * ==========================================================================
@@ -390,7 +489,7 @@ Enum.viewIndex = function(self, property)
   local index = function(_, key)
     local elem = 
       assert(self.elems.map[key],
-        "no element named '"..key.."' in property "..property.name)
+        makeStr("no element named '",key,"' in property ",property.name))
     return function()
       return tostring(elem)
     end
@@ -409,8 +508,18 @@ end
 Enum.set = function(self, property, val)
   local elem = 
     assert(self.elems.map[val],
-      "no element named '"..val.."' in property "..property.name)
-  return 'setAs<u64>("'..property.name..'"_str, '..elem..')'
+      makeStr("no element named '",val,"' in property ",property.name))
+  return elem
+end
+
+-- * --------------------------------------------------------------------------
+
+Enum.adjustValue = function(self, val)
+  local res = val
+  for k,v in pairs(self.elems.map) do
+    res = res:gsub(k, v)
+  end
+  return res
 end
 
 -- * ==========================================================================
@@ -444,14 +553,15 @@ end
 Flags.lookupIndex = function(self, lookup, key)
   local getElem = function(name)
     return assert(self.elems.map[name],
-      "no element named '"..name.."' in property '"..lookup.property.name.."'")
+      makeStr(
+        "no element named '",name,"' in property '",lookup.property.name,"'"))
   end
   local checkFlag = function(vname, name)
-    return "(("..vname..") & ("..elem.."))"
+    return makeStr("((",vname,") & (",elem,"))")
   end
   if key == "test" then
     return function(name)
-      return "(("..lookup.varname..") & ("..getElem(name).."))"
+      return makeStr("((",lookup.varname,") & (",getElem(name),"))")
     end
   elseif key == "testAny" then
     return function(...)
@@ -477,7 +587,7 @@ Flags.viewIndex = function(self, property)
   local index = function(_, key)
     local elem = 
       assert(self.elems.map[key],
-        "no element named '"..key.."' in property '"..property.name)
+        makeStr("no element named '",key,"' in property '",property.name))
     return function()
       return elem
     end
@@ -494,10 +604,27 @@ end
 -- * --------------------------------------------------------------------------
 
 Flags.set = function(self, property, val)
-  local elem = 
-    assert(self.elems.map[val],
-      "no element named '"..val.."' in property "..property.name)
-  return 'setAs<u32>("'..property.name..'"_str, '..elem..')'
+  local elem = self.elems.map[val]
+
+  if not elem then
+    elem = property.values[val]
+  end
+
+  if not elem then
+    error("no element or value named '"..val.."' in property "..property.name)
+  end
+
+  return elem
+end
+
+-- * --------------------------------------------------------------------------
+
+Flags.adjustValue = function(self, val)
+  local res = val
+  for k,v in pairs(self.elems.map) do
+    res = res:gsub(k, v)
+  end
+  return makeStr("(", res, ")")
 end
 
 -- * ==========================================================================
@@ -546,7 +673,57 @@ end
 -- * --------------------------------------------------------------------------
 
 CType.set = function(self, property, val)
-  return 'setAs<'..self.name..'>("'..property.name..'"_str, '..val..')'
+  return val
+end
+
+-- * --------------------------------------------------------------------------
+
+CType.adjustValue = function(self, val)
+  return val
+end
+
+-- * ==========================================================================
+-- *   Float
+-- * ==========================================================================
+
+-- TODO(sushi) generate all the primitive types.
+Float = makeType()
+Schema.Float = Float
+
+-- * --------------------------------------------------------------------------
+
+Float.new = function()
+  return setmetatable({}, Float)
+end
+
+-- * --------------------------------------------------------------------------
+
+Float.getTypeName = function()
+  return "f32"
+end
+
+-- * --------------------------------------------------------------------------
+
+Float.lookupIndex = function(self, lookup, key)
+  error("attempt to index a float property")
+end
+
+-- * --------------------------------------------------------------------------
+
+Float.lookupCall = function(self, lookup)
+  return lookup.varname
+end
+
+-- * --------------------------------------------------------------------------
+
+Float.set = function(self, property, val)
+  return val
+end
+
+-- * --------------------------------------------------------------------------
+
+Float.adjustValue = function(self, val)
+  return val
 end
 
 -- * ==========================================================================

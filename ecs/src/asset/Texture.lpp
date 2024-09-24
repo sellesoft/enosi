@@ -1,0 +1,112 @@
+
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+#include "iro/io/io.h"
+#include "iro/fs/file.h"
+#include "iro/fs/path.h"
+#include "iro/platform.h"
+
+@@lpp.import "asset/Texture.lh"
+@@lpp.import "asset/AssetMgr.lh"
+
+#include "cassert"
+
+static Logger logger = 
+  Logger::create("ecs.texture"_str, Logger::Verbosity::Debug);
+
+// TODO(sushi) put somewhere common.
+typedef io::StaticBuffer<512> PathBuffer;
+
+/* ----------------------------------------------------------------------------
+ */
+s64 Texture::writeDataPath(io::IO* io, str name, AssetMgr& assetmgr)
+{
+  return io::formatv(io, 
+      assetmgr.getDataDir(), "/textures/", name, ".texture");
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 TextureData::serialize(io::IO* out)
+{
+  out->write({(u8*)this, offsetof(TextureData, pixels)});
+
+  void* dummy = (void*)0xff;
+  out->write(&dummy);
+
+  out->write({(u8*)pixels, u64(width*height)});
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Texture::load(
+    Texture* out,
+    str name,
+    mem::Allocator* allocator,
+    AssetMgr& assetmgr)
+{
+  using namespace fs;
+
+  PathBuffer data_path;
+  writeDataPath(&data_path, name, assetmgr);
+
+  if (!Path::exists(data_path.asStr()))
+    return ERROR("attempt to load texture '", name, "' but there is no asset "
+                 "at path '", data_path.asStr(), "'\n");
+
+  out->handle = assetmgr.loadAsset(data_path.asStr());
+  if (isnil(out->handle))
+    return ERROR("failed to load asset for texture '", name, "'\n");
+
+  TextureData* data = out->data = 
+    assetmgr.getAssetData<TextureData>(out->handle);
+
+  // Repoint the data's pixels.
+  data->pixels = (void*)(data + 1);
+
+  out->gfx_handle = 0;
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Texture::compileFromMemory(void* pixels, CompileParams& params)
+{
+  using namespace fs;
+
+  // Ensure the data directories exist.
+  if (!platform::makeDir(Path::removeBasename(params.data_path), true))
+    return ERROR("failed to create data directories for data at '",
+                 params.data_path);
+
+  TextureData data;
+
+  data.format = params.format;
+  data.filter = params.filter;
+  data.address_mode = params.address_mode;
+  data.kind = params.kind;
+
+  data.width = params.width;
+  data.height = params.height;
+
+  data.pixels = pixels;
+
+  auto data_file = 
+    File::from(params.data_path, 
+        OpenFlag::Create
+      | OpenFlag::Truncate
+      | OpenFlag::Write);
+  if (isnil(data_file))
+    return ERROR("failed to open texture data file for writing at '", 
+                 params.data_path, "'\n");
+  defer { data_file.close(); };
+
+  if (!data.serialize(&data_file))
+    return ERROR("failed to serialize texture\n");
+
+  return true;
+}

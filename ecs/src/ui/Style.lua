@@ -19,10 +19,13 @@ local pushPropKind = function(typename, unionname, kindname)
   }
 end
 
+-- These result in the generation of setAs and getAs functions in Style.lpp
 pushPropKind("u32", "enum_value", "Enum")
 pushPropKind("u64", "flag_value", "Flags")
 pushPropKind("Color", "color", "Color")
 pushPropKind("vec2f", "v2", "Vec2f")
 pushPropKind("vec4f", "v4", "Vec4f")
+pushPropKind("f32", "_f32", "Float")
+pushPropKind("str", "string", "String")
 
 return Style

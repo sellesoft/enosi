@@ -50,6 +50,18 @@ Reflect.include = function(path)
   return formed
 end
 
+--- Imports a lpp file and parses it with clang so semantic
+--- information may be retreived.
+Reflect.import = function(path)
+  local result = lpp.import(path)
+
+  if result then
+    Reflect.ctx:parseString(result)
+  end
+
+  return result
+end
+
 Reflect.beginNamespace = function(name)
   Reflect.ctx:beginNamespace(name)
   return "namespace "..name.."\n{\n"
@@ -68,11 +80,11 @@ local imported = {}
 
 lpp.import = function(path)
   if imported[path] then
-    return ""
+    return 
   end
 
-  local result = lpp.processFile("src/"..path)
   imported[path] = true
+  local result = lpp.processFile("src/"..path)
 
   local expansion = lpp.MacroExpansion.new()
   expansion:pushBack(

@@ -46,6 +46,8 @@ struct Context
   u64 vertex_next;
   u64 index_next;
 
+  Engine* eng;
+
   b8 init(Engine& engine);
   void deinit();
 

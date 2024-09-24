@@ -6,6 +6,7 @@ $ local lpp = require "lpp"
 $ local reflect = require "reflection.Reflector"
 
 #include "input/Keys.h"
+#include "math/vec.h"
 
 #include "iro/containers/EnumArray.h"
 
@@ -26,6 +27,12 @@ struct InputMgr
   MouseButtonMap mouse_old;
   MouseButtonMap mouse_new;
   MouseButtonMap mouse_real;
+
+  struct
+  {
+    vec2f screen;
+    vec2f window;
+  } mouse;
 
   b8   init(Engine& engine);
   void deinit();

@@ -1,0 +1,100 @@
+
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+@@lpp.import "asset/AssetHandle.lh"
+
+#include "iro/common.h"
+#include "iro/unicode.h"
+#include "iro/memory/allocator.h"
+
+using namespace iro;
+
+struct AssetMgr;
+
+enum class ImageFormat
+{
+  BW,
+  BWA,
+  RGB,
+  RGBA,
+};
+
+enum class ImageFilter
+{
+  Nearest,
+  Linear,
+};
+
+enum class ImageAddressMode
+{
+  Repeat,
+  MirroredRepeat,
+  ClampToEdge,
+  ClampToWhite,
+  ClampToBlack,
+  ClampToTransparent,
+};
+
+enum class ImageKind
+{
+  OneD,
+  TwoD,
+  ThreeD,
+  Cube,
+};
+
+struct TextureData
+{
+  ImageFormat format;
+  ImageFilter filter;
+  ImageAddressMode address_mode;
+  ImageKind kind;
+
+  s32 width;
+  s32 height;
+
+  void* pixels;
+
+  b8 serialize(io::IO* out);
+};
+
+struct Texture
+{
+  AssetHandle handle;
+
+  TextureData* data; 
+ 
+  // Handle to the gfx representation of this Texture.
+  u32 gfx_handle;
+
+  static s64 writeAssetPath(io::IO* io, str name, AssetMgr& assetmgr);
+  static s64 writeDataPath(io::IO* io, str name, AssetMgr& assetmgr);
+
+  static b8 load(
+    Texture* texture,
+    str name, 
+    mem::Allocator* allocator,
+    AssetMgr& assetmgr);
+
+  struct CompileParams
+  {
+    str name;
+    str asset_path;
+    str data_path;
+    u32 width;
+    u32 height;
+    ImageFormat format;
+    ImageKind kind;
+    ImageFilter filter;
+    ImageAddressMode address_mode;
+    mem::Allocator* allocator;
+    AssetMgr* assetmgr;
+  };
+
+  static b8 compile(CompileParams& params);
+
+  // In this case 'asset_path' is unused.
+  static b8 compileFromMemory(void* data, CompileParams& params);
+
+};

@@ -20,19 +20,31 @@ ui.createItemContext = function(schemaname, varname, maybe_null)
       schemaname, 
       varname.."->style", 
       varname,
-      maybe_null and varname or nil)
+      varname,
+      maybe_null)
   return ItemContext.new(schema, varname, style)
 end
 
 -- * --------------------------------------------------------------------------
 
-ui.createStyleContext = function(schema, varname, prefix, item_var_maybe_null)
+ui.createStyleContext = function(
+    schema, 
+    varname, 
+    prefix, 
+    itemvar, 
+    itemvar_maybe_null)
   if type(schema) == "string" then
     schema = 
       assert(ui.schema_defs[schema], "no schema with name "..schema)
   end
 
-  return StyleContext.new(schema, varname, prefix, item_var_maybe_null)
+  return 
+    StyleContext.new(
+      schema, 
+      varname, 
+      prefix, 
+      itemvar,
+      itemvar_maybe_null)
 end
 
 -- * --------------------------------------------------------------------------
