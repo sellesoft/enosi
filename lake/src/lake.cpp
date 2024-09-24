@@ -102,12 +102,12 @@ b8 Lake::init(const char** argv_, int argc_, mem::Allocator* allocator)
 
   DEBUG("Creating target pool and target lists.\n");
 
-  target_pool    = TargetPool::create(allocator);
-  targets        = TargetList::create(allocator);
-  build_queue    = TargetList::create(allocator);
-  active_recipes = TargetList::create(allocator);
-  action_pool    = Pool<str>::create(allocator);
-  action_queue   = DList<str>::create(allocator);
+  if (!target_pool.init(allocator)) return false;
+  if (!targets.init(allocator)) return false;
+  if (!build_queue.init(allocator)) return false;
+  if (!active_recipes.init(allocator)) return false;
+  if (!action_pool.init(allocator)) return false;
+  if (!action_queue.init(allocator)) return false;
 
   DEBUG("Loading lua state.\n");
 
@@ -137,21 +137,21 @@ b8 Lake::init(const char** argv_, int argc_, mem::Allocator* allocator)
 void Lake::deinit()
 {
   lua.deinit();
-  active_recipes.destroy();
-  build_queue.destroy();
+  active_recipes.deinit();
+  build_queue.deinit();
 
   for (auto& t : targets)
     t.deinit();
-  targets.destroy();
+  targets.deinit();
   target_pool.deinit();
 
   cwd_stack.destroy();
   active_process_pool.deinit();
-  lua_cli_args.destroy();
+  lua_cli_args.deinit();
   for (auto& action : action_queue)
     mem::stl_allocator.free(action.bytes);
   action_pool.deinit();
-  action_queue.destroy();
+  action_queue.deinit();
 
   // TODO(sushi) this needs to be done using some platform on exit thing.
   platform::termRestoreSettings(saved_term_settings);
