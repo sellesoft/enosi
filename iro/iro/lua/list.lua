@@ -162,6 +162,38 @@ List.eachReverse = function(self, f)
   end
 end
 
+--- Returns the first element for which the return value of 
+--- f is truthy.
+List.find = function(self, f)
+  for e in self:each() do
+    if f(e) then
+      return e
+    end
+  end
+end
+
+--- Returns the index of the element for which the return value of
+--- f is truthy.
+List.index = function(self, f)
+  for e,i in self:eachWithIndex() do
+    if f(e) then
+      return i
+    end
+  end
+end
+
+--- Returns the return values of f for the first element in which
+--- the first return value of f is truthy
+List.findAndMap = function(self, f)
+  for e in self:each() do
+    -- There's gotta be a way to do this w/o capturing results in a table.
+    local result = {f(e)}
+    if result[1] then
+      return unpack(result)
+    end
+  end
+end
+
 --- The same as each, but returns as a second value the
 --- index of the element.
 ---

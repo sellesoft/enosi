@@ -134,6 +134,25 @@ s64 Memory::readFrom(s64 pos, Bytes slice)
 
 /* ------------------------------------------------------------------------------------------------
  */
+s64 Memory::consume(io::IO* io, u32 chunk_size)
+{
+  s64 sum = 0;
+  for (;;)
+  {
+    Bytes reserved = reserve(chunk_size);
+
+    s64 written = io->read(reserved);
+    if (written == 0)
+      return sum;
+
+    sum += written;
+
+    commit(written);
+  }
+}
+
+/* ------------------------------------------------------------------------------------------------
+ */
 Memory::Rollback Memory::createRollback()
 {
   return len;

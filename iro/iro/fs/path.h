@@ -57,6 +57,13 @@ struct Path
   static str basename(str path);
   static str removeBasename(str path);
 
+  // Compares the modification times of the given paths.
+  //  0 is returned if they are equal, 
+  //  1 is returned if path0 > path1,
+  // -1 is returned if path1 < path0.
+  // This function asserts if either of the files do not exist.
+  static s8 compareModTimes(str path0, str path1);
+
   b8   init(mem::Allocator* allocator = &mem::stl_allocator) 
     { return init({}, allocator); }
   b8   init(str s, mem::Allocator* allocator = &mem::stl_allocator);

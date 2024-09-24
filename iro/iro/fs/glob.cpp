@@ -22,7 +22,7 @@ void Globber::destroy()
 {
   allocator->free(pattern.bytes);
   part_pool.deinit();
-  part_list.destroy();
+  part_list.deinit();
 }
 
 /* ------------------------------------------------------------------------------------------------

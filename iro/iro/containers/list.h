@@ -199,14 +199,23 @@ struct DList
   static DList<T> create(mem::Allocator* allocator = &mem::stl_allocator)
   {
     DList<T> out = {};
-    out.pool = Pool<Node>::create(allocator);
-    out.head = out.tail = nullptr;
+    out.init(allocator);
     return out;
   }
 
   /* -------------------------------------------------------------------------------------------- create
    */
-  void destroy()
+  b8 init(mem::Allocator* allocator = &mem::stl_allocator)
+  {
+    if (!pool.init(allocator))
+      return false;
+    head = tail = nullptr;
+    return true;
+  }
+
+  /* -------------------------------------------------------------------------------------------- create
+   */
+  void deinit()
   {
     pool.deinit();
     head = tail = nullptr;

@@ -93,7 +93,9 @@ void File::close()
   if (handle > 2)
     platform::close(handle);
   
-  path.destroy();
+  // The path could have been moved for storage elsewhere.
+  if (notnil(path))
+    path.destroy();
 
   unsetOpen();
   unsetReadable();

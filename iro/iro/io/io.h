@@ -66,6 +66,18 @@ struct IO
   b8 canRead()  { return flags.test(Flag::Readable); }
   b8 canWrite() { return flags.test(Flag::Writable); }
 
+  template<typename T>
+  s64 write(T* v)
+  {
+    return write(Bytes{ (u8*)v, sizeof(T) });
+  }
+
+  template<typename T>
+  s64 read(T* v)
+  {
+    return read(Bytes{(u8*)v, sizeof(T)});
+  }
+
 protected:
 
   // Helpers for use internally, especially for things that define their own 
@@ -123,6 +135,9 @@ struct Memory : public IO
 
   s64 readFrom(s64 pos, Bytes slice) override;
 
+  // Reads from the given io until it returns no more bytes.
+  s64 consume(io::IO* io, u32 chunk_size);
+
   /* ==========================================================================
    *  Helper for saving a position in the memory to rollback to if the user 
    *  changes their mind about writing something to the buffer. Note that 
@@ -158,8 +173,8 @@ private:
 template<size_t N>
 struct StaticBuffer : public IO
 {
-  u8  buffer[N+1];
-  s32 len;
+  u8  buffer[N+1] = {};
+  s32 len = 0;
 
   inline static size_t capacity() { return N; }
   str asStr() { return str{buffer, u64(len)}; }
@@ -168,8 +183,13 @@ struct StaticBuffer : public IO
 
   virtual s64 write(Bytes slice) override
   {
-    len = (slice.len > N? N : slice.len);
-    mem::copy(buffer, slice.ptr, len);
+    u64 bytes_remaining = N - len;
+    u64 bytes_to_write = 
+      (slice.len > bytes_remaining? bytes_remaining : slice.len);
+    if (bytes_to_write == 0)
+      return 0;
+    mem::copy(buffer+len, slice.ptr, slice.len);
+    len += bytes_to_write;
     buffer[len] = 0;
     return len;
   }

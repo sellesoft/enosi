@@ -33,6 +33,11 @@ struct TimePoint
   
   static TimePoint now();
   static TimePoint monotonic();
+
+  bool operator==(const TimePoint& rhs) const
+  {
+    return s == rhs.s && ns == rhs.ns;
+  }
 };
 
 TimeSpan operator-(const TimePoint& lhs, const TimePoint& rhs);
@@ -44,14 +49,16 @@ struct UTCDate
 {
   const TimePoint& point;
   const char* fmtstr;
-  UTCDate(const TimePoint& point, const char* fmtstr = __default_fmtstr) : point(point), fmtstr(fmtstr) {}
+  UTCDate(const TimePoint& point, const char* fmtstr = __default_fmtstr) : 
+    point(point), fmtstr(fmtstr) {}
 };
 
 struct LocalDate
 { 
   const TimePoint& point;
   const char* fmtstr;
-  LocalDate(const TimePoint& point, const char* fmtstr = __default_fmtstr) : point(point), fmtstr(fmtstr) {}
+  LocalDate(const TimePoint& point, const char* fmtstr = __default_fmtstr) : 
+    point(point), fmtstr(fmtstr) {}
 };
 
 namespace io

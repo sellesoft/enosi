@@ -138,23 +138,17 @@ struct AVL
     }
   }
 
-
   /* --------------------------------------------------------------------------
-   *  Attempts to insert the given data. If the data already exists then 
-   *  nothing happens.
    */
-  void insert(T* data)
+  Node* insert(u64 data_key)
   {
     if (!root)
     {
       root = pool.add();
-      root->data = data;
       root->balance_factor = 0;
-      return;
+      return root;
     }
 
-    u64 data_key = GetKey(data);
-    
     Node* search_node = root;
     b8 place_right = true;
     for (;;)
@@ -162,7 +156,7 @@ struct AVL
       u64 search_key = GetKey(search_node->data);
 
       if (search_key == data_key)
-        return;
+        return search_node;
       
       if (search_key > data_key)
       {
@@ -189,8 +183,6 @@ struct AVL
       search_node->right = new_node;
     else
       search_node->left = new_node;
-
-    new_node->data = data;
 
     // walk back up the tree and adjust balance
     for (Node* parent = search_node,* child = new_node; 
@@ -261,6 +253,27 @@ struct AVL
         root = new_child;
       break;
     }
+
+    return new_node;
+  }
+
+
+  /* --------------------------------------------------------------------------
+   *  Attempts to insert the given data. If the data already exists then 
+   *  nothing happens.
+   */
+  void insert(T* data)
+  {
+    if (!root)
+    {
+      root = pool.add();
+      root->data = data;
+      root->balance_factor = 0;
+      return;
+    }
+
+    Node* new_node = insert(GetKey(data));
+    new_node->data = data;
   }
   
   /* --------------------------------------------------------------------------

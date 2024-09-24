@@ -157,6 +157,24 @@ b8 Path::isDirectory(str path)
 }
 
 /* ------------------------------------------------------------------------------------------------
+ */
+s8 Path::compareModTimes(str path0, str path1)
+{
+  assert(exists(path0) && exists(path1));
+
+  auto m0 = FileInfo::of(path0).last_modified_time;
+  auto m1 = FileInfo::of(path1).last_modified_time;
+
+  if (m1 == m0)
+    return 0;
+
+  if (m0.s > m1.s)
+    return 1;
+
+  return -1;
+}
+
+/* ------------------------------------------------------------------------------------------------
  *  TODO(sushi) implement alternative braces 
  *              (eg. path.{cpp,h} matches both 'path.cpp' and 'path.h')
  *              and implement character classes
