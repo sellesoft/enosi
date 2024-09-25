@@ -134,6 +134,10 @@ static vec2i putFilledRect(
     vec2i   offsets,
     vec2f   pos,
     vec2f   dim,
+    vec2f   uv0,
+    vec2f   uv1,
+    vec2f   uv2,
+    vec2f   uv3,
     Color   color)
 {
   if (color.a == 0)
@@ -151,12 +155,35 @@ static vec2i putFilledRect(
 
   ip[0] = offsets.x; ip[1] = offsets.x + 1; ip[2] = offsets.x + 2;
   ip[3] = offsets.x; ip[4] = offsets.x + 2; ip[5] = offsets.x + 3;
-  vp[0] = { tl, { 0, 1 }, col };
-  vp[1] = { tr, { 1, 1 }, col };
-  vp[2] = { br, { 1, 0 }, col };
-  vp[3] = { bl, { 0, 0 }, col };
+  vp[0] = { tl, uv0, col };
+  vp[1] = { tr, uv1, col };
+  vp[2] = { br, uv2, col };
+  vp[3] = { bl, uv3, col };
 
   return putFilledRectCounts();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static vec2i putFilledRect(
+    Vertex* putverts,
+    Index*  putindices,
+    vec2i   offsets,
+    vec2f   pos,
+    vec2f   dim,
+    Color   color)
+{
+  return putFilledRect(
+    putverts,
+    putindices,
+    offsets,
+    pos,
+    dim,
+    { 0.f, 1.f },
+    { 1.f, 1.f },
+    { 1.f, 0.f },
+    { 0.f, 0.f },
+    color);
 }
 
 }

@@ -1,0 +1,465 @@
+
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+@@lpp.import "asset/Font.lh"
+@@lpp.import "asset/Texture.lh"
+@@lpp.import "asset/AssetMgr.lh"
+
+#include "iro/logger.h"
+#include "iro/platform.h"
+#include "iro/BinarySearch.h"
+#include "iro/fs/path.h"
+#include "iro/fs/file.h"
+#include "iro/memory/bump.h"
+
+#include "math/util.h"
+
+#include "ctype.h"
+#include "stdlib.h"
+
+static Logger logger
+  = Logger::create("font.bdf"_str, Logger::Verbosity::Debug);
+
+typedef io::StaticBuffer<512> PathBuffer;
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Font::compileBDF(CompileParams& params)
+{
+  // NOTE(sushi) this is a very poor BDF font compiler as it was implemented
+  //             which the intension of compiling gohufont specifically.
+  //             Currently this only supports monospaced fonts and doesn't 
+  //             deal with a majority of font properties and some char
+  //             properties as they were not needed for gohufont!
+  //             This parser is also VERY UNSAFE to improper data!
+  //             No proper erroring will be given for an improper font 
+  //             provided here, so make sure its correct outside of this
+  //             parser first and DONT LOAD UNTRUSTED FONTS!
+
+  using namespace fs;
+
+#define error(...) \
+  (ERROR("compiling ", params.data_path, ": ", __VA_ARGS__))
+
+  if (!Path::exists(params.asset_path))
+    return error("attempt to load font '", params.name, "' but there is no "
+                 "asset at path '", params.asset_path, "'\n");
+
+  if (false and !AssetMgr::checkNeedsCompiled(params.asset_path, params.data_path))
+    return true;
+
+  INFO("compiling '", params.data_path, "'\n");
+
+  // TODO(sushi) take in an allocator to use for temp data.
+  mem::LenientBump allocator;
+  if (!allocator.init())
+    return error("failed to initialize temp allocator\n");
+  defer { allocator.deinit(); };
+
+  // Ensure the data directories exist.
+  if (!platform::makeDir(Path::removeBasename(params.data_path), true))
+    return error("failed to make directories\n");
+
+  auto file = File::from(params.asset_path, OpenFlag::Read);
+  if (isnil(file))
+    return error("failed to open font asset file at '", 
+                 params.data_path, "'\n");
+  
+  u64 file_size = file.getInfo().byte_size;
+
+  io::Memory buffer;
+  if (!buffer.open(file_size, &allocator))
+    return error("failed to open buffer for reading file data\n");
+
+  if (file_size != buffer.consume(&file, file_size))
+    return error("failed to read entire asset file\n");
+
+  // Begin parsing.
+
+  u8* scan = buffer.buffer;
+  
+  b8 eof = false;
+
+  auto current = [&]() -> u8
+  {
+    if (eof)
+      return 0;
+    return *scan;
+  };
+
+  auto advance = [&]() 
+  {
+    if (not eof)
+    {
+      scan += 1;
+      if (*scan == '\0' or scan >= buffer.buffer + buffer.len)
+        eof = true;
+    }
+  };
+
+  auto at = [&](u8 c) -> b8
+  {
+    if (eof)
+      return false;
+    return *scan == c;
+  };
+
+  auto atAlpha = [&]() -> b8
+  {
+    return 0 != isalpha(current());
+  };
+
+  auto atDigit = [&]() -> b8
+  {
+    return 0 != isdigit(current());
+  };
+
+  auto skipWhitespace = [&]()
+  {
+    while (not eof and isspace(current()))
+      advance();
+  };
+
+  auto skipLine = [&]()
+  {
+    while (not at('\n'))
+      advance();
+    advance();
+  };
+
+  auto consumeKeyword = [&]() -> str
+  {
+    for (;;)
+    {
+      u8* start = scan;
+      while (not eof and (atAlpha() or at('_')))
+        advance();
+      auto kw = str::from(start, scan);
+      if (kw == "COMMENT"_str)
+        skipLine();
+      else 
+        return kw;
+      if (eof)
+        return nil;
+    }
+  };
+
+  auto consumeNumber = [&]() -> s32
+  {
+    skipWhitespace();
+
+    u8* start = scan;
+    if (eof)
+      return MIN_S32;
+
+    skipWhitespace();
+
+    if (at('-'))
+      advance();
+
+    while(not eof and atDigit())
+      advance();
+    
+    auto num = str::from(start, scan);
+
+    u8 buffer[32];
+    num.nullTerminate(buffer, 32);
+
+    s32 val = atoi((char*)buffer);
+    return val;
+  };
+
+  {
+    str start = consumeKeyword();
+    if (start != "STARTFONT"_str)
+      return error("BDF font does not start with STARTFONT");
+    skipLine();
+  }
+
+  vec4i bbx = {};
+
+  // Parse pre properties.
+  for (;;)
+  {
+    str kw = consumeKeyword();
+
+    if (eof)
+      return error("unexpected end of file\n");
+
+    if (kw == "STARTPROPERTIES"_str)
+    {
+      skipLine();
+      break;
+    }
+    else if (kw == "FONTBOUNDINGBOX"_str)
+    {
+      bbx.x = consumeNumber();
+      bbx.y = consumeNumber();
+      bbx.z = consumeNumber();
+      bbx.w = consumeNumber();
+    }
+    else // Don't care about anything else.
+      skipLine();
+  }
+
+  s32 descent = 0;
+  s32 ascent = 0;
+
+  // Parse properties.
+  for (;;)
+  {
+    str kw = consumeKeyword();
+
+    if (eof)
+      return error("unexpected end of file\n");
+
+    if (kw == "ENDPROPERTIES"_str)
+    {
+      skipLine();
+      break;
+    }
+    else if (kw == "FONT_ASCENT"_str)
+      ascent = consumeNumber();
+    else if (kw == "FONT_DESCENT"_str)
+      descent = consumeNumber();
+    else // Don't care about anything else.
+      skipLine();
+  }
+
+  s32 num_chars = 0;
+  {
+    str kw = consumeKeyword();
+    if (kw != "CHARS"_str)
+      return error("expected CHARS after ENDPROPERTIES\n");
+    num_chars = consumeNumber();
+    skipLine();
+  }
+
+  auto* char_pixels = (u8*)allocator.allocate(num_chars * bbx.x * bbx.y);
+
+  struct Char
+  {
+    u32 encoding;
+    vec4i bbx;
+    u32 num_rows;
+    u64 bitmap_rows[32];
+  };
+
+  auto* chars = (Char*)allocator.allocate(num_chars * sizeof(Char));
+
+  for (s32 char_idx = 0; char_idx < num_chars; ++char_idx)
+  {
+    str kw = consumeKeyword();
+    if (kw != "STARTCHAR"_str)
+      return error("expected STARTCHAR\n");
+  
+    // Don't care about the name.
+    skipLine();
+
+    Char* c = chars + char_idx;
+    
+    b8 done = false;
+    while (not done)
+    {
+      kw = consumeKeyword();
+      switch (kw.hash())
+      {
+      case "ENCODING"_hashed:
+        c->encoding = u16(consumeNumber());
+        break;
+      case "BBX"_hashed:
+        c->bbx = vec4i(
+          consumeNumber(),
+          consumeNumber(),
+          consumeNumber(),
+          consumeNumber());
+        break;
+      case "BITMAP"_hashed:
+        skipLine();
+        done = true;
+        break;
+      default:
+        skipLine();
+        break;
+      }
+    }
+
+    for (u32 row_idx = 0;; ++row_idx)
+    {
+      if (str::from(
+            scan, buffer.buffer + buffer.len).startsWith("ENDCHAR"_str))
+      {
+        skipLine();
+        break;
+      }
+
+      if (row_idx >= 32)
+        return error("too many rows specified for char with encoding ", 
+                     c->encoding, "\n");
+
+      c->num_rows += 1;
+      c->bitmap_rows[row_idx] = strtoll((char*)scan, nullptr, 16);;
+
+      skipLine();
+    }
+  }
+
+  // Render the requested ranges.
+
+  // Adjust the width of each character to be aligned to 4 bytes.
+  u64 width_aligned = u64(ceil(bbx.x / 4.f) * 4.f);
+
+  // Sum up the total wanted codepoints.
+  u32 num_codepoints = 0;
+  for (CodepointRange& range : params.ranges)
+  {
+    num_codepoints += range.num_codepoints;
+  } 
+
+  // TODO(sushi) this only works with monospaced fonts.
+
+  // Figure out how many characters we want per row.
+  u64 codepoints_per_row = 
+    math::roundUpToPower2(u64(sqrt((f32)num_codepoints)));
+  
+  // And how many rows.
+  u64 row_count = 1 + num_codepoints / codepoints_per_row;
+
+  auto tex_size = vec2i(
+    codepoints_per_row * width_aligned, row_count * bbx.y);
+
+  // Allocate the bitmap.
+  auto* pixels = (u8*)allocator.allocate(tex_size.x * tex_size.y);
+  
+  auto char_slice = Slice<Char>::from(chars, num_chars);
+
+  auto findChar = [&](u32 codepoint)
+  {
+    return 
+      binarySearch(
+        char_slice, 
+        codepoint,
+        [](Char& lhs, u32 codepoint) 
+          {
+            if (lhs.encoding == codepoint)
+              return 0;
+            if (lhs.encoding < codepoint)
+              return -1;
+            return 1;
+          }); 
+  };
+
+  u32 chars_written = 0;
+  auto cursor = vec2i(0,tex_size.y-1);
+
+  // Prep font data for writing while rendering.
+  FontData data = {};
+
+  data.count = num_codepoints;
+  data.size_x = tex_size.x;
+  data.size_y = tex_size.y;
+  data.ascent = ascent;
+  data.descent = descent;
+
+  // Write out the ranges and their chardata.
+  data.ranges = 
+    (PackRange*)allocator.allocateType<PackRange>(params.ranges.len);
+
+  // NOTE(sushi) the texture is rendered upside down as we flip the y axis 
+  //             in opengl rendering.
+  for (s32 rangeidx = 0; rangeidx < params.ranges.len; ++rangeidx)
+  {
+    CodepointRange& range = params.ranges[rangeidx];
+
+    PackRange* prange = data.ranges + rangeidx;
+    prange->font_size = bbx.y;
+    prange->first_codepoint = range.first_codepoint;
+    prange->num_chars = range.num_codepoints;
+
+    prange->chardata = 
+      allocator.allocateType<PackedChar>(range.num_codepoints);
+
+    for (u32 i = 0; i < range.num_codepoints; ++i)
+    {
+      if (cursor.x >= tex_size.x)
+      {
+        cursor.x = 0;
+        cursor.y -= bbx.y;
+      }
+
+      // Search chars array for the appropriate codepoint.
+      // Assuming its sorted here, not sure if it ever won't be.
+      auto [idx, found] = findChar(range.first_codepoint + i);
+    
+      Char* c = chars + idx;
+
+      u32 top_offset = bbx.y - (c->bbx.w - bbx.w) - c->bbx.y;
+      u32 left_offset = c->bbx.z - bbx.z;
+
+      PackedChar* pc = prange->chardata + idx;
+
+      pc->x0 = cursor.x + left_offset;
+      pc->y0 = cursor.y - top_offset;
+      pc->x1 = pc->x0 + c->bbx.x;
+      pc->y1 = pc->y1 + c->bbx.y;
+      pc->xadvance = bbx.x;
+      pc->xoff = pc->yoff = pc->xoff2 = pc->yoff2 = 0.f;
+
+      u8* tl = pixels + (cursor.y * tex_size.x) + cursor.x;
+
+      u8* ctl = tl - top_offset * tex_size.x + left_offset;
+
+      for (u32 row_idx = 0; row_idx < c->num_rows; ++row_idx)
+      {
+        // TODO(sushi) there will probably be endianess issues here 
+
+        u8* row = ctl - (row_idx * tex_size.x);
+
+        for (u32 column_idx = 0; column_idx < bbx.x; ++column_idx)
+        {
+          if (c->bitmap_rows[row_idx] & (1 << (bbx.x - column_idx + 1)))
+            *(row + column_idx) = 255;
+        }
+      }
+
+      cursor.x += width_aligned;
+    }
+  }
+
+  auto data_file = 
+    File::from(params.data_path, 
+        OpenFlag::Write 
+      | OpenFlag::Truncate
+      | OpenFlag::Create);
+
+  if (isnil(data_file))
+    return error(
+        "failed to open data file for writing at '", params.data_path, "'\n");
+  defer { data_file.close(); };
+
+  if (!data.serialize(&data_file))
+    return error("failed to serialize font data\n");
+
+  PathBuffer texture_data_path;
+  Texture::writeDataPath(&texture_data_path, params.name, *params.assetmgr);
+
+  Texture::CompileParams tparams =
+  {
+    .name = params.name,
+    .data_path = texture_data_path.asStr(),
+    .width = u32(tex_size.x),
+    .height = u32(tex_size.y),
+    .format = ImageFormat::BW,
+    .kind = ImageKind::TwoD,
+    .filter = ImageFilter::Nearest,
+    .address_mode = ImageAddressMode::ClampToWhite,
+    .allocator = params.allocator,
+    .assetmgr = params.assetmgr,
+  };
+
+  if (!Texture::compileFromMemory(pixels, tparams))
+    return error("failed to compile font texture\n");
+
+  return true;
+} 

@@ -6,6 +6,7 @@ $ local reflect = require "reflection.Reflector"
 
 #include "iro/memory/memory.h"
 #include "iro/fs/file.h"
+#include "iro/platform.h"
 
 static Logger logger = 
   Logger::create("ecs.assetmgr"_str, Logger::Verbosity::Info);
@@ -122,4 +123,13 @@ Asset* AssetMgr::getAsset(AssetHandle handle)
   if (isnil(handle))
     return nullptr;
   return asset_pool + handle.id - 1;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 AssetMgr::checkNeedsCompiled(str asset_path, str data_path)
+{
+  using namespace fs;
+  return !Path::exists(data_path) ||
+         1 ==  Path::compareModTimes(asset_path, data_path);
 }

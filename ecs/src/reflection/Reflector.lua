@@ -34,6 +34,20 @@ local Reflect = {}
 -- Create the clang context.
 Reflect.ctx = lpp.clang.createContext(args)
 
+-- Attempt at lazy loading the context. This didn't seem to change much 
+-- but would ideally be helpful for files that don't use reflection at all
+-- to avoid having to load clang.
+--
+-- Reflect.ctx = setmetatable({},
+-- {
+--   __index = function(self, key)
+--     if Reflect.ctx == self then
+--       Reflect.ctx = lpp.clang.createContext(args)
+--     end
+--     return Reflect.ctx[key]
+--   end,
+-- })
+
 --- 'Includes' a C/C++ file. The file will be parsed by clang so that 
 --- its definitions become available.
 ---

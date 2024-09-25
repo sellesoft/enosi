@@ -16,10 +16,10 @@ void main()
 {
   out_col = in_col;
 
-  if (has_texture)
+  //if (has_texture)
     out_uv = in_uv;
-  else
-    out_uv = vec2(-1.f, -1.f );
+  //else
+    //out_uv = vec2(-1.f, -1.f );
 
   vec2 pos = scale * in_pos + translation;
 

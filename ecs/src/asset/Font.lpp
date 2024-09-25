@@ -2,10 +2,6 @@
 $ local lpp = require "lpp"
 $ local reflect = require "reflection.Reflector"
 $ local List = require "list"
-$ local CGen = require "cgen"
-
-#define STB_TRUETYPE_IMPLEMENTATION
-#include "external/stb_truetype.h"
 
 #include "math.h"
 
@@ -22,16 +18,64 @@ static Logger logger =
 typedef io::StaticBuffer<512> PathBuffer;
 
 /* ----------------------------------------------------------------------------
- *  Hardcoding ttf support for now. Should support other formats later.
  */
-static s64 writeFontAssetPath(io::IO* io, str name, AssetMgr& assetmgr)
+static b8 codepointInRange(PackRange* range, u32 codepoint)
 {
-  return io::formatv(io, assetmgr.getAssetDir(), "/fonts/", name, ".ttf");
+  return codepoint >= range->first_codepoint &&
+         codepoint < range->first_codepoint + range->num_chars;
 }
 
 /* ----------------------------------------------------------------------------
  */
-static s64 writeFontDataPath(io::IO* io, str name, AssetMgr& assetmgr)
+PackRange* Font::getRangeOfCodepoint(u32 codepoint)
+{
+  if (data->num_ranges == 1)
+  {
+    if (codepointInRange(data->ranges, codepoint))
+      return data->ranges;
+    else
+      return nullptr;
+  }
+
+  for (s32 rangeidx = 0; rangeidx < data->num_ranges; ++rangeidx)
+  {
+    PackRange* range = data->ranges + rangeidx;
+    
+    if (codepointInRange(data->ranges, codepoint))
+      return range;
+  }
+
+  return nullptr;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Font::getPackedChar(PackedChar* out, u32 codepoint)
+{
+  PackRange* range = getRangeOfCodepoint(codepoint);
+  if (!range)
+    return false;
+  getPackedChar(out, range, codepoint);
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Font::getPackedChar(PackedChar* out, PackRange* range, u32 codepoint)
+{
+  *out = *(range->chardata + codepoint - range->first_codepoint);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+s64 Font::writeAssetPath(io::IO* io, str name, str ext, AssetMgr& assetmgr)
+{
+  return io::formatv(io, assetmgr.getAssetDir(), "/fonts/", name, '.', ext);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+s64 Font::writeDataPath(io::IO* io, str name, AssetMgr& assetmgr)
 {
   return io::formatv(io, assetmgr.getDataDir(), "/fonts/", name, ".font");
 }
@@ -46,35 +90,12 @@ b8 Font::load(
 {
   using namespace fs;
 
-  PathBuffer asset_path;
   PathBuffer data_path;
+  writeDataPath(&data_path, name, assetmgr);
 
-  writeFontAssetPath(&asset_path, name, assetmgr);
-  writeFontDataPath(&data_path, name, assetmgr);
-
-  if (!Path::exists(asset_path.asStr()))
-    return ERROR("attempt to load font '", name, "' but there is no asset at "
-                 "path '", asset_path.asStr(), "'\n");
-
-  b8 need_compile = 
-    true ||
-    !Path::exists(data_path.asStr()) ||
-    1 == Path::compareModTimes(asset_path.asStr(), data_path.asStr());
-  
-  if (need_compile)
-  {
-    CompileParams params =
-    {
-      .name = name,
-      .asset_path = asset_path.asStr(),
-      .data_path = data_path.asStr(),
-      .allocator = allocator,
-      .assetmgr = &assetmgr,
-    };
-
-    if (!compile(params))
-      return false;
-  }
+  if (!Path::exists(data_path.asStr()))
+    return ERROR("attempt to load font '", name, "' but there is no data at "
+                 "path '", data_path.asStr(), "'\n");
 
   out->handle = assetmgr.loadAsset(data_path.asStr());
   if (isnil(out->handle))
@@ -90,8 +111,8 @@ b8 Font::load(
   for (s32 range_idx = 0; range_idx < data->num_ranges; ++range_idx)
   {
     PackRange& range = data->ranges[range_idx];
-    range.chardata_for_range = 
-      (PackedChar*)((u8*)data + (u64)range.chardata_for_range);
+    range.chardata = 
+      (PackedChar*)((u8*)data + (u64)range.chardata);
   }
 
   // Load the texture.
@@ -116,260 +137,37 @@ b8 FontData::serialize(io::IO* out)
   out->write(&dummy);
 
   u64 char_data_offset = sizeof(FontData) + num_ranges * sizeof(PackRange);
-    
-  // Serialize the ranges array.
-  for (s32 range_idx = 0; range_idx < num_ranges; ++range_idx)
-  {
-    PackRange& range = ranges[range_idx];
-
-    out->write({(u8*)&range, offsetof(PackRange, chardata_for_range)});
-
-    // Store offset to this range's char data array from the beginning 
-    // of the data.
-    out->write(&char_data_offset);
-
-    char_data_offset += range.num_chars * sizeof(PackedChar);
-  }
-
-  // Serialize the char data arrays.
-  for (s32 range_idx = 0; range_idx < num_ranges; ++range_idx)
-  {
-    PackRange& range = ranges[range_idx];
-
-    out->write(
-      {
-        (u8*)range.chardata_for_range, 
-        range.num_chars*sizeof(PackRange)
-      });
-  }
-
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 Font::compile(CompileParams& params)
-{
-  INFO("compiling '", params.asset_path, "'\n");
-
-  using namespace fs;
-
-  mem::Allocator* allocator = params.allocator;
-
-  // Ensure the data directories exist.
-  str data_dir = Path::removeBasename(params.data_path);
-
-  if (!platform::makeDir(data_dir, true))
-    return ERROR("failed to make directory for data at '", 
-                 params.data_path, "'\n");
-
   
-  const u32 font_size = 22; // TODO(sushi) FIX HARDCODING
-
-  // Load the asset's data from disk.
-  auto file = File::from(params.asset_path, OpenFlag::Read);
-  if (isnil(file))
-    return ERROR("failed to open font asset file at '", params.asset_path, 
-                 "'\n");
-  defer { file.close(); };
-
-  u64 file_size = file.getInfo().byte_size;
-
-  io::Memory data;
-  if (!data.open())
-    return ERROR("failed to open buffer for reading file data\n");
-  defer { data.close(); };
-
-  u64 bytes_consumed = data.consume(&file, file_size);
-
-  if (bytes_consumed != file_size)
-    return ERROR("failed to read entire font asset file at '", 
-                 params.asset_path, "'\n");
-  
-  const unsigned char* raw = data.buffer;
-
-  // Initialize font info.
-  stbtt_fontinfo info = {};
-  if (!stbtt_InitFont(&info, raw, 0))
+  if (ranges)
   {
-    ERROR("stbtt_InitFont failed\n");
-    return nil;
-  }
-
-	//Codepoint Ranges to Load:
-	// ASCII              32 - 126  ~  94 chars
-	// ...just ascii for now.
-
-$$$
-
-local ranges = List
-{
-  {  94,   32 },
-}
-
-$$$
-
-$ local setupRanges = function()
-  auto* ranges = (stbtt_pack_range*)allocator->allocate(
-      sizeof(stbtt_pack_range)*$(ranges:len()));
-  mem::zero(ranges, sizeof(stbtt_pack_range)*$(ranges:len()));
-$ ranges:eachWithIndex(function(range,i)
-$ i = i - 1
-  ranges[$(i)].num_chars = $(range[1]);
-  ranges[$(i)].first_unicode_codepoint_in_range = $(range[2]);
-  ranges[$(i)].chardata_for_range = 
-    (stbtt_packedchar*)allocator->allocate(
-      ranges[$(i)].num_chars * sizeof(stbtt_packedchar));
-  ranges[$(i)].font_size = font_size; 
-$ end)
-$ end
-
-  @@setupRanges
-
-  // Determine the surface area of loadable codepoints.
-  f32 glyph_scale = stbtt_ScaleForPixelHeight(&info, font_size);
-  u32 glyph_count = 0;
-  s32 glyph_padding = 1;
-  s32 total_surface = 0;
-
-  // TODO(sushi) this could be done via lpp but it would result in 
-  //             a lot of code that might make debugging annoying.
-  for (s32 range = 0; range< $(ranges:len()); ++range)
-  {
-    for (u32 codepoint = ranges[range].first_unicode_codepoint_in_range;
-         codepoint < ranges[range].first_unicode_codepoint_in_range + 
-                     ranges[range].num_chars;
-         ++codepoint)
+    // Serialize the ranges array.
+    for (s32 range_idx = 0; range_idx < num_ranges; ++range_idx)
     {
-      int glyph_index_in_font = stbtt_FindGlyphIndex(&info, codepoint);
-      if (glyph_index_in_font == 0)
-        continue; // Skip any glyphs not found in the font.
+      PackRange& range = ranges[range_idx];
 
-      int x0, y0, x1, y1;
-      stbtt_GetGlyphBitmapSubpixel(
-        &info,
-        glyph_index_in_font,
-        glyph_scale, glyph_scale,
-        0, 0,
-        &x0, &y0, &x1, &y1);
-      
-      total_surface += 
-        ((x1 - x0) + glyph_padding) * ((y1 - y0) + glyph_padding);
+      out->write({(u8*)&range, offsetof(PackRange, chardata)});
+
+      // Store offset to this range's char data array from the beginning 
+      // of the data.
+      out->write(&char_data_offset);
+
+      char_data_offset += range.num_chars * sizeof(PackedChar);
+    }
+
+    // Serialize the char data arrays.
+    for (s32 range_idx = 0; range_idx < num_ranges; ++range_idx)
+    {
+      PackRange& range = ranges[range_idx];
+
+      out->write(
+        {
+          (u8*)range.chardata, 
+          range.num_chars*sizeof(PackRange)
+        });
     }
   }
 
-  // Determine texture size.
-
-  int surface_sqrt = (int)sqrt((f32)total_surface) + 1;
-  u32 tex_size_x = 
-    (surface_sqrt >= 4096 * 0.7f?
-      4096 :
-      (surface_sqrt >= 2048 * 0.7f?
-        2048 :
-        (surface_sqrt >= 1024 * 0.7f? 
-         1024 :
-         512)));
-  u32 tex_size_y = tex_size_x;
-
-  // assert(surface_sqrt <= 4096);
-
-  // TODO(sushi) use a linear allocator of some kind.
-  u8* pixels = (u8*)mem::stl_allocator.allocate(tex_size_x * tex_size_y);
-
-  stbtt_pack_context pc = {};
-  // TODO(sushi) error cleanly here.
-  assert(stbtt_PackBegin(
-    &pc, 
-    pixels, 
-    tex_size_x, tex_size_y, 
-    0,
-    glyph_padding,
-    0));
-
-  stbtt_PackSetSkipMissingCodepoints(&pc, true);
-
-  assert(stbtt_PackFontRanges(
-    &pc,
-    raw,
-    0,
-    ranges,
-    $(ranges:len())));
-
-  stbtt_PackEnd(&pc);
-
-  // Get extra font rendering info.
-  f32 ascent, descent, line_gap;
-  stbtt_GetScaledFontVMetrics(
-    raw, 
-    0,
-    font_size,
-    &ascent,
-    &descent,
-    &line_gap);
-
-  int x0, y0, x1, y1;
-  stbtt_GetFontBoundingBox(&info, &x0, &y0, &x1, &y1);
-
-  FontData fdata;
-
-  fdata.count = glyph_count;
-  fdata.size_x = tex_size_x;
-  fdata.size_y = tex_size_y;
-  fdata.ascent = ascent;
-  fdata.descent = descent;
-  fdata.line_gap = line_gap;
-  fdata.num_ranges = $(ranges:len());
-
-  // Translate from stbtt's ranges to ours.
-  PackRange fdata_ranges[$(ranges:len())] = {};
-  
-  for (s32 rangeIdx = 0; rangeIdx < $(ranges:len()); ++rangeIdx)
-  {
-    fdata_ranges[rangeIdx].font_size = ranges[rangeIdx].font_size;
-    fdata_ranges[rangeIdx].first_codepoint = 
-      ranges[rangeIdx].first_unicode_codepoint_in_range;
-    fdata_ranges[rangeIdx].num_chars = ranges[rangeIdx].num_chars;
-    fdata_ranges[rangeIdx].chardata_for_range = 
-      (PackedChar*)ranges[rangeIdx].chardata_for_range;
-  }
-
-  fdata.ranges = fdata_ranges;
-
-  auto data_file = 
-    File::from(params.data_path, 
-        OpenFlag::Write 
-      | OpenFlag::Truncate
-      | OpenFlag::Create);
-
-  if (isnil(data_file))
-    return ERROR(
-        "failed to open data file for writing at '", params.data_path, "'\n");
-  defer { data_file.close(); };
-
-  if (!fdata.serialize(&data_file))
-    return ERROR("failed to serialize font data to path '", 
-                 params.data_path, "'\n");
-
-  PathBuffer texture_data_path;
-  Texture::writeDataPath(&texture_data_path, params.name, *params.assetmgr);
-
-  // Compile the texture created by stbtt.
-  Texture::CompileParams tparams = 
-  {
-    .name = params.name,
-    .data_path = texture_data_path.asStr(),
-    .width = tex_size_x,
-    .height = tex_size_y,
-    .format = ImageFormat::BW,
-    .kind = ImageKind::TwoD,
-    .filter = ImageFilter::Nearest,
-    .address_mode = ImageAddressMode::ClampToWhite,
-    .allocator = params.allocator,
-    .assetmgr = params.assetmgr,
-  };
-
-  if (!Texture::compileFromMemory(pixels, tparams))
-    return ERROR("failed to compile font texture\n");
-
   return true;
 }
+
+

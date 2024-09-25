@@ -1,0 +1,32 @@
+/*
+ *  A library of fonts managed by the UI context.
+ */
+
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local ui = require "ui.UI"
+
+#include "iro/containers/avl.h"
+
+@@lpp.import "asset/Font.lh"
+
+/* ============================================================================
+ */
+struct FontLib
+{
+  struct Entry
+  {
+    str name;
+    u64 hash;
+    Font font;
+  };
+
+  typedef AVL<Entry, [](const Entry* x) { return x->hash; }> FontMap;
+
+  FontMap fonts;
+
+  b8 init();
+  void deinit();
+
+  Font* findOrLoadFont(str name);
+};

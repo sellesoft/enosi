@@ -180,10 +180,12 @@ struct Renderer
     drawcmds.push(cmd);
   }
 
-  b8   init(Window* window);
+  Engine* engine;
+
+  b8   init(Engine& engine);
   void deinit();
 
-  b8 update(Engine& engine);
+  b8 update();
 
   b8 compileShaders();
 

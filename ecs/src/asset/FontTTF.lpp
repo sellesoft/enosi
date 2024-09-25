@@ -1,0 +1,249 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local List = require "list"
+
+#include "iro/io/io.h"
+#include "iro/fs/file.h"
+#include "iro/platform.h"
+
+@@lpp.import "asset/Font.lh"
+@@lpp.import "asset/AssetMgr.lh"
+
+#define STB_TRUETYPE_IMPLEMENTATION
+#include "external/stb_truetype.h"
+
+static Logger logger = 
+  Logger::create("font.ttf"_str, Logger::Verbosity::Info);
+
+typedef io::StaticBuffer<512> PathBuffer;
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Font::compileTTF(CompileParams& params)
+{
+  if (!AssetMgr::checkNeedsCompiled(params.asset_path, params.data_path))
+    return true;
+
+  INFO("compiling '", params.data_path, "'\n");
+
+  using namespace fs;
+
+  mem::Allocator* allocator = params.allocator;
+
+  // Ensure the data directories exist.
+  str data_dir = Path::removeBasename(params.data_path);
+
+  if (!platform::makeDir(data_dir, true))
+    return ERROR("failed to make directory for data at '", 
+                 params.data_path, "'\n");
+
+  
+  const u32 font_size = 22; // TODO(sushi) FIX HARDCODING
+
+  // Load the asset's data from disk.
+  auto file = File::from(params.asset_path, OpenFlag::Read);
+  if (isnil(file))
+    return ERROR("failed to open font asset file at '", params.asset_path, 
+                 "'\n");
+  defer { file.close(); };
+
+  u64 file_size = file.getInfo().byte_size;
+
+  io::Memory data;
+  if (!data.open())
+    return ERROR("failed to open buffer for reading file data\n");
+  defer { data.close(); };
+
+  u64 bytes_consumed = data.consume(&file, file_size);
+
+  if (bytes_consumed != file_size)
+    return ERROR("failed to read entire font asset file at '", 
+                 params.asset_path, "'\n");
+  
+  const unsigned char* raw = data.buffer;
+
+  // Initialize font info.
+  stbtt_fontinfo info = {};
+  if (!stbtt_InitFont(&info, raw, 0))
+  {
+    ERROR("stbtt_InitFont failed\n");
+    return nil;
+  }
+
+	//Codepoint Ranges to Load:
+	// ASCII              32 - 126  ~  94 chars
+	// ...just ascii for now.
+
+$$$
+
+local ranges = List
+{
+  {  94,   32 },
+}
+
+$$$
+
+$ local setupRanges = function()
+  auto* ranges = (stbtt_pack_range*)allocator->allocate(
+      sizeof(stbtt_pack_range)*$(ranges:len()));
+  mem::zero(ranges, sizeof(stbtt_pack_range)*$(ranges:len()));
+$ ranges:eachWithIndex(function(range,i)
+$ i = i - 1
+  ranges[$(i)].num_chars = $(range[1]);
+  ranges[$(i)].first_unicode_codepoint_in_range = $(range[2]);
+  ranges[$(i)].chardata_for_range = 
+    (stbtt_packedchar*)allocator->allocate(
+      ranges[$(i)].num_chars * sizeof(stbtt_packedchar));
+  ranges[$(i)].font_size = font_size; 
+$ end)
+$ end
+
+  @@setupRanges
+
+  // Determine the surface area of loadable codepoints.
+  f32 glyph_scale = stbtt_ScaleForPixelHeight(&info, font_size);
+  u32 glyph_count = 0;
+  s32 glyph_padding = 1;
+  s32 total_surface = 0;
+
+  // TODO(sushi) this could be done via lpp but it would result in 
+  //             a lot of code that might make debugging annoying.
+  for (s32 range = 0; range< $(ranges:len()); ++range)
+  {
+    for (u32 codepoint = ranges[range].first_unicode_codepoint_in_range;
+         codepoint < ranges[range].first_unicode_codepoint_in_range + 
+                     ranges[range].num_chars;
+         ++codepoint)
+    {
+      int glyph_index_in_font = stbtt_FindGlyphIndex(&info, codepoint);
+      if (glyph_index_in_font == 0)
+        continue; // Skip any glyphs not found in the font.
+
+      int x0, y0, x1, y1;
+      stbtt_GetGlyphBitmapSubpixel(
+        &info,
+        glyph_index_in_font,
+        glyph_scale, glyph_scale,
+        0, 0,
+        &x0, &y0, &x1, &y1);
+      
+      total_surface += 
+        ((x1 - x0) + glyph_padding) * ((y1 - y0) + glyph_padding);
+    }
+  }
+
+  // Determine texture size.
+
+  int surface_sqrt = (int)sqrt((f32)total_surface) + 1;
+  u32 tex_size_x = 
+    (surface_sqrt >= 4096 * 0.7f?
+      4096 :
+      (surface_sqrt >= 2048 * 0.7f?
+        2048 :
+        (surface_sqrt >= 1024 * 0.7f? 
+         1024 :
+         512)));
+  u32 tex_size_y = tex_size_x;
+
+  // assert(surface_sqrt <= 4096);
+
+  // TODO(sushi) use a linear allocator of some kind.
+  u8* pixels = (u8*)mem::stl_allocator.allocate(tex_size_x * tex_size_y);
+
+  stbtt_pack_context pc = {};
+  // TODO(sushi) error cleanly here.
+  assert(stbtt_PackBegin(
+    &pc, 
+    pixels, 
+    tex_size_x, tex_size_y, 
+    0,
+    glyph_padding,
+    0));
+
+  stbtt_PackSetSkipMissingCodepoints(&pc, true);
+
+  assert(stbtt_PackFontRanges(
+    &pc,
+    raw,
+    0,
+    ranges,
+    $(ranges:len())));
+
+  stbtt_PackEnd(&pc);
+
+  // Get extra font rendering info.
+  f32 ascent, descent, line_gap;
+  stbtt_GetScaledFontVMetrics(
+    raw, 
+    0,
+    font_size,
+    &ascent,
+    &descent,
+    &line_gap);
+
+  int x0, y0, x1, y1;
+  stbtt_GetFontBoundingBox(&info, &x0, &y0, &x1, &y1);
+
+  FontData fdata;
+
+  fdata.count = glyph_count;
+  fdata.size_x = tex_size_x;
+  fdata.size_y = tex_size_y;
+  fdata.ascent = ascent;
+  fdata.descent = descent;
+  fdata.line_gap = line_gap;
+  fdata.num_ranges = $(ranges:len());
+
+  // Translate from stbtt's ranges to ours.
+  PackRange fdata_ranges[$(ranges:len())] = {};
+  
+  for (s32 rangeIdx = 0; rangeIdx < $(ranges:len()); ++rangeIdx)
+  {
+    fdata_ranges[rangeIdx].font_size = ranges[rangeIdx].font_size;
+    fdata_ranges[rangeIdx].first_codepoint = 
+      ranges[rangeIdx].first_unicode_codepoint_in_range;
+    fdata_ranges[rangeIdx].num_chars = ranges[rangeIdx].num_chars;
+    fdata_ranges[rangeIdx].chardata = 
+      (PackedChar*)ranges[rangeIdx].chardata_for_range;
+  }
+
+  fdata.ranges = fdata_ranges;
+
+  auto data_file = 
+    File::from(params.data_path, 
+        OpenFlag::Write 
+      | OpenFlag::Truncate
+      | OpenFlag::Create);
+
+  if (isnil(data_file))
+    return ERROR(
+        "failed to open data file for writing at '", params.data_path, "'\n");
+  defer { data_file.close(); };
+
+  if (!fdata.serialize(&data_file))
+    return ERROR("failed to serialize font data to path '", 
+                 params.data_path, "'\n");
+
+  PathBuffer texture_data_path;
+  Texture::writeDataPath(&texture_data_path, params.name, *params.assetmgr);
+
+  // Compile the texture created by stbtt.
+  Texture::CompileParams tparams = 
+  {
+    .name = params.name,
+    .data_path = texture_data_path.asStr(),
+    .width = tex_size_x,
+    .height = tex_size_y,
+    .format = ImageFormat::BW,
+    .kind = ImageKind::TwoD,
+    .filter = ImageFilter::Nearest,
+    .address_mode = ImageAddressMode::ClampToWhite,
+    .allocator = params.allocator,
+    .assetmgr = params.assetmgr,
+  };
+
+  if (!Texture::compileFromMemory(pixels, tparams))
+    return ERROR("failed to compile font texture\n");
+
+  return true;
+}

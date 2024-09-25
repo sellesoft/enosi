@@ -1,10 +1,13 @@
 $ local lpp = require "lpp"
 $ local reflect = require "reflection.Reflector"
 
-@lpp.import "graphics/Renderer.lh"
-@lpp.import "Engine.lh"
-@lpp.import "window/Window.lh"
-@lpp.import "asset/Texture.lh"
+@@lpp.import "graphics/Renderer.lh"
+
+@@lpp.import "Engine.lh"
+@@lpp.import "window/Window.lh"
+
+@@lpp.import "asset/AssetMgr.lh"
+@@lpp.import "asset/Texture.lh"
 
 #include "iro/logger.h"
 #include "iro/fs/file.h"
@@ -36,16 +39,20 @@ static void GLAPIENTRY glMessageCallback(
   {
     ERROR(message, "\n");
   }
+  else
+  {
+    INFO(message, "\n");
+  }
 }
 
 
 /* ----------------------------------------------------------------------------
  */
-b8 Renderer::init(Window* window)
+b8 Renderer::init(Engine& engine)
 {
   INFO("initializing\n");
-  
-  if (!rendererPlatformInit(window))
+
+  if (!rendererPlatformInit(&engine.window))
     return false;
     
   int opengl_version = gladLoaderLoadGL();
@@ -70,6 +77,8 @@ b8 Renderer::init(Window* window)
   if (!drawcmds.init(16))
     return ERROR("failed to initialize draw cmd array\n");
   
+  this->engine = &engine;
+
   INFO("done!\n");
   
   return true;
@@ -77,14 +86,12 @@ b8 Renderer::init(Window* window)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Renderer::update(Engine& engine)
+b8 Renderer::update()
 {
   glClearColor(0.f, 0.f, 0.f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT);
 
   glUseProgram(shader_program);
-
-  glUniform1i(glGetUniformLocation(shader_program, "sampler"), 0);
 
   Buffer* last_buff = nullptr;
   for (DrawCmd& cmd : drawcmds)
@@ -113,7 +120,6 @@ b8 Renderer::update(Engine& engine)
       break;
 
     case DrawCmd::Kind::BindTexture:
-      glActiveTexture(GL_TEXTURE0);
       glBindTexture(GL_TEXTURE_2D, cmd.bind_texture->gfx_handle);
       break;
     
@@ -151,7 +157,7 @@ b8 Renderer::update(Engine& engine)
 
   drawcmds.clear();
 
-  rendererPlatformSwapBuffers(&engine.window);
+  rendererPlatformSwapBuffers(&engine->window);
 
   frame += 1;
 
@@ -257,6 +263,14 @@ b8 Renderer::loadTexture(Texture& texture)
 
   TextureData* data = texture.data;
 
+  if (data->width % 4 != 0)
+  {
+    // TODO(sushi) handle alignments of 2 as well.
+    auto* asset = engine->assetmgr.getAsset(texture.handle);
+    WARN("provided texture '", asset->path, "' has a width that is not "
+         "aligned to 4 and will likely be loaded improperly\n");
+  }
+
   struct GLFormat { GLint internal; GLint format; };
 
   GLFormat formats[] = 
@@ -287,7 +301,7 @@ b8 Renderer::loadTexture(Texture& texture)
     GL_CLAMP_TO_EDGE,
   };
 
-  f32 border_colors[][4] = 
+  f32 border_colors[6][4] = 
   {
     {},{},{},
     { 1.f, 1.f, 1.f, 1.f },

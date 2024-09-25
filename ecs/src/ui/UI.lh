@@ -9,6 +9,7 @@ $ local ui = require "ui.UI"
 
 @@lpp.import "ui/Item.lh"
 @@lpp.import "ui/DrawCmd.lh"
+@@lpp.import "ui/FontLib.lh"
 
 #include "iro/containers/list.h"
 #include "iro/containers/pool.h"
@@ -27,6 +28,8 @@ struct Engine;
 namespace ui
 {
 
+/* ============================================================================
+ */
 struct Context
 {
   // Root item of anything in the item tree.
@@ -45,6 +48,8 @@ struct Context
   gfx::Buffer* buffer;
   u64 vertex_next;
   u64 index_next;
+
+  FontLib font_lib;
 
   Engine* eng;
 

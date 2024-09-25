@@ -33,7 +33,7 @@ b8 Engine::init()
   if (!window.init("ecs"_str))
     return ERROR("failed to initialize window\n");
 
-  if (!renderer.init(&window))
+  if (!renderer.init(*this))
     return ERROR("failed to initialize renderer\n");
 
   if (!assetmgr.init(4096, &mem::stl_allocator))
@@ -70,6 +70,24 @@ b8 Engine::init()
   //   }
   // }
 
+  CodepointRange ascii =
+  {
+    .first_codepoint = 32,
+    .num_codepoints = 94,
+  };
+
+  Font::CompileParams params =
+  {
+    .name = "gohufont11"_str,
+    .asset_path = "assets/fonts/gohufont11.bdf"_str,
+    .data_path = "data/fonts/gohufont11.font"_str,
+    .ranges = CodepointRanges::from(&ascii, 1),
+    .allocator = &mem::stl_allocator,
+    .assetmgr = &assetmgr,
+  };
+
+  Font::compileBDF(params);
+
   Font font;
 
   if (!Font::load(
@@ -85,18 +103,14 @@ b8 Engine::init()
 
   $ local item = ui.createItemContext("Item", "test")
 
-  @item.style.set.size({30, 30});
+  @item.style.set.size({
+    f32(gohu_font.texture.data->width), f32(gohu_font.texture.data->height)});
   @item.style.set.background_color({255, 0, 0, 255});
   @item.style.set.padding({5, 5, 5, 5});
 
-  ui::Item* test2 = ui.make<ui::Item>();
-
-  $ local test2 = ui.createItemContext("Item", "test2")
-
-  @test2.style.set.size({20, 20});
-  @test2.style.set.background_color({0, 255, 0, 255});
-
   ui.end<ui::Item>();
+
+  INFO("done!\n");
 
   return true;
 }
@@ -108,7 +122,7 @@ b8 Engine::update()
   if (!window.update(*this))
     return ERROR("failed to update window\n");
 
-  if (!renderer.update(*this))
+  if (!renderer.update())
     return ERROR("failed to update renderer\n");
 
   if (!input.update(*this))
@@ -123,7 +137,6 @@ b8 Engine::update()
   {
     @item.style.set.pos(
       { input.mouse.window.x, input.mouse.window.y });
-
   }
 
   return true;

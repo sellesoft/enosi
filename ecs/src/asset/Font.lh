@@ -8,6 +8,7 @@ $ local reflect = require "reflection.Reflector"
 #include "iro/common.h"
 #include "iro/unicode.h"
 #include "iro/traits/nil.h"
+#include "iro/containers/slice.h"
 #include "math/vec.h"
 
 using namespace iro;
@@ -45,7 +46,25 @@ struct PackRange
   f32 font_size;
   s32 first_codepoint;
   s32 num_chars;
-  PackedChar* chardata_for_range;
+  PackedChar* chardata;
+};
+
+/* ============================================================================
+ */
+struct CodepointRange
+{
+  s32 first_codepoint;
+  s32 num_codepoints;
+};
+
+typedef Slice<CodepointRange> CodepointRanges;
+
+/* ============================================================================
+ */
+enum class FontKind
+{
+  BDF,
+  TTF,
 };
 
 /* ============================================================================
@@ -53,7 +72,10 @@ struct PackRange
  */
 struct FontData
 {
+  FontKind kind;
+
   u32 count;
+  f32 height;
   s32 size_x;
   s32 size_y;
   f32 ascent;
@@ -78,11 +100,34 @@ struct Font
   Texture texture;
 
   FontData* data;
+  
+  // It's recommended to use this to find the proper range for a given
+  // codepoint and then passing it to getPackedChar() when you know what
+  // ranges you'll be working with.
+  // Returns nullptr if no range exists in this font for the given codepoint.
+  PackRange* getRangeOfCodepoint(u32 codepoint);
 
-  static Font loadFromPath(
-    str path, 
-    f32 font_size,
-    mem::Allocator* allocator,
+  // Returns false if the given codepoint doesn't exist in any range 
+  // stored by this font.
+  b8 getPackedChar(PackedChar* out, u32 codepoint);
+
+  // This ASSUMES that the given codepoint exists in the given range,
+  // BE CAREFUL!
+  // TODO(sushi) a safe alternative to this when we get to user input
+  //             in text boxes and such. Especially since ECS is meant to 
+  //             be played online, this could potentially be used to send
+  //             arbitrary data via, say, a chat system or something.
+  void getPackedChar(PackedChar* out, PackRange* range, u32 codepoint);
+
+  static s64 writeAssetPath(
+    io::IO* out, 
+    str name, 
+    str ext, 
+    AssetMgr& assetmgr);
+
+  static s64 writeDataPath(
+    io::IO* out, 
+    str name, 
     AssetMgr& assetmgr);
 
   static b8 load(
@@ -96,11 +141,13 @@ struct Font
     str name;
     str asset_path;
     str data_path;
+    CodepointRanges ranges;
     mem::Allocator* allocator;
     AssetMgr* assetmgr;
   };
 
-  static b8 compile(CompileParams& params);
+  static b8 compileTTF(CompileParams& params);
+  static b8 compileBDF(CompileParams& params);
 };
 
 DefineNilValue(Font, {nil}, { return notnil(x.handle); });

@@ -222,18 +222,33 @@ struct vec4
 {
   union
   {
-    f32 arr[4];
+    T arr[4];
     struct
     {
-      vec2<T> xy;
-      struct { f32 x, y; };
-    };
-    struct
-    {
-      vec2<T> wz;
-      struct { f32 z, w; };
+      union
+      {
+        vec2<T> xy;
+        struct { T x, y; };
+      };
+      union
+      {
+        vec2<T> zw;
+        struct { T z, w; };
+      };
     };
   };
+
+  vec4() { x = 0; y = 0; z = 0; w = 0; }
+  vec4(T x, T y, T z, T w) 
+  { 
+    this->x = x; 
+    this->y = y; 
+    this->z = z;
+    this->w = w;
+  }
+  
+  template<typename X>
+  vec4(const vec4<X>& in) { x = in.x; y = in.y; z = in.z; w = in.w; }
 
   /* --------------------------------------------------------------------------
    */
@@ -339,7 +354,7 @@ struct vec4
 
   /* --------------------------------------------------------------------------
    */
-  inline f32 dot(const vec4& rhs) const
+  inline T dot(const vec4& rhs) const
   {
     return 
       x * rhs.x + 
@@ -351,5 +366,16 @@ struct vec4
 
 typedef vec4<s32> vec4i;
 typedef vec4<f32> vec4f;
+
+namespace iro::io
+{
+
+template<typename T>
+s64 format(io::IO* io, vec4<T>& v)
+{
+  return io::formatv(io, '(', v.x, ',', v.y, ',', v.z, ',', v.w, ')');
+}
+
+}
 
 #endif

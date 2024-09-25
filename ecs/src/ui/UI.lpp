@@ -69,6 +69,8 @@ b8 Context::init(Engine& engine)
     return ERROR("failed to init vertex sorted free drawcmds array\n");
   if (!free_drawcmds_index_sorted.init())
     return ERROR("failed to init index sorted free drawcmds array\n");
+  if (!font_lib.init())
+    return ERROR("failed to init font library\n");
   
   buffer = renderer.createBuffer();
   if (!buffer)
