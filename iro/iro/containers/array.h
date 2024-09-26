@@ -9,6 +9,8 @@
 #include "../memory/memory.h"
 #include "../memory/allocator.h"
 
+#include "ArrayFuncs.h"
+
 #include "../traits/nil.h"
 #include "../traits/move.h"
 #include "../traits/container.h"
@@ -104,51 +106,65 @@ struct Array
   {
     growIfNeeded(1);
 
-    len() += 1;
-    return new (arr + len() - 1) T; 
+    return array::push(arr, &len());
+
+    // len() += 1;
+    // return new (arr + len() - 1) T; 
   }
 
   void push(const T& x)
   {
     growIfNeeded(1);
 
-    arr[len()] = x;
-    len() += 1;
+    array::push(arr, &len(), x);
+
+    // arr[len()] = x;
+    // len() += 1;
   }
 
   /* --------------------------------------------------------------------------
    */ 
   void pop()
   {
-    len() -= 1;
+    assert(len() != 0);
+    array::pop(arr, &len());
+
+    // len() -= 1;
   }
 
   /* --------------------------------------------------------------------------
    */ 
   void insert(s32 idx, const T& x)
   {
+    assert(idx >= 0 && idx <= len());
     growIfNeeded(1);
 
-    if (!len()) 
-      push(x);
-    else
-    {
-      mem::move(arr + idx + 1, arr + idx, sizeof(T) * (len() - idx));
-      len() += 1;
-      arr[idx] = x;
-    }
+    array::insert(arr, &len(), idx, x);
+
+    // if (!len()) 
+    //   push(x);
+    // else
+    // {
+    //   mem::move(arr + idx + 1, arr + idx, sizeof(T) * (len() - idx));
+    //   len() += 1;
+    //   arr[idx] = x;
+    // }
   }
 
   T* insert(s32 idx)
   {
     assert(idx >= 0 && idx <= len());
-    if (idx == len())
-      return push();
-
     growIfNeeded(1);
-    mem::move(arr + idx + 1, arr + idx, sizeof(T) * (len() - idx));
-    len() += 1;
-    return new (arr + idx) T;
+
+    return array::insert(arr, &len(), idx);
+
+    // if (idx == len())
+    //   return push();
+
+    // growIfNeeded(1);
+    // mem::move(arr + idx + 1, arr + idx, sizeof(T) * (len() - idx));
+    // len() += 1;
+    // return new (arr + idx) T;
   }
 
   /* --------------------------------------------------------------------------
@@ -161,17 +177,20 @@ struct Array
   void remove(s32 idx)
   {
     assert(idx >= 0 && idx < len());
-    mem::move(arr + idx + 1, arr + idx, sizeof(T) * (len() - idx));
-    len() -= 1;
+    array::remove(arr, &len(), idx);
+    // mem::move(arr + idx + 1, arr + idx, sizeof(T) * (len() - idx));
+    // len() -= 1;
   }
 
   /* --------------------------------------------------------------------------
    */ 
   void clear()
   {
-    for (s32 i = 0; i < len(); i++)
-      (arr + i)->~T();
-    len() = 0;
+    array::clear(arr, &len());
+
+    // for (s32 i = 0; i < len(); i++)
+    //   (arr + i)->~T();
+    // len() = 0;
   }
 
   /* --------------------------------------------------------------------------

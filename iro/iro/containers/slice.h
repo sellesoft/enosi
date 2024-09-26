@@ -18,6 +18,8 @@ struct Slice
   T*  ptr = nullptr;
   u64 len = 0;
 
+  static Slice<T> from(T* ptr, u64 len) { return { ptr, len }; }
+
   static Slice<T> invalid() { return {nullptr, 0}; }
   b8 isValid() { return ptr != nullptr; }
 

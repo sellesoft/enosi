@@ -287,6 +287,13 @@ b8 isRunningUnderDebugger();
  */
 void debugBreak();
 
+/* ----------------------------------------------------------------------------
+ *  TODO(sushi) put these somewhere better later.
+ */
+ u16 byteSwap(u16 x);
+ u32 byteSwap(u32 x);
+ u64 byteSwap(u64 x);
+
 } // namespace iro::platform
 
 #endif

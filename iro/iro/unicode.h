@@ -117,7 +117,7 @@ struct str
     return {bytes + start, u64(end - start)};  
   }
 
-  b8 operator ==(str s);
+  bool operator ==(str s);
 
   u8* begin() { return bytes; }
   u8* end()   { return bytes + len; }
@@ -128,6 +128,7 @@ struct str
   u64 countCharacters();
 
   b8 startsWith(str s);
+  b8 endsWith(str s);
 
   struct pos
   {

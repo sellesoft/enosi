@@ -617,6 +617,13 @@ b8 processSpawn(
     if (pid == -1)
       return reportErrno("failed to fork process: ", explain_fork());
 
+    ERROR("started process ", file, ":", pid, "with args:\n");
+
+    for (char* c : argsc)
+    {
+      ERROR(c, "\n");
+    }
+
     // close uneeded pipes
     for (s32 i = 0; i < 3; i++)
     {
@@ -882,5 +889,11 @@ void debugBreak()
 {
   raise(SIGTRAP);
 }
+
+/* ----------------------------------------------------------------------------
+ */
+ u16 byteSwap(u16 x) { return __builtin_bswap16(x); }
+ u32 byteSwap(u32 x) { return __builtin_bswap32(x); }
+ u64 byteSwap(u64 x) { return __builtin_bswap64(x); }
 
 }

@@ -235,7 +235,7 @@ Codepoint str::advance(s32 n)
 
 /* ------------------------------------------------------------------------------------------------
  */
-b8 str::operator==(str s)
+bool str::operator==(str s)
 {
   if (len != s.len)
     return false;
@@ -303,6 +303,20 @@ b8 str::startsWith(str s)
   if (s.len > len)
     return false;
   for (s32 i = 0; i < s.len; i++)
+  {
+    if (bytes[i] != s.bytes[i])
+      return false;
+  }
+  return true;
+}
+
+/* ------------------------------------------------------------------------------------------------ 
+ */
+b8 str::endsWith(str s)
+{
+  if (s.len > len)
+    return false;
+  for (s32 i = len-1; i >= 0; ++i)
   {
     if (bytes[i] != s.bytes[i])
       return false;
