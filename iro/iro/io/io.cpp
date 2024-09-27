@@ -28,7 +28,7 @@ void Memory::growIfNeeded(s64 wanted_space)
   while (space - len < wanted_space)
     space *= 2;
 
-  buffer = (u8*)allocator->reallocate(buffer, space);
+  ptr = (u8*)allocator->reallocate(ptr, space);
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -45,10 +45,10 @@ b8 Memory::open(s32 initial_space, mem::Allocator* allocator)
 
   space = initial_space + 1;
   pos = len = 0;
-  buffer = (u8*)allocator->allocate(space);
-  buffer[initial_space] = 0;
+  ptr = (u8*)allocator->allocate(space);
+  ptr[initial_space] = 0;
 
-  if (buffer != nullptr)
+  if (ptr != nullptr)
   {
     flags.set(Flag::Open);
     return true;
@@ -63,8 +63,8 @@ void Memory::close()
   if (!isOpen())
     return;
 
-  allocator->free(buffer);
-  buffer = nullptr;
+  allocator->free(ptr);
+  ptr = nullptr;
   len = space = 0;
   pos = 0;
 
@@ -79,7 +79,7 @@ Bytes Memory::reserve(s32 wanted_space)
 {
   growIfNeeded(wanted_space+1);
   
-  return {buffer + len, u64(wanted_space)};
+  return {ptr + len, u64(wanted_space)};
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -88,7 +88,7 @@ void Memory::commit(s32 committed_space)
 {
   assert(len + committed_space <= space);
   len += committed_space;
-  buffer[len] = 0;
+  ptr[len] = 0;
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -97,10 +97,10 @@ s64 Memory::write(Bytes slice)
 {
   growIfNeeded(slice.len+1);
 
-  mem::copy(buffer + len, slice.ptr, slice.len);
+  mem::copy(ptr + len, slice.ptr, slice.len);
   len += slice.len;
 
-  buffer[len] = 0;
+  ptr[len] = 0;
 
   return slice.len;
 }
@@ -115,7 +115,7 @@ s64 Memory::read(Bytes outbuffer)
   s64 bytes_remaining = len - pos;
   s64 bytes_to_read = 
     (bytes_remaining > outbuffer.len ? outbuffer.len : bytes_remaining);
-  mem::copy(outbuffer.ptr, buffer + pos, bytes_to_read);
+  mem::copy(outbuffer.ptr, ptr + pos, bytes_to_read);
   pos += bytes_to_read;
   return bytes_to_read;
 }
@@ -128,7 +128,7 @@ s64 Memory::readFrom(s64 pos, Bytes slice)
 
   s64 bytes_remaining = len - pos;
   s64 bytes_to_read = (bytes_remaining > slice.len ? slice.len : bytes_remaining);
-  mem::copy(slice.ptr, buffer + pos, bytes_to_read);
+  mem::copy(slice.ptr, ptr + pos, bytes_to_read);
   return bytes_to_read;
 }
 

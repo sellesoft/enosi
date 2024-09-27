@@ -79,7 +79,7 @@ struct Lexer
 
   Token nextToken();
 
-  str getRaw(Token t) { return { cache.buffer + t.loc, u64(t.len) }; }
+  str getRaw(Token t) { return { cache.ptr + t.loc, u64(t.len) }; }
 
 private:
 

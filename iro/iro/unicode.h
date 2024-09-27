@@ -78,10 +78,10 @@ inline u64 stringHash(const struct str* x);
  */
 struct str
 {
-  u8* bytes = nullptr;
+  u8* ptr = nullptr;
   u64 len = 0;
 
-  operator Bytes() { return {bytes, len}; }
+  operator Bytes() { return {ptr, len}; }
 
   // where 'end' is a pointer to the byte AFTER the last of the range desired
   static inline str from(u8* start, u8* end) 
@@ -98,7 +98,7 @@ struct str
   // This may return invalid codepoints if this str is not valid utf8!
   Codepoint advance(s32 n = 1);
 
-  void increment(s32 n) { n = (n > len? len : n); bytes += n; len -= n; }
+  void increment(s32 n) { n = (n > len? len : n); ptr += n; len -= n; }
 
   // If the provided buffer is large enough, copy this 
   // str into it followed by a null terminator and return true.
@@ -108,19 +108,19 @@ struct str
   str sub(s32 start) 
   { 
     assert(start >= 0 && start < len); 
-    return {bytes + start, len - start}; 
+    return {ptr + start, len - start}; 
   }
   
   str sub(s32 start, s32 end) 
   { 
     assert(start >= 0 && start <= end && end <= len); 
-    return {bytes + start, u64(end - start)};  
+    return {ptr + start, u64(end - start)};  
   }
 
   bool operator ==(str s);
 
-  u8* begin() { return bytes; }
-  u8* end()   { return bytes + len; }
+  u8* begin() { return ptr; }
+  u8* end()   { return ptr + len; }
 
   u8& last() { return *(end()-1); }
 
@@ -181,7 +181,7 @@ struct str
   {
     LineAndColumn result = {};
     str me = *this;
-    while (not me.isEmpty() && me.bytes - bytes < offset)
+    while (not me.isEmpty() && me.ptr - ptr < offset)
     {
       Codepoint c = me.advance();
       if (c.codepoint == '\n')
@@ -200,9 +200,9 @@ struct str
   str allocateCopy(mem::Allocator* allocator = &mem::stl_allocator)
   {
     str out;
-    out.bytes = (u8*)allocator->allocate(len);
+    out.ptr = (u8*)allocator->allocate(len);
     out.len = len;
-    mem::copy(out.bytes, bytes, len);
+    mem::copy(out.ptr, ptr, len);
     return out;
   }
 };
@@ -212,7 +212,7 @@ inline u64 stringHash(const str* x)
   u64 seed = 14695981039;
   for (s32 i = 0; i < x->len; i++)
   {
-    seed ^= (u8)x->bytes[i];
+    seed ^= (u8)x->ptr[i];
     seed *= 1099511628211; //64bit FNV_prime
   }
   return seed;
@@ -233,7 +233,7 @@ static str operator ""_str (const char* s, size_t len)
 
 }
 
-DefineNilValue(iro::utf8::str, {nullptr}, { return x.bytes == nullptr; });
+DefineNilValue(iro::utf8::str, {nullptr}, { return x.ptr == nullptr; });
 DefineNilValue(iro::utf8::Codepoint, {(u32)-1}, { return x.codepoint == (u32)-1; });
 
 #endif // _iro_unicode_h

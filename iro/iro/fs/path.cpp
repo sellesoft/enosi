@@ -97,7 +97,7 @@ str Path::basename(str path)
 
   if (path.len == 1)
   {
-    if (path.bytes[0] == '/')
+    if (path.ptr[0] == '/')
       return path;
     return ""_str;
   }
@@ -201,10 +201,10 @@ b8 Path::matches(str name, str pattern)
   {
     if (pattern_pos < pattern_len)
     {
-      switch (pattern.bytes[pattern_pos])
+      switch (pattern.ptr[pattern_pos])
       {
       case '*':
-        if (nodot && name.bytes[name_pos] == '.')
+        if (nodot && name.ptr[name_pos] == '.')
           break;
         name_backup = name_pos;
         pattern_pos += 1;
@@ -212,9 +212,9 @@ b8 Path::matches(str name, str pattern)
         continue;
 
       case '?':
-        if (nodot && name.bytes[name_pos] == '.')
+        if (nodot && name.ptr[name_pos] == '.')
           break;
-        if (name.bytes[name_pos] == '/')
+        if (name.ptr[name_pos] == '/')
           break;
         name_pos += 1;
         pattern_pos += 1;
@@ -226,18 +226,18 @@ b8 Path::matches(str name, str pattern)
 
       default: 
         {
-          if (pattern.bytes[pattern_pos] == '/' && name.bytes[name_pos] != '/')
+          if (pattern.ptr[pattern_pos] == '/' && name.ptr[name_pos] != '/')
             break;
 
-          nodot = pattern.bytes[pattern_pos] == '/';
+          nodot = pattern.ptr[pattern_pos] == '/';
 
           // decode at positions
           utf8::Codepoint pattern_codepoint = 
             utf8::decodeCharacter(
-              pattern.bytes + pattern_pos, pattern.len - pattern_pos);
+              pattern.ptr + pattern_pos, pattern.len - pattern_pos);
 
           utf8::Codepoint name_codepoint = 
-            utf8::decodeCharacter(name.bytes + name_pos, name.len - name_pos);
+            utf8::decodeCharacter(name.ptr + name_pos, name.len - name_pos);
 
           if (pattern_codepoint != name_codepoint)
             break;
@@ -249,7 +249,8 @@ b8 Path::matches(str name, str pattern)
       }
     }
 
-    if (pattern_backup == -1 || (name_backup != -1 && name.bytes[name_backup] == '/'))
+    if (pattern_backup == -1 || 
+       (name_backup != -1 && name.ptr[name_backup] == '/'))
       return false;
     // star loop: backtrack to the last * but dont jump over /
     name_backup += 1;
@@ -257,7 +258,7 @@ b8 Path::matches(str name, str pattern)
     pattern_pos = pattern_backup;
   }
 
-  while (pattern_pos < pattern_len && pattern.bytes[pattern_pos] == '*')
+  while (pattern_pos < pattern_len && pattern.ptr[pattern_pos] == '*')
     pattern_pos += 1;
 
   return pattern_pos >= pattern_len;

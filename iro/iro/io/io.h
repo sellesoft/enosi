@@ -96,7 +96,7 @@ protected:
  */
 struct Memory : public IO
 {
-  u8* buffer = nullptr;
+  u8* ptr = nullptr;
   u32 len = 0;
   u32 space = 0;
 
@@ -128,12 +128,18 @@ struct Memory : public IO
   // Commits space reserved by reserve().
   void commit(s32 space);
 
-  str asStr() { return {buffer, len}; }
+  str asStr() { return {ptr, len}; }
 
   s64 write(Bytes slice) override;
   s64 read(Bytes slice) override;
 
   s64 readFrom(s64 pos, Bytes slice) override;
+
+  void set(str s)
+  {
+    clear();
+    write(s);
+  }
 
   // Reads from the given io until it returns no more bytes.
   s64 consume(io::IO* io, u32 chunk_size);
@@ -151,7 +157,7 @@ struct Memory : public IO
   Rollback createRollback();
   void     commitRollback(Rollback rollback);
 
-  u8& operator[](u32 x) { assert(x <= len); return buffer[x]; }
+  u8& operator[](u32 x) { assert(x <= len); return ptr[x]; }
 
 private: 
   
@@ -239,7 +245,7 @@ struct StringView : public IO
     s64 bytes_remaining = s.len - pos;
     s64 bytes_to_read = 
       (bytes_remaining > slice.len ? slice.len : bytes_remaining);
-    mem::copy(slice.ptr, s.bytes + pos, bytes_to_read);
+    mem::copy(slice.ptr, s.ptr + pos, bytes_to_read);
     pos += bytes_to_read;
     return bytes_to_read;
   }
@@ -251,6 +257,6 @@ struct StringView : public IO
 
 DefineMove(iro::io::Memory, 
     { iro::mem::copy(&to, &from, sizeof(iro::io::Memory)); });
-DefineNilValue(iro::io::Memory, {}, { return x.buffer == nullptr; });
+DefineNilValue(iro::io::Memory, {}, { return x.ptr == nullptr; });
 
 #endif // _iro_io_h

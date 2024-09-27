@@ -91,7 +91,7 @@ struct Path
   //             directory at this path
   Path& makeDir() 
   { 
-    if (buffer.len != 0 && buffer.buffer[buffer.len-1] != '/') 
+    if (buffer.len != 0 && buffer.ptr[buffer.len-1] != '/') 
       append('/'); 
     return *this; 
   }

@@ -205,7 +205,7 @@ Codepoint decodeCharacter(u8* s, s32 slen)
 str str::fromCStr(const char* s)
 {
   str out;
-  out.bytes = (u8*)s;
+  out.ptr = (u8*)s;
   out.len = 0;
   while (s[0])
   {
@@ -223,10 +223,10 @@ Codepoint str::advance(s32 n)
 
   for (s32 i = 0; i < n; i++)
   {
-    c = decodeCharacter(bytes, len);
+    c = decodeCharacter(ptr, len);
     if (isnil(c))
       return nil;
-    bytes += c.advance;
+    ptr += c.advance;
     len -= c.advance;
   }
 
@@ -242,7 +242,7 @@ bool str::operator==(str s)
   
   for (s32 i = 0; i < len; i++)
   {
-    if (bytes[i] != s.bytes[i])
+    if (ptr[i] != s.ptr[i])
       return false;
   }
 
@@ -256,7 +256,7 @@ b8 str::nullTerminate(u8* buffer, s32 buffer_len)
   if (buffer_len <= len)
     return false;
 
-  mem::copy(buffer, bytes, len);
+  mem::copy(buffer, ptr, len);
   buffer[len] = 0;
   return true;
 }
@@ -267,8 +267,13 @@ u64 str::countCharacters()
 {
   str scan = *this;
   u64 accum = 0;
-  while (notnil(scan.advance()))
+  for (;;)
+  {
+    if (scan.len == 0)
+      break;
+    scan.advance();
     accum += 1;
+  }
   return accum;
 }
 
@@ -278,7 +283,7 @@ str::pos str::findFirst(u8 c)
 {
   for (s32 i = 0; i < len; i++)
   {
-    if (bytes[i] == c)
+    if (ptr[i] == c)
       return pos::found(i);
   }
   return pos::notFound();
@@ -290,7 +295,7 @@ str::pos str::findLast(u8 c)
 {
   for (s32 i = len-1; i >= 0; i--)
   {
-    if (bytes[i] == c)
+    if (ptr[i] == c)
       return pos::found(i);
   }
   return pos::notFound();
@@ -304,7 +309,7 @@ b8 str::startsWith(str s)
     return false;
   for (s32 i = 0; i < s.len; i++)
   {
-    if (bytes[i] != s.bytes[i])
+    if (ptr[i] != s.ptr[i])
       return false;
   }
   return true;
@@ -318,7 +323,7 @@ b8 str::endsWith(str s)
     return false;
   for (s32 i = len-1; i >= 0; ++i)
   {
-    if (bytes[i] != s.bytes[i])
+    if (ptr[i] != s.ptr[i])
       return false;
   }
   return true;

@@ -167,6 +167,16 @@ struct SmallArray
    */
   T* begin() { return arr; }
   T* end() { return arr + len; }
+
+  T* first() { return arr; }
+  T* last() { return arr + len; }
+
+  /* --------------------------------------------------------------------------
+   */ 
+  T& operator[](s32 idx)
+  {
+    return arr[idx];
+  }
 };
 
 }

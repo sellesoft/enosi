@@ -124,7 +124,7 @@ s64 format(IO* io, const SanitizeControlCharacters& x)
       flush();
 
     for (u64 i = 0; i < s.len; ++i)
-      *buffer.push() = s.bytes[i];
+      *buffer.push() = s.ptr[i];
     
     bytes_written += s.len;
   };

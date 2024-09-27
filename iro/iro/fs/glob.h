@@ -375,7 +375,7 @@ void Globber::run(GlobberCallback auto callback)
             continue;
           }
 
-          if (s.bytes[0] == '.')
+          if (s.ptr[0] == '.')
           {
             INFO("skipping entry ", s, " because it is a dotfile\n");
             continue;

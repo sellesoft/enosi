@@ -169,15 +169,15 @@ b8 Parser::value()
 
         for (s32 i = 0; i < s.len; ++i)
         {
-          if (s.bytes[i] != '\\')
+          if (s.ptr[i] != '\\')
           {
-            buffer.write({s.bytes+i, 1});
+            buffer.write({s.ptr+i, 1});
             continue;
           }
 
           i += 1;
           
-          switch (s.bytes[i])
+          switch (s.ptr[i])
           {
           case '"':  io::format(&buffer, '"');  break;
           case '/':  io::format(&buffer, '/');  break;

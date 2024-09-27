@@ -160,7 +160,7 @@ b8 LuaState::loadbuffer(Bytes buffer, const char* name)
       return nullptr;
     *size = buffer->len;
     buffer->len = 0;
-    return (char*)buffer->bytes;
+    return (char*)buffer->ptr;
   };
 
   if (lua_load(L, loader, &buffer, name))
@@ -264,7 +264,7 @@ void* LuaState::tolightuserdata(s32 idx)
 void LuaState::pushstring(str s)
 {
   // TODO(sushi) handle non-temrinated input
-  lua_pushlstring(L, (char*)s.bytes, s.len);
+  lua_pushlstring(L, (char*)s.ptr, s.len);
 }
 
 /* ----------------------------------------------------------------------------

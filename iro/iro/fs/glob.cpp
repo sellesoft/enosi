@@ -20,7 +20,7 @@ Globber Globber::create(str pattern, mem::Allocator* allocator)
  */
 void Globber::destroy()
 {
-  allocator->free(pattern.bytes);
+  allocator->free(pattern.ptr);
   part_pool.deinit();
   part_list.deinit();
 }
@@ -65,8 +65,8 @@ void Globber::compilePattern()
         if (last_part->kind == ConstantEntry ||
           last_part->kind == ConstantDirectory)
         {
-          last_part->raw.len += last_part->raw.bytes - start;
-          last_part->raw.bytes = start;
+          last_part->raw.len += last_part->raw.ptr - start;
+          last_part->raw.ptr = start;
           return;
         }
         else

@@ -65,7 +65,7 @@ b8 Lexer::decodeCurrent()
 {
   current_codepoint = 
     utf8::decodeCharacter(
-      cache.buffer + current_offset, 
+      cache.ptr + current_offset, 
       cache.len - current_offset);
 
   return notnil(current_codepoint);
@@ -281,7 +281,7 @@ Token Lexer::nextToken()
         while (isalpha(current()))
           advance();
 
-        str raw = {cache.buffer + curt.loc, current_offset - curt.loc };
+        str raw = {cache.ptr + curt.loc, current_offset - curt.loc };
         switch (raw.hash())
         {
         case "true"_hashed: 
