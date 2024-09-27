@@ -146,7 +146,7 @@ int testContext()
   for (;;)
   {
     buffer.reserve(32);
-    u64 bytes_read = testfile.read({buffer.buffer + buffer.len, 32});
+    u64 bytes_read = testfile.read({buffer.ptr + buffer.len, 32});
     if (!bytes_read)
       break;
     buffer.commit(bytes_read);
@@ -224,7 +224,7 @@ int testLookup()
   
   str name = getTypeName(ctx, type);
 
-  printf("%s\n", name.bytes);
+  printf("%s\n", name.ptr);
   
   return 0;
 }
@@ -306,9 +306,9 @@ int testParseStmt()
       return false;
     }
 
-    str s = {test.bytes+offset};
+    str s = {test.ptr+offset};
     if (result.offset == -1)
-      s.len = test.bytes  + test.len - s.bytes;
+      s.len = test.ptr  + test.len - s.ptr;
     else
       s.len = result.offset - offset;
 
@@ -351,7 +351,7 @@ int testParsePartialStmt()
   assert(result.stmt);
 
   INFO("parsed statement: ", 
-      str{mem.buffer+offset, u64(result.offset-offset)}, "\n");
+      str{mem.ptr+offset, u64(result.offset-offset)}, "\n");
 
   offset = result.offset;
 
@@ -362,13 +362,13 @@ int testParsePartialStmt()
   s64 newstart = mem.len;
   mem.write(" a + 2; "_str);
 
-  loadString(ctx, str{mem.buffer+offset, u64(mem.len-offset)});
+  loadString(ctx, str{mem.ptr+offset, u64(mem.len-offset)});
 
   result = parseStatement(ctx);
   assert(result.stmt);
 
   INFO("parsed statement: ", 
-      str{mem.buffer+offset, u64(mem.len-offset)}, "\n");
+      str{mem.ptr+offset, u64(mem.len-offset)}, "\n");
 
   return 0;
 }
@@ -503,6 +503,29 @@ int testFakeNamespace()
   return 0;
 }
 
+int debugEnumParse()
+{
+  auto ctx = createContext(nullptr, 0);
+  if (!ctx)
+    return 1;
+  defer { destroyContext(ctx); };
+
+  loadString(ctx, R"cpp(
+    enum class Kind
+    {
+      String,
+      Integer,
+      Float,
+    };
+
+    typedef Kind Kind2;
+  )cpp"_str);
+
+  parseTopLevelDecl(ctx);
+
+  return 0;
+}
+
 int main()
 {
   if (!log.init())
@@ -530,6 +553,7 @@ int main()
   // return testLookupName();
   // return testArgs();
   // return testDepedencies();
-  return testFakeNamespace();
+  // return testFakeNamespace();
+  return debugEnumParse();
 }
 

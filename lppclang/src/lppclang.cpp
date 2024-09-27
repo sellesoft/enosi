@@ -8,6 +8,10 @@
 #include "iro/containers/list.h"
 #include "iro/containers/linked_pool.h"
 
+// TODO(sushi) PLEASE take some time to separate functionality into 
+//             different translation units as this thing currently 
+//             takes 20s to compile and 30s to link in debug!!
+
 #include "clang/Tooling/Tooling.h"
 #include "clang/Tooling/CompilationDatabase.h"
 #include "clang/Tooling/DependencyScanning/DependencyScanningTool.h"
@@ -80,7 +84,7 @@ struct LLVMIO : llvm::raw_ostream
  */
 inline llvm::StringRef strRef(str s)
 {
-  return llvm::StringRef((char*)s.bytes, s.len);
+  return llvm::StringRef((char*)s.ptr, s.len);
 }
 
 /* ----------------------------------------------------------------------------
@@ -408,7 +412,7 @@ struct Context
 
     for (auto arg : args)
     {
-      driver_args.push_back((char*)arg.bytes);
+      driver_args.push_back((char*)arg.ptr);
     }
 
     driver_args.push_back("-xc++");
@@ -592,7 +596,7 @@ static b8 startNewBuffer(
     srcmgr.createFileID(
       std::move(
         llvm::MemoryBuffer::getMemBuffer(
-          llvm::StringRef((char*)s.bytes, s.len))),
+          llvm::StringRef((char*)s.ptr, s.len))),
       SrcMgr::C_User, 
       0, 0, new_loc);
 
@@ -1063,13 +1067,13 @@ b8 createASTFromString(Context* ctx, str s)
   for (auto& d : ctx->include_dirs)
   {
     std::string arg = "-I";
-    arg += std::string((char*)d.bytes, d.len);
+    arg += std::string((char*)d.ptr, d.len);
     args.push_back(arg);
   }
 
   ASTUnitPtr unit = 
     clang::tooling::buildASTFromCodeWithArgs(
-      llvm::StringRef((char*)s.bytes, s.len), 
+      llvm::StringRef((char*)s.ptr, s.len), 
       args,
       "lppclang-string.cc",
       "lppclang",
@@ -1820,7 +1824,7 @@ str getDependencies(str file, str* args, u64 argc)
   for (u64 i = 0; i < argc; ++i)
   {
     compilation.push_back(std::string(
-          (char*)args[i].bytes, (char*)args[i].bytes + args[i].len));
+          (char*)args[i].ptr, (char*)args[i].ptr + args[i].len));
   }
 
   auto ofs = new llvm::vfs::OverlayFileSystem(llvm::vfs::getRealFileSystem());
@@ -1830,13 +1834,13 @@ str getDependencies(str file, str* args, u64 argc)
   auto cwd_path = iro::fs::Path::cwd();
   defer { cwd_path.destroy(); };
 
-  llvm::StringRef cwd((char*)cwd_path.buffer.buffer, cwd_path.buffer.len);
+  llvm::StringRef cwd((char*)cwd_path.buffer.ptr, cwd_path.buffer.len);
 
   vfs->addFile(
       llvm::Twine(cwd) + "/__dependent_file.cpp", 
       0,
       llvm::MemoryBuffer::getMemBuffer(
-        llvm::StringRef((char*)file.bytes, file.len)));
+        llvm::StringRef((char*)file.ptr, file.len)));
 
   DependencyScanningService service(
       ScanningMode::DependencyDirectivesScan,
@@ -1857,8 +1861,8 @@ str getDependencies(str file, str* args, u64 argc)
   std::string result = *result_or_err;
 
   str out;
-  out.bytes = (u8*)mem::stl_allocator.allocate(result.size());
-  mem::copy(out.bytes, result.data(), result.size());
+  out.ptr = (u8*)mem::stl_allocator.allocate(result.size());
+  mem::copy(out.ptr, result.data(), result.size());
   out.len = result.size();
 
   return out;
@@ -1868,7 +1872,7 @@ str getDependencies(str file, str* args, u64 argc)
  */
 void destroyDependencies(str deps)
 {
-  mem::stl_allocator.free(deps.bytes);
+  mem::stl_allocator.free(deps.ptr);
 }
 
 /* ----------------------------------------------------------------------------
