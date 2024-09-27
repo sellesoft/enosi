@@ -7,6 +7,8 @@ $ local ui = require "ui.UI"
 @@lpp.import "Engine.lh"
 @@lpp.import "graphics/Renderer.lh"
 @@lpp.import "window/Window.lh"
+@@lpp.import "window/WindowEvents.lh"
+@@lpp.import "math/util.h"
 
 #include "iro/logger.h"
 
@@ -16,7 +18,27 @@ namespace ui
 {
 
 static Logger logger = 
-  Logger::create("ecs.ui"_str, Logger::Verbosity::Info);
+  Logger::create("ui"_str, Logger::Verbosity::Info);
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Context::initItem(str id, Item* item)
+{
+  item->name = id;
+  item->node = &item_tree.addLast(item_stack.head->data->node, item);
+  if (!item->style.init())
+    return false;
+  if (!item->drawcmds.init(1))
+  {
+    item->style.deinit();
+    return false;
+  }
+  auto* dc = drawcmds.add();
+  dc->alloc(this, putFilledRectCounts());
+  item->drawcmds.push(dc);
+  item->dirty = true;
+  return true;
+}
 
 /* ----------------------------------------------------------------------------
  */
@@ -24,24 +46,11 @@ template<>
 Item* Context::make<Item>(str id)
 {
   Item* item = mem::stl_allocator.construct<Item>();
-  item->node = &item_tree.addLast(item_stack.head->data->node, item);
-  if (!item->style.init())
+  if (!initItem(id, item))
+  {
+    mem::stl_allocator.free(item);
     return nullptr;
-  if (!item->drawcmds.init(4))
-    return nullptr;
-  item->drawcmds.push();
-  item->drawcmds[0].alloc(this, putFilledRectCounts());
-  item->dirty = true;
-  return item;
-}
-
-/* ----------------------------------------------------------------------------
- */
-template<>
-Item* Context::begin<Item>(str id)
-{
-  Item* item = make<Item>(id);
-  item_stack.push(item);
+  }
   return item;
 }
 
@@ -63,13 +72,15 @@ b8 Context::init(Engine& engine)
     return ERROR("failed to init item stack\n");
   if (!item_tree.init())
     return ERROR("failed to init item tree\n");
+  if (!drawcmds.init())
+    return ERROR("failed to init drawcmd pool\n");
   if (!free_drawcmds.init())
     return ERROR("failed to init free drawcmds list\n");
   if (!free_drawcmds_vertex_sorted.init())
     return ERROR("failed to init vertex sorted free drawcmds array\n");
   if (!free_drawcmds_index_sorted.init())
     return ERROR("failed to init index sorted free drawcmds array\n");
-  if (!font_lib.init())
+  if (!fontlib.init())
     return ERROR("failed to init font library\n");
   
   buffer = renderer.createBuffer();
@@ -97,6 +108,7 @@ b8 Context::init(Engine& engine)
   root->dirty = true;
   root->visible_start = {0,0};
   root->visible_size = root->size;
+  root->name = "root"_str;
 
   $ local root = ui.createItemContext("Item", "root")
 
@@ -106,6 +118,8 @@ b8 Context::init(Engine& engine)
   item_stack.push(root);
 
   vertex_next = index_next = 0;
+
+  engine.subscribeToBroadcast<WindowResized>(this, &Context::onWindowResized);
 
   // Store a reference to the engine incase widgets need to access 
   // information from it.
@@ -120,6 +134,11 @@ b8 Context::update(Engine& engine)
 {
   if (item_stack.head->data != root)
     return ERROR("items left on stack!\n");
+
+  // TODO(sushi) only do this if the mouse moves by subscribing to the 
+  //             MouseMoved event, maybe. A lot of other stuff will
+  //             also make this need to be retriggered as well.
+  findHoveredItem(item_tree.root);
 
   engine.renderer.pushBindBuffer(buffer);
 
@@ -172,25 +191,71 @@ void Context::updateTree(ItemNode* node, Engine& engine)
 {
   gfx::Renderer renderer = engine.renderer;
   Window& window = engine.window;
-  
+  InputMgr& input = engine.input;
+
   Item* item = node->data;
   Item* parent = (node->parent? node->parent->data : nullptr);
+
+  $ local item = ui.createItemContext("Item", "item")
+  $ local style = item.style
+
+  // TODO(sushi) doing these look ups every frame for every item kinda
+  //             sucks. Maybe try storing a map from item to cached 
+  //             information about it that we need here? Sorta defeats the 
+  //             purpose of the style map stuff though.
+  @@style:lookup(margin, border, update_triggers)
+  
+$ local tryUpdate = function(reason, cond)
+  if ($(style.update_triggers.test(reason)) && ($(cond or "true")))
+    item->update(this, UpdateReason::$(reason));
+$ end
+
+  @tryUpdate(DirtyBeforeEval, item->dirty)
+
+  if (item->isHovered(this, Item::HoverKind::Topmost))
+  {
+    // Only allow hover and pressed when item is topmost.
+    @tryUpdate(MouseHover)
+    @tryUpdate(MousePressed, input.anyMouseButtonPressed())
+  }
+  
+  if (item->isHovered(this, Item::HoverKind::Area))
+  {
+    // Allow other mouse inputs if the item is hovered at all.
+    @tryUpdate(MouseReleased, input.anyMouseButtonReleased())
+    @tryUpdate(MouseDown, input.anyMouseButtonDown())
+    @tryUpdate(MouseScroll, input.scroll != 0.f)
+  }
+
+  @tryUpdate(MouseHoverChild, item->isHovered(this, Item::HoverKind::Child))
 
   if (item->dirty)
   {
     item->dirty = false;
     ItemNode* sspar = findStaticSizedParent(this, node, nullptr);
+    
+    // TODO(sushi) store a temp allocator here and pass it along with a 
+    //             void* to eval and gen functions to allow items 
+    //             caching information calculated in evaluate to be 
+    //             reused in generate.
+    //             Also try to apply this idea to base item evaluation in 
+    //             general.. surely there's some data cached on Item that
+    //             doesn't need to be and could instead be put in temp 
+    //             memory to be read here and in generate.
+    // TODO(sushi) try working out a way to tell widgets what exactly 
+    //             changed when they are marked dirty so that they can
+    //             decide if they actually need to do work.
+    // TODO(sushi) don't reevalute an item's branch when it is statically 
+    //             sized and all that happened to it is it moved.
+
     evalItemBranch(sspar);
     genItemBranch(sspar);
   }
 
+  @tryUpdate(DirtyAfterEval)
+
   vec2f scoff;
   vec2f scext;
-
-  $ local item = ui.createItemContext("Item", "item")
-  $ local style = item.style
-
-  @@style:lookup(margin, border)
 
   if (parent)
   {
@@ -251,15 +316,22 @@ void Context::updateTree(ItemNode* node, Engine& engine)
       scext.x != 0.f          && scext.y != 0.f          && 
       scoff.x + scext.x > 0.f && scoff.y + scext.y > 0.f)
   {
-    renderer.pushUniformBool("has_texture"_str, false);
-    renderer.pushBindTexture(&engine.gohu_font.texture);
-
-    for (DrawCmd& drawcmd : item->drawcmds)
+    for (DrawCmd* drawcmd : item->drawcmds)
     {
+      if (drawcmd->tex)
+      {
+        renderer.pushUniformBool("has_texture"_str, true);
+        renderer.pushBindTexture(drawcmd->tex);
+      }
+      else
+      {
+        renderer.pushUniformBool("has_texture"_str, false);
+      }
+
       renderer.pushDraw(
-        drawcmd.index_offset,
-        drawcmd.counts_used.y,
-        drawcmd.vertex_offset);
+        drawcmd->index_offset,
+        drawcmd->counts_used.y,
+        drawcmd->vertex_offset);
     }
   }
 
@@ -289,6 +361,9 @@ void Context::evalItemBranch(ItemNode* node)
     border,
     display)
 
+  // TODO(sushi) someway to reuse this information as the parent 
+  //             will have already been passed at this point so 
+  //             we're doing double lookups here.
   @@parent.style:lookup(
     sizing,
     size,
@@ -361,6 +436,9 @@ void Context::evalItemBranch(ItemNode* node)
   else
     item->size.x = 0.f;
 
+  // Call item's evaluate callback.
+  item->evaluate(this);
+
   // Evaluate children.
   
   vec2f cursor = 
@@ -370,8 +448,8 @@ void Context::evalItemBranch(ItemNode* node)
 
   ItemNode* it = 
     (@style.display.test(reverse)? 
-      node->first_child :
-      node->last_child);
+      node->last_child :
+      node->first_child);
 
   u32 idx = 0;
   while (it) 
@@ -489,7 +567,10 @@ $ end
 
     idx += 1;
     assert(it != it->next);
-    it = it->next;
+    it = 
+      (@style.display.test(reverse)? 
+        it->prev :
+        it->next);
   }
 
   if (wauto)
@@ -536,6 +617,39 @@ void Context::genItemBranch(ItemNode* node)
     genItemBranch(child);
 }
 
+/* ----------------------------------------------------------------------------
+ */
+b8 Context::findHoveredItem(ItemTree::Node* node)
+{
+  Item* item = node->data;
 
+  $ local item = ui.createItemContext("Item", "item")
+  @@item.style:lookup(display)
+
+  for (ItemTree::Node* child = node->last_child; child; child = child->prev)
+  {
+    if (!@item.style.display.test(hidden))
+    {
+      if (findHoveredItem(child))
+        return true;
+    }
+  }
+
+  if (item->containsPoint(eng->input.mouse.window))
+  {
+    hovered = item;
+    return true;
+  }
+
+  return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Context::onWindowResized(WindowResized& event)
+{
+  $ local root = ui.createItemContext("Item", "root")
+  @root.style.set.size(event.size);
+}
 
 }

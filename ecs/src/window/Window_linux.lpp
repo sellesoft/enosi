@@ -3,8 +3,9 @@ $ local reflect = require "reflection.Reflector"
 $ local CGen = require "cgen"
 $ local List = require "list"
 
-@lpp.import "input/InputEvents.lh"
-@lpp.import "Engine.lh"
+@@lpp.import "input/InputEvents.lh"
+@@lpp.import "window/WindowEvents.lh"
+@@lpp.import "Engine.lh"
 
 #include "iro/logger.h"
 #include "math/util.h"
@@ -134,7 +135,7 @@ b8 Window::init(str title)
   XSetStandardProperties(
     display, 
     window, 
-    (const char*)title.bytes,
+    (const char*)title.ptr,
     0,0,0,0,0);
 
   int res = XSelectInput(display, window, window_event_masks);
@@ -185,9 +186,11 @@ b8 Window::update(const Engine& engine)
     case FocusIn:
       focused = true;
       break;
+
     case FocusOut:
       focused = false;
       break;
+
     case KeyPress:
       {
         KeySym ks = XLookupKeysym(&event.xkey, 0);
@@ -195,6 +198,7 @@ b8 Window::update(const Engine& engine)
         raise<KeyPressed>(engine, {key});
       }
       break;
+
     case KeyRelease:
       {
         KeySym ks = XLookupKeysym(&event.xkey, 0);
@@ -202,6 +206,7 @@ b8 Window::update(const Engine& engine)
         raise<KeyReleased>(engine, {key});
       } 
       break;
+
     case ButtonPress:
     case ButtonRelease:
       {
@@ -229,6 +234,7 @@ $ map = nil
         }
       }
       break;
+
     case MotionNotify:
       {
         XMotionEvent motion = event.xmotion;
@@ -238,6 +244,16 @@ $ map = nil
             .window_pos = vec2f(motion.x, motion.y),
             .screen_pos = vec2f(motion.x_root, motion.y_root)
           });
+      }
+      break;
+
+    case ConfigureNotify:
+      {
+        XConfigureEvent cev = event.xconfigure;
+        size.x = cev.width;
+        size.y = cev.height;
+        
+        raise<WindowResized>(engine, { size });
       }
       break;
     }

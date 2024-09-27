@@ -20,6 +20,7 @@ end
 local Schema,
       View,
       Property,
+      InheritedProperty,
       Lookup,
       Enum,
       Flags,
@@ -42,6 +43,9 @@ end
 
 Schema = makeType()
 
+-- Unique values.
+Schema.inherit = {}
+
 -- * --------------------------------------------------------------------------
 
 Schema.new = function(name, def, file_offset)
@@ -50,15 +54,21 @@ Schema.new = function(name, def, file_offset)
   o.property = {}
   o.property.list = List{}
   o.property.map = {}
+  o.base_schema = false
   o.funcs = {}
+  o.terminal = false
   o:parse(def, file_offset)
   return o
 end
 
 -- * --------------------------------------------------------------------------
 
-Schema.findMember = function(self, name)
-  return self.property.map[name]
+Schema.findProperty = function(self, name)
+  local property = self.property.map[name]
+  if not property and self.base_schema then
+    property = self.base_schema:findProperty(name)
+  end 
+  return property
 end
 
 -- * --------------------------------------------------------------------------
@@ -78,92 +88,46 @@ end
 --- Parses 'def' into this schema.
 Schema.parse = function(self, def, file_offset)
   local ui = require "ui.UI"
+  local parser = require"Parser".new(def, file_offset)
 
-  local offset = 1
+  -- Tracks the last top-level parsing loop a kind of tailing information
+  -- was found to disallow specifying them multiple times.
+  local tail_loops = {}
 
-  local errorHere = function(...)
-    local line, column = 
-      lpp.getLineAndColumnFromOffset(file_offset + offset - 1)
-    error("\nat "..line..":"..column..": "..makeStr(...), 2)
-  end
+  -- How many times the top-level parsing loop has iterated.
+  local loop_count = 0
 
-  local skipWhitespace = function()
-    local found,stop = def:find("^%s*", offset)
-    if found then
-      offset = stop+1
-    end
-  end
-
-  local expectToken = function(token)
-    skipWhitespace()
-    local start, stop = def:find("^"..token, offset)
-    if not start then
-      errorHere("expected '"..token.."'")
-    end
-    offset = stop+1
-  end
-
-  local expectIdentifier = function()
-    skipWhitespace()
-    local start, stop = def:find("^[%w_-]+", offset)
-    if not start then
-      errorHere("expected an identifier")
-    end
-    local id = def:sub(start, stop)
-    offset = stop+1
-    return id
-  end
-
-  local expectPattern = function(pattern, expected)
-    skipWhitespace()
-    local start, stop = def:find("^"..pattern, offset)
-    if not start then
-      errorHere("expected "..expected)
-    end
-    offset = stop+1
-    return def:sub(start, stop)
-  end
-
-  local checkToken = function(token)
-    skipWhitespace()
-    local start, stop = def:find("^"..token, offset)
-    if start then
-      offset = stop+1
-      return true
-    end
-  end
-
-  local checkPattern = function(pattern)
-    skipWhitespace()
-    local start, stop = def:find("^"..pattern, offset)
-    if start then
-      offset = stop+1
-      return def:sub(start,stop)
-    end
+  --- Wrapper around error function to pass to type init functions.
+  --- This kinda sucks since it will report this in the callstack 
+  --- but im too lazy to fix that rn.
+  local errcb = function(...)
+    parser:errorHere(...)
   end
 
   local parseEnumOrFlags = function()
     local elems = List{}
-    expectToken "{"
+    parser:expectToken "{"
     while true do
-      elems:push(expectIdentifier())
+      elems:push(parser:expectIdentifier())
       
-      if not checkToken "," then
-        expectToken "}"
+      if not parser:checkToken "," then
+        parser:expectToken "}"
         return elems
       else
-        if checkToken "}" then
+        if parser:checkToken "}" then
           return elems
         end
       end
     end
   end
 
-  local parseProperty = function()
-    local id = expectIdentifier()
-    expectToken ":"
-   
-    local typename = expectIdentifier()
+  --- <identifier>: ...
+  local parseProperty = function(id)
+    ---
+    --- Parse and create type information.
+    ---
+
+    local typename = parser:expectIdentifier()
 
     local handlers =
     {
@@ -189,154 +153,200 @@ Schema.parse = function(self, def, file_offset)
       type = CType.new(typename)
     end
 
+    ---
+    --- Parse default value.
+    ---
+
     local defval
 
-    -- Requiring a default value for now.
-    -- TODO(sushi) make this optional.
-    expectToken "="
-
-    if typename == "enum" or
-       typename == "flags" then
-      local elem = expectIdentifier()
-      if not type.elems.map[elem] then
-        errorHere(
-          "default value specified as '"..elem.."' but this is not "..
-          "defined")
+    if not parser:checkToken "=" then
+      if typename ~= "flags" then
+        parser:errorHere(
+          "default value can only be omitted on flag properties for now")
       end
-      defval = type.elems.map[elem]
-    elseif typename == "str" then
-      defval = 
-        expectPattern('".-"', "a string")
-      defval = defval.."_str"
-    elseif typename == "f32" then
-      local attempt = checkPattern("%d+%.%d+")
-      if not attempt then
-        attempt = checkPattern("%d+")
-      end
-      if not attempt then
-        errorHere("expected an integer or float for default value")
-      end
-      defval = attempt
+      -- Flags can omit '=' to indicate an initial value of 0 (no flags set).
+      defval = "0"
     else
-      defval = 
-        expectPattern("%b{}", "a braced initializer list (eg. {...})")
+      if typename == "enum" or
+         typename == "flags" then
+        local elem = parser:expectIdentifier()
+        if not type.elems.map[elem] then
+          parser:errorHere(
+            "default value specified as '"..elem.."' but this is not "..
+            "defined")
+        end
+        defval = type.elems.map[elem]
+      elseif typename == "str" then
+        defval = 
+          parser:expectPattern('".-"', "a string")
+        defval = defval.."_str"
+      elseif typename == "f32" then
+        local attempt = parser:checkPattern("%d+%.%d+")
+        if not attempt then
+          attempt = parser:checkPattern("%d+")
+        end
+        if not attempt then
+          parser:errorHere("expected an integer or float for default value")
+        end
+        defval = attempt
+      else
+        defval = 
+          parser:expectPattern("%b{}", "a braced initializer list (eg. {...})")
+      end
     end
 
-    return id, type, defval
+    local property = Property.new(id, type, defval, self, errcb)
+
+    ---
+    --- Parse tailing information.
+    ---
+
+    while true do
+      local found_tail = false
+
+      local checkTail = function(keyword, tailParser)
+        if parser:checkToken(keyword) then
+          if tail_loops[keyword] == loop_count then
+            parser:errorHere(keyword.." already parsed for this property")
+          end
+          tail_loops[keyword] = loop_count
+          found_tail = true
+          tailParser()
+        end
+      end
+
+      checkTail("accessors", function()
+        if not type.allows_accessors then
+          parser:errorHere(
+            "this property type does not allow defining accessors")
+        end
+
+        while true do
+          local id = parser:expectIdentifier()
+
+          parser:expectToken "="
+
+          local accessor = 
+            parser:expectPattern('".-"', "string for accessor pattern")
+          accessor = accessor:sub(2,-2)
+          if not accessor:find("%%") then
+            parser:errorHere(
+              "accessor pattern must contain at least one '%' to replace "..
+              "with the lookup")
+          end
+
+          property:addAccessor(id, accessor, errcb)
+
+          if not parser:checkToken "," then
+            return
+          end
+        end
+      end)
+
+      checkTail("values", function()
+        while true do
+          local id = parser:expectIdentifier()
+
+          parser:expectToken "="
+
+          local res = List
+          {
+            { '".-"', function(res) return res:sub(2,-2) end },
+            { "%b{}", function(res) return res end },
+          }
+          :findAndMap(function(handler)
+            local res = parser:checkPattern(handler[1])
+            if res then
+              return handler[2](res)
+            end
+          end)
+
+          if not res then
+            parser:errorHere("expected a braced list or string for value")
+          end
+
+          property:addValue(id, res, errcb)
+
+          if not parser:checkToken "," then
+            return
+          end
+        end
+      end)
+
+      if not found_tail then
+        parser:expectToken ";"
+        break
+      end
+    end
+
+    return property
+  end
+  
+  -- <identifier> = ...
+  local parseAssignment = function(id)
+    -- Check if this id has already been defined.
+    if self.property.map[id] then
+      parser:errorHere(
+        "attempt to assign to already defined property '",id,"'")
+    end
+
+
+    if parser:checkToken "inherit" then
+      -- Check if the given id exists in the base schema.
+      local property = self.base_schema.property.map[id]
+      if not property then
+        parser:errorHere(
+          "property ",id," was not inherited from a base schema")
+      end
+
+      InheritedProperty.new(property, self)
+    else
+      parser:errorHere("overriding default values is not supported yet.")
+    end
+
+    parser:expectToken ";"
   end
 
-  local tail_loops = {}
-
-  local loop_count = 0
-
-  expectToken "{"
+  parser:expectToken "{"
   while true do
     loop_count = loop_count + 1
 
-    if checkToken "inherit" then
-      local basename = expectIdentifier()
-
-      local base = ui.schema_defs[basename]
-      if not base then
-        errorHere("no schema with name '",basename,"'")
+    if parser:checkToken "terminal" then
+      self.terminal = true
+      parser:expectToken ";"
+    elseif parser:checkToken "inherit" then
+      if self.base_schema then
+        -- TODO(sushi) maybe handle multiple inheritance. I don't think 
+        --             it will ever be necessary and complicates some 
+        --             stuff I don't want to deal with atm.
+        parser:errorHere("base schema has already been defined as ", 
+                         self.base_schema.name)
       end
 
-      -- Take on all the properties and funcs of the base schema.
-      self.property.list:pushList(base.property.list)
-      for k,v in pairs(base.property.map) do
-        self.property.map[k] = v
+      local basename = parser:expectIdentifier()
+
+      self.base_schema = ui.schema_defs[basename]
+      if not self.base_schema then
+        parser:errorHere("no schema with name '",basename,"'")
       end
 
-      expectToken ";"
-    elseif checkToken "func" then
-      local id = expectIdentifier()
-      local def = expectPattern("%b{}", "braced function definition")
+      parser:expectToken ";"
+    elseif parser:checkToken "func" then
+      local id = parser:expectIdentifier()
+      local def = parser:expectPattern("%b{}", "braced function definition")
       def = def:sub(2,-2)
-      Func.new(id, def, self, errorHere)
+      Func.new(id, def, self, errcb)
     else
-      local id, type, defval = parseProperty(false)
+      local id = parser:expectIdentifier()
 
-      local property = Property.new(id, type, defval, self, errorHere)
-
-      while true do
-        local found_tail = false
-
-        local checkTail = function(keyword, parser)
-          if checkToken(keyword) then
-            if tail_loops[keyword] == loop_count then
-              errorHere(keyword.." already parsed for this property")
-            end
-            tail_loops[keyword] = loop_count
-            found_tail = true
-            parser()
-          end
-        end
-
-        checkTail("accessors", function()
-          if not type.allows_accessors then
-            errorHere("this property type does not allow defining accessors")
-          end
-
-          while true do
-            local id = expectIdentifier()
-
-            expectToken "="
-
-            accessor = expectPattern('".-"', "string for accessor pattern")
-            accessor = accessor:sub(2,-2)
-            if not accessor:find("%%") then
-              errorHere(
-                "accessor pattern must contain at least one '%' to replace "..
-                "with the lookup")
-            end
-
-            property:addAccessor(id, accessor, errorHere)
-
-            if not checkToken "," then
-              return
-            end
-          end
-        end)
-
-        checkTail("values", function()
-          while true do
-            local id = expectIdentifier()
-
-            expectToken "="
-
-            local res = List
-            {
-              { '".-"', function(res) return res:sub(2,-2) end },
-              { "%b{}", function(res) return res end },
-            }
-            :findAndMap(function(handler)
-              local res = checkPattern(handler[1])
-              if res then
-                return handler[2](res)
-              end
-            end)
-
-            if not res then
-              errorHere("expected a braced list or string for value")
-            end
-
-            property:addValue(id, res, errorHere)
-
-            if not checkToken "," then
-              return
-            end
-          end
-        end)
-
-        if not found_tail then
-          expectToken ";"
-          break
-        end
+      if parser:checkToken ":" then
+        parseProperty(id)
+      elseif parser:checkToken "=" then
+        parseAssignment(id)
       end
     end
 
-
-    if checkToken "}" then
+    if parser:checkToken "}" then
       break
     end
   end
@@ -395,13 +405,7 @@ Property.new = function(
     o.accessors = {}
   end
   if schema.property.map[name] then
-    if aliased_property then
-      errcb(
-        "cannot alias as '"..name.."' as a property with this name already "..
-        "exists")
-    else
       errcb("a property with name '"..name.."' already exists")
-    end
   end
   schema.property.map[name] = o
   schema.property.list:push(o)
@@ -427,6 +431,24 @@ Property.addValue = function(self, name, val, errcb)
 
   self.values[name] = self.type:adjustValue(val)
 end
+
+-- * ==========================================================================
+-- *   InheritedProperty
+-- * ==========================================================================
+
+--- A property of a schema that is intended to be inherited from 
+--- a base item by default.
+InheritedProperty = makeType()
+Schema.InheritedProperty = InheritedProperty
+
+InheritedProperty.new = function(base_property, schema)
+  local o = {}
+  o.base_property = base_property
+  schema.property.map[base_property.name] = o
+  schema.property.list:push(o)
+  return setmetatable(o, InheritedProperty)
+end
+
 
 -- * ==========================================================================
 -- *   Lookup
@@ -556,9 +578,6 @@ Flags.lookupIndex = function(self, lookup, key)
       makeStr(
         "no element named '",name,"' in property '",lookup.property.name,"'"))
   end
-  local checkFlag = function(vname, name)
-    return makeStr("((",vname,") & (",elem,"))")
-  end
   if key == "test" then
     return function(name)
       return makeStr("((",lookup.varname,") & (",getElem(name),"))")
@@ -604,17 +623,37 @@ end
 -- * --------------------------------------------------------------------------
 
 Flags.set = function(self, property, val)
-  local elem = self.elems.map[val]
+  local buf = buffer.new()
+  buf:put("(")
 
-  if not elem then
-    elem = property.values[val]
+  local first = true
+
+  for elem in val:gmatch("[^|]+") do
+    if not first then
+      buf:put("|")
+    end
+
+    elem = elem:match("%S+")
+
+    elem = self.elems.map[elem]
+
+    if not elem then
+      elem = property.values[elem]
+    end
+
+    if not elem then
+      error("no element or value named '"..elem.."' in property "..
+            property.name)
+    end
+
+    buf:put("(", elem, ")")
+
+    first = false
   end
 
-  if not elem then
-    error("no element or value named '"..val.."' in property "..property.name)
-  end
+  buf:put(")")
 
-  return elem
+  return buf:get()
 end
 
 -- * --------------------------------------------------------------------------
@@ -673,6 +712,9 @@ end
 -- * --------------------------------------------------------------------------
 
 CType.set = function(self, property, val)
+  if self.name == "str" then
+    return makeStr('"',val,'"_str')
+  end
   return val
 end
 

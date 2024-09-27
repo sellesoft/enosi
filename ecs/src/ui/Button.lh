@@ -1,0 +1,54 @@
+/*
+ *  A widget that runs a callback when some form of mouse 
+ *  interaction is made with it.
+ *
+ *  May contain any other item within it.
+ */
+
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local ui = require "ui.UI"
+
+@@lpp.import "ui/Item.lh"
+
+// TODO(sushi) define a way to override the default value of a property 
+//             so that here we may set that update_triggers' default 
+//             value is MousePressed | MouseReleased instead of setting it
+//             in the make function.
+@@ui.defineSchema(Button, 
+{ 
+  inherit Item;
+
+  triggers: flags
+  {
+    Pressed,
+    Released,
+
+    OnChild,
+  };
+})
+
+namespace ui
+{
+
+/* ============================================================================
+ */
+enum class ButtonActivation
+{
+  Pressed,
+  Released,
+};
+
+/* ============================================================================
+ */
+struct Button : public Item
+{
+  typedef void (*Action)(void*, ButtonActivation);
+
+  Action action;
+  void* userdata;
+
+  virtual void update(Context* ctx, UpdateReason reason) override;
+};
+
+}

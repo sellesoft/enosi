@@ -45,7 +45,6 @@ b8 TextureData::serialize(io::IO* out)
 b8 Texture::load(
     Texture* out,
     str name,
-    mem::Allocator* allocator,
     AssetMgr& assetmgr)
 {
   using namespace fs;

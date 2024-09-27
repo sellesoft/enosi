@@ -19,6 +19,7 @@ using namespace iro;
 struct Engine;
 struct Window;
 struct Texture;
+struct WindowResized;
 
 namespace gfx
 {
@@ -195,6 +196,11 @@ struct Renderer
   // Loads a texture into opengl and sets the proper reference to it 
   // on the given texture.
   b8 loadTexture(Texture& texture);
+
+private:
+
+  void onWindowResized(WindowResized& event);
+
 };
 
 }

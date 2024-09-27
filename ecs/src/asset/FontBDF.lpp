@@ -46,7 +46,7 @@ b8 Font::compileBDF(CompileParams& params)
     return error("attempt to load font '", params.name, "' but there is no "
                  "asset at path '", params.asset_path, "'\n");
 
-  if (false and !AssetMgr::checkNeedsCompiled(params.asset_path, params.data_path))
+  if (false && !AssetMgr::checkNeedsCompiled(params.asset_path, params.data_path))
     return true;
 
   INFO("compiling '", params.data_path, "'\n");
@@ -77,7 +77,7 @@ b8 Font::compileBDF(CompileParams& params)
 
   // Begin parsing.
 
-  u8* scan = buffer.buffer;
+  u8* scan = buffer.ptr;
   
   b8 eof = false;
 
@@ -93,7 +93,7 @@ b8 Font::compileBDF(CompileParams& params)
     if (not eof)
     {
       scan += 1;
-      if (*scan == '\0' or scan >= buffer.buffer + buffer.len)
+      if (*scan == '\0' or scan >= buffer.ptr + buffer.len)
         eof = true;
     }
   };
@@ -242,9 +242,12 @@ b8 Font::compileBDF(CompileParams& params)
   {
     u32 encoding;
     vec4i bbx;
+    vec2i dwidth;
     u32 num_rows;
     u64 bitmap_rows[32];
   };
+
+  INFO("size: ", sizeof(Char) * num_chars, "\n");
 
   auto* chars = (Char*)allocator.allocate(num_chars * sizeof(Char));
 
@@ -275,6 +278,11 @@ b8 Font::compileBDF(CompileParams& params)
           consumeNumber(),
           consumeNumber());
         break;
+      case "DWIDTH"_hashed:
+        c->dwidth = vec2i(
+          consumeNumber(),
+          consumeNumber());
+        break;
       case "BITMAP"_hashed:
         skipLine();
         done = true;
@@ -288,7 +296,7 @@ b8 Font::compileBDF(CompileParams& params)
     for (u32 row_idx = 0;; ++row_idx)
     {
       if (str::from(
-            scan, buffer.buffer + buffer.len).startsWith("ENDCHAR"_str))
+            scan, buffer.ptr + buffer.len).startsWith("ENDCHAR"_str))
       {
         skipLine();
         break;
@@ -356,11 +364,13 @@ b8 Font::compileBDF(CompileParams& params)
   // Prep font data for writing while rendering.
   FontData data = {};
 
+  data.height = bbx.y;
   data.count = num_codepoints;
   data.size_x = tex_size.x;
   data.size_y = tex_size.y;
   data.ascent = ascent;
   data.descent = descent;
+  data.num_ranges = params.ranges.len;
 
   // Write out the ranges and their chardata.
   data.ranges = 
@@ -397,14 +407,30 @@ b8 Font::compileBDF(CompileParams& params)
       u32 top_offset = bbx.y - (c->bbx.w - bbx.w) - c->bbx.y;
       u32 left_offset = c->bbx.z - bbx.z;
 
-      PackedChar* pc = prange->chardata + idx;
+      PackedChar* pc = prange->chardata + i;
 
-      pc->x0 = cursor.x + left_offset;
-      pc->y0 = cursor.y - top_offset;
-      pc->x1 = pc->x0 + c->bbx.x;
-      pc->y1 = pc->y1 + c->bbx.y;
-      pc->xadvance = bbx.x;
+      *pc = {};
+
+      pc->x0 = cursor.x;
+      pc->y0 = (cursor.y + 1) - bbx.y;
+      pc->x1 = pc->x0 + bbx.x;
+      pc->y1 = cursor.y + 1;
+      pc->xadvance = c->dwidth.x;
       pc->xoff = pc->yoff = pc->xoff2 = pc->yoff2 = 0.f;
+
+$ if false then
+      INFO(
+          "encoding: ", (char)c->encoding,
+        "\n   x0,y0: ", pc->x0, ",", pc->y0, 
+        "\n   x1,y1: ", pc->x1, ",", pc->y1, 
+        "\n      um: ", cursor.y - bbx.y,
+        "\ncursor.y: ", cursor.y,
+        "\n   bbx.y: ", bbx.y,
+        "\n     bbx: ", c->bbx, 
+        "\n  cursor: ", cursor,
+        "\n  offset: ", pc - prange->chardata,
+        "\nshouldbe: ", c->encoding - prange->first_codepoint, "\n");
+$ end
 
       u8* tl = pixels + (cursor.y * tex_size.x) + cursor.x;
 

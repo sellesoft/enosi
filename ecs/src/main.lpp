@@ -29,6 +29,8 @@ int main()
     {
       flags = 
           AllowColor
+        | TrackLongestName
+        | PadVerbosity
         | ShowCategoryName
         | ShowVerbosity
         | PrefixNewlines;

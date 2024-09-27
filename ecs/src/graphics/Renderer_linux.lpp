@@ -23,7 +23,7 @@ namespace gfx
 {
 
 static Logger logger = 
-  Logger::create("ecs.renderer.linux"_str, Logger::Verbosity::Info);
+  Logger::create("gfx.linux"_str, Logger::Verbosity::Info);
 
 /* ----------------------------------------------------------------------------
  */

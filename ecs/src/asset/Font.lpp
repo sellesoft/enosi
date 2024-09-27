@@ -85,9 +85,10 @@ s64 Font::writeDataPath(io::IO* io, str name, AssetMgr& assetmgr)
 b8 Font::load(
     Font* out,
     str name, 
-    mem::Allocator* allocator,
     AssetMgr& assetmgr)
 {
+  INFO("loading font '", name, "'\n");
+
   using namespace fs;
 
   PathBuffer data_path;
@@ -115,11 +116,12 @@ b8 Font::load(
       (PackedChar*)((u8*)data + (u64)range.chardata);
   }
 
+  INFO("loading font's texture\n");
+
   // Load the texture.
   if (!Texture::load(
         &out->texture,
         name,
-        allocator,
         assetmgr))
     return ERROR("failed to load font texture\n");
 
@@ -162,7 +164,7 @@ b8 FontData::serialize(io::IO* out)
       out->write(
         {
           (u8*)range.chardata, 
-          range.num_chars*sizeof(PackRange)
+          range.num_chars*sizeof(PackedChar)
         });
     }
   }

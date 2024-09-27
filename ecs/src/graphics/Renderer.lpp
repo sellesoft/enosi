@@ -5,6 +5,7 @@ $ local reflect = require "reflection.Reflector"
 
 @@lpp.import "Engine.lh"
 @@lpp.import "window/Window.lh"
+@@lpp.import "window/WindowEvents.lh"
 
 @@lpp.import "asset/AssetMgr.lh"
 @@lpp.import "asset/Texture.lh"
@@ -22,7 +23,7 @@ extern b8 rendererPlatformInit(Window* window);
 extern b8 rendererPlatformSwapBuffers(Window* window);
 
 static Logger logger = 
-  Logger::create("ecs.renderer"_str, Logger::Verbosity::Info);
+  Logger::create("gfx"_str, Logger::Verbosity::Info);
 
 /* ----------------------------------------------------------------------------
  */
@@ -44,7 +45,6 @@ static void GLAPIENTRY glMessageCallback(
     INFO(message, "\n");
   }
 }
-
 
 /* ----------------------------------------------------------------------------
  */
@@ -68,6 +68,9 @@ b8 Renderer::init(Engine& engine)
     GLAD_VERSION_MAJOR(opengl_version), '.', 
     GLAD_VERSION_MINOR(opengl_version), "\n");
 
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
   if (!compileShaders())
     return false;
 
@@ -77,6 +80,8 @@ b8 Renderer::init(Engine& engine)
   if (!drawcmds.init(16))
     return ERROR("failed to initialize draw cmd array\n");
   
+  engine.subscribeToBroadcast<WindowResized>(this, &Renderer::onWindowResized);
+
   this->engine = &engine;
 
   INFO("done!\n");
@@ -88,19 +93,27 @@ b8 Renderer::init(Engine& engine)
  */
 b8 Renderer::update()
 {
+  TRACE("Renderer::update\n");
+
   glClearColor(0.f, 0.f, 0.f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT);
 
   glUseProgram(shader_program);
 
+  DEBUG("executing draw commands\n");
+
+
   Buffer* last_buff = nullptr;
   for (DrawCmd& cmd : drawcmds)
   {
+    u32* base_offset = 0x0;
+
     switch (cmd.kind)
     {
     case DrawCmd::Kind::BindBuffer:
       if (cmd.bind_buffer != last_buff)
       {
+        TRACE("binding buffer\n");
         last_buff = cmd.bind_buffer;
         glBindVertexArray(cmd.bind_buffer->vao);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cmd.bind_buffer->ibo);
@@ -108,55 +121,62 @@ b8 Renderer::update()
       break;
 
     case DrawCmd::Kind::Draw:
+      TRACE("drawing\n");
       glDrawRangeElementsBaseVertex(
         GL_TRIANGLES, 
-        cmd.draw.index_start, 
+        0, 
         // kind scuffed
         last_buff->num_indexes, 
         cmd.draw.index_count,
         GL_UNSIGNED_INT,
-        nullptr,
+        (void*)(base_offset + cmd.draw.index_start),
         cmd.draw.vertex_start);
       break;
 
     case DrawCmd::Kind::BindTexture:
+      TRACE("binding texture ", cmd.bind_texture, "\n");
       glBindTexture(GL_TEXTURE_2D, cmd.bind_texture->gfx_handle);
       break;
     
     case DrawCmd::Kind::PushUniformVec2:
       {
+        TRACE("pushing vec2 uniform ", cmd.push_uniform.name, "\n");
         u32 loc = 
           glGetUniformLocation(
             shader_program, 
-            (char*)cmd.push_uniform.name.bytes);
+            (char*)cmd.push_uniform.name.ptr);
         glUniform2f(loc, cmd.push_uniform.v.x, cmd.push_uniform.v.y);
       }
       break;
 
     case DrawCmd::Kind::PushUniformFloat:
       {
+        TRACE("pushing float uniform ", cmd.push_uniform.name, "\n");
         u32 loc = 
           glGetUniformLocation(
             shader_program, 
-            (char*)cmd.push_uniform.name.bytes);
+            (char*)cmd.push_uniform.name.ptr);
         glUniform1f(loc, cmd.push_uniform.f);
       }
       break;
 
     case DrawCmd::Kind::PushUniformBool:
       {
+        TRACE("pushing bool uniform ", cmd.push_uniform.name, "\n");
         u32 loc = 
           glGetUniformLocation(
             shader_program, 
-            (char*)cmd.push_uniform.name.bytes);
+            (char*)cmd.push_uniform.name.ptr);
         glUniform1i(loc, cmd.push_uniform.b);
       }
       break;
     }
   }
 
+  TRACE("clearing drawcmds\n");
   drawcmds.clear();
-
+  
+  TRACE("swapping buffers\n");
   rendererPlatformSwapBuffers(&engine->window);
 
   frame += 1;
@@ -184,7 +204,7 @@ static b8 compileShader(str path, int kind, u32* out_shader_id)
 
   u32 id = *out_shader_id = glCreateShader(kind);
 
-  glShaderSource(id, 1, &(char*&)buffer.buffer, nullptr);
+  glShaderSource(id, 1, &(char*&)buffer.ptr, nullptr);
   glCompileShader(id);
 
   int success;
@@ -341,6 +361,13 @@ b8 Renderer::loadTexture(Texture& texture)
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
 
+  if (data->format == ImageFormat::BW)
+  {
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, GL_RED);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, GL_RED);
+  }
+
   return true;
 }
 
@@ -354,8 +381,8 @@ b8 Buffer::init(u64 vsize, u64 isize)
 
   glBindVertexArray(vao);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
   glBindBuffer(GL_ARRAY_BUFFER, 0);
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
   glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 
   vertex_size = vsize;
@@ -438,6 +465,13 @@ void Buffer::unmap()
   assert(glUnmapNamedBuffer(ibo));
 
   mapped.vp = mapped.ip = nullptr;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::onWindowResized(WindowResized& event)
+{
+  glViewport(0, 0, event.size.x, event.size.y);
 }
 
 

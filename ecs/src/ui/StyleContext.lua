@@ -62,7 +62,7 @@ StyleContext.lookup = function(self, ...)
 
   List{...}:each(function(propname)
     local property = 
-      assert(self.schema:findMember(propname), 
+      assert(self.schema:findProperty(propname), 
         "no property '"..propname.."' in schema '"..self.schema.name.."'")
 
     local name = propname
@@ -70,13 +70,28 @@ StyleContext.lookup = function(self, ...)
       name = self.prefix.."_"..name
     end
 
+    local get_func
+
+    if Schema.InheritedProperty.isTypeOf(property) then
+      get_func = "getOrInheritAs"
+      property = property.base_property
+    else
+      get_func = "getAs"
+    end
+
     local lookup = 
       Schema.Lookup.new(property, name)
 
     local get = 
       makeStr(
-        self.varname,'.getAs<',property.type:getTypeName(),'>("',property.name,
-        '"_hashed,',property.defval,')')
+        self.varname,'.',get_func,'<',property.type:getTypeName(),'>("',
+        property.name,'"_hashed,',property.defval)
+
+    if self.itemvar then
+      get = get..","..self.itemvar
+    end
+
+    get = get..")"
 
     self.lookups[propname] = lookup
 
@@ -107,23 +122,42 @@ StyleContext.__index = function(self, key)
     {
       __index = function(_, key)
         local property = 
-          assert(self.schema:findMember(key), 
+          assert(self.schema:findProperty(key), 
             "no property '"..key.."' in schema '"..self.schema.name.."'")
 
+        if Schema.InheritedProperty.isTypeOf(property) then
+          property = property.base_property
+        end
+ 
         local buf = buffer.new()
 
-        buf:put(
-          self.varname,'.setAs<',property.type:getTypeName(),'>("',
-          property.name,'"_hashed,')
+        return setmetatable({},
+        {
+          __index = function(_, key)
+            if key == "inherited" then
+              buf:put(
+                self.varname,'.setAsInherited<',property.type:getTypeName(),
+                '>("',property.name,'"_hashed')
+              if self.itemvar then
+                buf:put(",", self.itemvar)
+              end
+              buf:put(")")
+            end
+          end,
+            
+          __call = function(_, val)
+            buf:put(
+              self.varname,'.setAs<',property.type:getTypeName(),'>("',
+              property.name,'"_hashed,')
 
-        return function(val)
-          buf:put(property.type:set(property, val))
-          if self.itemvar then
-            buf:put(",", self.itemvar)
+              buf:put(property.type:set(property, val))
+              if self.itemvar then
+                buf:put(",", self.itemvar)
+              end
+              buf:put(")")
+              return buf:get()
           end
-          buf:put(")")
-          return buf:get()
-        end
+        })
       end
     })
   end

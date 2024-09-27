@@ -5,6 +5,9 @@ $ local Style = require "ui.Style"
 @@lpp.import "ui/Style.lh"
 @@lpp.import "ui/Item.lh"
 
+static Logger logger =
+  Logger::create("style"_str, Logger::Verbosity::Info);
+
 $$$
 
 -- * --------------------------------------------------------------------------
@@ -16,14 +19,79 @@ $$$
 /* ----------------------------------------------------------------------------
  */
 template<>
-$(pk.typename) StyleMap::getAs(u64 id, $(pk.typename) def)
+StyleMap::Elem* StyleMap::find<$(pk.typename)>(u64 id)
+{
+  Elem* elem = map.find(id);
+  if (!elem || elem->kind != Elem::Kind::$(pk.kindname))
+    return nullptr;
+  return elem;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 StyleMap::findInheritedElem<$(pk.typename)>(Elem** out, u64 id, Item* item)
+{
+  ItemNode* i = item->node->parent;
+  while (i)
+  {
+    Item* ii = i->data;
+    Elem* pelem = ii->style.find<$(pk.typename)>(id);
+    if (pelem)
+    {
+      *out = pelem;
+      return true;
+    }
+    i = i->parent;
+  }
+  return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+$(pk.typename) StyleMap::getAs(u64 id, $(pk.typename) def, Item* item)
 {
   // TODO(sushi) maybe also add the elem to the map here? Not sure if that
   //             would be good behavior or not.
   Elem* elem = map.find(id);
   if (!elem)
     return def;
+
+  if (elem->kind == Elem::Kind::Inherit)
+  {
+    if (!item)
+    {
+      WARN(
+        "getAs called for $(pk.typename) property set to Inherit but no Item "
+        "was passed");
+      return def;
+    }
+    
+    if (!findInheritedElem<$(pk.typename)>(&elem, id, item))
+      return def;
+  }
+
   assert(elem->kind == Elem::Kind::$(pk.kindname));
+  return elem->value.$(pk.unionname);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+$(pk.typename) StyleMap::getOrInheritAs(u64 id, $(pk.typename) def, Item* item)
+{
+  Elem* elem = map.find(id);
+  if (elem)
+  {
+    assert(elem->kind == Elem::Kind::$(pk.kindname));
+    return elem->value.$(pk.unionname);
+  }
+
+  // Search for an inherited value.
+  if (!item || !findInheritedElem<$(pk.typename)>(&elem, id, item))
+    return def;
+
   return elem->value.$(pk.unionname);
 }
 
@@ -50,7 +118,7 @@ void StyleMap::setAs(u64 id, $(pk.typename) val, Item* item)
 /* ----------------------------------------------------------------------------
  */
 template<>
-$(pk.typename) StyleMap::getAs(str name, $(pk.typename) def)
+$(pk.typename) StyleMap::getAs(str name, $(pk.typename) def, Item* item)
 {
   return getAs(name.hash(), def);
 }
@@ -62,6 +130,28 @@ void StyleMap::setAs(str name, $(pk.typename) val, Item* item)
 {
   return setAs(name.hash(), val, item);
 }
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+void StyleMap::setAsInherited<$(pk.typename)>(u64 id, Item* item)
+{
+  Elem* elem = map.find(id);
+  if (!elem)
+  {
+    elem = pool.add();
+    elem->hash = id;
+    map.insert(elem);
+  }
+
+  elem->kind = Elem::Kind::Inherit;
+
+  if (item)
+    item->dirty = true;
+}
+
+
+
 
 $$$
   end)
@@ -87,6 +177,14 @@ b8 StyleMap::init()
     return false;
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void StyleMap::deinit()
+{
+  map.deinit();
+  pool.deinit();
 }
 
 }

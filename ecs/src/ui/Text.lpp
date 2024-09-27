@@ -6,8 +6,10 @@ $ local ui = require "ui.UI"
 @@lpp.import "ui/UI.lh"
 @@lpp.import "Engine.lh"
 
+#include "iro/containers/SmallArray.h"
+
 static Logger logger = 
-  Logger::create("ui.text"_str, Logger::Verbosity::Notice);
+  Logger::create("ui.text"_str, Logger::Verbosity::Debug);
 
 namespace ui
 {
@@ -15,32 +17,173 @@ namespace ui
 /* ----------------------------------------------------------------------------
  */
 template<>
-Text* Context::make<Text>(str id)
+Text* Context::make(str id, str init)
 {
   Text* text = mem::stl_allocator.construct<Text>();
-  text->node = &item_tree.addLast(item_stack.head->data->node, text);
-  if (!text->style.init())
+  if (!initItem(id, text))
+  {
+    mem::stl_allocator.free(text);
     return nullptr;
-  if (!text->drawcmds.init(1))
-    return nullptr;
+  }
+
   if (!text->buffer.open())
+  {
+    ERROR("failed to open text buffer\n");
     return nullptr;
-  text->drawcmds.push();
-  text->dirty = true;
+  }
+
+  if (notnil(init))
+    text->buffer.write(init);
   return text;
+}
+
+struct TextBreak
+{
+  // Offset into the text buffer where this break happens.
+  s64 offset;
+  // Where to visually place the text.
+  vec2f placement;
+};
+
+typedef SmallArray<TextBreak, 64> TextBreaks;
+
+/* ----------------------------------------------------------------------------
+ *  Search for locations in the text buffer where we need to perform line 
+ *  breaks. This is done in generation and evaluation.
+ */
+static void findTextBreaks(
+    TextBreaks* breaks, 
+    Text* text, 
+    f32 max_width)
+{
+  $ local text = ui.createItemContext("Text", "text")
+  $ local style = text.style
+  $ local Text = ui.schemas.Text
+
+  @@style:lookup(
+    font_height,
+    tab_spaces,
+    wrap)
+
+  b8 should_wrap = @style.wrap !=- @Text.wrap.none;
+
+  breaks->push({0, {0.f, 0.f}});
+
+  str scan = text->buffer.asStr();
+  str last_space_or_tab = scan;
+
+  Font* font = text->font;
+
+  // Cache off space width since its used in a couple places.
+  PackedChar space_char;
+  font->getPackedChar(&space_char, ' ');
+  f32 space_width = space_char.xadvance;
+
+  f32 width_since_last_word = 0.f;
+  vec2f offset = {};
+
+  while (scan.len)
+  {
+    utf8::Codepoint cp = scan.advance();
+    switch (cp.codepoint)
+    {
+    case '\n':
+      width_since_last_word = 0.f;
+      offset.y += @style.font_height;
+      offset.x = 0.f;
+      breaks->push({scan.ptr - text->buffer.ptr, offset});
+      break;
+
+    case '\t':
+      width_since_last_word = 0.f;
+      offset.x += @style.tab_spaces * space_width;
+      last_space_or_tab = scan;
+      breaks->push({scan.ptr - text->buffer.ptr, offset});
+      break;
+
+    case ' ':
+      width_since_last_word = 0.f;
+      last_space_or_tab = scan;
+      offset.x += space_width;
+      break;
+
+    default:
+      {
+        PackedChar c;
+        font->getPackedChar(&c, cp.codepoint);
+        width_since_last_word += c.xadvance;
+        offset.x += c.xadvance;
+      }
+      break;
+    }
+
+    if (offset.x > max_width)
+    {
+      switch (@style.wrap)
+      {
+      case @Text.wrap.char:
+        offset.x = 0.f;
+        offset.y += @style.font_height;
+
+        if (cp.codepoint == '\t')
+        {
+          breaks->last()->placement = {0.f, offset.y};
+        }
+        else
+        {
+          s64 prev_offset = scan.ptr - cp.advance - text->buffer.ptr;
+          if (prev_offset > breaks->last()->offset)
+          {
+            breaks->push({prev_offset, offset});
+          }
+          else if (prev_offset == breaks->last()->offset)
+          {
+            breaks->last()->placement = { 0.f, offset.y };
+          }
+        }
+        {
+          PackedChar pc;
+          font->getPackedChar(&pc, cp.codepoint);
+          offset.x = pc.xadvance;
+        }
+        break;
+
+      case @Text.wrap.word:
+        offset.x = 0.f;
+        offset.y += @style.font_height;
+        {
+          s64 offset_from_last_space = 
+            last_space_or_tab.ptr - text->buffer.ptr;
+          if (offset_from_last_space == breaks->last()->offset)
+          {
+            breaks->last()->placement = offset;
+          }
+          else if (offset_from_last_space > breaks->last()->offset)
+          {
+            breaks->push({offset_from_last_space, offset});
+          }
+        }
+        offset.x = width_since_last_word;
+        break;
+      }
+    }
+    text->size.x = max(text->size.x, offset.x);
+    text->size.y = offset.y + @style.font_height;
+  }
+  breaks->push({ text->buffer.len, offset });
 }
 
 /* ----------------------------------------------------------------------------
  */
-void Text::evaluate(Context* ctx)
+void Text::evaluate(Context* ui)
 {
   $ local text = ui.createItemContext("Text", "this")
   $ local style = text.style
 
-  auto& assetmgr = ctx->eng->assetmgr;
-
   if (font == nullptr)
   {
+    DEBUG("font not loaded yet\n");
+
     // We have not yet loaded the font request so do so now.
     @@style:lookup(font);
 
@@ -50,15 +193,111 @@ void Text::evaluate(Context* ctx)
       return;
     }
 
+    DEBUG("item specifies font ", @style.font, "\n");
+
+    font = ui->fontlib.findOrLoadFont(
+      @style.font, 
+      ui->eng->assetmgr,
+      ui->eng->renderer);
+
+    DEBUG("loaded font at ", font, "\n");
     
+    if (font == nullptr)
+    {
+      ERROR("evaluate called on a Text item with font '", @style.font, "' ",
+            "but the font failed to load\n");
+      return;
+    }
   }
+
+  Item* parent = node->parent->data;
+  $ local parent = ui.createItemContext("Item", "parent")
+
+  @@parent.style:lookup(margin, border, padding)
+  
+  // This is done here because it sets the size of this item. Actually 
+  // storing the breaks is unecessary. In deshi this used to cache off
+  // the breaks, but here we just do it again in generate() to avoid 
+  // caching off too much information.
+  // TODO(sushi) try factoring out the logic for determining the size of 
+  //             a Text item into its own function so we only do that 
+  //             work here.
+  // TODO(sushi) implement a system for storing temp cached data that is 
+  //             reusable in generate().
+  TextBreaks breaks;
+  findTextBreaks(&breaks, this, @parent.getPaddedWidth);
 }
 
 /* ----------------------------------------------------------------------------
  */
 void Text::generate(Context* ctx)
 {
-  
+  $ local text = ui.createItemContext("Text", "this")
+
+  @@text.style:lookup(text_color)
+
+  vec2i counts = {};
+  DrawCmd* dc = *drawcmds.arr;
+
+  dc->tex = &font->texture;
+
+  vec2i nucounts = putFilledRectCounts() * buffer.asStr().countCharacters();
+  auto [vp, ip] = dc->realloc(ctx, nucounts);
+
+  // Cache off space width since its used in a couple places.
+  PackedChar space_char;
+  font->getPackedChar(&space_char, ' ');
+  f32 space_width = space_char.xadvance;
+
+  vec2f cursor = pos_screen;
+
+  Item* parent = node->parent->data;
+  $ local parent = ui.createItemContext("Item", "parent")
+
+  @@parent.style:lookup(margin, border, padding)
+
+  FontData* font_data = font->data;
+
+  TextBreaks breaks;
+  // TODO(sushi) make this a member of Text and get the parent info 
+  //             inside of it.
+  findTextBreaks(&breaks, this, @parent.getPaddedWidth);
+
+  for (s32 breakidx = 0; breakidx < breaks.len - 1; ++breakidx)
+  {
+    auto this_break = breaks[breakidx];
+    auto next_break = breaks[breakidx+1];
+    cursor = this_break.placement + pos_screen;
+    for (s32 charidx = 0; 
+         charidx < next_break.offset - this_break.offset; 
+         ++charidx)
+    {
+      PackedChar pc;
+      font->getPackedChar(&pc, *(buffer.ptr + this_break.offset + charidx));
+
+      auto uv0 = 
+        vec2f(f32(pc.x0) / font_data->size_x, f32(pc.y0) / font_data->size_y);
+      auto uv1 = 
+        vec2f(f32(pc.x1) / font_data->size_x, f32(pc.y1) / font_data->size_y);
+
+      counts += 
+        putFilledRect(
+          vp, 
+          ip, 
+          counts, 
+          cursor, 
+          vec2f(pc.x1 - pc.x0, pc.y1 - pc.y0),
+          { uv0.x, uv1.y },
+          { uv1.x, uv1.y },
+          { uv1.x, uv0.y },
+          { uv0.x, uv0.y },
+          @text.style.text_color);
+
+      cursor.x += pc.xadvance;
+    }
+  }
+
+  dc->counts_used = counts;
 }
 
 /* ----------------------------------------------------------------------------

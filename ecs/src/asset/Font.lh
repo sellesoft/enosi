@@ -133,7 +133,6 @@ struct Font
   static b8 load(
     Font* out,
     str name, 
-    mem::Allocator* allocator,
     AssetMgr& assetmgr);
 
   struct CompileParams

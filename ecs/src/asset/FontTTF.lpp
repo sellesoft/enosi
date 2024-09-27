@@ -60,7 +60,7 @@ b8 Font::compileTTF(CompileParams& params)
     return ERROR("failed to read entire font asset file at '", 
                  params.asset_path, "'\n");
   
-  const unsigned char* raw = data.buffer;
+  const unsigned char* raw = data.ptr;
 
   // Initialize font info.
   stbtt_fontinfo info = {};

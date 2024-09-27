@@ -25,6 +25,8 @@ namespace gfx
 struct Window;
 struct Engine;
 
+struct WindowResized;
+
 namespace ui
 {
 
@@ -34,10 +36,18 @@ struct Context
 {
   // Root item of anything in the item tree.
   Item* root;
+  
+  // The currently hovered item or nullptr if none.
+  Item* hovered;
 
   // TODO(sushi) the stack prob does not need to be a whole list!
   SList<Item> item_stack;
-  Tree<Item>  item_tree;
+  
+  typedef Tree<Item> ItemTree;
+
+  ItemTree item_tree;
+
+  Pool<DrawCmd> drawcmds;
 
   SList<DrawCmd> free_drawcmds;
 
@@ -49,7 +59,7 @@ struct Context
   u64 vertex_next;
   u64 index_next;
 
-  FontLib font_lib;
+  FontLib fontlib;
 
   Engine* eng;
 
@@ -58,12 +68,33 @@ struct Context
 
   b8 update(Engine& engine);
 
+  b8 initItem(str id, Item* item);
+
   // TODO(sushi) someway to reuse styles if I ever need it.
   template<typename TItem>
   TItem* make(str id = nil);
 
+  // It's actually wild that this works and I'm not sure how much I like it
+  // but it's nice.
+  template<typename TItem, typename... TArgs>
+  TItem* make(str id, TArgs... args);
+
   template<typename TItem>
-  TItem* begin(str id = nil);
+  TItem* begin(str id = nil) 
+  {
+    TItem* item = make<TItem>();
+    item_stack.push(item);
+    return item;
+  }
+
+  template<typename TItem, typename... TArgs>
+  TItem* begin(str id, TArgs... args)
+  {
+    TItem* item = make<TItem>(id, args...);
+    item_stack.push(item);
+    return item;
+  }
+
 
   void endItem();
 
@@ -76,6 +107,10 @@ private:
 
   void evalItemBranch(ItemNode* node);
   void genItemBranch(ItemNode* node);
+
+  b8 findHoveredItem(ItemTree::Node* node);
+
+  void onWindowResized(WindowResized& x);
 };
 
 }

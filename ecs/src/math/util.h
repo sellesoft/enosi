@@ -7,7 +7,7 @@
 #ifndef _ecs_math_util_h
 #define _ecs_math_util_h
 
-#include "vec.h"
+#include "math/vec.h"
 
 namespace math
 {

@@ -90,7 +90,7 @@ void DrawCmd::alloc(Context* ctx, vec2i counts)
           auto [index, found] = dc->findIndex(ctx);
           if (found)
             fisorted.remove(index);
-          dc->destroy();
+          ctx->drawcmds.remove(dc);
         }
       }
       else
@@ -98,6 +98,7 @@ void DrawCmd::alloc(Context* ctx, vec2i counts)
         dc->vertex_offset += counts.x;
         dc->counts_reserved.x -= counts.x;
       }
+      break;
     }
   }
 
@@ -114,13 +115,14 @@ void DrawCmd::alloc(Context* ctx, vec2i counts)
         fisorted.remove(i);
         dc->counts_reserved.y = 0;
         if (dc->counts_reserved.x == 0)
-          dc->destroy();
+          ctx->drawcmds.remove(dc);
       }
       else
       {
         dc->index_offset += counts.y;
         dc->counts_reserved.y -= counts.y;
       }
+      break;
     }
   }
 
@@ -145,12 +147,38 @@ void DrawCmd::alloc(Context* ctx, vec2i counts)
 
 /* ----------------------------------------------------------------------------
  */
+Pair<Vertex*, Index*> DrawCmd::realloc(Context* ctx, vec2i counts)
+{
+  if (counts_reserved.x >= counts.x && counts_reserved.y >= counts.y)
+    return getPtrs(ctx);
+
+  auto restore_texture = tex;
+
+  // The given drawcmd needs to release its drawinfo but still be usable
+  // by whatever is calling this function, so we make a copy of it, 
+  // call remove on it, then reallocate this one.
+  // TODO(sushi) try to factor out the logic for deleting drawcmds 
+  //             from remove() and make it so that it just tells you 
+  //             what needs deleted. Not sure if this is possible.
+  auto dummy = ctx->drawcmds.add();
+  *dummy = *this;
+  dummy->remove(ctx);
+
+  *this = {};
+  tex = restore_texture;
+
+  alloc(ctx, counts);
+  return getPtrs(ctx);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 void DrawCmd::remove(Context* ctx)
 {
   if (counts_reserved.x == 0 &&
       counts_reserved.y == 0)
   {
-    destroy();
+    ctx->drawcmds.remove(this);
     return;
   }
 
@@ -164,7 +192,7 @@ void DrawCmd::remove(Context* ctx)
 
     varr.insert(index, this);
 
-    if (index != varr.len())
+    if (index != varr.len() - 1)
     {
       DrawCmd* right = varr[index+1];
       if (right->vertex_offset - counts_reserved.x == vertex_offset)
@@ -173,7 +201,7 @@ void DrawCmd::remove(Context* ctx)
         right->counts_reserved.x = 0;
         varr.remove(index+1);
         if (right->counts_reserved.y == 0)
-          right->destroy();
+          ctx->drawcmds.remove(right);
       }
     }
     if (index != 0)
@@ -197,7 +225,7 @@ void DrawCmd::remove(Context* ctx)
 
     iarr.insert(index, this);
 
-    if (index != iarr.len()-1)
+    if (index != iarr.len() - 1)
     {
       DrawCmd* right = iarr[index+1];
       if (right->index_offset - counts_reserved.y == index_offset)
@@ -206,7 +234,7 @@ void DrawCmd::remove(Context* ctx)
         right->counts_reserved.y = 0;
         iarr.remove(index+1);
         if (right->counts_reserved.x == 0)
-          right->destroy();
+          ctx->drawcmds.remove(right);
       }
     }
     if (index != 0)
@@ -218,7 +246,7 @@ void DrawCmd::remove(Context* ctx)
         counts_reserved.y = 0;
         iarr.remove(index);
         if (counts_reserved.x == 0)
-          destroy();
+          ctx->drawcmds.remove(this);
       }
     }
   }

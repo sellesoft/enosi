@@ -10,6 +10,8 @@ $ local reflect = require "reflection.Reflector"
 
 using namespace iro;
 
+struct Texture;
+
 namespace ui
 {
 
@@ -17,29 +19,21 @@ struct Context;
 
 struct DrawCmd
 {
-  u32 vertex_offset;
-  u32 index_offset;
+  u32 vertex_offset = 0;
+  u32 index_offset = 0;
 
-  vec2i counts_reserved;
-  vec2i counts_used;
+  vec2i counts_reserved = {};
+  vec2i counts_used = {};
 
-  b8 freed;
+  Texture* tex = nullptr;
+
+  b8 freed = false;
   
-  // TODO(sushi) maybe allocate these better later!
-  static DrawCmd* create(u64 count)
-  {
-    return (DrawCmd*)mem::stl_allocator.allocate(sizeof(DrawCmd)*count);
-  }
-
-  void destroy()
-  {
-    mem::stl_allocator.free(this);
-  }
-
   Pair<s32, b8> findVertex(Context* ctx);
   Pair<s32, b8> findIndex(Context* ctx);
 
   void alloc(Context* ctx, vec2i counts);
+  Pair<Vertex*, Index*> realloc(Context* ctx, vec2i counts);
   void remove(Context* ctx);
 
   Pair<Vertex*, Index*> getPtrs(Context* ctx);

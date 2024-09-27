@@ -10,23 +10,37 @@ $ local ui = require "ui.UI"
 
 @@lpp.import "asset/Font.lh"
 
+struct AssetMgr;
+struct Graphics;
+
+namespace gfx
+{
+  struct Renderer;
+}
+
+namespace ui
+{
+
 /* ============================================================================
  */
 struct FontLib
 {
   struct Entry
   {
-    str name;
     u64 hash;
     Font font;
   };
 
-  typedef AVL<Entry, [](const Entry* x) { return x->hash; }> FontMap;
+  typedef AVL<Entry, [](const Entry* x) { return x->hash; }> EntryMap;
+  typedef Pool<Entry> EntryPool;
 
-  FontMap fonts;
+  EntryMap map;
+  EntryPool pool;
 
   b8 init();
   void deinit();
 
-  Font* findOrLoadFont(str name);
+  Font* findOrLoadFont(str name, AssetMgr& assetmgr, gfx::Renderer& gfx);
 };
+
+}

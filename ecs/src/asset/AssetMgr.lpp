@@ -9,13 +9,14 @@ $ local reflect = require "reflection.Reflector"
 #include "iro/platform.h"
 
 static Logger logger = 
-  Logger::create("ecs.assetmgr"_str, Logger::Verbosity::Info);
+  Logger::create("assetmgr"_str, Logger::Verbosity::Debug);
 
 /* ----------------------------------------------------------------------------
  */
 b8 AssetMgr::init(u64 asset_capacity, mem::Allocator* allocator)
 {
-  INFO("initializing AssetMgr with capacity ", asset_capacity, "\n");
+  INFO("initializing AssetMgr with capacity ", asset_capacity, 
+       " and allocator ", allocator, "\n");
 
   if (!asset_list.init())
     return false;
@@ -50,6 +51,8 @@ void AssetMgr::deinit()
  */
 AssetHandle AssetMgr::loadAsset(str path)
 {
+  INFO("loading asset '", path, "'\n");
+
   using namespace fs;
 
   if (loaded_count == asset_capacity)
@@ -90,6 +93,8 @@ AssetHandle AssetMgr::loadAsset(str path)
     return nil;
   }
 
+  DEBUG("reading asset file\n");
+
   auto file = File::from(path, OpenFlag::Read);
   if (isnil(file))
   {
@@ -103,6 +108,9 @@ AssetHandle AssetMgr::loadAsset(str path)
   asset->data = allocator->allocate(file_size);
   asset->data_size = file_size;
 
+  DEBUG("allocated asset data with size ", asset->data_size, " at ", 
+        asset->data, "\n");
+
   file.read({(u8*)asset->data, asset->data_size});
 
   // Take the path from the file.
@@ -112,6 +120,8 @@ AssetHandle AssetMgr::loadAsset(str path)
 
   AssetHandle handle;
   handle.id = asset - asset_pool + 1;
+
+  INFO("finished loading asset with handle id ", handle.id, "\n");
 
   return handle;
 } 

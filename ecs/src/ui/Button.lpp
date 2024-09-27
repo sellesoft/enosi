@@ -1,0 +1,77 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local ui = require "ui.UI"
+
+@@lpp.import "ui/Button.lh"
+@@lpp.import "ui/UI.lh"
+@@lpp.import "Engine.lh"
+
+#include "iro/containers/SmallArray.h"
+
+static Logger logger = 
+  Logger::create("ui.text"_str, Logger::Verbosity::Debug);
+
+namespace ui
+{
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+Button* Context::make(str id, Button::Action action, void* userdata)
+{
+  auto* button = mem::stl_allocator.construct<Button>();
+
+  if (!initItem(id, button))
+  {
+    mem::stl_allocator.free(button);
+    return nullptr;
+  }
+
+  $ local button = ui.createItemContext("Button", "button")
+
+  assert(action);
+  button->action = action;
+  button->userdata = userdata;
+
+  @button.style.set.update_triggers(
+      MousePressed
+    | MouseReleased);
+
+  return button;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+Button* Context::make(str id, Button::Action action)
+{
+  return make<Button>(id, action, (void*)nullptr);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Button::update(Context* ctx, UpdateReason reason)
+{
+  $ local this = ui.createItemContext("Button", "this")
+
+  @@this.style:lookup(triggers)
+
+  switch (reason)
+  {
+  case UpdateReason::MousePressed:
+    if (@this.style.triggers.test(Pressed))
+    {
+      action(userdata, ButtonActivation::Pressed);
+    }
+    break;
+
+  case UpdateReason::MouseReleased:
+    if (@this.style.triggers.test(Released))
+    {
+      action(userdata, ButtonActivation::Released);
+    }
+    break;
+  }
+}
+
+}

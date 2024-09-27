@@ -59,4 +59,10 @@ ui.defineSchema = function(name, def)
   ui.schemas[name] = Schema.View.new(schema)
 end
 
+-- * --------------------------------------------------------------------------
+
+ui.definePlaceable = function(name, def)
+  
+end
+
 return ui

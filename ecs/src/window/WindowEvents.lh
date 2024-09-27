@@ -1,0 +1,12 @@
+$ local event = require "event.Event"
+$ local reflect = require "reflection.Reflector"
+
+#include "iro/common.h"
+#include "event/BroadcastEventBus.h"
+@reflect.include "input/Keys.h"
+@reflect.include "math/vec.h"
+
+@event WindowResized
+{
+  vec2f size;
+};

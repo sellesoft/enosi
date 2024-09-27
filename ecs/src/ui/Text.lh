@@ -8,11 +8,16 @@ $ local ui = require "ui.UI"
 
 @@lpp.import "ui/Item.lh"
 
+#include "iro/containers/SmallArray.h"
+#include "iro/Pair.h"
+
 @@ui.defineSchema(Text,
 {
+  terminal;
   inherit Item;
 
-  font: str = "null";
+  font = inherit;
+
   font_height: f32 = 11;
   text_color: Color = { 255,255,255,255 };
   wrap: enum
@@ -21,6 +26,8 @@ $ local ui = require "ui.UI"
     char,
     word,
   } = none;
+
+  tab_spaces: f32 = 2;
 })
 
 using namespace iro;

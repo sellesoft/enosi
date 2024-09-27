@@ -34,6 +34,8 @@ struct InputMgr
     vec2f window;
   } mouse;
 
+  f32 scroll;
+
   b8   init(Engine& engine);
   void deinit();
 
@@ -65,6 +67,24 @@ struct InputMgr
   b8 wasMouseButtonReleased(MouseButton button)
   {
     return !mouse_new[button] && mouse_old[button];
+  }
+  b8 anyMouseButtonPressed()
+  {
+    return wasMouseButtonPressed(MouseButton::Left) ||
+           wasMouseButtonPressed(MouseButton::Right) ||
+           wasMouseButtonPressed(MouseButton::Middle);
+  }
+  b8 anyMouseButtonReleased()
+  {
+    return wasMouseButtonReleased(MouseButton::Left) ||
+           wasMouseButtonReleased(MouseButton::Right) ||
+           wasMouseButtonReleased(MouseButton::Middle);
+  }
+  b8 anyMouseButtonDown()
+  {
+    return isMouseButtonDown(MouseButton::Left) ||
+           isMouseButtonDown(MouseButton::Right) ||
+           isMouseButtonDown(MouseButton::Middle);
   }
 };  
  

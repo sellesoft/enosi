@@ -1,0 +1,74 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local ui = require "ui.UI"
+
+@@lpp.import "ui/FontLib.lh"
+@@lpp.import "graphics/Renderer.lh"
+
+static Logger logger = 
+  Logger::create("fontlib"_str, Logger::Verbosity::Debug);
+
+namespace ui
+{
+
+/* ----------------------------------------------------------------------------
+ */
+b8 FontLib::init()
+{
+  if (!map.init())
+    return false;
+  if (!pool.init())
+    return false;
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void FontLib::deinit()
+{
+  map.deinit();
+  pool.deinit();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Font* FontLib::findOrLoadFont(
+    str name, 
+    AssetMgr& assetmgr,
+    gfx::Renderer& gfx)
+{
+  TRACE("finding font ", name, "\n");
+  u64 hashed = name.hash();
+  Entry* entry = map.find(hashed);
+  if (!entry)
+  {
+    DEBUG("font '", name, "' not loaded yet\n");
+    entry = pool.add();
+    entry->hash = hashed;
+
+    if (!Font::load(
+          &entry->font,
+          name,
+          assetmgr))
+    {
+      ERROR("failed to load font '", name, "'\n");
+      pool.remove(entry);
+      return nullptr;
+    }
+
+    DEBUG("loaded font '", name, "' with data ", entry->font.data, " and "
+          "texture ", &entry->font.texture, "\n");
+
+    map.insert(entry);
+  }
+
+  // Load the font's texture into the graphics backend.
+  gfx.loadTexture(entry->font.texture);
+
+  return &entry->font;
+}
+
+
+}
+
+

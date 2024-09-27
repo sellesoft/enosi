@@ -4,16 +4,25 @@ $ local ui = require "ui.UI"
  
 @@lpp.import "ui/Item.lh"
 @@lpp.import "ui/DrawCmd.lh"
+@@lpp.import "ui/UI.lh"
+@@lpp.import "Engine.lh"
+
+#include "math/util.h"
+
+static Logger logger =
+  Logger::create("ui.item"_str, Logger::Verbosity::Info);
 
 namespace ui
 {
 
+/* ----------------------------------------------------------------------------
+ */
 void Item::generate(Context* ctx) 
 {
   $ local this = ui.createItemContext("Item", "this")
   @@this.style:lookup(background_color)
 
-  DrawCmd* dc = &drawcmds[0];
+  DrawCmd* dc = drawcmds[0];
 
   auto [vp, ip] = dc->getPtrs(ctx);
 
@@ -29,6 +38,42 @@ void Item::generate(Context* ctx)
       @this.style.background_color);
 
   dc->counts_used = sum;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Item::containsPoint(vec2f point)
+{
+  return math::pointInRect(point, pos_screen, size);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Item::isHovered(Context* ctx, HoverKind kind)
+{
+  switch (kind)
+  {
+  case HoverKind::Topmost: 
+    return ctx->hovered == this;
+
+  case HoverKind::Area:
+    return containsPoint(ctx->eng->input.mouse.window);
+
+  case HoverKind::Child:
+    {
+      Item* i = ctx->hovered;
+      while (i)
+      {
+        if (i == this)
+          return true;
+        if (i == ctx->root)
+          return false;
+        i = i->node->parent->data;
+      }
+    }
+    break;
+  }
+  return false;
 }
 
 }

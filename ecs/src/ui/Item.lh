@@ -13,6 +13,9 @@ $ local ui = require "ui.UI"
 
 @@lpp.import "ui/Style.lh"
 
+// NOTE(sushi) font property is declared in here such that it can apply 
+//             to any text within an item and be inherited.
+
 @@ui.defineSchema(Item,
 {
   pos: vec2f = {0, 0};
@@ -92,6 +95,25 @@ $ local ui = require "ui.UI"
 
   background_color: Color = { 0, 0, 0, 0 };
 
+  update_triggers: flags
+  {
+    DirtyBeforeEval,
+    DirtyAfterEval,
+
+    AlwaysBeforeEval,
+    AlwaysAfterEval,
+
+    MouseHover,
+    MouseHoverChild,
+
+    MousePressed,
+    MouseReleased,
+    MouseDown,
+    MouseScroll,
+  };
+
+  font: str = "gohufont11";
+
   func hasBorder 
   {
     %.border.left ||
@@ -153,20 +175,31 @@ struct Item;
 struct DrawCmd;
 struct Context;
 
-typedef Tree<Item>::Node ItemNode;
+typedef Tree<Item> ItemTree;
+typedef ItemTree::Node ItemNode;
 
-enum class ActionTrigger
+/* ============================================================================
+ *  The reason an update callback was called on an item.
+ */
+enum class UpdateReason
 {
-  Never,
+  DirtyBeforeEval,
+  DirtyAfterEval,
+
+  AlwaysBeforeEval,
+  AlwaysAfterEval,
+
   MouseHover,
-  MouseHoverChildren,
+  MouseHoverChild,
+
   MousePressed,
   MouseReleased,
   MouseDown,
   MouseScroll,
-  Always,
 };
 
+/* ============================================================================
+ */
 struct Item
 {
   str name;
@@ -176,7 +209,9 @@ struct Item
 
   // TODO(sushi) implement something like SmallVector from llvm and 
   //             use that here.
-  Array<DrawCmd> drawcmds;
+  // NOTE(sushi) SmallArray is implemented now, but it might bloat
+  //             Item a lot. Expertiment with it later.
+  Array<DrawCmd*> drawcmds;
 
   operator ItemNode*() { return node; }
 
@@ -191,10 +226,8 @@ struct Item
 
   b8 dirty;
   
-  ActionTrigger update_trigger;
-
-  // Called according to the update trigger.
-  virtual void update() {}
+  // Called according to the update_trigger style property.
+  virtual void update(Context* ctx, UpdateReason reason) {}
 
   // Determines how this item is sized and positioned relative to other items.
   virtual void evaluate(Context* ctx) {}
@@ -204,13 +237,22 @@ struct Item
 
   // Cleans up any dynamic memory this item may have allocated in its lifetime.
   virtual void cleanup() {}
-};
+  
+  b8 containsPoint(vec2f point);
 
-// struct Text : public Item
-// {
-//   str text;
-// 
-//   virtual void generate() override;
-// };
+  enum class HoverKind
+  {
+    // The topmost hovered item.
+    Topmost,
+
+    // The mouse is over this item, no matter if it is topmost.
+    Area,
+    
+    // This item or one of its children are hovered.
+    Child,
+  };
+
+  b8 isHovered(Context* ctx, HoverKind kind);
+};
 
 }

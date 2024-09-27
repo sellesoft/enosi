@@ -61,6 +61,7 @@ struct StyleMap
     {
       Invalid,
     @placePropKindEnums
+      Inherit,
     };
 
     Kind kind;
@@ -85,22 +86,42 @@ struct StyleMap
   b8   init();
   void deinit();
 
+  // Optionally passed an item whose parents we search for properties
+  // when this property is set as Inherit.
   template<typename T>
-  T getAs(str name, T def = {});
+  T getAs(str name, T def = {}, Item* item = nullptr);
 
   // Optionally passed an item to set dirty after set is used.
   template<typename T>
   void setAs(str name, T val, Item* item = nullptr);
 
+  template<typename T>
+  Elem* find(u64 id);
+
   // Variants for compile time hashed strings, which should be the most 
   // likely case.
 
   template<typename T>
-  T getAs(u64 id, T def = {});
+  T getAs(u64 id, T def = {}, Item* item = nullptr);
 
   // Optionally passed an item to set dirty after set is used.
   template<typename T>
   void setAs(u64 id, T val, Item* item = nullptr);
+
+  // Sets the given property as inherited.
+  template<typename T>
+  void setAsInherited(u64 id, Item* item = nullptr);
+
+  // Used in cases where we know that a property of an item may initially 
+  // be set to inherit. This avoids needing to create an Elem marked as 
+  // Inherit when a Schema defines the default value of a property as 
+  // inherited. If an item is not available to search parents for the
+  // property then the default value is given.
+  template<typename T>
+  T getOrInheritAs(u64 id, T def = {}, Item* item = nullptr);
+
+  template<typename T>
+  b8 findInheritedElem(Elem** out, u64 id, Item* item);
 };
 
 

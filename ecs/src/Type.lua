@@ -6,6 +6,7 @@ Type.make = function()
   o.isTypeOf = function(x)
     return getmetatable(x) == o
   end
+  return o
 end
 
 return Type

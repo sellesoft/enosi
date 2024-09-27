@@ -74,7 +74,6 @@ struct Texture
   static b8 load(
     Texture* texture,
     str name, 
-    mem::Allocator* allocator,
     AssetMgr& assetmgr);
 
   struct CompileParams

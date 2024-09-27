@@ -6,6 +6,10 @@ $ local reflect = require "reflection.Reflector"
 
 @lpp.import "Engine.lh"
 
+// TODO(sushi) using events here is cool and all but really should move 
+//             to the window directly setting these values or calling the 
+//             on<...> functions directly!
+
 $ local on = function(E, c)
     template<>
     void InputMgr::on($(E)& event)
@@ -19,7 +23,8 @@ $ end
 @on(MousePressed, mouse_real[event.button] = true)
 @on(MouseReleased, mouse_real[event.button] = false)
 @on(MouseMoved, mouse.screen = event.screen_pos; 
-                mouse.window = event.window_pos;)
+                mouse.window = event.window_pos)
+@on(MouseScroll, scroll += event.scroll)
 
 b8 InputMgr::init(Engine& engine)
 {
