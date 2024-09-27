@@ -149,7 +149,7 @@ void Lake::deinit()
   active_process_pool.deinit();
   lua_cli_args.deinit();
   for (auto& action : action_queue)
-    mem::stl_allocator.free(action.bytes);
+    mem::stl_allocator.free(action.ptr);
   action_pool.deinit();
   action_queue.deinit();
 
@@ -180,7 +180,7 @@ struct ArgIter
     }
 
     current = { (u8*)argv[idx++] };
-    current.len = strlen((char*)current.bytes);
+    current.len = strlen((char*)current.ptr);
   }
 };
 
@@ -199,7 +199,7 @@ b8 processMaxJobsArg(Lake* lake, ArgIter* iter)
 
   str arg = iter->current;
 
-  u8* scan = arg.bytes;
+  u8* scan = arg.ptr;
 
   while (*scan)
   {
@@ -213,7 +213,7 @@ b8 processMaxJobsArg(Lake* lake, ArgIter* iter)
     scan += 1;
   }
 
-  lake->max_jobs = atoi((char*)arg.bytes);
+  lake->max_jobs = atoi((char*)arg.ptr);
 
   DEBUG("max_jobs set to ", lake->max_jobs, " via command line argument\n");
 
@@ -305,9 +305,9 @@ b8 Lake::processArgv(str* initfile)
   for (ArgIter iter(argv, argc); notnil(iter.current); iter.next())
   {
     str arg = iter.current;
-    if (arg.len > 1 && arg.bytes[0] == '-')
+    if (arg.len > 1 && arg.ptr[0] == '-')
     {
-      if (arg.len > 2 && arg.bytes[1] == '-')
+      if (arg.len > 2 && arg.ptr[1] == '-')
       {
         if (!processArgDoubleDash(this, arg.sub(2), initfile, &iter))
           return false;
@@ -392,7 +392,7 @@ b8 Lake::run()
   lua.pop();
 
   lua.getglobal(lake_err_handler);
-  if (!lua.loadfile((char*)initpath.bytes) || 
+  if (!lua.loadfile((char*)initpath.ptr) || 
       !lua.pcall(0,1,2))
   {
     ERROR("failed to run ", initpath, ": ", lua.tostring(), "\n");
@@ -922,7 +922,7 @@ void lua__globDestroy(LuaGlobResult x)
   auto arr = Array<str>::fromOpaquePointer(x.paths);
 
   for (str& s : arr)
-    mem::stl_allocator.free(s.bytes);
+    mem::stl_allocator.free(s.ptr);
 
   arr.destroy();
 }
@@ -1012,7 +1012,7 @@ int lua__cwd(lua_State* L)
 
   auto s = cwd.buffer.asStr();
 
-  lua_pushlstring(L, (char*)s.bytes, s.len);
+  lua_pushlstring(L, (char*)s.ptr, s.len);
 
   return 1;
 }
@@ -1044,7 +1044,7 @@ int lua__canonicalizePath(lua_State* L)
   }
 
 
-  lua_pushlstring(L, (char*)canonicalized.buffer.buffer, canonicalized.buffer.len);
+  lua_pushlstring(L, (char*)canonicalized.buffer.ptr, canonicalized.buffer.len);
 
   return 1;
 }
