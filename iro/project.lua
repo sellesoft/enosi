@@ -38,6 +38,8 @@ end
 
 if os == "Linux" then
   proj:reportDefine { "IRO_LINUX", "1" }
+elseif os == "Windows" then
+  proj:reportDefine { "IRO_WIN32", "1" }
 else
   error("unhandled OS for iro")
 end
