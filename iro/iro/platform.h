@@ -25,8 +25,8 @@ namespace iro::platform
 /* ----------------------------------------------------------------------------
  *  Puts the calling thread to sleep for the given TimeSpan.
  *
- *  On Linux this uses 'usleep' which has a precision of microseconds. I 
- *  believe on Windows it will be the same.
+ *  On Linux this uses 'usleep' which has a precision of microseconds.
+ *  On Win32 this uses 'Sleep' which has a precision of milliseconds.
  */
 void sleep(TimeSpan time);
 
@@ -179,6 +179,9 @@ b8 makeDir(str path, b8 make_parents);
  *  Creates a new process and writes its handle into 'out_handle'. If 'cwd' is 
  *  not nil then the child process will chdir into it before starting the 
  *  actual process.
+ * 
+ * 'streams' should only contain stdin, stdout, or stderr in that order, but
+ * each of those is optional.
  */
 b8 processSpawn(
     Process::Handle* out_handle, 
@@ -188,6 +191,11 @@ b8 processSpawn(
     str              cwd);
 
 /* ----------------------------------------------------------------------------
+ *  Stops a running process and it's threads with the 'exit_code'.
+ */
+b8 stopProcess(Process::Handle handle, s32 exit_code);
+
+/* ----------------------------------------------------------------------------
  *  Performs a check on the process referred to by 'handle' and determines if 
  */
 b8 processSpawnPTY(
@@ -195,6 +203,11 @@ b8 processSpawnPTY(
     str              file,
     Slice<str>       args,
     fs::File*        stream);
+
+/* ----------------------------------------------------------------------------
+ *  Stops a running PTY process and it's threads with the 'exit_code'.
+ */
+b8 stopProcessPTY(Process::Handle handle, s32 exit_code);
 
 /* ----------------------------------------------------------------------------
  *  Performs a check on the process referred to by 'handle' and determines if 
@@ -245,9 +258,6 @@ b8 chdir(str path);
  *  newlines. Returns an opaque pointer to saved terminal settings that must be 
  *  restored when the program closes. If you don't do this it will leave the 
  *  terminal in a bad state!!
- *
- *  Use this when implementing for windows.
- *  https://gist.github.com/cloudwu/96ec4d6636d65b7974b633e01d97a1f9
  */
 typedef void* TermSettings;
 

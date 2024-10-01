@@ -42,7 +42,16 @@ void Process::checkStatus()
   }
 }
 
-
+b8 Process::stop(s32 exit_code)
+{
+  assert(handle);
+  
+  if (ispty)
+    return platform::stopProcessPTY(handle, exit_code);
+  else if (!terminated)
+    return platform::stopProcess(handle, exit_code);
+  return false;
+}
 
 }
 

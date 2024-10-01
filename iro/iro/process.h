@@ -69,6 +69,9 @@ struct Process
   // Checks the status of this process and sets the status of the process.
   // If the process exits, 'exit_code' is set.
   void checkStatus();
+  
+  // Stops a running process with the 'exit_code'.
+  b8 stop(s32 exit_code);
 };
 
 }

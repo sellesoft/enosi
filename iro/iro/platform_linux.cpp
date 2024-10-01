@@ -1,3 +1,5 @@
+#if IRO_LINUX
+
 #include "platform.h"
 
 #include "logger.h"
@@ -283,7 +285,7 @@ s64 readdir(fs::Dir::Handle handle, Bytes buffer)
   if (!de)
   {
     if (errno == 0)
-      return false;
+      return 0;
     reportErrno(
       "failed to read directory stream with handle ", handle, ": ", 
       explain_readdir((DIR*)handle));
@@ -496,67 +498,6 @@ b8 makeDir(str path, b8 make_parents)
 
 /* ----------------------------------------------------------------------------
  */
-b8 processSpawnPTY(
-    Process::Handle* out_handle,
-    str file,
-    Slice<str> args,
-    fs::File* stream)
-{
-  int master, slave;
-
-  if (-1 == openpty(&master, &slave, nullptr, nullptr, nullptr))
-    return reportErrno("failed to open pty for file '", file, "': ",
-                       strerror(errno));
-
-  auto argsc = Array<char*>::create(args.len+1);
-  argsc.push((char*)file.ptr);
-  for (s32 i = 0; i < args.len; ++i)
-    argsc.push((char*)args[i].ptr);
-  argsc.push(nullptr);
-  defer { argsc.destroy(); };
-
-  if (pid_t pid = fork())
-  {
-    // parent branch 
-    if (pid == -1)
-      return reportErrno("failed to fork process: ", explain_fork());
-
-    close(slave);
-    
-    *stream = 
-      fs::File::fromFileDescriptor(
-        master, 
-          fs::OpenFlag::Write
-        | fs::OpenFlag::Read);
-
-    *out_handle = (void*)(s64)pid;
-    stream->is_pty = true;
-  }
-  else
-  {
-    // child branch
-    close(master);
-
-    if (login_tty(slave))
-    {
-      FATAL("login_tty() failed\n");
-      exit(1);
-    }
-
-    if (-1 == execvp(argsc.arr[0], argsc.arr))
-    {
-      reportErrno(
-        "execvp failed to replace child process with file '", file, "': ",
-        explain_execvp(argsc.arr[0], argsc.arr));
-      exit(1);
-    }
-  }
-
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
 b8 processSpawn(
     Process::Handle* out_handle, 
     str file, 
@@ -704,9 +645,104 @@ b8 processSpawn(
 
 /* ----------------------------------------------------------------------------
  */
+b8 stopProcess(Process::Handle handle, s32 exit_code)
+{
+  assert((HANDLE)handle != INVALID_HANDLE_VALUE);
+  
+  if (processCheck(handle, nullptr) != ProcessCheckResult::StillRunning)
+    return false;
+  
+  if (-1 == kill((pid_t)handle, 1))
+    return reportErrno(
+      "failed to stop process with handle '", handle, "': ",
+      explain_kill((pid_t)handle, 1));
+  
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 processSpawnPTY(
+    Process::Handle* out_handle,
+    str file,
+    Slice<str> args,
+    fs::File* stream)
+{
+  int master, slave;
+
+  if (-1 == openpty(&master, &slave, nullptr, nullptr, nullptr))
+    return reportErrno("failed to open pty for file '", file, "': ",
+                       strerror(errno));
+
+  auto argsc = Array<char*>::create(args.len+1);
+  argsc.push((char*)file.ptr);
+  for (s32 i = 0; i < args.len; ++i)
+    argsc.push((char*)args[i].ptr);
+  argsc.push(nullptr);
+  defer { argsc.destroy(); };
+
+  if (pid_t pid = fork())
+  {
+    // parent branch
+    if (pid == -1)
+      return reportErrno("failed to fork process: ", explain_fork());
+
+    close(slave);
+
+    *stream =
+      fs::File::fromFileDescriptor(
+        master,
+          fs::OpenFlag::Write
+        | fs::OpenFlag::Read);
+
+    *out_handle = (void*)(s64)pid;
+    stream->is_pty = true;
+  }
+  else
+  {
+    // child branch
+    close(master);
+
+    if (login_tty(slave))
+    {
+      FATAL("login_tty() failed\n");
+      exit(1);
+    }
+
+    if (-1 == execvp(argsc.arr[0], argsc.arr))
+    {
+      reportErrno(
+        "execvp failed to replace child process with file '", file, "': ",
+        explain_execvp(argsc.arr[0], argsc.arr));
+      exit(1);
+    }
+  }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 stopProcessPTY(Process::Handle handle, s32 exit_code)
+{
+  assert((HANDLE)handle != INVALID_HANDLE_VALUE);
+  
+  if (processCheck(handle, nullptr) != ProcessCheckResult::StillRunning)
+    return false;
+  
+  if (-1 == kill((pid_t)handle, 1))
+    return reportErrno(
+      "failed to stop process with handle '", handle, "': ",
+      explain_kill((pid_t)handle, 1));
+  
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 ProcessCheckResult processCheck(Process::Handle handle, s32* out_exit_code)
 {
-  assert(handle && out_exit_code);
+  assert(handle);
 
   int status = 0;
   int r = waitpid((s64)handle, &status, WNOHANG);
@@ -736,7 +772,8 @@ ProcessCheckResult processCheck(Process::Handle handle, s32* out_exit_code)
 
     if (WIFEXITED(status))
     {
-      *out_exit_code = WEXITSTATUS(status);
+      if (out_exit_code)
+        *out_exit_code = WEXITSTATUS(status);
       return ProcessCheckResult::Exited;
     }
   }
@@ -892,8 +929,21 @@ void debugBreak()
 
 /* ----------------------------------------------------------------------------
  */
- u16 byteSwap(u16 x) { return __builtin_bswap16(x); }
- u32 byteSwap(u32 x) { return __builtin_bswap32(x); }
- u64 byteSwap(u64 x) { return __builtin_bswap64(x); }
+u16 byteSwap(u16 x)
+{
+  return __builtin_bswap16(x);
+}
+
+u32 byteSwap(u32 x)
+{
+  return __builtin_bswap32(x);
+}
+
+u64 byteSwap(u64 x)
+{
+  return __builtin_bswap64(x);
+}
 
 }
+
+#endif // #if IRO_LINUX
