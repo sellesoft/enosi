@@ -48,7 +48,7 @@ b8 Process::stop(s32 exit_code)
   
   if (ispty)
     return platform::stopProcessPTY(handle, exit_code);
-  else if (!terminated)
+  else if (status == Status::Running)
     return platform::stopProcess(handle, exit_code);
   return false;
 }

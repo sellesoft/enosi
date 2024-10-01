@@ -647,15 +647,15 @@ b8 processSpawn(
  */
 b8 stopProcess(Process::Handle handle, s32 exit_code)
 {
-  assert((HANDLE)handle != INVALID_HANDLE_VALUE);
+  assert(handle);
   
   if (processCheck(handle, nullptr) != ProcessCheckResult::StillRunning)
     return false;
   
-  if (-1 == kill((pid_t)handle, SIGKILL))
+  if (-1 == kill((pid_t)(s64)handle, SIGKILL))
     return reportErrno(
       "failed to stop process with handle '", handle, "': ",
-      explain_kill((pid_t)handle, SIGKILL));
+      explain_kill((pid_t)(s64)handle, SIGKILL));
   
   return true;
 }
@@ -725,15 +725,15 @@ b8 processSpawnPTY(
  */
 b8 stopProcessPTY(Process::Handle handle, s32 exit_code)
 {
-  assert((HANDLE)handle != INVALID_HANDLE_VALUE);
+  assert(handle);
   
   if (processCheck(handle, nullptr) != ProcessCheckResult::StillRunning)
     return false;
   
-  if (-1 == kill((pid_t)handle, SIGKILL))
+  if (-1 == kill((pid_t)(s64)handle, SIGKILL))
     return reportErrno(
       "failed to stop process with handle '", handle, "': ",
-      explain_kill((pid_t)handle, SIGKILL));
+      explain_kill((pid_t)(s64)handle, SIGKILL));
   
   return true;
 }
