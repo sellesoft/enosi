@@ -24,7 +24,6 @@ namespace gfx
 
 struct Window;
 struct Engine;
-
 struct WindowResized;
 
 namespace ui
@@ -32,7 +31,7 @@ namespace ui
 
 /* ============================================================================
  */
-struct Context
+struct UI
 {
   // Root item of anything in the item tree.
   Item* root;
@@ -95,7 +94,6 @@ struct Context
     return item;
   }
 
-
   void endItem();
 
   template<typename TItem>
@@ -105,7 +103,21 @@ private:
 
   void updateTree(ItemNode* node, Engine& engine);
 
-  void evalItemBranch(ItemNode* node);
+  struct FlexContext
+  {
+    // Set when the parent of the evaluating item is a flex container.
+    b8 is_container;
+    // Set when the parent is displaying items in a row.
+    b8 disp_horizontal;
+    // Sum of flex sized child ratios.
+    f32 ratio_sum;
+    // Size that the parent can fit flexed items in.
+    f32 effective_size;
+    // How many times we much ceil a child's size rather than floor it.
+    u32 n_ceils;
+  };
+
+  void evalItemBranch(ItemNode* node, FlexContext* flex);
   void genItemBranch(ItemNode* node);
 
   b8 findHoveredItem(ItemTree::Node* node);

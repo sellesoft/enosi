@@ -75,6 +75,9 @@ Parser.expectIdentifier = function(self)
   end
   local id = self.text:sub(start, stop)
   self.offset = stop + 1
+  if not id then
+    self:errorHere("failed to sub identifier at offsets ",start," ",stop)
+  end
   return id
 end
 
@@ -88,6 +91,31 @@ Parser.expectPattern = function(self, pattern, expected)
   end
   self.offset = stop + 1
   return self.text:sub(start, stop)
+end
+
+-- * --------------------------------------------------------------------------
+
+Parser.expectNumber = function(self)
+  self:skipWhitespace()
+  local attempt = self:checkPattern("%d+%.%d+")
+  if not attempt then
+    attempt = self:checkPattern("%d+")
+  end
+  if not attempt then
+    self:errorHere("expected a number")
+  end
+  return attempt
+end
+
+-- * --------------------------------------------------------------------------
+
+Parser.expectString = function(self)
+  self:skipWhitespace()
+  local result = self:checkPattern('".-"')
+  if not result then
+    self:errorHere("expected a string")
+  end
+  return result:sub(2, -2)
 end
 
 -- * --------------------------------------------------------------------------
@@ -109,6 +137,31 @@ Parser.checkPattern = function(self, pattern)
   if start then
     self.offset = stop + 1
     return self.text:sub(start, stop)
+  end
+end
+
+-- * --------------------------------------------------------------------------
+
+Parser.checkIdentifier = function(self)
+  self:skipWhitespace()
+  local start, stop = self.text:find("^[%w_]+", self.offset)
+  if start then
+    self.offset = stop + 1
+    return self.text:sub(start, stop)
+  end
+end
+
+-- * --------------------------------------------------------------------------
+
+Parser.checkNumber = function(self)
+  self:skipWhitespace()
+  local attempt = self:checkPattern("%d+%.%d+")
+  if attempt then
+    return attempt
+  end
+  attempt = self:checkPattern("%d+")
+  if attempt then
+    return attempt
   end
 end
 

@@ -17,14 +17,17 @@ namespace ui
 
 /* ----------------------------------------------------------------------------
  */
-void Item::generate(Context* ctx) 
+void Item::generate(UI* ui) 
 {
   $ local this = ui.createItemContext("Item", "this")
-  @@this.style:lookup(background_color)
+  @@this.style:lookup(background_color, margin)
 
   DrawCmd* dc = drawcmds[0];
 
-  auto [vp, ip] = dc->getPtrs(ctx);
+  auto [vp, ip] = dc->getPtrs(ui);
+
+  vec2f tl = pos_screen + @this.style.margin.top_left;
+  vec2f br = pos_screen + size - @this.style.margin.bottom_right;
 
   vec2i sum = {0,0};
 
@@ -33,8 +36,8 @@ void Item::generate(Context* ctx)
       vp, 
       ip,
       sum,
-      pos_screen, 
-      size, 
+      tl,
+      br - tl,
       @this.style.background_color);
 
   dc->counts_used = sum;
@@ -44,29 +47,35 @@ void Item::generate(Context* ctx)
  */
 b8 Item::containsPoint(vec2f point)
 {
-  return math::pointInRect(point, pos_screen, size);
+  $ local this = ui.createItemContext("Item", "this")
+  @@this.style:lookup(margin)
+
+  vec2f tl = pos_screen + @this.style.margin.top_left;
+  vec2f br = pos_screen + size - @this.style.margin.bottom_right;
+
+  return math::pointInRect(point, tl, br - tl);
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 Item::isHovered(Context* ctx, HoverKind kind)
+b8 Item::isHovered(UI* ui, HoverKind kind)
 {
   switch (kind)
   {
   case HoverKind::Topmost: 
-    return ctx->hovered == this;
+    return ui->hovered == this;
 
   case HoverKind::Area:
-    return containsPoint(ctx->eng->input.mouse.window);
+    return containsPoint(ui->eng->input.mouse.window);
 
   case HoverKind::Child:
     {
-      Item* i = ctx->hovered;
+      Item* i = ui->hovered;
       while (i)
       {
         if (i == this)
           return true;
-        if (i == ctx->root)
+        if (i == ui->root)
           return false;
         i = i->node->parent->data;
       }

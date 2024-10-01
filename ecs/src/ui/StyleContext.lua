@@ -12,6 +12,7 @@ local buffer = require "string.buffer"
 local log = require "logger" ("ui.StyleContext", Verbosity.Notice)
 local List = require "list"
 local Schema = require "ui.Schema"
+local Style = require "ui.Style"
 
 -- Reusable buffer for making strings. You MUST remember to use get() when 
 -- returning the result of this! All functions are meant to be able to assume
@@ -135,27 +136,15 @@ StyleContext.__index = function(self, key)
         {
           __index = function(_, key)
             if key == "inherited" then
-              buf:put(
-                self.varname,'.setAsInherited<',property.type:getTypeName(),
-                '>("',property.name,'"_hashed')
-              if self.itemvar then
-                buf:put(",", self.itemvar)
-              end
-              buf:put(")")
+              -- TODO(sushi) this wont actually work, fix when I use it :)
+              return Style.setAsInherited(self.varname, property, self.itemvar)
+            else
+              error("expected 'inherited'")
             end
           end,
             
           __call = function(_, val)
-            buf:put(
-              self.varname,'.setAs<',property.type:getTypeName(),'>("',
-              property.name,'"_hashed,')
-
-              buf:put(property.type:set(property, val))
-              if self.itemvar then
-                buf:put(",", self.itemvar)
-              end
-              buf:put(")")
-              return buf:get()
+            return Style.setAs(self.varname, property, val, self.itemvar, true)
           end
         })
       end

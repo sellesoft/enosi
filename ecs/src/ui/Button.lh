@@ -11,23 +11,6 @@ $ local ui = require "ui.UI"
 
 @@lpp.import "ui/Item.lh"
 
-// TODO(sushi) define a way to override the default value of a property 
-//             so that here we may set that update_triggers' default 
-//             value is MousePressed | MouseReleased instead of setting it
-//             in the make function.
-@@ui.defineSchema(Button, 
-{ 
-  inherit Item;
-
-  triggers: flags
-  {
-    Pressed,
-    Released,
-
-    OnChild,
-  };
-})
-
 namespace ui
 {
 
@@ -41,14 +24,25 @@ enum class ButtonActivation
 
 /* ============================================================================
  */
-struct Button : public Item
+@ui.widget(Button,
+schema
+{ 
+  triggers: flags
+  {
+    Pressed,
+    Released,
+
+    OnChild,
+  };
+},
+struct
 {
   typedef void (*Action)(void*, ButtonActivation);
 
   Action action;
   void* userdata;
 
-  virtual void update(Context* ctx, UpdateReason reason) override;
-};
+  virtual void update(UI* ui, UpdateReason reason) override;
+})
 
 }

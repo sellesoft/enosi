@@ -17,9 +17,63 @@ using namespace iro;
 
 @@lpp.import "ui/Text.lh"
 @@lpp.import "ui/Button.lh"
+@@lpp.import "ui/Separator.lh"
 
 static Logger logger = 
   Logger::create("ecs.eng"_str, Logger::Verbosity::Info);
+
+namespace ui
+{
+
+@@ui.definePlaceable(Demo,
+{
+  Item root
+  | size: 500 500
+  | padding: 5 5 5 5
+  | font: "gohu"
+  | font_height: 11
+  | display: flex
+  | background_color: 0x08141eff
+  {
+    Item header
+    | size: 100% 15
+    | display: flex horizontal
+    {
+      .header_sep
+      | sizing: flex
+      | size: 1 1;
+
+      Separator | .header_sep;
+
+      Text ("demo");
+
+      Separator | .header_sep;
+    }
+
+    Button
+    | sizing: flex
+    | triggers: Pressed Released
+    | padding: 10
+    | size: 100 1
+    | background_color: 0x20394fff
+    {
+      Text ("button 0");
+    }
+
+    Button
+    | sizing: flex
+    | triggers: Pressed Released
+    | padding: 10
+    | margin: 5
+    | size: 90 2
+    | background_color: 0x20394fff
+    {
+      Text ("button 1");
+    }
+  }
+})
+
+}
 
 /* ----------------------------------------------------------------------------
  */ 
@@ -52,28 +106,6 @@ b8 Engine::init()
   INFO("done initializing in ", 
     (TimePoint::now() - start_time).toSeconds(), "s\n");
 
-  // ui.def
-  // {
-  //   item "demo"
-  //   {
-  //     style =
-  //     {
-  //       pos = { 10, 10 },
-  //       size = { 100, 100 },
-  //       background_color = { 100, 70, 150 }
-  //     }
-
-  //     item "inner"
-  //     {
-  //       style = 
-  //       {
-  //         background_color = { 200, 150, 100 },
-  //         pos.x = 10,
-  //       }
-  //     }
-  //   }
-  // }
-
   CodepointRange ascii =
   {
     .first_codepoint = 32,
@@ -82,9 +114,9 @@ b8 Engine::init()
 
   Font::CompileParams params =
   {
-    .name = "gohufont11"_str,
-    .asset_path = "assets/fonts/gohufont11.bdf"_str,
-    .data_path = "data/fonts/gohufont11.font"_str,
+    .name = "gohu"_str,
+    .asset_path = "assets/fonts/gohu.bdf"_str,
+    .data_path = "data/fonts/gohu.font"_str,
     .ranges = CodepointRanges::from(&ascii, 1),
     .allocator = &mem::stl_allocator,
     .assetmgr = &assetmgr,
@@ -92,51 +124,14 @@ b8 Engine::init()
 
   Font::compileBDF(params);
 
-  test = ui.begin<ui::Item>();
+  using namespace ui;
 
-  $ local item = ui.createItemContext("Item", "test")
-
-  @item.style.set.size({500, 500});
-  @item.style.set.background_color({150, 100, 80, 255});
-  @item.style.set.padding({5, 5, 5, 5});
-
-  auto button = ui.begin<ui::Button>("blah"_str, 
-    (ui::Button::Action)[](void* _, ui::ButtonActivation activation)
-    {
-      if (activation == ui::ButtonActivation::Pressed)
-        INFO("pressed\n");
-      else
-        INFO("released\n");
-    });
-
-  $ local button = ui.createItemContext("Button", "button")
-
-  @button.style.set.size({100, 100});
-  @button.style.set.background_color({0, 255, 0, 255});
-  @button.style.set.triggers(Pressed | Released);
-  @button.style.set.padding({10, 10, 10, 10});
-
-  auto text = ui.make<ui::Text>("hello"_str, "goodbye"_str);
-
-  $ local text = ui.createItemContext("Text", "text")
-
-
-  ui.end<ui::Button>();
-  
-  ui.end<ui::Item>();
+  Demo demo;
+  demo.place(ui);
 
   INFO("done!\n");
 
-  @@ui.definePlaceable(test,
-  {
-    item demo
-    {
-      size = 100 100;
-      padding = 5 5 5 5;
 
-      text "Demo";
-    }
-  })
 
   return true;
 }
@@ -170,7 +165,6 @@ b8 Engine::update()
 
   if (!ui.update(*this))
     return ERROR("failed to update ui\n");
-
 
   return true;
 }

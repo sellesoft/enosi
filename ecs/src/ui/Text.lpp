@@ -17,7 +17,7 @@ namespace ui
 /* ----------------------------------------------------------------------------
  */
 template<>
-Text* Context::make(str id, str init)
+Text* UI::make(str id, str init)
 {
   Text* text = mem::stl_allocator.construct<Text>();
   if (!initItem(id, text))
@@ -58,7 +58,7 @@ static void findTextBreaks(
 {
   $ local text = ui.createItemContext("Text", "text")
   $ local style = text.style
-  $ local Text = ui.schemas.Text
+  $ local Text = ui.widgets.Text.schema
 
   @@style:lookup(
     font_height,
@@ -175,7 +175,7 @@ static void findTextBreaks(
 
 /* ----------------------------------------------------------------------------
  */
-void Text::evaluate(Context* ui)
+void Text::evaluate(UI* ui)
 {
   $ local text = ui.createItemContext("Text", "this")
   $ local style = text.style
@@ -230,7 +230,7 @@ void Text::evaluate(Context* ui)
 
 /* ----------------------------------------------------------------------------
  */
-void Text::generate(Context* ctx)
+void Text::generate(UI* ui)
 {
   $ local text = ui.createItemContext("Text", "this")
 
@@ -242,7 +242,7 @@ void Text::generate(Context* ctx)
   dc->tex = &font->texture;
 
   vec2i nucounts = putFilledRectCounts() * buffer.asStr().countCharacters();
-  auto [vp, ip] = dc->realloc(ctx, nucounts);
+  auto [vp, ip] = dc->realloc(ui, nucounts);
 
   // Cache off space width since its used in a couple places.
   PackedChar space_char;

@@ -7,6 +7,7 @@
 #define _ecs_color_h
 
 #include "iro/common.h"
+#include "iro/platform.h"
 
 struct Color
 {
@@ -28,7 +29,7 @@ struct Color
 
   Color(u32 rgba)
   {
-    this->rgba = rgba;
+    this->rgba = iro::platform::byteSwap(rgba);
   }
 
   void operator*= (f32 rhs)

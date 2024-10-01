@@ -17,7 +17,7 @@ namespace ui
 /* ----------------------------------------------------------------------------
  */
 template<>
-Button* Context::make(str id, Button::Action action, void* userdata)
+Button* UI::make(str id, Button::Action action, void* userdata)
 {
   auto* button = mem::stl_allocator.construct<Button>();
 
@@ -29,7 +29,6 @@ Button* Context::make(str id, Button::Action action, void* userdata)
 
   $ local button = ui.createItemContext("Button", "button")
 
-  assert(action);
   button->action = action;
   button->userdata = userdata;
 
@@ -43,14 +42,22 @@ Button* Context::make(str id, Button::Action action, void* userdata)
 /* ----------------------------------------------------------------------------
  */
 template<>
-Button* Context::make(str id, Button::Action action)
+Button* UI::make(str id, Button::Action action)
 {
   return make<Button>(id, action, (void*)nullptr);
 }
 
 /* ----------------------------------------------------------------------------
  */
-void Button::update(Context* ctx, UpdateReason reason)
+template<>
+Button* UI::make(str id)
+{
+  return make<Button>(id, (Button::Action)nullptr, (void*)nullptr);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Button::update(UI* ui, UpdateReason reason)
 {
   $ local this = ui.createItemContext("Button", "this")
 

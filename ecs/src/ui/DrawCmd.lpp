@@ -11,9 +11,9 @@ namespace ui
 
 /* ----------------------------------------------------------------------------
  */
-Pair<s32, b8> DrawCmd::findVertex(Context* ctx)
+Pair<s32, b8> DrawCmd::findVertex(UI* ui)
 {
-  auto& varr = ctx->free_drawcmds_vertex_sorted;
+  auto& varr = ui->free_drawcmds_vertex_sorted;
 
   if (0 == varr.len())
     return { 0, false };
@@ -38,9 +38,9 @@ Pair<s32, b8> DrawCmd::findVertex(Context* ctx)
 
 /* ----------------------------------------------------------------------------
  */
-Pair<s32, b8> DrawCmd::findIndex(Context* ctx)
+Pair<s32, b8> DrawCmd::findIndex(UI* ui)
 {
-  auto& varr = ctx->free_drawcmds_index_sorted;
+  auto& varr = ui->free_drawcmds_index_sorted;
 
   if (0 == varr.len())
     return { 0, false };
@@ -65,13 +65,13 @@ Pair<s32, b8> DrawCmd::findIndex(Context* ctx)
 
 /* ----------------------------------------------------------------------------
  */
-void DrawCmd::alloc(Context* ctx, vec2i counts)
+void DrawCmd::alloc(UI* ui, vec2i counts)
 {
   u32 v_next = -1;
   u32 i_next = -1;
 
-  auto& fvsorted = ctx->free_drawcmds_vertex_sorted;
-  auto& fisorted = ctx->free_drawcmds_index_sorted;
+  auto& fvsorted = ui->free_drawcmds_vertex_sorted;
+  auto& fisorted = ui->free_drawcmds_index_sorted;
 
   for (s32 i = 0; i < fvsorted.len(); ++i)
   {
@@ -87,10 +87,10 @@ void DrawCmd::alloc(Context* ctx, vec2i counts)
         dc->counts_reserved.x = 0;
         if (dc->counts_reserved.y == 0)
         {
-          auto [index, found] = dc->findIndex(ctx);
+          auto [index, found] = dc->findIndex(ui);
           if (found)
             fisorted.remove(index);
-          ctx->drawcmds.remove(dc);
+          ui->drawcmds.remove(dc);
         }
       }
       else
@@ -115,7 +115,7 @@ void DrawCmd::alloc(Context* ctx, vec2i counts)
         fisorted.remove(i);
         dc->counts_reserved.y = 0;
         if (dc->counts_reserved.x == 0)
-          ctx->drawcmds.remove(dc);
+          ui->drawcmds.remove(dc);
       }
       else
       {
@@ -128,16 +128,16 @@ void DrawCmd::alloc(Context* ctx, vec2i counts)
 
   if (v_next == -1)
   {
-    vertex_offset = ctx->vertex_next;
-    ctx->vertex_next += counts.x;
+    vertex_offset = ui->vertex_next;
+    ui->vertex_next += counts.x;
   }
   else
     vertex_offset = v_next;
   
   if (i_next == -1)
   {
-    index_offset = ctx->index_next;
-    ctx->index_next += counts.y;
+    index_offset = ui->index_next;
+    ui->index_next += counts.y;
   }
   else
     index_offset = i_next;
@@ -147,10 +147,10 @@ void DrawCmd::alloc(Context* ctx, vec2i counts)
 
 /* ----------------------------------------------------------------------------
  */
-Pair<Vertex*, Index*> DrawCmd::realloc(Context* ctx, vec2i counts)
+Pair<Vertex*, Index*> DrawCmd::realloc(UI* ui, vec2i counts)
 {
   if (counts_reserved.x >= counts.x && counts_reserved.y >= counts.y)
-    return getPtrs(ctx);
+    return getPtrs(ui);
 
   auto restore_texture = tex;
 
@@ -160,34 +160,34 @@ Pair<Vertex*, Index*> DrawCmd::realloc(Context* ctx, vec2i counts)
   // TODO(sushi) try to factor out the logic for deleting drawcmds 
   //             from remove() and make it so that it just tells you 
   //             what needs deleted. Not sure if this is possible.
-  auto dummy = ctx->drawcmds.add();
+  auto dummy = ui->drawcmds.add();
   *dummy = *this;
-  dummy->remove(ctx);
+  dummy->remove(ui);
 
   *this = {};
   tex = restore_texture;
 
-  alloc(ctx, counts);
-  return getPtrs(ctx);
+  alloc(ui, counts);
+  return getPtrs(ui);
 }
 
 /* ----------------------------------------------------------------------------
  */
-void DrawCmd::remove(Context* ctx)
+void DrawCmd::remove(UI* ui)
 {
   if (counts_reserved.x == 0 &&
       counts_reserved.y == 0)
   {
-    ctx->drawcmds.remove(this);
+    ui->drawcmds.remove(this);
     return;
   }
 
-  auto& varr = ctx->free_drawcmds_vertex_sorted;
-  auto& iarr = ctx->free_drawcmds_index_sorted;
+  auto& varr = ui->free_drawcmds_vertex_sorted;
+  auto& iarr = ui->free_drawcmds_index_sorted;
 
   if (0 != varr.len())
   {
-    auto [index, found] = findVertex(ctx);
+    auto [index, found] = findVertex(ui);
     assert(!found && "this drawcmd should not already be in the list");
 
     varr.insert(index, this);
@@ -201,7 +201,7 @@ void DrawCmd::remove(Context* ctx)
         right->counts_reserved.x = 0;
         varr.remove(index+1);
         if (right->counts_reserved.y == 0)
-          ctx->drawcmds.remove(right);
+          ui->drawcmds.remove(right);
       }
     }
     if (index != 0)
@@ -220,7 +220,7 @@ void DrawCmd::remove(Context* ctx)
 
   if (0 != iarr.len())
   {
-    auto [index, found] = findIndex(ctx);
+    auto [index, found] = findIndex(ui);
     assert(!found && "this drawcmd should not already be in the list");
 
     iarr.insert(index, this);
@@ -234,7 +234,7 @@ void DrawCmd::remove(Context* ctx)
         right->counts_reserved.y = 0;
         iarr.remove(index+1);
         if (right->counts_reserved.x == 0)
-          ctx->drawcmds.remove(right);
+          ui->drawcmds.remove(right);
       }
     }
     if (index != 0)
@@ -246,7 +246,7 @@ void DrawCmd::remove(Context* ctx)
         counts_reserved.y = 0;
         iarr.remove(index);
         if (counts_reserved.x == 0)
-          ctx->drawcmds.remove(this);
+          ui->drawcmds.remove(this);
       }
     }
   }
@@ -256,12 +256,12 @@ void DrawCmd::remove(Context* ctx)
 
 /* ----------------------------------------------------------------------------
  */
-Pair<Vertex*, Index*> DrawCmd::getPtrs(Context* ctx)
+Pair<Vertex*, Index*> DrawCmd::getPtrs(UI* ui)
 {
   return
   {
-    (Vertex*)ctx->buffer->mapped.vp + vertex_offset,
-    (Index*)ctx->buffer->mapped.ip + index_offset
+    (Vertex*)ui->buffer->mapped.vp + vertex_offset,
+    (Index*)ui->buffer->mapped.ip + index_offset
   };
 }
 

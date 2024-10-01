@@ -13,10 +13,42 @@ $ local ui = require "ui.UI"
 
 @@lpp.import "ui/Style.lh"
 
-// NOTE(sushi) font property is declared in here such that it can apply 
-//             to any text within an item and be inherited.
+using namespace iro;
 
-@@ui.defineSchema(Item,
+namespace ui
+{
+
+struct Item;
+struct DrawCmd;
+struct UI;
+
+typedef Tree<Item> ItemTree;
+typedef ItemTree::Node ItemNode;
+
+/* ============================================================================
+ *  The reason an update callback was called on an item.
+ */
+enum class UpdateReason
+{
+  DirtyBeforeEval,
+  DirtyAfterEval,
+
+  AlwaysBeforeEval,
+  AlwaysAfterEval,
+
+  MouseHover,
+  MouseHoverChild,
+
+  MousePressed,
+  MouseReleased,
+  MouseDown,
+  MouseScroll,
+};
+
+/* ============================================================================
+ */
+@ui.widget(Item,
+schema
 {
   pos: vec2f = {0, 0};
 
@@ -31,7 +63,26 @@ $ local ui = require "ui.UI"
   size: vec2f = {0, 0}
     accessors
       width = "%.x",
-      height = "%.y";
+      height = "%.y"
+    parseValue
+    {
+      -- Special because we could encounter a percentage.
+      local x = parser:expectNumber()
+      local xperc = parser:checkToken "%%"
+
+      local y = parser:expectNumber()
+      local yperc = parser:checkToken "%%"
+
+      if xperc and yperc then
+        style.set.sizing "percent"
+      elseif xperc then
+        style.set.sizing "percent_x"
+      elseif yperc then
+        style.set.sizing "percent_y"
+      end
+
+      return "{"..x..","..y.."}"
+    };
 
   sizing: flags
   {
@@ -50,7 +101,7 @@ $ local ui = require "ui.UI"
   margin: vec4f = { 0, 0, 0, 0 }
     accessors
       top_left = "%.xy",
-      bottom_right = "%.wz",
+      bottom_right = "%.zw",
       top = "%.y",
       left = "%.x",
       right = "%.z",
@@ -58,12 +109,11 @@ $ local ui = require "ui.UI"
   
   display: flags
   {
-    vertical,
     horizontal,
     flex,
     reverse,
     hidden,
-  } = vertical;
+  };
 
   padding: vec4f = { 0, 0, 0, 0 }
     accessors
@@ -112,7 +162,10 @@ $ local ui = require "ui.UI"
     MouseScroll,
   };
 
-  font: str = "gohufont11";
+  font: str = "gohu";
+  font_height: f32 = 11;
+
+  alignment: vec2f = {0, 0};
 
   func hasBorder 
   {
@@ -164,43 +217,8 @@ $ local ui = require "ui.UI"
   func getPaddedStyleArea
     { { $.getPaddedStyleWidth, $.getPaddedStyleHeight } }
     
-})
-
-using namespace iro;
-
-namespace ui
-{
-
-struct Item;
-struct DrawCmd;
-struct Context;
-
-typedef Tree<Item> ItemTree;
-typedef ItemTree::Node ItemNode;
-
-/* ============================================================================
- *  The reason an update callback was called on an item.
- */
-enum class UpdateReason
-{
-  DirtyBeforeEval,
-  DirtyAfterEval,
-
-  AlwaysBeforeEval,
-  AlwaysAfterEval,
-
-  MouseHover,
-  MouseHoverChild,
-
-  MousePressed,
-  MouseReleased,
-  MouseDown,
-  MouseScroll,
-};
-
-/* ============================================================================
- */
-struct Item
+},
+struct
 {
   str name;
   StyleMap style;
@@ -227,13 +245,13 @@ struct Item
   b8 dirty;
   
   // Called according to the update_trigger style property.
-  virtual void update(Context* ctx, UpdateReason reason) {}
+  virtual void update(UI* ui, UpdateReason reason) {}
 
   // Determines how this item is sized and positioned relative to other items.
-  virtual void evaluate(Context* ctx) {}
+  virtual void evaluate(UI* ui) {}
 
   // Generates draw information for rendering this item.
-  virtual void generate(Context* ctx);
+  virtual void generate(UI* ui);
 
   // Cleans up any dynamic memory this item may have allocated in its lifetime.
   virtual void cleanup() {}
@@ -252,7 +270,7 @@ struct Item
     Child,
   };
 
-  b8 isHovered(Context* ctx, HoverKind kind);
-};
+  b8 isHovered(UI* ui, HoverKind kind);
+})
 
 }

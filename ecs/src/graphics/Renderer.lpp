@@ -71,6 +71,9 @@ b8 Renderer::init(Engine& engine)
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+  glEnable(GL_SCISSOR_TEST);
+  glScissor(0, 0, engine.window.size.x, engine.window.size.y);
+
   if (!compileShaders())
     return false;
 
@@ -131,6 +134,14 @@ b8 Renderer::update()
         GL_UNSIGNED_INT,
         (void*)(base_offset + cmd.draw.index_start),
         cmd.draw.vertex_start);
+      break;
+
+    case DrawCmd::Kind::SetScissor:
+      glScissor(
+        cmd.set_scissor.pos.x,
+        cmd.set_scissor.pos.y,
+        cmd.set_scissor.size.x,
+        cmd.set_scissor.size.y);
       break;
 
     case DrawCmd::Kind::BindTexture:
@@ -392,6 +403,88 @@ b8 Buffer::init(u64 vsize, u64 isize)
   glNamedBufferStorage(ibo, index_size, nullptr, GL_MAP_WRITE_BIT);
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::pushBindBuffer(Buffer* buffer)
+{
+  DrawCmd cmd;
+  cmd.kind = DrawCmd::Kind::BindBuffer;
+  cmd.bind_buffer = buffer;
+  drawcmds.push(cmd);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::pushDraw(
+  u64 index_start, 
+  u64 index_count, 
+  u64 vertex_start)
+{
+  DrawCmd cmd;
+  cmd.kind = DrawCmd::Kind::Draw;
+  cmd.draw = 
+  {
+    .index_start = index_start,
+    .index_count = index_count,
+    .vertex_start = vertex_start,
+  };
+  drawcmds.push(cmd);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::pushSetScissor(vec2i pos, vec2i size)
+{
+  DrawCmd cmd;
+  cmd.kind = DrawCmd::Kind::SetScissor;
+  cmd.set_scissor.pos = pos;
+  cmd.set_scissor.size = size;
+  drawcmds.push(cmd);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::pushBindTexture(Texture* texture)
+{
+  DrawCmd cmd;
+  cmd.kind = DrawCmd::Kind::BindTexture;
+  cmd.bind_texture = texture;
+  drawcmds.push(cmd);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::pushUniformVec2(str name, vec2f v)
+{
+  DrawCmd cmd;
+  cmd.kind = DrawCmd::Kind::PushUniformVec2;
+  cmd.push_uniform.name = name;
+  cmd.push_uniform.v = v;
+  drawcmds.push(cmd);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::pushUniformFloat(str name, f32 f)
+{
+  DrawCmd cmd;
+  cmd.kind = DrawCmd::Kind::PushUniformFloat;
+  cmd.push_uniform.name = name;
+  cmd.push_uniform.f = f;
+  drawcmds.push(cmd);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::pushUniformBool(str name, b8 b)
+{
+  DrawCmd cmd;
+  cmd.kind = DrawCmd::Kind::PushUniformBool;
+  cmd.push_uniform.name = name;
+  cmd.push_uniform.b = b;
+  drawcmds.push(cmd);
 }
 
 /* ----------------------------------------------------------------------------

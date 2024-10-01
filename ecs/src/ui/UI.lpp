@@ -11,6 +11,7 @@ $ local ui = require "ui.UI"
 @@lpp.import "math/util.h"
 
 #include "iro/logger.h"
+#include "iro/containers/SmallArray.h"
 
 using namespace iro;
 
@@ -22,7 +23,7 @@ static Logger logger =
 
 /* ----------------------------------------------------------------------------
  */
-b8 Context::initItem(str id, Item* item)
+b8 UI::initItem(str id, Item* item)
 {
   item->name = id;
   item->node = &item_tree.addLast(item_stack.head->data->node, item);
@@ -43,7 +44,7 @@ b8 Context::initItem(str id, Item* item)
 /* ----------------------------------------------------------------------------
  */
 template<>
-Item* Context::make<Item>(str id)
+Item* UI::make<Item>(str id)
 {
   Item* item = mem::stl_allocator.construct<Item>();
   if (!initItem(id, item))
@@ -56,14 +57,14 @@ Item* Context::make<Item>(str id)
 
 /* ----------------------------------------------------------------------------
  */
-void Context::endItem()
+void UI::endItem()
 {
   item_stack.pop();
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 Context::init(Engine& engine)
+b8 UI::init(Engine& engine)
 {
   gfx::Renderer& renderer = engine.renderer;
   Window& window = engine.window;
@@ -119,7 +120,7 @@ b8 Context::init(Engine& engine)
 
   vertex_next = index_next = 0;
 
-  engine.subscribeToBroadcast<WindowResized>(this, &Context::onWindowResized);
+  engine.subscribeToBroadcast<WindowResized>(this, &UI::onWindowResized);
 
   // Store a reference to the engine incase widgets need to access 
   // information from it.
@@ -130,8 +131,10 @@ b8 Context::init(Engine& engine)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Context::update(Engine& engine)
+b8 UI::update(Engine& engine)
 {
+  TRACE("ui update\n");
+
   if (item_stack.head->data != root)
     return ERROR("items left on stack!\n");
 
@@ -140,6 +143,7 @@ b8 Context::update(Engine& engine)
   //             also make this need to be retriggered as well.
   findHoveredItem(item_tree.root);
 
+  TRACE("  binding buffer ", buffer, "\n");
   engine.renderer.pushBindBuffer(buffer);
 
   engine.renderer.pushUniformVec2(
@@ -150,10 +154,12 @@ b8 Context::update(Engine& engine)
     "translation"_str,
     { -1.f, 1.f });
 
+  TRACE("  mapping buffer\n");
   buffer->map();
 
   updateTree(root->node, engine);
   
+  TRACE("  unmapping buffer\n");
   buffer->unmap();
 
   // idk
@@ -165,11 +171,11 @@ b8 Context::update(Engine& engine)
 /* ----------------------------------------------------------------------------
  */
 static ItemNode* findStaticSizedParent(
-    Context* ctx, 
+    UI* ui, 
     ItemNode* node, 
     ItemNode* child)
 {
-  if (node == ctx->root->node)
+  if (node == ui->root->node)
     return node;
 
   Item* item = node->data;
@@ -178,18 +184,18 @@ static ItemNode* findStaticSizedParent(
   @@item.style:lookup(sizing)
 
   if (child == nullptr)
-    return findStaticSizedParent(ctx, node->parent, node);
+    return findStaticSizedParent(ui, node->parent, node);
   if (@item.style.sizing.testAny(auto_x, auto_y, flex))
     return node;
   else
-    return findStaticSizedParent(ctx, node->parent, node);
+    return findStaticSizedParent(ui, node->parent, node);
 }
 
 /* ----------------------------------------------------------------------------
  */
-void Context::updateTree(ItemNode* node, Engine& engine)
+void UI::updateTree(ItemNode* node, Engine& engine)
 {
-  gfx::Renderer renderer = engine.renderer;
+  gfx::Renderer& renderer = engine.renderer;
   Window& window = engine.window;
   InputMgr& input = engine.input;
 
@@ -248,7 +254,7 @@ $ end
     // TODO(sushi) don't reevalute an item's branch when it is statically 
     //             sized and all that happened to it is it moved.
 
-    evalItemBranch(sspar);
+    evalItemBranch(sspar, nullptr);
     genItemBranch(sspar);
   }
 
@@ -271,13 +277,13 @@ $ end
         max(
           parent->visible_start, 
           min(
-            item->pos_screen,
+            cpos,
             parent->visible_start + parent->visible_size)));
     vec2f br = 
       max(
         parent->visible_start,
         min(
-          item->pos_screen + item->size,
+          cpos + csiz,
           parent->visible_start + parent->visible_size));
     scext = max(vec2f(0,0), br - scoff);
     item->visible_start = 
@@ -310,24 +316,35 @@ $ end
     item->visible_size = item->size;
   }
 
+  renderer.pushSetScissor(
+    vec2i(scoff.x, window.size.y - (scoff.y+scext.y)), scext);
+
   // TODO(sushi) we can maybe pull some of these conditions into the 
   //             calculations above to stop doing work much earlier.
   if (scoff.x < window.size.x && scoff.y < window.size.y &&
       scext.x != 0.f          && scext.y != 0.f          && 
       scoff.x + scext.x > 0.f && scoff.y + scext.y > 0.f)
   {
+    TRACE("pushing draw cmds for item '", item->name, "'\n");
+
     for (DrawCmd* drawcmd : item->drawcmds)
     {
       if (drawcmd->tex)
       {
+        TRACE("  drawcmd has tex ", drawcmd->tex, "\n");
         renderer.pushUniformBool("has_texture"_str, true);
         renderer.pushBindTexture(drawcmd->tex);
       }
       else
       {
+        TRACE("  drawcmd has no tex\n");
         renderer.pushUniformBool("has_texture"_str, false);
       }
 
+      TRACE("  pushing draw \n",
+            "    io: ", drawcmd->index_offset,
+          "\n    ic: ", drawcmd->counts_used.y,
+          "\n    vo: ", drawcmd->vertex_offset, "\n");
       renderer.pushDraw(
         drawcmd->index_offset,
         drawcmd->counts_used.y,
@@ -343,12 +360,22 @@ $ end
 
 /* ----------------------------------------------------------------------------
  */
-void Context::evalItemBranch(ItemNode* node)
+void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
 {
+  FlexContext flex = {};
+
+  SmallArray<Item*, 16> already_evaluated;
+  if (!already_evaluated.init())
+  {
+    ERROR("failed to initialize already evaluated array\n");
+    return;
+  }
+  defer { already_evaluated.deinit(); };
+
   Item* item = node->data;
   Item* parent = (node->parent? node->parent->data : nullptr);
 
-  $ local schema = ui.schemas.Item
+  $ local schema = ui.widgets.Item.schema
   $ local item = ui.createItemContext("Item", "item")
   $ local style = item.style
   $ local parent = ui.createItemContext("Item", "parent", true)
@@ -359,7 +386,8 @@ void Context::evalItemBranch(ItemNode* node)
     size,
     padding,
     border,
-    display)
+    display,
+    alignment)
 
   // TODO(sushi) someway to reuse this information as the parent 
   //             will have already been passed at this point so 
@@ -369,7 +397,8 @@ void Context::evalItemBranch(ItemNode* node)
     size,
     padding,
     margin,
-    border)
+    border,
+    display)
 
   vec2f area = @item.getMarginedArea;
 
@@ -378,7 +407,25 @@ void Context::evalItemBranch(ItemNode* node)
 
   if (!hauto)
   {
-    if (@style.sizing.test(percent_y))
+    if (@style.sizing.test(flex) && 
+        parent_flex && 
+        parent_flex->is_container && 
+        !parent_flex->disp_horizontal)
+    {
+      item->size.y = 
+        @style.size.y / parent_flex->ratio_sum * parent_flex->effective_size;
+
+      if (parent_flex->n_ceils)
+      {
+        item->size.y = ceil(item->size.y);
+        parent_flex->n_ceils -= 1;
+      }
+      else
+      {
+        item->size.y = floor(item->size.y);
+      }
+    }
+    else if (@style.sizing.test(percent_y))
     {
       if (@style.size.height < 0.f)
         ERROR("percent_y is set but height (", @style.size.height, ") is "
@@ -409,7 +456,25 @@ void Context::evalItemBranch(ItemNode* node)
 
   if (!wauto)
   {
-    if (@style.sizing.test(percent_x))
+    if (@style.sizing.test(flex) &&
+        parent_flex &&
+        parent_flex->is_container &&
+        parent_flex->disp_horizontal)
+    {
+      item->size.x = 
+        @style.size.x / parent_flex->ratio_sum * parent_flex->effective_size;
+
+      if (parent_flex->n_ceils)
+      {
+        item->size.x = ceil(item->size.x);
+        parent_flex->n_ceils -= 1;
+      }
+      else
+      {
+        item->size.x = floor(item->size.x);
+      }
+    }
+    else if (@style.sizing.test(percent_x))
     {
       if (@style.size.width < 0.f)
         ERROR("percent_x set but width set (", @style.size.width, ") is "
@@ -436,6 +501,94 @@ void Context::evalItemBranch(ItemNode* node)
   else
     item->size.x = 0.f;
 
+  // Determine info needed to flex children if this is a flex container.
+  if (@style.display.test(flex))
+  {
+    b8 is_horizontal = @style.display.test(horizontal);
+
+    flex.is_container = true;
+    flex.effective_size = 
+      (is_horizontal? 
+        @item.getPaddedWidth :
+        @item.getPaddedHeight);
+    flex.ratio_sum = 0.f;
+    flex.disp_horizontal = is_horizontal;
+
+    if (is_horizontal && wauto)
+    {
+      ERROR("display set to flex and horizontal, but sizing is set to auto "
+            "width\n");
+      return;
+    }
+    else if (hauto)
+    {
+      ERROR("display set to flex and vertical, but sizing is set to auto "
+            "height\n");
+      return;
+    }
+
+    // Perform a first past to figure out the ratio sum.
+    for (ItemNode* cnode = node->first_child; cnode; cnode = cnode->next)
+    {
+      Item* child = cnode->data;
+
+      $ local child = ui.createItemContext("Item", "child")
+
+      @@child.style:lookup(size, sizing, margin)
+
+      if (@child.style.sizing.test(flex))
+      {
+        flex.ratio_sum += 
+          (is_horizontal? @child.style.size.width : @child.style.size.height);
+      }
+      else
+      {
+        if ((is_horizontal && @child.style.sizing.test(auto_x)) ||
+            @child.style.sizing.test(auto_y))
+        {
+          // If a child has automatic sizing we can still support using it in
+          // flex containers by evaluating it early. When we do this we need
+          // to tell the main child eval loop later that it has already been
+          // evaluated and we do so by storing the child in already_evaluated.
+          evalItemBranch(cnode, &flex);
+          flex.effective_size -= 
+            (is_horizontal? child->size.x : child->size.y);
+          already_evaluated.push(child);
+        }
+        else if (is_horizontal)
+        {
+          if (@child.style.sizing.test(percent_x))
+          {
+            flex.effective_size -= 
+              @child.style.size.width / 100.f * item->size.x;
+          }
+          else
+          {
+            flex.effective_size -= 
+              @child.style.size.x +
+              @child.style.margin.left +
+              @child.style.margin.right;
+          }
+        }
+        else
+        {
+          if (@child.style.sizing.test(percent_y))
+          {
+            flex.effective_size -= 
+              @child.style.size.height / 100.f * item->size.y;
+          }
+          else
+          {
+            flex.effective_size -= 
+              @child.style.size.y + 
+              @child.style.margin.top +
+              @child.style.margin.bottom;
+          }
+        }
+      }
+    }
+  }
+
   // Call item's evaluate callback.
   item->evaluate(this);
 
@@ -451,7 +604,7 @@ void Context::evalItemBranch(ItemNode* node)
       node->last_child :
       node->first_child);
 
-  u32 idx = 0;
+  u32 aeidx = 0;
   while (it) 
   {
     Item* child = it->data;
@@ -463,11 +616,12 @@ void Context::evalItemBranch(ItemNode* node)
       positioning,
       pos,
       anchor,
-      margin)
+      sizing,
+      margin,
+      alignment)
 
     if (@child.style.display.test(hidden))
     {
-      idx += 1;
       assert(it != it->next);
       it = 
         (@style.display.test(reverse)? 
@@ -476,7 +630,14 @@ void Context::evalItemBranch(ItemNode* node)
       continue;
     }
 
-    evalItemBranch(child->node);
+    if (already_evaluated.len < aeidx && already_evaluated[aeidx] == child)
+    {
+      aeidx += 1;
+    }
+    else
+    {
+      evalItemBranch(child->node, &flex);
+    }
 
 $ local placeAnchorSwitch = function(var)
 $   local style = child.style
@@ -527,7 +688,33 @@ $ end
     switch (@child.style.positioning)
     {
     case @schema.positioning.static:
-      child->pos_local = cursor;
+      if (@style.display.test(horizontal))
+      {
+        if (!hauto)
+        {
+          child->pos_local.y = cursor.y +
+            @child.style.alignment.y * (@item.getPaddedHeight - child->size.y);
+        }
+        else
+        {
+          child->pos_local.y = cursor.y;
+        }
+        child->pos_local.x = cursor.x;
+      }
+      else
+      {
+        if (!wauto)
+        {
+          child->pos_local.x = cursor.x +
+            @child.style.alignment.x * (@item.getPaddedWidth - child->size.x);
+        }
+        else
+        {
+          child->pos_local.x = cursor.x;
+        }
+        child->pos_local.y = cursor.y;
+      }
+
       if (@style.display.test(horizontal))
         cursor.x = child->pos_local.x + child->size.x;
       else
@@ -565,7 +752,6 @@ $ end
     if (hauto)
       item->size.y = max(item->size.y, child->pos_local.y + child->size.y);
 
-    idx += 1;
     assert(it != it->next);
     it = 
       (@style.display.test(reverse)? 
@@ -594,7 +780,7 @@ $ end
 
 /* ----------------------------------------------------------------------------
  */
-void Context::genItemBranch(ItemNode* node)
+void UI::genItemBranch(ItemNode* node)
 {
   Item* item = node->data;
 
@@ -619,7 +805,7 @@ void Context::genItemBranch(ItemNode* node)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Context::findHoveredItem(ItemTree::Node* node)
+b8 UI::findHoveredItem(ItemTree::Node* node)
 {
   Item* item = node->data;
 
@@ -646,7 +832,7 @@ b8 Context::findHoveredItem(ItemTree::Node* node)
 
 /* ----------------------------------------------------------------------------
  */
-void Context::onWindowResized(WindowResized& event)
+void UI::onWindowResized(WindowResized& event)
 {
   $ local root = ui.createItemContext("Item", "root")
   @root.style.set.size(event.size);

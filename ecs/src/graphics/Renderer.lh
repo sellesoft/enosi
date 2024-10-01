@@ -73,6 +73,7 @@ struct DrawCmd
     Invalid,
     BindBuffer,
     Draw,
+    SetScissor,
     BindTexture,
     PushUniformVec2,
     PushUniformFloat,
@@ -91,6 +92,12 @@ struct DrawCmd
       u64 index_count;
       u64 vertex_start;
     } draw;
+
+    struct 
+    {
+      vec2i pos;
+      vec2i size;
+    } set_scissor;
 
     Texture* bind_texture;
     
@@ -122,65 +129,6 @@ struct Renderer
   SLinkedPool<Buffer> buffers;
   Array<DrawCmd> drawcmds;
 
-  void pushBindBuffer(Buffer* buffer)
-  {
-    DrawCmd cmd;
-    cmd.kind = DrawCmd::Kind::BindBuffer;
-    cmd.bind_buffer = buffer;
-    drawcmds.push(cmd);
-  }
-
-  void pushDraw(
-    u64 index_start, 
-    u64 index_count, 
-    u64 vertex_start)
-  {
-    DrawCmd cmd;
-    cmd.kind = DrawCmd::Kind::Draw;
-    cmd.draw = 
-    {
-      .index_start = index_start,
-      .index_count = index_count,
-      .vertex_start = vertex_start,
-    };
-    drawcmds.push(cmd);
-  }
-
-  void pushBindTexture(Texture* texture)
-  {
-    DrawCmd cmd;
-    cmd.kind = DrawCmd::Kind::BindTexture;
-    cmd.bind_texture = texture;
-    drawcmds.push(cmd);
-  }
-
-  void pushUniformVec2(str name, vec2f v)
-  {
-    DrawCmd cmd;
-    cmd.kind = DrawCmd::Kind::PushUniformVec2;
-    cmd.push_uniform.name = name;
-    cmd.push_uniform.v = v;
-    drawcmds.push(cmd);
-  }
-
-  void pushUniformFloat(str name, f32 f)
-  {
-    DrawCmd cmd;
-    cmd.kind = DrawCmd::Kind::PushUniformFloat;
-    cmd.push_uniform.name = name;
-    cmd.push_uniform.f = f;
-    drawcmds.push(cmd);
-  }
-
-  void pushUniformBool(str name, b8 b)
-  {
-    DrawCmd cmd;
-    cmd.kind = DrawCmd::Kind::PushUniformBool;
-    cmd.push_uniform.name = name;
-    cmd.push_uniform.b = b;
-    drawcmds.push(cmd);
-  }
-
   Engine* engine;
 
   b8   init(Engine& engine);
@@ -196,6 +144,23 @@ struct Renderer
   // Loads a texture into opengl and sets the proper reference to it 
   // on the given texture.
   b8 loadTexture(Texture& texture);
+
+  void pushBindBuffer(Buffer* buffer);
+  void pushDraw(u64 index_start, u64 index_count, u64 vertex_start);
+  void pushSetScissor(vec2i pos, vec2i size);
+  void pushBindTexture(Texture* texture);
+  void pushUniformVec2(str name, vec2f v);
+  void pushUniformFloat(str name, f32 f);
+  void pushUniformBool(str name, b8 b);
+  
+  Renderer() {}
+
+  // NOTE(sushi) explicitly deleting the copy constructor of Renderer
+  //             to prevent accidental copies since operating on a copy 
+  //             of it has potential to cause really really awesome bugs
+  //             that are hard to find.
+  Renderer(const Renderer& rhs) = delete;
+  Renderer operator=(const Renderer& rhs) = delete;
 
 private:
 

@@ -13,7 +13,7 @@ $ local List = require "list"
 @@lpp.import "asset/AssetMgr.lh"
 
 static Logger logger = 
-  Logger::create("ecs.font"_str, Logger::Verbosity::Debug);
+  Logger::create("font"_str, Logger::Verbosity::Debug);
 
 typedef io::StaticBuffer<512> PathBuffer;
 

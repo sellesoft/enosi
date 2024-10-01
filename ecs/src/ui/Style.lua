@@ -5,6 +5,7 @@
 ---
 
 local List = require "list"
+local buffer = require "string.buffer"
 
 local Style = {}
 
@@ -27,5 +28,43 @@ pushPropKind("vec2f", "v2", "Vec2f")
 pushPropKind("vec4f", "v4", "Vec4f")
 pushPropKind("f32", "_f32", "Float")
 pushPropKind("str", "string", "String")
+
+--- Helpers for forming the code to set a property on a style map.
+
+Style.setAs = function(var, property, val, itemvar, eval_val)
+  local buf = buffer.new()
+
+  buf:put(
+    var,'.setAs<',property.type:getTypeName(),'>("',property.name,'"_hashed,')
+
+  if eval_val then
+    buf:put(property.type:set(property, val))
+  else
+    buf:put(val)
+  end
+
+  if itemvar then
+    buf:put(",",itemvar)
+  end
+
+  buf:put(")")
+
+  return buf:get()
+end
+
+Style.setAsInherited = function(var, property, itemvar)
+  local buf = buffer.new()
+
+  buf:put(
+    var,'.setAsInherited<',property.type:getTypeName(),'>("',property.name,
+    '"_hashed')
+
+  if itemvar then
+    buf:put(",",itemvar)
+  end
+
+  buf:put(")")
+  return buf:get()
+end
 
 return Style

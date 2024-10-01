@@ -48,15 +48,16 @@ Schema.inherit = {}
 
 -- * --------------------------------------------------------------------------
 
-Schema.new = function(name, def, file_offset)
+Schema.new = function(name, def, file_offset, base)
   local o = setmetatable({}, Schema)
   o.name = name
   o.property = {}
   o.property.list = List{}
   o.property.map = {}
-  o.base_schema = false
+  o.base = base or false
   o.funcs = {}
   o.terminal = false
+  o.makeParser = false
   o:parse(def, file_offset)
   return o
 end
@@ -65,8 +66,8 @@ end
 
 Schema.findProperty = function(self, name)
   local property = self.property.map[name]
-  if not property and self.base_schema then
-    property = self.base_schema:findProperty(name)
+  if not property and self.base then
+    property = self.base:findProperty(name)
   end 
   return property
 end
@@ -273,6 +274,12 @@ Schema.parse = function(self, def, file_offset)
         end
       end)
 
+      checkTail("parseValue", function()
+        local def = parser:expectPattern("%b{}", 
+                      "braced lua code for value parser definition")
+        property.valueParser = def:sub(2,-2)
+      end)
+
       if not found_tail then
         parser:expectToken ";"
         break
@@ -290,10 +297,9 @@ Schema.parse = function(self, def, file_offset)
         "attempt to assign to already defined property '",id,"'")
     end
 
-
     if parser:checkToken "inherit" then
       -- Check if the given id exists in the base schema.
-      local property = self.base_schema.property.map[id]
+      local property = self.base.property.map[id]
       if not property then
         parser:errorHere(
           "property ",id," was not inherited from a base schema")
@@ -311,25 +317,12 @@ Schema.parse = function(self, def, file_offset)
   while true do
     loop_count = loop_count + 1
 
-    if parser:checkToken "terminal" then
+    if parser:checkToken "make" then
+      self.makeParser = parser:expectPattern("%b{}", 
+        "braced lua code for make parsing")
+      self.makeParser = self.makeParser:sub(2,-2)
+    elseif parser:checkToken "terminal" then
       self.terminal = true
-      parser:expectToken ";"
-    elseif parser:checkToken "inherit" then
-      if self.base_schema then
-        -- TODO(sushi) maybe handle multiple inheritance. I don't think 
-        --             it will ever be necessary and complicates some 
-        --             stuff I don't want to deal with atm.
-        parser:errorHere("base schema has already been defined as ", 
-                         self.base_schema.name)
-      end
-
-      local basename = parser:expectIdentifier()
-
-      self.base_schema = ui.schema_defs[basename]
-      if not self.base_schema then
-        parser:errorHere("no schema with name '",basename,"'")
-      end
-
       parser:expectToken ";"
     elseif parser:checkToken "func" then
       local id = parser:expectIdentifier()
@@ -394,18 +387,19 @@ Property.new = function(
     name, 
     type, 
     defval, 
-    schema, 
+    schema,
     errcb)
+  if schema.property.map[name] then
+      errcb("a property with name '"..name.."' already exists")
+  end
   local o = {}
   o.name = name
   o.type = type
   o.defval = defval
   o.values = {}
+  o.valueParser = false
   if type.allows_accessors then
     o.accessors = {}
-  end
-  if schema.property.map[name] then
-      errcb("a property with name '"..name.."' already exists")
   end
   schema.property.map[name] = o
   schema.property.list:push(o)
@@ -448,7 +442,6 @@ InheritedProperty.new = function(base_property, schema)
   schema.property.list:push(o)
   return setmetatable(o, InheritedProperty)
 end
-
 
 -- * ==========================================================================
 -- *   Lookup
@@ -542,6 +535,16 @@ Enum.adjustValue = function(self, val)
     res = res:gsub(k, v)
   end
   return res
+end
+
+-- * --------------------------------------------------------------------------
+
+Enum.valueParser = function(self, property, parser)
+  local elem = parser:expectIdentifier()
+  local val = 
+    assert(self.elems.map[elem],
+      makeStr("no element named '",elem,"' in property ",property.name))
+  return val
 end
 
 -- * ==========================================================================
@@ -666,6 +669,35 @@ Flags.adjustValue = function(self, val)
   return makeStr("(", res, ")")
 end
 
+-- * --------------------------------------------------------------------------
+
+Flags.valueParser = function(self, property, parser)
+  local buf = buffer.new()
+  buf:put("(")
+  local first = true
+  while true do
+    local elem
+    if first then
+      elem = parser:expectIdentifier()
+    else
+      elem = parser:checkIdentifier()
+      if not elem then
+        break
+      end
+    end
+    local val = 
+      assert(self.elems.map[elem],
+        makeStr("no element named '",elem,"' in property ", property.name))
+    if not first then
+      buf:put("|")
+    end
+    buf:put(val)
+    first = false
+  end
+  buf:put(")")
+  return buf:get()
+end
+
 -- * ==========================================================================
 -- *   CType
 -- * ==========================================================================
@@ -724,6 +756,64 @@ CType.adjustValue = function(self, val)
   return val
 end
 
+-- * --------------------------------------------------------------------------
+
+CType.valueParser = function(self, property, parser)
+  print(property.name)
+  local switch = 
+  {
+  vec2f = function()
+    local x = parser:expectNumber()
+    local y = parser:expectNumber()
+    return "{"..x..","..y.."}"
+  end,
+  vec4f = function()
+    local n0 = parser:expectNumber()
+    local n1 = parser:checkNumber()
+    if n1 then
+      local n2 = parser:checkNumber()
+      if n2 then
+        local n3 = parser:checkNumber()
+        if n3 then
+          return "{"..n0..","..n1..","..n2..","..n3.."}"
+        else
+          return "{"..n1..","..n0..","..n1..","..n2.."}"
+        end
+      else
+        return "{"..n1..","..n0..","..n1..","..n0.."}"
+      end
+    else
+      return "{"..n0..","..n0..","..n0..","..n0.."}"
+    end
+  end,
+  Color = function()
+    if parser:checkPattern "0x" then
+      local hex = parser:expectPattern("[%x]+", "hex for color")
+      return "0x"..hex
+    else
+      local r = parser:expectNumber()
+      local g = parser:expectNumber()
+      local b = parser:expectNumber()
+      local a = parser:checkNumber()
+      if not a then
+        a = "255"
+      end
+      return "{"..r..","..g..","..b..","..a.."}"
+    end
+  end,
+  str = function()
+    return '"'..parser:expectString(true)..'"_str'
+  end,
+  }
+
+  local case = switch[self.name]
+  if not case then
+    parser:errorHere("unhandled CType")
+  end
+
+  return case()
+end
+
 -- * ==========================================================================
 -- *   Float
 -- * ==========================================================================
@@ -768,6 +858,12 @@ Float.adjustValue = function(self, val)
   return val
 end
 
+-- * --------------------------------------------------------------------------
+
+Float.valueParser = function(self, property, parser)
+  return parser:expectNumber()
+end
+
 -- * ==========================================================================
 -- *   Func
 -- * ==========================================================================
@@ -793,7 +889,7 @@ end
 Func.call = function(self, item)
   local style = item.style
   local def = self.def
-  local schema = item.schema
+  local schema = item.widget.schema_def
   
   -- This is black magic that I feel will break sooner or later.
   -- But its kinda awesome that it works.

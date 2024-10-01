@@ -15,7 +15,7 @@ struct Texture;
 namespace ui
 {
 
-struct Context;
+struct UI;
 
 struct DrawCmd
 {
@@ -29,14 +29,14 @@ struct DrawCmd
 
   b8 freed = false;
   
-  Pair<s32, b8> findVertex(Context* ctx);
-  Pair<s32, b8> findIndex(Context* ctx);
+  Pair<s32, b8> findVertex(UI* ui);
+  Pair<s32, b8> findIndex(UI* ui);
 
-  void alloc(Context* ctx, vec2i counts);
-  Pair<Vertex*, Index*> realloc(Context* ctx, vec2i counts);
-  void remove(Context* ctx);
+  void alloc(UI* ui, vec2i counts);
+  Pair<Vertex*, Index*> realloc(UI* ui, vec2i counts);
+  void remove(UI* ui);
 
-  Pair<Vertex*, Index*> getPtrs(Context* ctx);
+  Pair<Vertex*, Index*> getPtrs(UI* ui);
   
 };
 

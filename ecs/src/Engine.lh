@@ -30,7 +30,7 @@ struct Engine
 
   AssetMgr assetmgr;
 
-  ui::Context ui;
+  ui::UI ui;
 
   InputMgr input;
 

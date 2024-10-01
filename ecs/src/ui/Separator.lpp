@@ -1,0 +1,77 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local ui = require "ui.UI"
+ 
+@@lpp.import "ui/Separator.lh"
+@@lpp.import "ui/DrawCmd.lh"
+@@lpp.import "ui/UI.lh"
+@@lpp.import "Engine.lh"
+
+#include "math/util.h"
+
+static Logger logger =
+  Logger::create("ui.separator"_str, Logger::Verbosity::Info);
+
+namespace ui
+{
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+Separator* UI::make<Separator>(str id)
+{
+  auto* sep = mem::stl_allocator.construct<Separator>();
+  if (!initItem(id, sep))
+  {
+    mem::stl_allocator.free(sep);
+    return nullptr;
+  }
+
+  $ local sep = ui.createItemContext("Item", "sep")
+
+  @sep.style.set.sizing(percent_x);
+  @sep.style.set.size({100.f, 1.f});
+  @sep.style.set.margin({10.f, 5.f, 10.f, 5.f});
+  @sep.style.set.alignment({0.5f, 0.5f});
+
+  return sep;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Separator::generate(UI* ui)
+{
+  $ local this = ui.createItemContext("Item", "this")
+
+  @@this.style:lookup(margin)
+
+  auto* dc = drawcmds[0];
+
+  auto [vp, ip] = dc->getPtrs(ui);
+
+  vec2i sum = {};
+
+  auto left = 
+    vec2i(
+      pos_screen.x + @this.style.margin.left, 
+      pos_screen.y + @this.style.margin.top);
+
+  auto right = 
+    vec2i(
+      pos_screen.x + size.x - @this.style.margin.right, 
+      pos_screen.y + @this.style.margin.top);
+
+  sum += 
+    putLine(
+      vp,
+      ip,
+      sum,
+      left, 
+      right,
+      1.f,
+      {255, 255, 255, 255});
+
+  dc->counts_used = sum;
+}
+
+}

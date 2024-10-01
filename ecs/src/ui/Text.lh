@@ -11,10 +11,21 @@ $ local ui = require "ui.UI"
 #include "iro/containers/SmallArray.h"
 #include "iro/Pair.h"
 
-@@ui.defineSchema(Text,
+using namespace iro;
+
+struct Font;
+
+namespace ui
+{
+
+/* ============================================================================
+ */
+@ui.widget(Text,
+schema
 {
   terminal;
-  inherit Item;
+
+  make { return '"'..parser:expectString()..'"_str' }
 
   font = inherit;
 
@@ -28,16 +39,8 @@ $ local ui = require "ui.UI"
   } = none;
 
   tab_spaces: f32 = 2;
-})
-
-using namespace iro;
-
-struct Font;
-
-namespace ui
-{
-
-struct Text : public Item
+},
+struct
 {
   // The loaded font for this Text item.
   Font* font;
@@ -50,12 +53,12 @@ struct Text : public Item
   //             we have in deshi.
   io::Memory buffer;
 
-  virtual void evaluate(Context* ctx) override;
+  virtual void evaluate(UI* ui) override;
 
-  virtual void generate(Context* ctx) override;
+  virtual void generate(UI* ui) override;
 
   virtual void cleanup() override;
-};
+})
 
 }
 
