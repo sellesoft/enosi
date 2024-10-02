@@ -37,7 +37,6 @@ struct DrawCmd
   void remove(UI* ui);
 
   Pair<Vertex*, Index*> getPtrs(UI* ui);
-  
 };
 
 }

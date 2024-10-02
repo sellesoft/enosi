@@ -34,9 +34,6 @@ b8 UI::initItem(str id, Item* item)
     item->style.deinit();
     return false;
   }
-  auto* dc = drawcmds.add();
-  dc->alloc(this, putFilledRectCounts());
-  item->drawcmds.push(dc);
   item->dirty = true;
   return true;
 }
@@ -52,6 +49,11 @@ Item* UI::make<Item>(str id)
     mem::stl_allocator.free(item);
     return nullptr;
   }
+    
+  auto* dc = drawcmds.add();
+  dc->alloc(this, putFilledRectCounts());
+  item->drawcmds.push(dc);
+
   return item;
 }
 
@@ -316,8 +318,11 @@ $ end
     item->visible_size = item->size;
   }
 
-  renderer.pushSetScissor(
-    vec2i(scoff.x, window.size.y - (scoff.y+scext.y)), scext);
+  TRACE("item ", item->name, ":",
+    "\n     ps: ", item->pos_screen,
+    "\n  scoff: ", scoff,
+    "\n  scext: ", scext,
+    "\n");
 
   // TODO(sushi) we can maybe pull some of these conditions into the 
   //             calculations above to stop doing work much earlier.
@@ -325,6 +330,9 @@ $ end
       scext.x != 0.f          && scext.y != 0.f          && 
       scoff.x + scext.x > 0.f && scoff.y + scext.y > 0.f)
   {
+    renderer.pushSetScissor(
+      vec2i(scoff.x, window.size.y - (scoff.y+scext.y)), scext);
+
     TRACE("pushing draw cmds for item '", item->name, "'\n");
 
     for (DrawCmd* drawcmd : item->drawcmds)
@@ -341,6 +349,9 @@ $ end
         renderer.pushUniformBool("has_texture"_str, false);
       }
 
+      if (drawcmd->counts_used.y == 0)
+        continue;
+
       TRACE("  pushing draw \n",
             "    io: ", drawcmd->index_offset,
           "\n    ic: ", drawcmd->counts_used.y,
@@ -352,9 +363,10 @@ $ end
     }
   }
 
-  for (ItemNode* child = node->first_child; child; child = child->next)
+  if (item->shouldPlaceChildren())
   {
-    updateTree(child, engine);
+    for (ItemNode* child = node->first_child; child; child = child->next)
+      updateTree(child, engine);
   }
 }
 
@@ -374,6 +386,8 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
 
   Item* item = node->data;
   Item* parent = (node->parent? node->parent->data : nullptr);
+
+  item->dirty = false;
 
   $ local schema = ui.widgets.Item.schema
   $ local item = ui.createItemContext("Item", "item")
@@ -592,52 +606,58 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
   // Call item's evaluate callback.
   item->evaluate(this);
 
-  // Evaluate children.
-  
-  vec2f cursor = 
-    @style.margin.top_left + 
-    @style.padding.top_left + 
-    @style.border.top_left;
+  // Evaluate children if the item tells us we should.
 
-  ItemNode* it = 
-    (@style.display.test(reverse)? 
-      node->last_child :
-      node->first_child);
-
-  u32 aeidx = 0;
-  while (it) 
+  if (item->shouldPlaceChildren())
   {
-    Item* child = it->data;
+    vec2f cursor = 
+      @style.margin.top_left + 
+      @style.padding.top_left + 
+      @style.border.top_left;
 
-    $ local child = ui.createItemContext("Item", "child", true)
+    // Allow widgets to adjust where child placement should begin, eg. in the
+    // case of a collapsing header. By default this doesn't move the cursor.
+    cursor = item->adjustCursorStart(this, cursor);
 
-    @@child.style:lookup(
-      display,
-      positioning,
-      pos,
-      anchor,
-      sizing,
-      margin,
-      alignment)
+    ItemNode* it = 
+      (@style.display.test(reverse)? 
+        node->last_child :
+        node->first_child);
 
-    if (@child.style.display.test(hidden))
+    u32 aeidx = 0;
+    while (it) 
     {
-      assert(it != it->next);
-      it = 
-        (@style.display.test(reverse)? 
-          it->prev :
-          it->next);
-      continue;
-    }
+      Item* child = it->data;
 
-    if (already_evaluated.len < aeidx && already_evaluated[aeidx] == child)
-    {
-      aeidx += 1;
-    }
-    else
-    {
-      evalItemBranch(child->node, &flex);
-    }
+      $ local child = ui.createItemContext("Item", "child", true)
+
+      @@child.style:lookup(
+        display,
+        positioning,
+        pos,
+        anchor,
+        sizing,
+        margin,
+        alignment)
+
+      if (@child.style.display.test(hidden))
+      {
+        assert(it != it->next);
+        it = 
+          (@style.display.test(reverse)? 
+            it->prev :
+            it->next);
+        continue;
+      }
+
+      if (already_evaluated.len < aeidx && already_evaluated[aeidx] == child)
+      {
+        aeidx += 1;
+      }
+      else
+      {
+        evalItemBranch(child->node, &flex);
+      }
 
 $ local placeAnchorSwitch = function(var)
 $   local style = child.style
@@ -685,78 +705,82 @@ $   local style = child.style
     }
 $ end
 
-    switch (@child.style.positioning)
-    {
-    case @schema.positioning.static:
-      if (@style.display.test(horizontal))
+      switch (@child.style.positioning)
       {
-        if (!hauto)
+      case @schema.positioning.static:
+        if (@style.display.test(horizontal))
         {
-          child->pos_local.y = cursor.y +
-            @child.style.alignment.y * (@item.getPaddedHeight - child->size.y);
-        }
-        else
-        {
-          child->pos_local.y = cursor.y;
-        }
-        child->pos_local.x = cursor.x;
-      }
-      else
-      {
-        if (!wauto)
-        {
-          child->pos_local.x = cursor.x +
-            @child.style.alignment.x * (@item.getPaddedWidth - child->size.x);
-        }
-        else
-        {
+          if (!hauto)
+          {
+            child->pos_local.y = cursor.y +
+              @child.style.alignment.y * 
+              (@item.getPaddedHeight - child->size.y);
+          }
+          else
+          {
+            child->pos_local.y = cursor.y;
+          }
           child->pos_local.x = cursor.x;
         }
-        child->pos_local.y = cursor.y;
+        else
+        {
+          if (!wauto)
+          {
+            child->pos_local.x = cursor.x +
+              @child.style.alignment.x * 
+              (@item.getPaddedWidth - child->size.x);
+          }
+          else
+          {
+            child->pos_local.x = cursor.x;
+          }
+          child->pos_local.y = cursor.y;
+        }
+
+        if (@style.display.test(horizontal))
+          cursor.x = child->pos_local.x + child->size.x;
+        else
+          cursor.y = child->pos_local.y + child->size.y;
+
+        @placeAnchorSwitch
+
+        break;
+
+      case @schema.positioning.relative:
+        child->pos_local = 
+          @child.style.margin.top_left +
+          @style.border.top_left;
+
+        if (@style.display.test(horizontal))
+          cursor.x += child->pos_local.x + child->size.x;
+        else
+          cursor.y += child->pos_local.y + child->size.y;
+
+        @placeAnchorSwitch
+
+        break;
+
+      case @schema.positioning.absolute:
+        @placeAnchorSwitch
+        break;
+
+      // NOTE(sushi) fixed positioning is handled in gen item branch
       }
 
-      if (@style.display.test(horizontal))
-        cursor.x = child->pos_local.x + child->size.x;
-      else
-        cursor.y = child->pos_local.y + child->size.y;
+      child->pos_local = floor(child->pos_local);
 
-      @placeAnchorSwitch
+      if (wauto)
+        item->size.x = max(item->size.x, child->pos_local.x + child->size.x);
+      if (hauto)
+        item->size.y = max(item->size.y, child->pos_local.y + child->size.y);
 
-      break;
-
-    case @schema.positioning.relative:
-      child->pos_local = 
-        @child.style.margin.top_left +
-        @style.border.top_left;
-
-      if (@style.display.test(horizontal))
-        cursor.x += child->pos_local.x + child->size.x;
-      else
-        cursor.y += child->pos_local.y + child->size.y;
-
-      @placeAnchorSwitch
-
-      break;
-
-    case @schema.positioning.absolute:
-      @placeAnchorSwitch
-      break;
-
-    // NOTE(sushi) fixed positioning is handled in gen item branch
+      assert(it != it->next);
+      it = 
+        (@style.display.test(reverse)? 
+          it->prev :
+          it->next);
     }
 
-    child->pos_local = floor(child->pos_local);
-
-    if (wauto)
-      item->size.x = max(item->size.x, child->pos_local.x + child->size.x);
-    if (hauto)
-      item->size.y = max(item->size.y, child->pos_local.y + child->size.y);
-
-    assert(it != it->next);
-    it = 
-      (@style.display.test(reverse)? 
-        it->prev :
-        it->next);
   }
 
   if (wauto)
@@ -774,6 +798,8 @@ $ end
       @style.margin.bottom +
       @style.border.bottom;
   }
+
+  item->size = max(item->size, item->getMinSize(this));
 
   item->pos_local = floor(item->pos_local);
 }
@@ -799,8 +825,11 @@ void UI::genItemBranch(ItemNode* node)
   if (item->drawcmds.len() != 0)
     item->generate(this);
 
-  for (ItemNode* child = node->first_child; child; child = child->next)
-    genItemBranch(child);
+  if (item->shouldPlaceChildren())
+  {
+    for (ItemNode* child = node->first_child; child; child = child->next)
+      genItemBranch(child);
+  }
 }
 
 /* ----------------------------------------------------------------------------

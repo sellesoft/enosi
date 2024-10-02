@@ -27,12 +27,11 @@ Separator* UI::make<Separator>(str id)
     return nullptr;
   }
 
-  $ local sep = ui.createItemContext("Item", "sep")
+  auto* dc = drawcmds.add();
+  dc->alloc(this, putFilledRectCounts());
+  sep->drawcmds.push(dc);
 
-  @sep.style.set.sizing(percent_x);
-  @sep.style.set.size({100.f, 1.f});
-  @sep.style.set.margin({10.f, 5.f, 10.f, 5.f});
-  @sep.style.set.alignment({0.5f, 0.5f});
+  $ local sep = ui.createItemContext("Item", "sep")
 
   return sep;
 }

@@ -27,6 +27,10 @@ Button* UI::make(str id, Button::Action action, void* userdata)
     return nullptr;
   }
 
+  auto* dc = drawcmds.add();
+  dc->alloc(this, putFilledRectCounts());
+  button->drawcmds.push(dc);
+
   $ local button = ui.createItemContext("Button", "button")
 
   button->action = action;
@@ -59,6 +63,9 @@ Button* UI::make(str id)
  */
 void Button::update(UI* ui, UpdateReason reason)
 {
+  if (!action)
+    return;
+
   $ local this = ui.createItemContext("Button", "this")
 
   @@this.style:lookup(triggers)

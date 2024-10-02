@@ -66,19 +66,50 @@ schema
       height = "%.y"
     parseValue
     {
-      -- Special because we could encounter a percentage.
-      local x = parser:expectNumber()
-      local xperc = parser:checkToken "%%"
+      -- Special because we could encounter a percentage or keyword.
+      local x, xperc
+      if parser:checkToken "auto" then
+        x = "auto"
+      else
+        x = parser:expectNumber()
+        xperc = parser:checkToken "%%"
+      end
 
-      local y = parser:expectNumber()
-      local yperc = parser:checkToken "%%"
+      local y, yperc
+      if parser:checkToken "auto" then
+        y = "auto"
+      else
+        y = parser:expectNumber()
+        yperc = parser:checkToken "%%"
+      end
 
-      if xperc and yperc then
-        style.set.sizing "percent"
+      local sizing = ""
+      local sizing_count = 0
+
+      local addSizing = function(s)
+        if sizing_count > 0 then
+          sizing = sizing.."|"
+        end
+        sizing = sizing..s
+        sizing_count = sizing_count + 1
+      end
+
+      if x == "auto" then
+        x = 0
+        addSizing "auto_x"
       elseif xperc then
-        style.set.sizing "percent_x"
+        addSizing "percent_x"
+      end
+
+      if y == "auto" then
+        y = 0
+        addSizing "auto_y"
       elseif yperc then
-        style.set.sizing "percent_y"
+        addSizing "percent_y"
+      end
+
+      if sizing_count > 0 then
+        style.set.sizing(sizing)
       end
 
       return "{"..x..","..y.."}"
@@ -113,6 +144,8 @@ schema
     flex,
     reverse,
     hidden,
+    hide_children,
+    override_cursor_start,
   };
 
   padding: vec4f = { 0, 0, 0, 0 }
@@ -164,6 +197,7 @@ schema
 
   font: str = "gohu";
   font_height: f32 = 11;
+  text_color: Color = { 255, 255, 255, 255 };
 
   alignment: vec2f = {0, 0};
 
@@ -255,7 +289,34 @@ struct
 
   // Cleans up any dynamic memory this item may have allocated in its lifetime.
   virtual void cleanup() {}
+
+  // Allows a widget to tell evaluate if it should place children or not.
+  virtual b8 shouldPlaceChildren() { return true; }
+
+  // Allows a widget to define a minimum size regardless of style properties.
+  // Eg. in the case of collapsing headers with auto_y set in sizing we need to
+  // override this in order to tell the evaluator that even when it has no 
+  // children or when the header is closed, it still has a minimum height of 
+  // its header_height property.
+  // TODO(sushi) this could really just be a postEvaluation callback, as it is
+  //             called at the very end. If we wind up having a lot of 
+  //             callbacks at that point; consolidate them.
+  virtual vec2f getMinSize(UI* ui) { return {0.f, 0.f}; }
+
+  // Adjusts where the cursor for placing the children of this item should
+  // start relative to where the item is placed.
+  virtual vec2f adjustCursorStart(UI* ui, vec2f norm) { return norm; }
   
+  // Adjusts the size of this item as seen by its children. Intended to be used
+  // in combination with adjustCursorStart() to tell children what they are 
+  // actually drawing in in cases where a widget adjusts where children
+  // are drawing. Eg. in a collapsing header, we want the children to 
+  // draw below the header and to think that the size they are drawing into
+  // is the size of the content rect below the header, not the entire 
+  // header item's area (as that would cause an Item with, say, sizing &
+  // percent_y and size.y == 100 to draw beyond the content rect).
+  virtual vec2f adjustItemSize(UI* ui, vec2f norm) { return norm; }
+
   b8 containsPoint(vec2f point);
 
   enum class HoverKind

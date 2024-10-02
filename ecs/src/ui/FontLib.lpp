@@ -62,8 +62,9 @@ Font* FontLib::findOrLoadFont(
     map.insert(entry);
   }
 
-  // Load the font's texture into the graphics backend.
-  gfx.loadTexture(entry->font.texture);
+  // Load the font's texture into the graphics backend if not already.
+  if (entry->font.texture.gfx_handle == 0)
+    gfx.loadTexture(entry->font.texture);
 
   return &entry->font;
 }

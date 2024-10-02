@@ -83,8 +83,6 @@ Placeable.parse = function(self, def, file_offset)
                                "a value parser nor does its underlying type")
             end
             
-            print(parser.text:sub(parser.offset, parser.offset + 10))
-
             result = property.type:valueParser(property, parser)
           else
             -- TODO(sushi) loading the lua chunks for parsing these values 
@@ -261,8 +259,6 @@ Placeable.parse = function(self, def, file_offset)
   --             when we apply them if they are valid so that we don't have to
   --             use an actual WidgetNode here.
   parseDeclarations(self.root)
-
-  print(self:makeC())
 end
 
 -- * --------------------------------------------------------------------------

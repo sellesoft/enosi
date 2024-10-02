@@ -69,7 +69,12 @@ struct UI
 
   b8 initItem(str id, Item* item);
 
-  // TODO(sushi) someway to reuse styles if I ever need it.
+  // TODO(sushi) maybe move away from make/begin being template based as it's
+  //             not really necessary and probably just slows down compile 
+  //             times. It also imposes restrictions on how you can define
+  //             functions for making/beginning widgets.
+
+  // TODO(sushi) someway to reuse styles if we ever need it.
   template<typename TItem>
   TItem* make(str id = nil);
 
@@ -81,7 +86,7 @@ struct UI
   template<typename TItem>
   TItem* begin(str id = nil) 
   {
-    TItem* item = make<TItem>();
+    TItem* item = make<TItem>(id);
     item_stack.push(item);
     return item;
   }

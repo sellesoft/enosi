@@ -1,0 +1,47 @@
+/*
+ *  Collapsing header widget. Places a clickable header that hides or shows 
+ *  its children.
+ */
+
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local ui = require "ui.UI"
+
+@@lpp.import "ui/Item.lh"
+@@lpp.import "ui/Text.lh"
+
+namespace ui
+{
+
+/* ============================================================================
+ */
+@ui.widget(CollapsingHeader,
+schema
+{
+  font = inherit;
+  font_height = inherit;
+  text_color = inherit;
+
+  header_color: Color = { 0, 0, 0, 255 };
+
+  header_height: f32 = 11;
+
+  header_text_align: vec2f = { 0, 0.5 };
+
+  make { return '"'..parser:expectString()..'"_str' }
+},
+struct
+{
+  b8 open;
+
+  TextState header_text;
+
+  virtual void  update(UI* ui, UpdateReason reason) override;
+  virtual void  evaluate(UI* ui) override;
+  virtual vec2f getMinSize(UI* ui) override;
+  virtual void  generate(UI* ui) override;
+  virtual vec2f adjustCursorStart(UI* ui, vec2f norm) override;
+  virtual b8    shouldPlaceChildren() override { return open; }
+})
+
+}

@@ -18,6 +18,7 @@ using namespace iro;
 @@lpp.import "ui/Text.lh"
 @@lpp.import "ui/Button.lh"
 @@lpp.import "ui/Separator.lh"
+@@lpp.import "ui/CollapsingHeader.lh"
 
 static Logger logger = 
   Logger::create("ecs.eng"_str, Logger::Verbosity::Info);
@@ -32,16 +33,17 @@ namespace ui
   | padding: 5 5 5 5
   | font: "gohu"
   | font_height: 11
-  | display: flex
   | background_color: 0x08141eff
   {
     Item header
-    | size: 100% 15
+    | size: 100% 11
     | display: flex horizontal
     {
       .header_sep
       | sizing: flex
-      | size: 1 1;
+      | size: 1 1
+      | alignment: 0.5 0.5
+      | margin: 5;
 
       Separator | .header_sep;
 
@@ -50,26 +52,34 @@ namespace ui
       Separator | .header_sep;
     }
 
-    Button
-    | sizing: flex
-    | triggers: Pressed Released
-    | padding: 10
-    | size: 100 1
-    | background_color: 0x20394fff
+    CollapsingHeader 
+    | size: 100% auto
+    ("header")
     {
-      Text ("button 0");
+      Item bg
+      | size: 100% auto
+      | background_color: 0xaa4488ff
+      {
+        Button
+        | triggers: Pressed Released
+        | margin: 5
+        | size: 100% 50
+        | background_color: 0x20394fff
+        {
+          Text ("button 0");
+        }
+
+        Button
+        | triggers: Pressed Released
+        | margin: 5
+        | size: 100% 50
+        | background_color: 0x32204fff
+        {
+          Text ("button 1");
+        }
+      }
     }
 
-    Button
-    | sizing: flex
-    | triggers: Pressed Released
-    | padding: 10
-    | margin: 5
-    | size: 90 2
-    | background_color: 0x20394fff
-    {
-      Text ("button 1");
-    }
   }
 })
 

@@ -631,21 +631,21 @@ Flags.set = function(self, property, val)
 
   local first = true
 
-  for elem in val:gmatch("[^|]+") do
+  for name in val:gmatch("[^|]+") do
     if not first then
       buf:put("|")
     end
 
-    elem = elem:match("%S+")
+    name = name:match("%S+")
 
-    elem = self.elems.map[elem]
+    local elem = self.elems.map[name]
 
     if not elem then
-      elem = property.values[elem]
+      elem = property.values[name]
     end
 
     if not elem then
-      error("no element or value named '"..elem.."' in property "..
+      error("no element or value named '"..name.."' in property "..
             property.name)
     end
 
@@ -759,7 +759,6 @@ end
 -- * --------------------------------------------------------------------------
 
 CType.valueParser = function(self, property, parser)
-  print(property.name)
   local switch = 
   {
   vec2f = function()

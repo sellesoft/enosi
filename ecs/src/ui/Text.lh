@@ -20,6 +20,74 @@ namespace ui
 
 /* ============================================================================
  */
+struct TextBreak
+{
+  // Offset into the text buffer where this break happens.
+  s64 offset;
+  // Where to visually place the text.
+  vec2f placement;
+};
+
+typedef SmallArray<TextBreak, 64> TextBreaks;
+
+/* ============================================================================
+ *  General text state for use by widgets that need to display text.
+ */
+struct TextState
+{
+  // The loaded font for this text.
+  Font* font;
+
+  // The name of the loaded font so we may reload it if the user changes
+  // it.
+  str font_name;
+
+  // TODO(sushi) replace with text manipulation helper like 
+  //             we have in deshi.
+  io::Memory buffer;
+
+  b8   init(str init);
+  void deinit();
+
+  void checkFont(str name, UI* ui);
+
+  void allocDrawCmd(DrawCmd* dc);
+  
+  void findTextBreaks(
+    vec2f*      size, 
+    TextBreaks* breaks,
+    f32         font_height,
+    f32         tab_spaces,
+    f32         max_width,
+    u32         wrap);
+
+  // Draws text at the given position. This overload will call findTextBreaks
+  // internally with the provided information. If it has already been called,
+  // eg. in the case where the text size needed to be known before hand, you
+  // may use the following overload instead.
+  void draw(
+    UI*      ui,
+    vec2f    pos,
+    DrawCmd* dc,
+    Color    text_color,
+    f32      font_height,
+    f32      tab_spaces,
+    f32      max_width,
+    u32      wrap);
+
+  // Draws text at the given position using the precomputed text breaks 
+  // as would be given by findTextBreaks.
+  void draw(
+    UI*               ui,
+    vec2f             pos,
+    DrawCmd*          dc,
+    Color             text_color,
+    const TextBreaks& breaks);
+};
+
+
+/* ============================================================================
+ */
 @ui.widget(Text,
 schema
 {
@@ -28,9 +96,9 @@ schema
   make { return '"'..parser:expectString()..'"_str' }
 
   font = inherit;
+  font_height = inherit;
+  text_color = inherit;
 
-  font_height: f32 = 11;
-  text_color: Color = { 255,255,255,255 };
   wrap: enum
   {
     none,
@@ -42,16 +110,7 @@ schema
 },
 struct
 {
-  // The loaded font for this Text item.
-  Font* font;
-  
-  // The name of the loaded font so we may reload it if the user changes
-  // it.
-  str font_name;
-
-  // TODO(sushi) replace with text manipulation helper like 
-  //             we have in deshi.
-  io::Memory buffer;
+  TextState state;
 
   virtual void evaluate(UI* ui) override;
 

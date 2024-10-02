@@ -1,0 +1,7 @@
+/*
+ *  Debug tool for inspecting the state of the Engine.
+ */
+
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local ui = require "ui.UI"
