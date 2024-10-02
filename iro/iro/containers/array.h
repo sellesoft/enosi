@@ -94,9 +94,14 @@ struct Array
 
   /* --------------------------------------------------------------------------
    */ 
-  s32& len()   { return getHeader()->len; }
-  s32& space() { return getHeader()->space; }
-  mem::Allocator* allocator() { return getHeader()->allocator; }
+  __attribute__((noinline))
+  Header* getHeader();
+  __attribute__((noinline))
+  s32& len();
+  __attribute__((noinline))
+  s32& space();
+  __attribute__((noinline))
+  mem::Allocator* allocator();
 
   b8 isEmpty() { return len() == 0; }
 
@@ -193,13 +198,10 @@ struct Array
     // len() = 0;
   }
 
-  /* --------------------------------------------------------------------------
-   */ 
-  Header* getHeader() { return (Header*)arr - 1; }
 
   /* --------------------------------------------------------------------------
    */ 
-  T& operator [](s64 i) { return arr[i]; }
+  T& operator [](s64 i) { assert(i >=0 && i < len()); return arr[i]; }
 
   T* begin() { return arr; }
   T* end()   { return arr + len(); }
@@ -225,6 +227,41 @@ struct Array
     arr = (T*)(header + 1);
   }
 };
+
+// NOTE(sushi) these are defined out-of-line to prevent the compiler from
+//             for inlining them to help debugging.
+
+/* ----------------------------------------------------------------------------
+ */ 
+template<typename T>
+Array<T>::Header* Array<T>::getHeader()
+{
+  return (Header*)arr - 1;
+}
+
+/* ----------------------------------------------------------------------------
+ */ 
+template<typename T>
+s32& Array<T>::len()
+{
+  return getHeader()->len;
+}
+
+/* ----------------------------------------------------------------------------
+ */ 
+template<typename T>
+s32& Array<T>::space() 
+{
+  return getHeader()->space;
+}
+
+/* ----------------------------------------------------------------------------
+ */ 
+template<typename T>
+mem::Allocator* Array<T>::allocator()
+{
+  return getHeader()->allocator;
+}
 
 }
 
