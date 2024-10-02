@@ -173,7 +173,7 @@ struct SmallArray
 
   /* --------------------------------------------------------------------------
    */ 
-  T& operator[](s32 idx)
+  T& operator[](s32 idx) const
   {
     return arr[idx];
   }
