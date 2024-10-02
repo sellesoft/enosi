@@ -166,8 +166,10 @@ b8 Window::init(str title)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Window::update(const Engine& engine)
+b8 Window::update(Engine& engine)
 {
+  engine.input.scroll = 0.f;
+
   XEvent event;
   for (;;)
   {

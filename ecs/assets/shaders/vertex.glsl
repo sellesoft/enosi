@@ -19,7 +19,7 @@ void main()
   if (has_texture)
     out_uv = in_uv;
   else
-    out_uv = vec2(-1.f, -1.f );
+    out_uv = vec2(-1.f, -1.f);
 
   vec2 pos = scale * in_pos + translation;
 

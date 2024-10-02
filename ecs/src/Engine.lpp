@@ -30,7 +30,7 @@ namespace ui
 {
   Item root
   | size: 500 500
-  | padding: 5 5 5 5
+  | padding: 5 
   | font: "gohu"
   | font_height: 11
   | background_color: 0x08141eff
@@ -38,6 +38,7 @@ namespace ui
     Item header
     | size: 100% 11
     | display: flex horizontal
+    | margin: 0 0 0 60
     {
       .header_sep
       | sizing: flex
@@ -52,8 +53,11 @@ namespace ui
       Separator | .header_sep;
     }
 
+    Text ("bah bah bah");
+
     CollapsingHeader 
-    | size: 100% auto
+    | size: 100% 70
+    | header_height: 15
     ("header")
     {
       Item bg
@@ -62,8 +66,8 @@ namespace ui
       {
         Button
         | triggers: Pressed Released
+        | size: 600 50
         | margin: 5
-        | size: 100% 50
         | background_color: 0x20394fff
         {
           Text ("button 0");
@@ -71,8 +75,8 @@ namespace ui
 
         Button
         | triggers: Pressed Released
-        | margin: 5
         | size: 100% 50
+        | margin: 5
         | background_color: 0x32204fff
         {
           Text ("button 1");
@@ -80,10 +84,14 @@ namespace ui
       }
     }
 
+    Item | size: 10 1000 | background_color: 0x0000ffff;
+
   }
 })
 
 }
+
+ui::Demo demo;
 
 /* ----------------------------------------------------------------------------
  */ 
@@ -134,14 +142,9 @@ b8 Engine::init()
 
   Font::compileBDF(params);
 
-  using namespace ui;
-
-  Demo demo;
   demo.place(ui);
 
   INFO("done!\n");
-
-
 
   return true;
 }
@@ -156,22 +159,22 @@ b8 Engine::update()
   if (!renderer.update())
     return ERROR("failed to update renderer\n");
 
+  auto ch = demo.root.collapsingheader0.item;
+
+  if (input.scroll != 0.f)
+  {
+    ch->dirty = true;
+    ch->scroll.y += input.scroll;
+    ch->scroll.y = min(max(ch->scroll.y, ch->max_scroll.y), 0.f);
+  }
+
   if (!input.update(*this))
     return ERROR("failed to update input\n");
 
-  static b8 latched = false;
-  static vec2f mpos;
+  // f32 t = (TimePoint::now() - start_time).toSeconds();
 
-  if (input.wasKeyPressed(Key::A))
-  {
-    latched = !latched;
-    mpos = input.mouse.screen;
-  }
-
-  if (latched)
-  {
-    input.mouse.screen = mpos;
-  }
+  // ch->scroll.y = (sin(t) + 1.f) / 2.f * ch->max_scroll.y;
+  // ch->dirty = true;
 
   if (!ui.update(*this))
     return ERROR("failed to update ui\n");

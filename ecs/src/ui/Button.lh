@@ -37,6 +37,8 @@ schema
 },
 struct
 {
+  struct WorkingData : Item::WorkingData {};
+
   typedef void (*Action)(void*, ButtonActivation);
 
   Action action;

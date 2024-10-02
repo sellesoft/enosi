@@ -54,7 +54,7 @@ struct Window
   b8 init(str title);
   void deinit();
 
-  b8 update(const Engine& engine);
+  b8 update(Engine& engine);
   
   void setCursorPosition(s32 x, s32 y);
 

@@ -209,6 +209,16 @@ schema
     %.border.bottom
   }
 
+  vertical_scrollbar_width: f32 = 4;
+  horizontal_scrollbar_height: f32 = 4;
+
+  overflow: enum
+  {
+    scroll,
+    clip,
+    visible,
+  } = scroll;
+
   func getMarginedWidth 
     { $.size.x - %.margin.left - %.margin.right }
   func getMarginedHeight 
@@ -263,9 +273,34 @@ struct
   //             use that here.
   // NOTE(sushi) SmallArray is implemented now, but it might bloat
   //             Item a lot. Expertiment with it later.
+  // TODO(sushi) its possible this can be eliminated via working data
+  //             where we ask the Item to allocate drawcmds into our 
+  //             list of them as they are drawn, which should go along 
+  //             with the future goal of eliminate much of the redundent work
+  //             we do in updateTree().
   Array<DrawCmd*> drawcmds;
 
+  // Draw commands issued after all children drawcmds.
+  Array<DrawCmd*> post_drawcmds;
+
+  // Uhh this sucks but I don't have any other way to cache this information.
+  DrawCmd* scroll_bars;
+
   operator ItemNode*() { return node; }
+
+  struct WorkingData
+  {
+
+  };
+
+  vec2f scroll;
+  vec2f max_scroll;
+
+  // TODO(sushi) much of the following data is not necessary to cache on the
+  //             Item as it is used only during evaluation and drawing.
+  //             We should move towards temporarily allocating 'working data'
+  //             during the entire process of eval/draw instead to reduce 
+  //             the size of this struct as much as possible.
 
   vec2f pos_local;
   vec2f pos_screen;
@@ -276,6 +311,8 @@ struct
   vec2f visible_start;
   vec2f visible_size;
 
+  // TODO(sushi) even this guy can probably be eliminated by just storing a 
+  //             list of dirty Items on UI that we check every update.
   b8 dirty;
   
   // Called according to the update_trigger style property.
@@ -315,7 +352,12 @@ struct
   // is the size of the content rect below the header, not the entire 
   // header item's area (as that would cause an Item with, say, sizing &
   // percent_y and size.y == 100 to draw beyond the content rect).
-  virtual vec2f adjustItemSize(UI* ui, vec2f norm) { return norm; }
+  virtual vec2f adjustItemContentSize(UI* ui, vec2f norm) { return norm; }
+
+  // Adjusts the size of this item after its initialial evaluation.
+  virtual vec2f adjustItemSize(UI* ui) { return size; }
+  
+
 
   b8 containsPoint(vec2f point);
 
@@ -332,6 +374,16 @@ struct
   };
 
   b8 isHovered(UI* ui, HoverKind kind);
+
+  void calcVerticalScrollBarSizes(
+    UI* ui,
+    vec2f* bar_size,
+    vec2f* handle_size);
+
+  void calcHorizontalScrollBarSizes(
+    UI* ui,
+    vec2f* bar_size,
+    vec2f* handle_size);
 })
 
 }

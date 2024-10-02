@@ -41,6 +41,7 @@ struct
   virtual vec2f getMinSize(UI* ui) override;
   virtual void  generate(UI* ui) override;
   virtual vec2f adjustCursorStart(UI* ui, vec2f norm) override;
+  virtual vec2f adjustItemSize(UI* ui) override;
   virtual b8    shouldPlaceChildren() override { return open; }
 })
 

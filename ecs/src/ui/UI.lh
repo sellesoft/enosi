@@ -62,6 +62,10 @@ struct UI
 
   Engine* eng;
 
+  vec2f scrollbar_offset;
+  Item* scrolling_item;
+  b8 horizontal_scroll;
+
   b8 init(Engine& engine);
   void deinit();
 
@@ -106,7 +110,7 @@ struct UI
 
 private:
 
-  void updateTree(ItemNode* node, Engine& engine);
+  void updateTree(ItemNode* node);
 
   struct FlexContext
   {

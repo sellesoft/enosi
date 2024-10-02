@@ -432,9 +432,11 @@ WidgetNode.findStyleClass = function(self, name)
 end
 
 -- * ==========================================================================
--- *   WidgetNode
+-- *   StyleClass
 -- * ==========================================================================
 
+-- TODO(sushi) make it so that you can write .<widget-name> to declare a 
+--             style class that applys to all widgets of a given type.
 StyleClass = Type.make()
 
 -- * --------------------------------------------------------------------------

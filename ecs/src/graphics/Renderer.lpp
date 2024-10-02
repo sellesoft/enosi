@@ -105,7 +105,6 @@ b8 Renderer::update()
 
   DEBUG("executing draw commands\n");
 
-
   Buffer* last_buff = nullptr;
   for (DrawCmd& cmd : drawcmds)
   {

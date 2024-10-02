@@ -85,5 +85,35 @@ b8 Item::isHovered(UI* ui, HoverKind kind)
   return false;
 }
 
+/* ----------------------------------------------------------------------------
+ */
+void Item::calcVerticalScrollBarSizes(
+    UI* ui,
+    vec2f* bar_size,
+    vec2f* handle_size)
+{
+  $ local this = ui.createItemContext("Item", "this")
+  @@this.style:lookup(vertical_scrollbar_width, horizontal_scrollbar_height)
+  
+  vec2f content_start = adjustCursorStart(ui, vec2f(0,0));
+
+  if (max_scroll.y != 0.f)
+  {
+    bar_size->y = size.y - content_start.y;
+  }
+
+  if (max_scroll.x != 0.f)
+  {
+    bar_size->y -= @this.style.horizontal_scrollbar_height;
+  }
+
+  bar_size->x = @this.style.vertical_scrollbar_width;
+
+  f32 total_height = size.y - max_scroll.y;
+  handle_size->y = bar_size->y * size.y / total_height;
+  
+  handle_size->x = @this.style.horizontal_scrollbar_height;
+}
+
 }
 

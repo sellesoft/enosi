@@ -28,10 +28,10 @@ CollapsingHeader* UI::make(str id, str init)
 
   auto* background_dc = drawcmds.add();
   background_dc->alloc(this, putFilledRectCounts());
-  ch->drawcmds.push(background_dc);
+  ch->post_drawcmds.push(background_dc);
 
   auto* text_dc = drawcmds.add();
-  ch->drawcmds.push(text_dc);
+  ch->post_drawcmds.push(text_dc);
 
   if (!ch->header_text.init(init))
   {
@@ -80,6 +80,7 @@ void CollapsingHeader::update(UI* ui, UpdateReason reason)
         vec2f(size.x, @this.style.header_height)))
   {
     open = !open;
+    dirty = true;
   }
 }
 
@@ -96,8 +97,8 @@ void CollapsingHeader::generate(UI* ui)
     font_height,
     text_color)
 
-  DrawCmd* background_dc = drawcmds[0];
-  DrawCmd* text_dc = drawcmds[1];
+  DrawCmd* background_dc = post_drawcmds[0];
+  DrawCmd* text_dc = post_drawcmds[1];
 
   auto [bgvp, bgip] = background_dc->getPtrs(ui);
 
@@ -108,7 +109,15 @@ void CollapsingHeader::generate(UI* ui)
       bgvp,
       bgip,
       sum,
-      pos_screen,
+      // HACK(sushi) I DO NOT KNOW WHY I HAVE TO OFFSET THIS LIKE THIS
+      //             but it fixes a off by one bug where the contents of 
+      //             this render for a single pixel line above the header
+      //             when scrolling. In RenderDoc this does not appear
+      //             but otherwise it does idk man this drove me insane
+      //             for like an hour and a half.
+      //             There is a similar hack in telling the evaluator
+      //             where to begin children.
+      vec2f(pos_screen.x, pos_screen.y - 1.f),
       vec2f(size.x, @this.style.header_height),
       @this.style.header_color);
 
@@ -150,10 +159,22 @@ vec2f CollapsingHeader::adjustCursorStart(UI* ui, vec2f norm)
 {
   // Start placing children below the header.
   $ local this = ui.createItemContext("CollapsingHeader", "this")
-
   @@this.style:lookup(header_height)
 
-  return vec2f(0.f, @this.style.header_height);
+  return vec2f(0.f, @this.style.header_height-1.f);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+vec2f CollapsingHeader::adjustItemSize(UI* ui)
+{
+  if (!open)
+  {
+    $ local this = ui.createItemContext("CollapsingHeader", "this")
+    @@this.style:lookup(header_height)
+    return vec2f(size.x, @this.style.header_height);
+  }
+  return size;
 }
 
 }

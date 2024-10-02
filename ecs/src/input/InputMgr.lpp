@@ -38,7 +38,8 @@ $ end
     KeyReleased,
     MousePressed,
     MouseReleased,
-    MouseMoved);
+    MouseMoved,
+    MouseScroll);
 
   return true;
 }
