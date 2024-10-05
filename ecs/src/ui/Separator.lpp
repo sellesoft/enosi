@@ -27,11 +27,8 @@ Separator* UI::make<Separator>(str id)
     return nullptr;
   }
 
-  auto* dc = drawcmds.add();
-  dc->alloc(this, putFilledRectCounts());
-  sep->drawcmds.push(dc);
-
-  $ local sep = ui.createItemContext("Item", "sep")
+  sep->dc = drawcmds.add();
+  sep->dc->alloc(this, putFilledRectCounts());
 
   return sep;
 }
@@ -43,8 +40,6 @@ void Separator::generate(UI* ui)
   $ local this = ui.createItemContext("Item", "this")
 
   @@this.style:lookup(margin)
-
-  auto* dc = drawcmds[0];
 
   auto [vp, ip] = dc->getPtrs(ui);
 

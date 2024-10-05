@@ -22,16 +22,19 @@ schema
   font_height = inherit;
   text_color = inherit;
 
-  header_color: Color = { 0, 0, 0, 255 };
-
+  header_color: Color = 0x000000ff;
   header_height: f32 = 11;
+  header_text_align: vec2f = 0 0.5;
 
-  header_text_align: vec2f = { 0, 0.5 };
+  content_background_color: Color = 0x00000000;
 
   make { return '"'..parser:expectString()..'"_str' }
 },
 struct
 {
+  DrawCmd* header_bg;
+  DrawCmd* content_bg;
+
   b8 open;
 
   TextState header_text;
@@ -41,8 +44,26 @@ struct
   virtual vec2f getMinSize(UI* ui) override;
   virtual void  generate(UI* ui) override;
   virtual vec2f adjustCursorStart(UI* ui, vec2f norm) override;
-  virtual vec2f adjustItemSize(UI* ui) override;
+  virtual AdjustedSize adjustItemSize(UI* ui, b8 ax, b8 ay) override;
   virtual b8    shouldPlaceChildren() override { return open; }
+  virtual vec2f calcContentStart(vec4f margin, vec4f border) override;
+  virtual vec2f calcContentArea(
+    vec4f margin, 
+    vec4f border, 
+    vec2f size) override;
+
+  virtual void reportDrawCmds(
+      UI* ui, 
+      DrawCmdList& pre, 
+      DrawCmdList& post) override
+  { 
+    if (open && content_bg)
+      pre.push(content_bg);
+    if (header_bg)
+      post.push(header_bg);
+    if (header_text.dc)
+      post.push(header_text.dc);
+  }
 })
 
 }

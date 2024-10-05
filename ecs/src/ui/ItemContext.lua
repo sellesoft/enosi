@@ -20,8 +20,10 @@ end
 
 ItemContext.__index = function(self, key)
   local func = 
-    assert(self.widget.schema_def.funcs[key],
-      "no function with name '"..key.."'")
+    assert(self.widget.schema_def:findFunc(key),
+      "no func named '"..key.."' in schema of widget '"..self.widget.name..
+      "' or any of its bases")
+
   return function()
     return func:call(self)
   end

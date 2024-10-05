@@ -10,6 +10,7 @@ $ local ui = require "ui.UI"
 #include "math/vec.h"
 #include "iro/containers/Tree.h"
 #include "iro/containers/array.h"
+#include "iro/containers/SmallArray.h"
 
 @@lpp.import "ui/Style.lh"
 
@@ -24,6 +25,7 @@ struct UI;
 
 typedef Tree<Item> ItemTree;
 typedef ItemTree::Node ItemNode;
+typedef SmallArray<DrawCmd*, 8> DrawCmdList;
 
 /* ============================================================================
  *  The reason an update callback was called on an item.
@@ -50,7 +52,7 @@ enum class UpdateReason
 @ui.widget(Item,
 schema
 {
-  pos: vec2f = {0, 0};
+  pos: vec2f = 0 0;
 
   positioning: enum
   {
@@ -60,7 +62,7 @@ schema
     fixed,
   } = static;
 
-  size: vec2f = {0, 0}
+  size: vec2f = 0 0
     accessors
       width = "%.x",
       height = "%.y"
@@ -129,10 +131,10 @@ schema
       auto = "auto_x | auto_y",
       percent = "percent_x | percent_y";
 
-  margin: vec4f = { 0, 0, 0, 0 }
+  margin: vec4f = 0
     accessors
-      top_left = "%.xy",
-      bottom_right = "%.zw",
+      top_left = "%.xy()",
+      bottom_right = "%.zw()",
       top = "%.y",
       left = "%.x",
       right = "%.z",
@@ -148,10 +150,10 @@ schema
     override_cursor_start,
   };
 
-  padding: vec4f = { 0, 0, 0, 0 }
+  padding: vec4f = 0
     accessors
-      top_left = "%.xy",
-      bottom_right = "%.zw",
+      top_left = "%.xy()",
+      bottom_right = "%.zw()",
       top = "%.y",
       left = "%.x",
       right = "%.z",
@@ -165,18 +167,18 @@ schema
     bottom_left,
   } = top_left;
 
-  border: vec4f = { 0, 0, 0, 0 }
+  border: vec4f = 0
     accessors
-      top_left = "%.xy",
-      bottom_right = "%.zw",
+      top_left = "%.xy()",
+      bottom_right = "%.zw()",
       top = "%.y",
       left = "%.x",
       right = "%.z",
       bottom = "%.w";
 
-  border_color: Color = { 255, 255, 255, 255 };
+  border_color: Color = 0x43242bff;
 
-  background_color: Color = { 0, 0, 0, 0 };
+  background_color: Color = 0x00000000;
 
   update_triggers: flags
   {
@@ -197,9 +199,9 @@ schema
 
   font: str = "gohu";
   font_height: f32 = 11;
-  text_color: Color = { 255, 255, 255, 255 };
+  text_color: Color = 0xc5c9c5ff;
 
-  alignment: vec2f = {0, 0};
+  alignment: vec2f = 0 0;
 
   func hasBorder 
   {
@@ -209,8 +211,14 @@ schema
     %.border.bottom
   }
 
-  vertical_scrollbar_width: f32 = 4;
-  horizontal_scrollbar_height: f32 = 4;
+  vertical_scrollbar_width: f32 = 5;
+  horizontal_scrollbar_height: f32 = 5;
+
+  scrollbar_color: Color = 0x16161dff;
+  scrollbar_handle_color: Color = 0x717c7c;
+
+  vertical_scrollbar_handle_width: f32 = 3;
+  horizontal_scrollbar_handle_height: f32 = 3;
 
   overflow: enum
   {
@@ -269,22 +277,22 @@ struct
 
   ItemNode* node;
 
-  // TODO(sushi) implement something like SmallVector from llvm and 
-  //             use that here.
-  // NOTE(sushi) SmallArray is implemented now, but it might bloat
-  //             Item a lot. Expertiment with it later.
-  // TODO(sushi) its possible this can be eliminated via working data
-  //             where we ask the Item to allocate drawcmds into our 
-  //             list of them as they are drawn, which should go along 
-  //             with the future goal of eliminate much of the redundent work
-  //             we do in updateTree().
-  Array<DrawCmd*> drawcmds;
+  // I would like to not do this, but since these properties are a part of 
+  // all Items I feel it is appropriate to force being able to use them
+  // on any of them whether the widget specifies it or not. Ideally these
+  // aren't cached on the Item itself as we want to keep Item small, but 
+  // I don't have anywhere else to put them atm. Once we get to caching 
+  // off drawcmds into a linear list that we feed to the Renderer (if 
+  // possible) then these should ideally be moved off.
+  struct 
+  {
+    // Always draws over anything the Item draws.
+    DrawCmd* borders;
+    DrawCmd* scrollbars;
 
-  // Draw commands issued after all children drawcmds.
-  Array<DrawCmd*> post_drawcmds;
-
-  // Uhh this sucks but I don't have any other way to cache this information.
-  DrawCmd* scroll_bars;
+    // Always draws below anything the Item draws.
+    DrawCmd* background;
+  } builtin;
 
   operator ItemNode*() { return node; }
 
@@ -327,6 +335,12 @@ struct
   // Cleans up any dynamic memory this item may have allocated in its lifetime.
   virtual void cleanup() {}
 
+  // Implemented by widgets that perform custom drawing, called just before 
+  // we decide what to send to the Renderer for this Item. DrawCmds stored in
+  // 'pre' will be emitted before any of its children's draw cmds while those
+  // in 'post' will be emitted after.
+  virtual void reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post) { }
+
   // Allows a widget to tell evaluate if it should place children or not.
   virtual b8 shouldPlaceChildren() { return true; }
 
@@ -354,11 +368,39 @@ struct
   // percent_y and size.y == 100 to draw beyond the content rect).
   virtual vec2f adjustItemContentSize(UI* ui, vec2f norm) { return norm; }
 
-  // Adjusts the size of this item after its initialial evaluation.
-  virtual vec2f adjustItemSize(UI* ui) { return size; }
+  // Adjusts the size of this item just after its initial size evaluation.
+  // The Item's internal 'size' variable will be set before this function is
+  // invoked. The Item is free to modify it here as necessary.
+  // If a widget needs to disable automatic sizing over either axis it may 
+  // also do so here.
+  struct AdjustedSize
+  {
+    b8 disable_auto_x;
+    b8 disable_auto_y;
+  };
+  virtual AdjustedSize adjustItemSize(
+      UI* ui,
+      b8 is_auto_x,
+      b8 is_auto_y) 
+  { 
+    return {}; 
+  }
   
+  // Calculates where the content of this Item starts. Can be overrided
+  // by widgets when they need their content to start somewhere other 
+  // than the default position.
+  virtual vec2f calcContentStart(vec4f margin, vec4f border)
+  {
+    return margin.xy() + border.xy();
+  }
 
-
+  // Calculates the visual area that the content of this Item is placed in.
+  // 'size' is the content area that would normally be computed for this Item.
+  virtual vec2f calcContentArea(vec4f margin, vec4f border, vec2f size)
+  {
+    return size;
+  }
+  
   b8 containsPoint(vec2f point);
 
   enum class HoverKind
@@ -375,14 +417,18 @@ struct
 
   b8 isHovered(UI* ui, HoverKind kind);
 
-  void calcVerticalScrollBarSizes(
+  void calcVerticalScrollBar(
     UI* ui,
+    vec2f* bar_pos,
     vec2f* bar_size,
+    vec2f* handle_pos,
     vec2f* handle_size);
 
-  void calcHorizontalScrollBarSizes(
+  void calcHorizontalScrollBar(
     UI* ui,
+    vec2f* bar_pos,
     vec2f* bar_size,
+    vec2f* handle_pos,
     vec2f* handle_size);
 })
 

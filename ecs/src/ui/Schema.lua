@@ -74,6 +74,16 @@ end
 
 -- * --------------------------------------------------------------------------
 
+Schema.findFunc = function(self, name)
+  local func = self.funcs[name]
+  if not func and self.base then
+    func = self.base:findFunc(name)
+  end
+  return func
+end
+
+-- * --------------------------------------------------------------------------
+
 Schema.__index = function(self, key)
   local raw = Schema[key]
   if raw then
@@ -191,8 +201,7 @@ Schema.parse = function(self, def, file_offset)
         end
         defval = attempt
       else
-        defval = 
-          parser:expectPattern("%b{}", "a braced initializer list (eg. {...})")
+        defval = type:valueParser(nil, parser)
       end
     end
 
@@ -905,7 +914,7 @@ Func.call = function(self, item)
       prev_stop = stop
 
       local st, sp = term:find("%w+")
-      local func = schema.funcs[term:sub(st,sp)]
+      local func = schema:findFunc(term:sub(st,sp))
       if func then
         local res = func:call(item)
         buf:put(res)

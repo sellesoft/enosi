@@ -9,8 +9,11 @@ require "lppclang" .init "../lppclang/build/debug/liblppclang.so"
 -- Get the cargs so we can pass them to lppclang when we create the context.
 local args = List{}
 
-for arg in os.getenv("NIX_CFLAGS_COMPILE"):gmatch("%S+") do
-  args:push(arg)
+local nix_cflags = os.getenv("NIX_CFLAGS_COMPILE")
+if nix_cflags then
+  for arg in nix_cflags:gmatch("%S+") do
+    args:push(arg)
+  end
 end
 
 -- TODO(sushi) put this somewhere central lol this is dumb
@@ -92,6 +95,7 @@ end
 
 local imported = {}
 
+-- TODO(sushi) this needs to be a part of lpp itself.
 lpp.import = function(path)
   if imported[path] then
     return 

@@ -202,6 +202,7 @@ static b8 compileShader(str path, int kind, u32* out_shader_id)
   auto file = File::from(path, OpenFlag::Read);
   if (isnil(file))
     return ERROR("failed to open shader at path '", path, "'\n");
+  defer { file.close(); };
 
   u64 filesize = file.getInfo().byte_size;
     

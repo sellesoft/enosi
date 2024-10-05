@@ -46,7 +46,7 @@ b8 Font::compileBDF(CompileParams& params)
     return error("attempt to load font '", params.name, "' but there is no "
                  "asset at path '", params.asset_path, "'\n");
 
-  if (false && !AssetMgr::checkNeedsCompiled(params.asset_path, params.data_path))
+  if (!AssetMgr::checkNeedsCompiled(params.asset_path, params.data_path))
     return true;
 
   INFO("compiling '", params.data_path, "'\n");
@@ -65,12 +65,14 @@ b8 Font::compileBDF(CompileParams& params)
   if (isnil(file))
     return error("failed to open font asset file at '", 
                  params.data_path, "'\n");
-  
+  defer { file.close(); };
+
   u64 file_size = file.getInfo().byte_size;
 
   io::Memory buffer;
   if (!buffer.open(file_size, &allocator))
     return error("failed to open buffer for reading file data\n");
+  defer { buffer.close(); };
 
   if (file_size != buffer.consume(&file, file_size))
     return error("failed to read entire asset file\n");

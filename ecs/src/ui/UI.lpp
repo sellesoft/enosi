@@ -29,17 +29,6 @@ b8 UI::initItem(str id, Item* item)
   item->node = &item_tree.addLast(item_stack.head->data->node, item);
   if (!item->style.init())
     return false;
-  if (!item->drawcmds.init())
-  {
-    item->style.deinit();
-    return false;
-  }
-  if (!item->post_drawcmds.init())
-  {
-    item->style.deinit();
-    item->drawcmds.destroy();
-    return false;
-  }
   item->dirty = true;
   return true;
 }
@@ -56,10 +45,6 @@ Item* UI::make<Item>(str id)
     return nullptr;
   }
     
-  auto* dc = drawcmds.add();
-  dc->alloc(this, putFilledRectCounts());
-  item->drawcmds.push(dc);
-
   return item;
 }
 
@@ -95,7 +80,9 @@ b8 UI::init(Engine& engine)
   buffer = renderer.createBuffer();
   if (!buffer)
     return ERROR("failed to create gfx::Buffer\n");
-  if (!buffer->init(sizeof(ui::Vertex) * 1028, sizeof(ui::Index) * 512))
+  if (!buffer->init(
+        sizeof(ui::Vertex) * 8224, 
+        sizeof(ui::Index) * 4096))
     return ERROR("failed to init gfx::Buffer\n");
 
   buffer->setF32AttribF32(
@@ -112,10 +99,6 @@ b8 UI::init(Engine& engine)
   root->node = &item_tree.add(root);
   if (!root->style.init())
     return ERROR("failed to initialize root style\n");
-  if (!root->drawcmds.init())
-    return ERROR("failed to initialize root drawcmds\n");
-  if (!root->post_drawcmds.init())
-    return ERROR("failed to initialize root post drawcmds\n");
   root->dirty = true;
   root->visible_start = {0,0};
   root->visible_size = root->size;
@@ -145,6 +128,8 @@ b8 UI::update(Engine& engine)
 {
   TRACE("ui update\n");
 
+  Window& window = eng->window;
+  gfx::Renderer& renderer = eng->renderer;
   InputMgr& input = eng->input;
 
   if (item_stack.head->data != root)
@@ -156,15 +141,17 @@ b8 UI::update(Engine& engine)
   findHoveredItem(item_tree.root);
 
   TRACE("  binding buffer ", buffer, "\n");
-  engine.renderer.pushBindBuffer(buffer);
+  renderer.pushBindBuffer(buffer);
 
-  engine.renderer.pushUniformVec2(
+  renderer.pushUniformVec2(
     "scale"_str,
     { 2.f / engine.window.size.x, -2.f / engine.window.size.y });
 
-  engine.renderer.pushUniformVec2(
+  renderer.pushUniformVec2(
     "translation"_str,
     { -1.f, 1.f });
+
+  renderer.pushSetScissor(vec2i(0,0), vec2i(window.size.x, window.size.y));
 
   TRACE("  mapping buffer\n");
   buffer->map();
@@ -185,15 +172,39 @@ b8 UI::update(Engine& engine)
     }
     else if (horizontal_scroll)
     {
+      vec2f bar_pos, bar_size;
+      vec2f handle_pos, handle_size;
+      scrolling_item->calcHorizontalScrollBar(
+        this,
+        &bar_pos,
+        &bar_size,
+        &handle_pos,
+        &handle_size);
 
+      f32 mlx = 
+        input.mouse.window.x - scrolling_item->pos_screen.x;
+
+      f32 mte = 
+        max(0.f, min(mlx - scrollbar_offset.x, bar_size.x - handle_size.x));
+
+      f32 new_scroll = 
+        scrolling_item->max_scroll.x * mte / (bar_size.x - handle_size.x);
+
+      if (new_scroll != scrolling_item->scroll.x)
+      {
+        scrolling_item->dirty = true;
+        scrolling_item->scroll.x = new_scroll;
+      }
     }
     else
     {
-      vec2f bar_size;
-      vec2f handle_size;
-      scrolling_item->calcVerticalScrollBarSizes(
+      vec2f bar_pos, bar_size;
+      vec2f handle_pos, handle_size;
+      scrolling_item->calcVerticalScrollBar(
         this,
+        &bar_pos,
         &bar_size,
+        &handle_pos,
         &handle_size);
 
       vec2f content_start = 
@@ -241,7 +252,7 @@ static ItemNode* findStaticSizedParent(
 
   if (child == nullptr)
     return findStaticSizedParent(ui, node->parent, node);
-  if (@item.style.sizing.testAny(auto_x, auto_y, flex))
+  if (!@item.style.sizing.testAny(auto_x, auto_y, flex))
     return node;
   else
     return findStaticSizedParent(ui, node->parent, node);
@@ -267,7 +278,7 @@ void UI::updateTree(ItemNode* node)
 
   $ local parent = ui.createItemContext("Item", "parent", true)
 
-  @@parent.style:lookup(overflow)
+  @@parent.style:lookup(overflow, margin, border)
 
   // TODO(sushi) doing these look ups every frame for every item kinda
   //             sucks. Maybe try storing a map from item to cached 
@@ -331,39 +342,54 @@ $ end
   {
     vec2f cpos = 
       item->pos_screen + 
-      @style.margin.top_left + 
-      @style.border.top_left;
-    vec2f csiz = @item.getBorderedArea;
+      @style.margin.top_left;
+    vec2f csiz = @item.getMarginedArea;
+
+    vec2f ppos = 
+      parent->pos_screen + 
+      parent->calcContentStart(
+        @parent.style.margin,
+        @parent.style.border);
+
+    ppos = max(ppos, parent->visible_start);
+
+    vec2f psiz = 
+      parent->calcContentArea(
+        @parent.style.margin,
+        @parent.style.border,
+        parent->visible_size);
+  
+    vec2f pext = ppos + psiz;
 
     scoff = 
       max(
         vec2f(0,0), 
         max(
-          parent->visible_start, 
+          ppos,
           min(
             cpos,
-            parent->visible_start + parent->visible_size)));
+            pext)));
     vec2f br = 
       max(
-        parent->visible_start,
+        ppos,
         min(
           cpos + csiz,
-          parent->visible_start + parent->visible_size));
+          pext));
     scext = max(vec2f(0,0), br - scoff);
     item->visible_start = 
       max(
         vec2f(0,0),
         max(
-          parent->visible_start,
+          ppos,
           min(
             cpos, 
-            parent->visible_start + parent->visible_size)));
+            pext)));
     br = 
       max(
-        parent->visible_start, 
+        ppos,
         min(
           cpos + csiz,
-          parent->visible_start + parent->visible_size));
+          pext));
 
     item->visible_size = br - item->visible_start;
   }
@@ -394,7 +420,35 @@ $ end
     scext.x != 0.f          && scext.y != 0.f          && 
     scoff.x + scext.x > 0.f && scoff.y + scext.y > 0.f;
 
-  auto emitDrawCmds = [&](Array<DrawCmd*>& drawcmds)
+  auto emitDrawCmd = [&](DrawCmd* drawcmd)
+  {
+    if (drawcmd->tex)
+    {
+      TRACE("  drawcmd has tex ", drawcmd->tex, "\n");
+      renderer.pushUniformBool("has_texture"_str, true);
+      renderer.pushBindTexture(drawcmd->tex);
+    }
+    else
+    {
+      TRACE("  drawcmd has no tex\n");
+      renderer.pushUniformBool("has_texture"_str, false);
+    }
+
+    if (drawcmd->counts_used.y == 0)
+      return;
+
+    TRACE("  pushing draw \n",
+        "    io: ", drawcmd->index_offset,
+        "\n    ic: ", drawcmd->counts_used.y,
+        "\n    vo: ", drawcmd->vertex_offset, "\n");
+
+    renderer.pushDraw(
+        drawcmd->index_offset,
+        drawcmd->counts_used.y,
+        drawcmd->vertex_offset);
+  };
+
+  auto emitDrawCmds = [&](DrawCmdList& drawcmds)
   {
      renderer.pushSetScissor(
       vec2i(scoff.x, window.size.y - (scoff.y+scext.y)), scext);
@@ -402,157 +456,85 @@ $ end
     TRACE("pushing draw cmds \n");
 
     for (DrawCmd* drawcmd : drawcmds)
-    {
-      if (drawcmd->tex)
-      {
-        TRACE("  drawcmd has tex ", drawcmd->tex, "\n");
-        renderer.pushUniformBool("has_texture"_str, true);
-        renderer.pushBindTexture(drawcmd->tex);
-      }
-      else
-      {
-        TRACE("  drawcmd has no tex\n");
-        renderer.pushUniformBool("has_texture"_str, false);
-      }
-
-      if (drawcmd->counts_used.y == 0)
-        continue;
-
-      TRACE("  pushing draw \n",
-            "    io: ", drawcmd->index_offset,
-          "\n    ic: ", drawcmd->counts_used.y,
-          "\n    vo: ", drawcmd->vertex_offset, "\n");
-
-      renderer.pushDraw(
-        drawcmd->index_offset,
-        drawcmd->counts_used.y,
-        drawcmd->vertex_offset);
-    }
+      emitDrawCmd(drawcmd);
   };
 
   if (item_in_view)
-    emitDrawCmds(item->drawcmds);
-
-  if (item->shouldPlaceChildren())
   {
-    for (ItemNode* child = node->first_child; child; child = child->next)
-      updateTree(child);
+    // Emit background if we have one.
+    if (item->builtin.background)
+      emitDrawCmd(item->builtin.background);
+
+    // Ask the Item if it has any drawcmds.
+    DrawCmdList precmds;
+    DrawCmdList postcmds;
+    item->reportDrawCmds(this, precmds, postcmds);
+
+    // Emit pre-children commands.
+    if (precmds.len != 0)
+      emitDrawCmds(precmds);
+
+    // Update child branches if the Item wants us to.
+    if (item->shouldPlaceChildren())
+    {
+      for (ItemNode* child = node->first_child; child; child = child->next)
+        updateTree(child);
+    }
+
+    // Emit post-children commands.
+    if (postcmds.len != 0)
+      emitDrawCmds(postcmds);
+
+    // Draw scrollbars and border when appropriate.
+    if (item->builtin.scrollbars)
+      emitDrawCmd(item->builtin.scrollbars);
+  
+    if (item->builtin.borders)
+      emitDrawCmd(item->builtin.borders);
   }
 
-  if (item_in_view)
-    emitDrawCmds(item->post_drawcmds);
-
-  renderer.pushUniformBool("has_texture"_str, false);
-
-  // If overflow is set to scroll and this item contains children that 
-  // overflow, draw the scroll bars and handle their inputs.
-  // TODO(sushi) why tf am I doing this here.
-  if (@style.overflow == @Item.overflow.scroll && 
-      (item->max_scroll.x != 0.f || item->max_scroll.y != 0.f))
+  // Handle scrollbar input for this Item if necessary.
+  if (scrolling_item == nullptr &&
+      input.wasMouseButtonPressed(MouseButton::Left) &&
+      item->isHovered(this, Item::HoverKind::Child))
   {
-    if (item->scroll_bars == nullptr)
+    vec2f bar_pos, bar_size;
+    vec2f handle_pos, handle_size;
+    
+    if (item->max_scroll.y != 0.f)
     {
-      // Allocate draw information for this item's scrollbars.
-      item->scroll_bars = drawcmds.add();
-      item->scroll_bars->alloc(this, putFilledRectCounts() * 4);
-    }
+      item->calcVerticalScrollBar(
+        this,
+        &bar_pos, &bar_size,
+        &handle_pos, &handle_size);
 
-    @@style:lookup(vertical_scrollbar_width, horizontal_scrollbar_height)
-
-    // HACK(sushi) this is not the appropriate function to call but in order
-    //             to properly position and size the scroll bar for 
-    //             collapsible headers we need to check this. This should
-    //             probably be changed to a more general function that 
-    //             allows the widget to tell us where its content starts
-    //             and its size.
-    vec2f content_start = item->adjustCursorStart(this, vec2f(0,0));
-
-    f32 vertical_bar_height = 0.f;
-    f32 horizontal_bar_width = 0.f;
-
-    if (item->max_scroll.y != 0.f && item->max_scroll.x != 0.f)
-    {
-      vertical_bar_height = 
-        (item->size.y - content_start.y) - @style.horizontal_scrollbar_height;
-      horizontal_bar_width = 
-        (item->size.x - content_start.x) - @style.vertical_scrollbar_width;
-    }
-    else if (item->max_scroll.x != 0.f)
-    {
-      horizontal_bar_width = item->size.x - content_start.x;
-    }
-    else
-    {
-      vertical_bar_height = item->size.y - content_start.y;
-    }
-
-    vec2i sum = {};
-    auto [vp, ip] = item->scroll_bars->getPtrs(this);
-
-    if (vertical_bar_height != 0.f)
-    {
-      f32 left_edge = 
-        item->pos_screen.x + item->size.x - 
-        @style.margin.right - @style.vertical_scrollbar_width;
-
-      f32 top_edge = item->pos_screen.y + content_start.y;
-
-      sum += 
-        putFilledRect(
-          vp,
-          ip,
-          sum,
-          vec2f(left_edge, top_edge),
-          vec2f(@style.vertical_scrollbar_width, vertical_bar_height),
-          {255, 255, 255, 255});
-
-      f32 total_height = item->size.y - item->max_scroll.y;
-      f32 handle_height = vertical_bar_height * item->size.y / total_height;
-      f32 offset = 
-        top_edge + 
-        (item->scroll.y / item->max_scroll.y) * 
-        (vertical_bar_height - handle_height);
-
-      auto handle_pos = vec2f(left_edge, offset);
-      auto handle_siz = vec2f(@style.vertical_scrollbar_width, handle_height);
-
-      if (input.wasMouseButtonPressed(MouseButton::Left) &&
-          math::pointInRect(
+      if (math::pointInRect(
             input.mouse.window,
             handle_pos,
-            handle_siz) &&
-          item->isHovered(this, Item::HoverKind::Child))
+            handle_size))
       {
         scrolling_item = item;
         horizontal_scroll = false;
         scrollbar_offset = input.mouse.window - handle_pos;
       }
-
-      sum += 
-        putFilledRect(
-          vp,
-          ip,
-          sum,
-          handle_pos,
-          handle_siz,
-          {0, 255, 0, 255});
     }
 
-    item->scroll_bars->counts_used = sum;
-
-    if (item->scroll_bars->counts_used.y != 0)
+    if (scrolling_item == nullptr && item->max_scroll.x != 0.f)
     {
-      renderer.pushSetScissor(
-        vec2i(
-          item->pos_screen.x, 
-          window.size.y - 
-          (item->pos_screen.y + item->size.y + @style.margin.bottom)),
-        vec2f@item.getMarginedArea);
+      item->calcHorizontalScrollBar(
+        this,
+        &bar_pos, &bar_size,
+        &handle_pos, &handle_size);
 
-      renderer.pushDraw(
-        item->scroll_bars->index_offset,
-        item->scroll_bars->counts_used.y,
-        item->scroll_bars->vertex_offset);
+      if (math::pointInRect(
+            input.mouse.window,
+            handle_pos,
+            handle_size))
+      {
+        scrolling_item = item;
+        horizontal_scroll = true;
+        scrollbar_offset = input.mouse.window - handle_pos;
+      }
     }
   }
 }
@@ -790,7 +772,15 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
     }
   }
 
-  item->size = item->adjustItemSize(this);
+  Item::AdjustedSize adjusted_size = 
+    item->adjustItemSize(
+      this,
+      wauto,
+      hauto);
+  if (adjusted_size.disable_auto_x)
+    wauto = false;
+  if (adjusted_size.disable_auto_y)
+    hauto = false;
 
   // Call item's evaluate callback.
   item->evaluate(this);
@@ -998,10 +988,17 @@ $ end
       @style.border.bottom;
   }
   
-  item->max_scroll.x = 
-    min(0.f, item->size.x - max_extent.x - @item.style.padding.right);
-  item->max_scroll.y = 
-    min(0.f, item->size.y - max_extent.y - @item.style.padding.bottom);
+  item->max_scroll = 
+    min(vec2f(0,0),
+      item->size - max_extent - 
+      @item.style.padding.bottom_right -
+      @item.style.border.bottom_right -
+      @item.style.margin.bottom_right);
+
+  // item->max_scroll.x = 
+  //   min(0.f, item->size.x - max_extent.x - @item.style.padding.right);
+  // item->max_scroll.y = 
+  //   min(0.f, item->size.y - max_extent.y - @item.style.padding.bottom);
 
   item->size = max(item->size, item->getMinSize(this));
 
@@ -1012,27 +1009,186 @@ $ end
  */
 void UI::genItemBranch(ItemNode* node)
 {
+  InputMgr& input = eng->input;
+
   Item* item = node->data;
 
   $ local item = ui.createItemContext("Item", "item")
 
-  @@item.style:lookup(display)
+  @@item.style:lookup(
+    display, 
+    overflow,
+    margin,
+    padding,
+    border,
+    border_color,
+    background_color,
+    horizontal_scrollbar_height)
 
   if (@item.style.display.test(hidden))
     return;
 
   if (item != root)
-  {
     item->pos_screen = node->parent->data->pos_screen + item->pos_local;
-  }
 
-  if (item->drawcmds.len() != 0 || item->post_drawcmds.len() != 0)
-    item->generate(this);
+  item->generate(this);
 
   if (item->shouldPlaceChildren())
   {
     for (ItemNode* child = node->first_child; child; child = child->next)
       genItemBranch(child);
+  }
+
+  // NOTE(sushi) the below logic is forced upon all Items because the base
+  //             Item schema provides properties for them. I intend for these 
+  //             things to be usable on all items regardless of what widget 
+  //             they are. However this sorta sucks cause it means that all
+  //             Items must have the builtin drawcmds stored on them regardless
+  //             if they use them or not. I have an idea for rewriting UI to
+  //             be 'component' based rather than inheritance in which these
+  //             things would only exist for the Item when actually used,
+  //             but that introduces a lot of complications and I'm hesitant
+  //             to experiment with a whole new setup for UI so soon after 
+  //             getting it working properly again. For now I'm going to 
+  //             continue designing UI to be completely callback based and 
+  //             while keeping in mind what problems making it component based
+  //             could solve while also trying to determine what new 
+  //             problems it could introduce.
+
+  // TODO(sushi) move the following logic into Item::generate and just call it
+  //             explicitly here.
+
+  if (@item.style.background_color.a != 0 )
+  {
+    if (item->builtin.background == nullptr)
+    {
+      item->builtin.background = drawcmds.add();
+      item->builtin.background->alloc(this, putFilledRectCounts());
+    }
+
+    auto [vp, ip] = item->builtin.background->getPtrs(this);
+
+    vec2i sum = {};
+
+    sum += 
+      putFilledRect(
+        vp,
+        ip,
+        sum,
+        item->pos_screen + 
+        @item.style.margin.top_left + 
+        @item.style.padding.top_left,
+        @item.getPaddedArea,
+        @item.style.background_color);
+
+    item->builtin.background->counts_used = sum;
+  }
+
+  // If the item specifies a border draw it.
+  if (@item.hasBorder)
+  {
+    if (item->builtin.borders == nullptr)
+    {
+      item->builtin.borders = drawcmds.add();
+      item->builtin.borders->alloc(this, putBordersCounts());
+    }
+
+    vec2i sum = {};
+    auto [vp, ip] = item->builtin.borders->getPtrs(this);
+
+    sum +=
+      putBorders(
+        vp,
+        ip,
+        sum,
+        @item.style.border,
+        item->pos_screen + 
+        @item.style.margin.top_left +
+        @item.style.border.top_left,
+        @item.getBorderedArea,
+        @item.style.border_color);
+    
+    item->builtin.borders->counts_used = sum;
+  }
+
+  // If overflow is set to scroll and this item contains children that 
+  // overflow, draw the scroll bars.
+  if (@item.style.overflow == @Item.overflow.scroll && 
+      (item->max_scroll.x != 0.f || item->max_scroll.y != 0.f))
+  {
+    if (item->builtin.scrollbars == nullptr)
+    {
+      // Allocate draw information for this item's scrollbars.
+      item->builtin.scrollbars = drawcmds.add();
+      item->builtin.scrollbars->alloc(this, putFilledRectCounts() * 4);
+    }
+
+    @@item.style:lookup(
+      scrollbar_color,
+      scrollbar_handle_color)
+
+    vec2i sum = {};
+    auto [vp, ip] = item->builtin.scrollbars->getPtrs(this);
+
+    vec2f bar_pos, bar_size;
+    vec2f handle_pos, handle_size;
+
+    Color scrollbar_color = @item.style.scrollbar_color;
+    Color scrollbar_handle_color = @item.style.scrollbar_handle_color;
+
+    if (item->max_scroll.y != 0.f)
+    {
+      item->calcVerticalScrollBar(
+        this,
+        &bar_pos, &bar_size,
+        &handle_pos, &handle_size);
+
+      sum += 
+        putFilledRect(
+          vp,
+          ip,
+          sum,
+          bar_pos,
+          bar_size,
+          @item.style.scrollbar_color);
+
+      sum += 
+        putFilledRect(
+          vp,
+          ip,
+          sum,
+          handle_pos,
+          handle_size,
+          @item.style.scrollbar_handle_color);
+    }
+
+    if (item->max_scroll.x != 0.f)
+    {
+      item->calcHorizontalScrollBar(
+        this,
+        &bar_pos, &bar_size,
+        &handle_pos, &handle_size);
+
+      sum += 
+        putFilledRect(
+          vp,
+          ip,
+          sum,
+          bar_pos,
+          bar_size,
+          @item.style.scrollbar_color);
+
+      sum += 
+        putFilledRect(
+          vp,
+          ip,
+          sum,
+          handle_pos,
+          handle_size,
+          @item.style.scrollbar_handle_color);
+    }
+
+    item->builtin.scrollbars->counts_used = sum;
   }
 }
 
@@ -1045,9 +1201,9 @@ b8 UI::findHoveredItem(ItemTree::Node* node)
   $ local item = ui.createItemContext("Item", "item")
   @@item.style:lookup(display)
 
-  for (ItemTree::Node* child = node->last_child; child; child = child->prev)
+  if (!@item.style.display.test(hidden) && item->shouldPlaceChildren())
   {
-    if (!@item.style.display.test(hidden))
+    for (ItemTree::Node* child = node->last_child; child; child = child->prev)
     {
       if (findHoveredItem(child))
         return true;

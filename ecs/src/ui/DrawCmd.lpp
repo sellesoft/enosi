@@ -130,6 +130,8 @@ void DrawCmd::alloc(UI* ui, vec2i counts)
   {
     vertex_offset = ui->vertex_next;
     ui->vertex_next += counts.x;
+    assert(ui->vertex_next < ui->buffer->vertex_size / sizeof(Vertex) &&
+           "UI has run out of vertex space on the GPU buffer!");
   }
   else
     vertex_offset = v_next;
@@ -138,6 +140,8 @@ void DrawCmd::alloc(UI* ui, vec2i counts)
   {
     index_offset = ui->index_next;
     ui->index_next += counts.y;
+    assert(ui->index_next < ui->buffer->index_size / sizeof(Index) &&
+           "UI has run out of index space on the GPU buffer!");
   }
   else
     index_offset = i_next;

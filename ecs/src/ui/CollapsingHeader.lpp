@@ -26,14 +26,7 @@ CollapsingHeader* UI::make(str id, str init)
     return nullptr;
   }
 
-  auto* background_dc = drawcmds.add();
-  background_dc->alloc(this, putFilledRectCounts());
-  ch->post_drawcmds.push(background_dc);
-
-  auto* text_dc = drawcmds.add();
-  ch->post_drawcmds.push(text_dc);
-
-  if (!ch->header_text.init(init))
+  if (!ch->header_text.init(this, init))
   {
     mem::stl_allocator.free(ch);
     return nullptr;
@@ -41,6 +34,12 @@ CollapsingHeader* UI::make(str id, str init)
 
   $ local ch = ui.createItemContext("CollapsingHeader", "ch")
 
+  // TODO(sushi) remove this from Style and make it just straight flags
+  //             on Item. It doesn't make sense anymore for someone to define
+  //             this property when writing UI because they have to override
+  //             the update method to utilize it. The ability for the user
+  //             to hook into these things should be provided by widgets 
+  //             eg. Button.
   @ch.style.set.update_triggers(MouseReleased);
 
   return ch;
@@ -94,34 +93,72 @@ void CollapsingHeader::generate(UI* ui)
     header_height, 
     header_color, 
     header_text_align,
+    content_background_color,
     font_height,
-    text_color)
+    text_color,
+    border,
+    margin)
 
-  DrawCmd* background_dc = post_drawcmds[0];
-  DrawCmd* text_dc = post_drawcmds[1];
+  vec2f cpos = 
+    pos_screen + @this.style.margin.top_left + @this.style.border.top_left;
 
-  auto [bgvp, bgip] = background_dc->getPtrs(ui);
+  vec2f csiz = @this.getBorderedArea;
 
-  vec2i sum = {};
+  if (@this.style.header_color.a != 0)
+  {
+    if (header_bg == nullptr)
+    {
+      header_bg = ui->drawcmds.add();
+      header_bg->alloc(ui, putFilledRectCounts());
+    }
 
-  sum +=
-    putFilledRect(
-      bgvp,
-      bgip,
-      sum,
-      // HACK(sushi) I DO NOT KNOW WHY I HAVE TO OFFSET THIS LIKE THIS
-      //             but it fixes a off by one bug where the contents of 
-      //             this render for a single pixel line above the header
-      //             when scrolling. In RenderDoc this does not appear
-      //             but otherwise it does idk man this drove me insane
-      //             for like an hour and a half.
-      //             There is a similar hack in telling the evaluator
-      //             where to begin children.
-      vec2f(pos_screen.x, pos_screen.y - 1.f),
-      vec2f(size.x, @this.style.header_height),
-      @this.style.header_color);
+    auto [vp, ip] = header_bg->getPtrs(ui);
 
-  background_dc->counts_used = sum;
+    vec2i sum = {};
+
+    sum +=
+      putFilledRect(
+        vp,
+        ip,
+        sum,
+        // HACK(sushi) I DO NOT KNOW WHY I HAVE TO OFFSET THIS LIKE THIS
+        //             but it fixes a off by one bug where the contents of 
+        //             this render for a single pixel line above the header
+        //             when scrolling. In RenderDoc this does not appear
+        //             but otherwise it does idk man this drove me insane
+        //             for like an hour and a half.
+        //             There is a similar hack in telling the evaluator
+        //             where to begin children.
+        cpos.yadd(-1),
+        vec2f(csiz.x, @this.style.header_height),
+        @this.style.header_color);
+
+    header_bg->counts_used = sum;
+  }
+
+  if (open && @this.style.content_background_color.a != 0)
+  {
+    if (content_bg == nullptr)
+    {
+      content_bg = ui->drawcmds.add();
+      content_bg->alloc(ui, putFilledRectCounts());
+    }
+
+    auto [vp, ip] = content_bg->getPtrs(ui);
+
+    vec2i sum = {};
+
+    sum +=
+      putFilledRect(
+        vp,
+        ip,
+        sum,
+        cpos.yadd(@this.style.header_height),
+        vec2f(csiz.x, csiz.y - @this.style.header_height),
+        @this.style.content_background_color);
+
+    content_bg->counts_used = sum;
+  }
 
   vec2f text_size = {};
   TextBreaks breaks;
@@ -140,15 +177,14 @@ void CollapsingHeader::generate(UI* ui)
     @Text.wrap.none);
 
   auto text_pos = vec2f(
-    pos_screen.x + @this.style.header_text_align.x * (size.x - text_size.x),
-    pos_screen.y + 
+    cpos.x + @this.style.header_text_align.x * (csiz.x - text_size.x),
+    cpos.y + 
       @this.style.header_text_align.y * 
       (@this.style.header_height - text_size.y));
   
   header_text.draw(
     ui,
     text_pos,
-    text_dc,
     @this.style.text_color,
     breaks);
 }
@@ -161,20 +197,54 @@ vec2f CollapsingHeader::adjustCursorStart(UI* ui, vec2f norm)
   $ local this = ui.createItemContext("CollapsingHeader", "this")
   @@this.style:lookup(header_height)
 
-  return vec2f(0.f, @this.style.header_height-1.f);
+  return vec2f(norm.x, norm.y + @this.style.header_height);
 }
 
 /* ----------------------------------------------------------------------------
  */
-vec2f CollapsingHeader::adjustItemSize(UI* ui)
+Item::AdjustedSize CollapsingHeader::adjustItemSize(
+    UI* ui,
+    b8 is_auto_x,
+    b8 is_auto_y)
 {
+  AdjustedSize adjusted = {};
+
   if (!open)
   {
     $ local this = ui.createItemContext("CollapsingHeader", "this")
-    @@this.style:lookup(header_height)
-    return vec2f(size.x, @this.style.header_height);
+    @@this.style:lookup(header_height, border, margin)
+
+    adjusted.disable_auto_y = true;
+    size.y = 
+      @this.style.header_height + 
+      @this.style.margin.top + @this.style.margin.bottom +
+      @this.style.border.top + @this.style.border.bottom;
   }
-  return size;
+
+  return adjusted;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+vec2f CollapsingHeader::calcContentStart(vec4f margin, vec4f border)
+{
+  $ local this = ui.createItemContext("CollapsingHeader", "this")
+  @@this.style:lookup(header_height)
+  return vec2f(
+    margin.x + border.x,
+    margin.y + border.y + @this.style.header_height);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+vec2f CollapsingHeader::calcContentArea(vec4f margin, vec4f border, vec2f size)
+{
+  $ local this = ui.createItemContext("CollapsingHeader", "this")
+  @@this.style:lookup(header_height, margin, border)
+  
+  return vec2f(
+    @this.getBorderedWidth,
+    @this.getBorderedHeight - @this.style.header_height);
 }
 
 }

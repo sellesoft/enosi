@@ -17,7 +17,7 @@ namespace ui
 
 /* ----------------------------------------------------------------------------
  */
-b8 TextState::init(str init)
+b8 TextState::init(UI* ui, str init)
 {
   if (!buffer.open())
   {
@@ -26,7 +26,11 @@ b8 TextState::init(str init)
   }
 
   if (notnil(init))
+  {
+    dc = ui->drawcmds.add();
+    dc->alloc(ui, putFilledRectCounts() * init.countCharacters());
     buffer.write(init);
+  }
 
   return true;
 }
@@ -195,7 +199,6 @@ void TextState::findTextBreaks(
 void TextState::draw(
     UI*      ui,
     vec2f    pos,
-    DrawCmd* dc,
     Color    text_color,
     f32      font_height,
     f32      tab_spaces,
@@ -215,7 +218,6 @@ void TextState::draw(
   draw(
     ui,
     pos,
-    dc,
     text_color,
     breaks);
 }
@@ -225,13 +227,19 @@ void TextState::draw(
 void TextState::draw(
     UI*               ui,
     vec2f             pos,
-    DrawCmd*          dc,
     Color             text_color,
     const TextBreaks& breaks)
 {
   vec2i counts = {};
 
-  vec2i nucounts = putFilledRectCounts() * buffer.asStr().countCharacters();
+  if (buffer.len == 0)
+    return;
+
+  if (dc == nullptr)
+    dc = ui->drawcmds.add();
+
+  u32 nchars = buffer.asStr().countCharacters();
+  vec2i nucounts = putFilledRectCounts() * nchars;
   auto [vp, ip] = dc->realloc(ui, nucounts);
   dc->tex = &font->texture;
   
@@ -273,7 +281,6 @@ void TextState::draw(
   }
 
   dc->counts_used = counts;
-
 }
 
 /* ----------------------------------------------------------------------------
@@ -288,13 +295,11 @@ Text* UI::make(str id, str init)
     return nullptr;
   }
 
-  if (!text->state.init(init))
+  if (!text->state.init(this, init))
   {
     mem::stl_allocator.free(text);
     return nullptr;
   }
-
-  text->drawcmds.push(drawcmds.add());  
 
   $ local text = ui.createItemContext("Text", "text")
   @text.style.set.sizing(auto);
@@ -370,13 +375,9 @@ void Text::generate(UI* ui)
     border, 
     padding)
 
-  vec2i counts = {};
-  DrawCmd* dc = *drawcmds.arr;
-
   state.draw(
     ui,
     pos_screen,
-    dc,
     @text.style.text_color,
     @text.style.font_height,
     @text.style.tab_spaces,

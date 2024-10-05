@@ -46,7 +46,9 @@ struct TextState
   //             we have in deshi.
   io::Memory buffer;
 
-  b8   init(str init);
+  DrawCmd* dc;
+
+  b8   init(UI* ui, str init);
   void deinit();
 
   void checkFont(str name, UI* ui);
@@ -68,7 +70,6 @@ struct TextState
   void draw(
     UI*      ui,
     vec2f    pos,
-    DrawCmd* dc,
     Color    text_color,
     f32      font_height,
     f32      tab_spaces,
@@ -80,7 +81,6 @@ struct TextState
   void draw(
     UI*               ui,
     vec2f             pos,
-    DrawCmd*          dc,
     Color             text_color,
     const TextBreaks& breaks);
 };
@@ -117,6 +117,15 @@ struct
   virtual void generate(UI* ui) override;
 
   virtual void cleanup() override;
+
+  virtual void reportDrawCmds(
+      UI* ui, 
+      DrawCmdList& pre, 
+      DrawCmdList& post) override 
+  { 
+    if (state.dc)
+      pre.push(state.dc); 
+  }
 })
 
 }

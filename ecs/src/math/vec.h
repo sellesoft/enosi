@@ -182,6 +182,34 @@ struct vec2
     else 
       return *this;
   }
+
+  /* --------------------------------------------------------------------------
+   */
+  inline vec2 xadd(T v) const
+  {
+    return { x + v, y };
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  inline vec2 yadd(T v) const
+  {
+    return { x, y + v };
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  inline vec2 xneg() const
+  {
+    return { -x, y };
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  inline vec2 yneg() const
+  {
+    return {x, -y};
+  }
 };
 
 typedef vec2<s32> vec2i;
@@ -230,16 +258,7 @@ struct vec4
     T arr[4];
     struct
     {
-      union
-      {
-        vec2<T> xy;
-        struct { T x, y; };
-      };
-      union
-      {
-        vec2<T> zw;
-        struct { T z, w; };
-      };
+      T x, y, z, w;
     };
   };
 
@@ -254,6 +273,16 @@ struct vec4
   
   template<typename X>
   vec4(const vec4<X>& in) { x = in.x; y = in.y; z = in.z; w = in.w; }
+
+  /* --------------------------------------------------------------------------
+   */
+#define swizzler2(a,b) \
+  vec2<T> GLUE(a,b)() const { return { a, b }; }
+  swizzler2(x, x); swizzler2(x, y); swizzler2(x, z); swizzler2(x, w);
+  swizzler2(y, x); swizzler2(y, y); swizzler2(y, z); swizzler2(y, w);
+  swizzler2(z, x); swizzler2(z, y); swizzler2(z, z); swizzler2(z, w);
+  swizzler2(w, x); swizzler2(w, y); swizzler2(w, z); swizzler2(w, w);
+#undef swizzler2
 
   /* --------------------------------------------------------------------------
    */

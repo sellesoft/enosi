@@ -17,31 +17,7 @@ namespace ui
 
 /* ----------------------------------------------------------------------------
  */
-void Item::generate(UI* ui) 
-{
-  $ local this = ui.createItemContext("Item", "this")
-  @@this.style:lookup(background_color, margin)
-
-  DrawCmd* dc = drawcmds[0];
-
-  auto [vp, ip] = dc->getPtrs(ui);
-
-  vec2f tl = pos_screen + @this.style.margin.top_left;
-  vec2f br = pos_screen + size - @this.style.margin.bottom_right;
-
-  vec2i sum = {0,0};
-
-  sum += 
-    putFilledRect(
-      vp, 
-      ip,
-      sum,
-      tl,
-      br - tl,
-      @this.style.background_color);
-
-  dc->counts_used = sum;
-}
+void Item::generate(UI* ui) {}
 
 /* ----------------------------------------------------------------------------
  */
@@ -87,14 +63,26 @@ b8 Item::isHovered(UI* ui, HoverKind kind)
 
 /* ----------------------------------------------------------------------------
  */
-void Item::calcVerticalScrollBarSizes(
+void Item::calcVerticalScrollBar(
     UI* ui,
+    vec2f* bar_pos,
     vec2f* bar_size,
+    vec2f* handle_pos,
     vec2f* handle_size)
 {
   $ local this = ui.createItemContext("Item", "this")
-  @@this.style:lookup(vertical_scrollbar_width, horizontal_scrollbar_height)
+  @@this.style:lookup(
+    margin,
+    border,
+    vertical_scrollbar_width, 
+    horizontal_scrollbar_height)
   
+  // HACK(sushi) this is not the appropriate function to call but in order
+  //             to properly position and size the scroll bar for 
+  //             collapsible headers we need to check this. This should
+  //             probably be changed to a more general function that 
+  //             allows the widget to tell us where its content starts
+  //             and its size.
   vec2f content_start = adjustCursorStart(ui, vec2f(0,0));
 
   if (max_scroll.y != 0.f)
@@ -107,12 +95,66 @@ void Item::calcVerticalScrollBarSizes(
     bar_size->y -= @this.style.horizontal_scrollbar_height;
   }
 
+  bar_pos->x = 
+    pos_screen.x + size.x - 
+    @this.style.margin.right - 
+    @this.style.border.right -
+    @this.style.vertical_scrollbar_width;
+  bar_pos->y = pos_screen.y + content_start.y;
+
   bar_size->x = @this.style.vertical_scrollbar_width;
+  handle_size->x = @this.style.vertical_scrollbar_width;
 
   f32 total_height = size.y - max_scroll.y;
   handle_size->y = bar_size->y * size.y / total_height;
-  
-  handle_size->x = @this.style.horizontal_scrollbar_height;
+
+  handle_pos->x = bar_pos->x;
+  handle_pos->y = 
+    bar_pos->y + (scroll.y / max_scroll.y) * (bar_size->y - handle_size->y);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Item::calcHorizontalScrollBar(
+    UI* ui,
+    vec2f* bar_pos,
+    vec2f* bar_size,
+    vec2f* handle_pos,
+    vec2f* handle_size)
+{
+  $ local this = ui.createItemContext("Item", "this")
+  @@this.style:lookup(
+    margin,
+    border,
+    vertical_scrollbar_width, 
+    horizontal_scrollbar_height)
+
+  if (max_scroll.x != 0.f)
+  {
+    bar_size->x = size.x;
+  }
+
+  if (max_scroll.y != 0.f)
+  {
+    bar_size->x -= @this.style.vertical_scrollbar_width;
+  }
+
+  bar_pos->x = pos_screen.x;
+  bar_pos->y = 
+    pos_screen.y + size.y - 
+    @this.style.margin.bottom -
+    @this.style.border.bottom -
+    @this.style.horizontal_scrollbar_height;
+
+  bar_size->y = @this.style.horizontal_scrollbar_height;
+  handle_size->y = @this.style.horizontal_scrollbar_height;
+
+  f32 total_width = size.x - max_scroll.x;
+  handle_size->x = bar_size->x * size.x / total_width;
+
+  handle_pos->y = bar_pos->y;
+  handle_pos->x = 
+    bar_pos->x + (scroll.x / max_scroll.x) * (bar_size->x - handle_size->x);
 }
 
 }

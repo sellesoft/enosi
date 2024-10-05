@@ -35,6 +35,10 @@ namespace ui
   | font_height: 11
   | background_color: 0x08141eff
   {
+    Text hovered_info
+    | wrap: word
+    ("bleh");
+
     Item header
     | size: 100% 11
     | display: flex horizontal
@@ -56,36 +60,26 @@ namespace ui
     Text ("bah bah bah");
 
     CollapsingHeader 
-    | size: 100% 70
+    | size: 100% auto
     | header_height: 15
+    | content_background_color: 0x34aeaeff
+    | border: 0 3 0 3
+    | padding: 5 5 5 5 
     ("header")
     {
       Item bg
       | size: 100% auto
       | background_color: 0xaa4488ff
       {
-        Button
-        | triggers: Pressed Released
-        | size: 600 50
-        | margin: 5
-        | background_color: 0x20394fff
+        CollapsingHeader
+        | size: 100% 100
+        | header_height: 15
+        ("hello")
         {
-          Text ("button 0");
-        }
-
-        Button
-        | triggers: Pressed Released
-        | size: 100% 50
-        | margin: 5
-        | background_color: 0x32204fff
-        {
-          Text ("button 1");
+          Text ("goodbye");
         }
       }
     }
-
-    Item | size: 10 1000 | background_color: 0x0000ffff;
-
   }
 })
 
@@ -175,6 +169,18 @@ b8 Engine::update()
 
   // ch->scroll.y = (sin(t) + 1.f) / 2.f * ch->max_scroll.y;
   // ch->dirty = true;
+
+  auto hi = demo.root.hovered_info;
+
+  if (ui.hovered)
+  {
+    hi->state.buffer.clear();
+    io::formatv(&hi->state.buffer, 
+        "item: ", ui.hovered->name,
+      "\n  vs: ", ui.hovered->visible_size, 
+      "\n  mp: ", input.mouse.window, "\n");
+    hi->dirty = true;
+  }
 
   if (!ui.update(*this))
     return ERROR("failed to update ui\n");

@@ -27,10 +27,6 @@ Button* UI::make(str id, Button::Action action, void* userdata)
     return nullptr;
   }
 
-  auto* dc = drawcmds.add();
-  dc->alloc(this, putFilledRectCounts());
-  button->drawcmds.push(dc);
-
   $ local button = ui.createItemContext("Button", "button")
 
   button->action = action;

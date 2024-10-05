@@ -94,6 +94,7 @@ b8 Window::init(str title)
       root,
       1,
       &n_monitors);
+  defer { XRRFreeMonitors(monitors); };
 
   XRRMonitorInfo selection;
   for (s32 i = 0; i < n_monitors; ++i)

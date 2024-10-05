@@ -1,5 +1,6 @@
 $ local lpp = require "lpp"
 $ local reflect = require "reflection.Reflector"
+$ local List = require "list"
 
 #include "math/vec.h"
 #include "Color.h"
@@ -184,6 +185,328 @@ static vec2i putFilledRect(
     { 1.f, 0.f },
     { 0.f, 0.f },
     color);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static vec2i putBordersCounts() { return { 8, 24 }; }
+
+/* ----------------------------------------------------------------------------
+ */
+static vec2i putBorders(
+    Vertex* putverts,
+    Index* putindices,
+    vec2i offsets,
+    vec4f borders,
+    vec2f pos,
+    vec2f area,
+    Color color)
+{
+  if (color.a == 0)
+    return { 0, 0 };
+
+  u32 col = color.rgba;
+
+  Vertex* vp = putverts + offsets.x;
+  Index*  ip = putindices + offsets.y;
+
+  u8 mask = 
+      (borders.x != 0.f? 1 << 0 : 0) 
+    | (borders.y != 0.f? 1 << 1 : 0)
+    | (borders.z != 0.f? 1 << 2 : 0)
+    | (borders.w != 0.f? 1 << 3 : 0);
+
+  vec2f tl = pos;
+  vec2f tr = pos.xadd(area.x);
+  vec2f br = pos + area;
+  vec2f bl = pos.yadd(area.y);
+
+// Helper for writing out the data. imap and vmap are filled out 
+// with appropriate data then this writes it out for us in each case.
+$ local imap,vmap
+$ local placeData = function()
+$   for i=0,#imap-1 do
+      ip[$(i)] = $(imap[i+1]);
+$   end
+$   for i=0,#vmap-1 do
+      vp[$(i)] = { $(vmap[i+1]), {0,0}, col };
+$   end
+$ end
+
+
+$$$
+    local i = 
+    {
+      [4] = 
+      {
+        0, 1, 3,
+        0, 3, 2,
+        2, 3, 5,
+        2, 5, 4,
+        4, 5, 7,
+        4, 7, 6,
+        6, 7, 1,
+        6, 1, 0,
+      },
+
+      [3] = 
+      {
+        0, 1, 3,
+        0, 3, 2,
+        2, 3, 5,
+        2, 5, 4,
+        4, 5, 7,
+        4, 7, 6,
+      },
+
+      [2] = 
+      {
+        0, 1, 3,
+        0, 3, 2,
+        2, 3, 5,
+        2, 5, 4,
+      },
+
+      s = 
+      {
+        0, 1, 3,
+        0, 2, 3,
+        4, 5, 7,
+        4, 7, 6,
+      },
+
+      [1] = 
+      {
+        0, 1, 3,
+        0, 3, 2,
+      },
+    }
+
+    local when = setmetatable({},
+    {
+      __index = function(_, key)
+        local mask = ""
+        local count = 0
+        local addMask = function(n)
+          if count ~= 0 then
+            mask = mask.." | "
+          end
+          mask = mask.."(1 << "..n..")"
+          count = count + 1
+        end
+
+        if key:find "l" then
+          addMask(0)
+        end
+
+        if key:find "t" then
+          addMask(1)
+        end
+
+        if key:find "r" then
+          addMask(2)
+        end
+
+        if key:find "b" then
+          addMask(3)
+        end 
+
+        return function()
+          return "case "..mask..":"
+        end
+      end
+    })
+
+    local put = function(m, ...)
+      local indicies
+      local n = tonumber(m)
+      if n then
+        indicies = i[n]
+      else
+        indicies = i[m]
+      end
+
+      List(indicies):eachWithIndex(function(idx, i)
+$$$
+        ip[$(i-1)] = $(idx);
+$$$
+      end)
+
+      local args = {...}
+
+      List(args):eachWithIndex(function(v, i)
+$$$
+        vp[$(i-1)] = { $(v), {0.f, 0.f}, col };
+$$$
+      end)
+$$$
+      return { $(#args), $(#indicies) };
+$$$
+    end
+$$$
+
+  switch (mask)
+  {
+  @when.ltrb
+    @put(4, 
+      tl - borders.xy(),
+      tl,
+      tr + borders.zy().yneg(),
+      tr,
+      br + borders.zw(),
+      br,
+      bl + borders.xw().xneg(),
+      bl)
+    break;
+
+  @when.ltr
+    @put(3,
+      bl.xadd(-borders.x),
+      bl,
+      tl - borders.xy(),
+      tl,
+      tr + borders.zy().yneg(),
+      tr,
+      br.xadd(borders.z),
+      br)
+    break;
+
+  @when.ltb
+    @put(3,
+      br.yadd(borders.w),
+      br,
+      bl + borders.xw().xneg(),
+      bl,
+      tl - borders.xy(),
+      tl,
+      tr + borders.zy().yneg(),
+      tr)
+    break;
+
+  @when.lrb
+    @put(3,
+      tr.xadd(borders.z),
+      tr,
+      br + borders.zw(),
+      br,
+      bl + borders.xw().xneg(),
+      bl,
+      tl.xadd(-borders.x),
+      tl)
+    break;
+
+  @when.trb
+    @put(3,
+      tl.yadd(-borders.y),
+      tl,
+      tr + borders.zy().yneg(),
+      tr,
+      br + borders.zw(),
+      br,
+      bl.yadd(borders.w),
+      bl)
+    break;
+
+  @when.lt
+    @put(2,
+      bl.xadd(-borders.x),
+      bl,
+      tl - borders.xy(),
+      tl,
+      tr.yadd(-borders.y),
+      tr)
+    break;
+
+  @when.lr
+    @put(s,
+      bl.xadd(-borders.x),
+      bl,
+      tl.xadd(-borders.x),
+      tl,
+      tr.xadd(borders.z),
+      tr,
+      br.xadd(borders.z),
+      br)
+    break;
+
+  @when.lb
+    @put(2,
+      br.yadd(borders.w),
+      br,
+      bl + borders.xw().xneg(),
+      bl,
+      tl.xadd(-borders.x),
+      tl)
+    break;
+
+  @when.tb
+    @put(s,
+      tl.yadd(-borders.y),
+      tl,
+      tr.yadd(-borders.y),
+      tr,
+      br.yadd(borders.w),
+      br,
+      bl.yadd(borders.w),
+      bl)
+    break;
+
+  @when.tr
+    @put(2,
+      tl.yadd(-borders.y),
+      tl,
+      tr + borders.zy().yneg(),
+      tr,
+      br.xadd(borders.z),
+      br)
+    break;
+
+  @when.rb
+    @put(2,
+      tr.xadd(borders.z),
+      tr,
+      br + borders.zw(),
+      br,
+      bl.yadd(borders.w),
+      bl)
+    break;
+
+  @when.l
+    @put(1,
+      tl.yadd(-borders.y),
+      tl,
+      tr.yadd(-borders.y),
+      tr)
+    break;
+
+  @when.t
+    @put(1,
+      tr.xadd(borders.z),
+      tr,
+      br.yadd(borders.z),
+      br)
+    break;
+
+  @when.r
+    @put(1,
+      br.yadd(borders.w),
+      br,
+      bl.yadd(borders.w),
+      bl)
+    break;
+
+  @when.b
+    @put(1,
+      bl.xadd(-borders.x),
+      bl,
+      tl.xadd(-borders.x),
+      tl)
+    break;
+
+  default:
+    return {0, 0};
+  }
+
 }
 
 }

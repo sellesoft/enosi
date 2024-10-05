@@ -19,7 +19,10 @@ namespace ui
 @ui.widget(Separator,
 struct
 {
+  DrawCmd* dc;
   virtual void generate(UI* ui) override;
+  virtual void reportDrawCmds(
+    UI* ui, DrawCmdList& pre, DrawCmdList& post) override { pre.push(dc); }
 })
 
 }

@@ -34,10 +34,6 @@ struct Engine
 
   InputMgr input;
 
-  ui::Item* test;
-
-  Font gohu_font;
-
   TimePoint start_time;
 
   b8 init();
