@@ -540,7 +540,7 @@ b8 processSpawn(
 
     if (notnil(*infos[i].f))
     {
-      ERROR("Stream ", i, " file given to processSpawn is not nil! Given "
+      ERROR("stream ", i, ": file given to processSpawn is not nil! Given "
           "files cannot already own resources.\n");
       return false;
     }
@@ -557,13 +557,6 @@ b8 processSpawn(
 
     if (pid == -1)
       return reportErrno("failed to fork process: ", explain_fork());
-
-    ERROR("started process ", file, ":", pid, "with args:\n");
-
-    for (char* c : argsc)
-    {
-      ERROR(c, "\n");
-    }
 
     // close uneeded pipes
     for (s32 i = 0; i < 3; i++)

@@ -57,22 +57,22 @@ struct Log
 
     enum class Flag : u8
     {
-      // prefix the message with the date and time
+      // Prefix the message with the date and time.
       ShowDateTime,
-      // show the name of the category that is being logged from
+      // Show the name of the category that is being logged from.
       ShowCategoryName,
-      // show the verbosity level before the message
+      // Show the verbosity level before the message.
       ShowVerbosity,
-      // pad the verbosity level to the right so that messages printed at 
-      // different levels stay aligned
+      // Pad the verbosity level to the right so that messages printed at 
+      // different levels stay aligned.
       PadVerbosity,
-      // allow color
+      // Allow color.
       AllowColor,
-      // track the longest category name and indent all other names so that 
-      // they stay aligned
+      // Track the longest category name and indent all other names so that 
+      // they stay aligned.
       TrackLongestName,
-      // if a logger logs a message that spans multiple lines, prefix each 
-      // line with the enabled information above
+      // If a logger logs a message that spans multiple lines, prefix each 
+      // line with the enabled information above.
       PrefixNewlines,
     };
     typedef iro::Flags<Flag> Flags;

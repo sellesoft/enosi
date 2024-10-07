@@ -50,6 +50,7 @@ List.new = function(init)
   setmetatable(o, List)
 
   if isList(init) then
+    o.arr = {}
     for elem in init:each() do
       o:push(elem)
     end

@@ -75,6 +75,25 @@ struct SanitizeControlCharacters
 
 s64 format(IO* io, const SanitizeControlCharacters& x);
 
+/* ============================================================================
+ */ 
+template<typename T>
+struct Hex
+{
+  T& x;
+
+  Hex(T& x) : x(x) {}
+};
+
+s64 format(IO* io, Hex<u8>  x);
+s64 format(IO* io, Hex<u16> x);
+s64 format(IO* io, Hex<u32> x);
+s64 format(IO* io, Hex<u64> x);
+s64 format(IO* io, Hex<s8>  x);
+s64 format(IO* io, Hex<s16> x);
+s64 format(IO* io, Hex<s32> x);
+s64 format(IO* io, Hex<s64> x);
+
 }
 
 #endif // _ilo_io_format_h

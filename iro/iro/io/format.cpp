@@ -159,4 +159,60 @@ s64 format(IO* io, const SanitizeControlCharacters& x)
   return bytes_written;
 }
 
+s64 format(IO* io, Hex<u8> x)
+{
+  u8  buffer[32];
+  u64 len = snprintf((char*)buffer, 32, "0x%hhx", x.x);
+  return io->write({buffer, len});
+}
+
+s64 format(IO* io, Hex<u16> x)
+{
+  u8  buffer[32];
+  u64 len = snprintf((char*)buffer, 32, "0x%hx", x.x);
+  return io->write({buffer, len});
+}
+
+s64 format(IO* io, Hex<u32> x)
+{
+  u8  buffer[32];
+  u64 len = snprintf((char*)buffer, 32, "0x%x", x.x);
+  return io->write({buffer, len});
+}
+
+s64 format(IO* io, Hex<u64> x)
+{
+  u8  buffer[32];
+  u64 len = snprintf((char*)buffer, 32, "0x%lx", x.x);
+  return io->write({buffer, len});
+}
+
+s64 format(IO* io, Hex<s8> x)
+{
+  u8  buffer[32];
+  u64 len = snprintf((char*)buffer, 32, "0x%hhx", x.x);
+  return io->write({buffer, len});
+}
+
+s64 format(IO* io, Hex<s16> x)
+{
+  u8  buffer[32];
+  u64 len = snprintf((char*)buffer, 32, "0x%hx", x.x);
+  return io->write({buffer, len});
+}
+
+s64 format(IO* io, Hex<s32> x)
+{
+  u8  buffer[32];
+  u64 len = snprintf((char*)buffer, 32, "0x%x", x.x);
+  return io->write({buffer, len});
+}
+
+s64 format(IO* io, Hex<s64> x)
+{
+  u8  buffer[32];
+  u64 len = snprintf((char*)buffer, 32, "%lx", x.x);
+  return io->write({buffer, len});
+}
+
 }

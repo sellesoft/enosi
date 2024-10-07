@@ -28,7 +28,7 @@ struct Slice
   T* begin() { return ptr; }
   T* end()   { return ptr + len; }
 
-  T& operator[](s32 i) { return ptr[i]; }
+  T& operator[](u64 i) const { return ptr[i]; }
 };
 
 typedef Slice<u8> Bytes;
