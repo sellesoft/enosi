@@ -886,7 +886,7 @@ void lua__processClose(ActiveProcess* proc)
   TRACE("closing proc ", (void*)proc, "\n");
 
   proc->stream.close();
-  proc->stop(0);
+  proc->process.stop(0);
   active_process_pool.remove(proc);
 }
 
