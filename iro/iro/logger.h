@@ -252,6 +252,45 @@ struct Logger
 
   b8 init(str name, Verbosity verbosity);
 
+  struct Intercept : io::IO
+  {
+    Log::Dest& dest;
+    Logger& logger;
+    Verbosity v;
+
+    Intercept(Log::Dest& dest, Logger& logger, Verbosity v) : 
+      dest(dest), logger(logger), v(v) {}
+
+    s64 write(Bytes slice) override
+    {
+      u64 linelen = 0;
+      for (u64 i = 0; i < slice.len; ++i)
+      {
+        if (logger.need_prefix)
+        {
+          logger.writePrefix(v, dest);
+          logger.need_prefix = false;
+        }
+
+        if (slice.ptr[i] == '\n')
+        {
+          dest.io->write({slice.ptr+i-linelen,linelen+1});
+          logger.need_prefix = true;
+          linelen = 0;
+        }
+        else
+          linelen += 1;
+
+      }
+
+      if (linelen)
+        dest.io->write({slice.ptr+slice.len-linelen,linelen});
+      return slice.len;
+    }
+
+    s64 read(Bytes bytes) override { return 0; }
+  };
+
   template<io::Formattable... T>
   void log(Verbosity v, b8 nofmt, T&... args)
   {
@@ -272,45 +311,6 @@ struct Logger
       {
         if (destination.flags.test(Log::Dest::Flag::PrefixNewlines))
         {
-          struct Intercept : io::IO
-          {
-            Log::Dest& dest;
-            Logger& logger;
-            Verbosity v;
-
-            Intercept(Log::Dest& dest, Logger& logger, Verbosity v) : 
-              dest(dest), logger(logger), v(v) {}
-
-            s64 write(Bytes slice) override
-            {
-              u64 linelen = 0;
-              for (u64 i = 0; i < slice.len; ++i)
-              {
-                if (logger.need_prefix)
-                {
-                  logger.writePrefix(v, dest);
-                  logger.need_prefix = false;
-                }
-
-                if (slice.ptr[i] == '\n')
-                {
-                  dest.io->write({slice.ptr+i-linelen,linelen+1});
-                  logger.need_prefix = true;
-                  linelen = 0;
-                }
-                else
-                  linelen += 1;
-
-              }
-
-              if (linelen)
-                dest.io->write({slice.ptr+slice.len-linelen,linelen});
-              return slice.len;
-            }
-
-            s64 read(Bytes bytes) override { return 0; }
-          };
-
           auto intercept = Intercept(destination, *this, v);
           io::formatv(&intercept, args...);
         }

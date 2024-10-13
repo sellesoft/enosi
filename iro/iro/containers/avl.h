@@ -1,5 +1,11 @@
 /*
- *  AVL tree implementation
+ *  AVL tree implementation.
+ *
+ *  TODO(sushi) it would be nice to be able to allocate the stored type 
+ *              with the node, rather than always forcing that data to be
+ *              stored elsewhere, as this forces using two Pools in most cases.
+ *              Problem is that data moves around then, which is normally 
+ *              undesirable.
  */
 
 #ifndef _iro_avl_h
@@ -608,7 +614,7 @@ private:
     return B;
   }
 
-private:
+public:
 
   /* -+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
    *  Iterator for compatibility with C++ ranged for loops 
@@ -641,8 +647,6 @@ private:
     }
   };
 
-public:
-
   RangeIterator begin()
   {
     return RangeIterator{ root? minimum(root) : nullptr };
@@ -652,6 +656,89 @@ public:
   {
     return RangeIterator{ nullptr };
   }
+};
+
+/* ============================================================================
+ *   Basic example of using AVL.
+ */
+struct StringSet
+{
+  struct Elem
+  {
+    u64 hash;
+    str s;
+  };
+
+  typedef AVL<Elem, [](const Elem* elem) { return elem->hash; }> Map;
+
+  Pool<Elem> pool;
+  Map map;
+
+  b8 init(mem::Allocator* allocator = &mem::stl_allocator)
+  {
+    if (!pool.init(allocator))
+      return false;
+    if (!map.init(allocator))
+    {
+      pool.deinit();
+      return false;
+    }
+    return true;
+  }
+
+  void deinit()
+  {
+    pool.deinit();
+    map.deinit();
+  }
+
+  void add(str s)
+  {
+    auto elem = Elem{s.hash(), s};
+    if (map.find(elem.hash))
+      return;
+
+    auto nuelem = pool.add();
+    *nuelem = elem;
+
+    map.insert(nuelem);
+  }
+
+  b8 has(str s)
+  {
+    if (isnil(s))
+      return false;
+    return map.find(s.hash()) != nullptr;
+  }
+
+
+  struct RangeIterator
+  {
+    Map::RangeIterator map_iterator;
+
+    Map::Node* operator++()
+    {
+      return map_iterator.operator++();
+    }
+    
+    b8 operator != (const RangeIterator& rhs)
+    {
+      return map_iterator != rhs.map_iterator;
+    }
+
+    str* operator->()
+    {
+      return &map_iterator.current->data->s;
+    }
+
+    str& operator*()
+    {
+      return map_iterator.current->data->s;
+    }
+  };
+
+  RangeIterator begin() { return RangeIterator{map.begin()}; }
+  RangeIterator end() { return RangeIterator{map.end()}; }
 };
 
 }
