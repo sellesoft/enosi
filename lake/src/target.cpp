@@ -27,7 +27,7 @@ void Target::initCommon()
 
 /* ----------------------------------------------------------------------------
  */
-str Target::name()
+String Target::name()
 {
   assert(kind != Kind::Unknown);
   switch (kind)
@@ -40,7 +40,7 @@ str Target::name()
 
 /* ----------------------------------------------------------------------------
  */
-void Target::initSingle(str path)
+void Target::initSingle(String path)
 {
   initCommon();
   kind = Kind::Single;

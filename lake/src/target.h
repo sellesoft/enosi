@@ -132,7 +132,7 @@ struct Target
   // Initialization that is common to all kinds of targets.
   void initCommon();
 
-  void initSingle(str path);
+  void initSingle(String path);
   void initGroup();
 
   void deinit();
@@ -155,7 +155,7 @@ struct Target
   //   3. If the target is older than any of its prerequisites.
   b8 needsBuilt();
 
-  str name();
+  String name();
 
   // Returns true if a recipe was added to this target in the lakefile.
   b8 hasRecipe();

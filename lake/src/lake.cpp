@@ -163,7 +163,7 @@ struct ArgIter
   u64 argc = 0;
   u64 idx = 0;
 
-  str current = nil;
+  String current = nil;
 
   ArgIter(const char** argv, u32 argc) : argv(argv), argc(argc) 
   {  
@@ -188,7 +188,7 @@ struct ArgIter
  */
 b8 processMaxJobsArg(Lake* lake, ArgIter* iter)
 {
-  str mjarg = iter->current;
+  String mjarg = iter->current;
 
   iter->next();
   if (isnil(iter->current))
@@ -197,7 +197,7 @@ b8 processMaxJobsArg(Lake* lake, ArgIter* iter)
     return false;
   }
 
-  str arg = iter->current;
+  String arg = iter->current;
 
   u8* scan = arg.ptr;
 
@@ -224,7 +224,7 @@ b8 processMaxJobsArg(Lake* lake, ArgIter* iter)
 
 /* ----------------------------------------------------------------------------
  */
-b8 processArgDoubleDash(Lake* lake, str arg, str* initfile, ArgIter* iter)
+b8 processArgDoubleDash(Lake* lake, String arg, String* initfile, ArgIter* iter)
 {
   switch (arg.hash())
   {
@@ -274,7 +274,7 @@ b8 processArgDoubleDash(Lake* lake, str arg, str* initfile, ArgIter* iter)
 
 /* ----------------------------------------------------------------------------
  */
-b8 processArgSingleDash(Lake* lake, str arg, str* initfile, ArgIter* iter)
+b8 processArgSingleDash(Lake* lake, String arg, String* initfile, ArgIter* iter)
 {
   switch (arg.hash())
   {
@@ -297,14 +297,14 @@ b8 processArgSingleDash(Lake* lake, str arg, str* initfile, ArgIter* iter)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Lake::processArgv(str* initfile)
+b8 Lake::processArgv(String* initfile)
 {
   INFO("Processing cli args.\n");
   SCOPED_INDENT;
 
   for (ArgIter iter(argv, argc); notnil(iter.current); iter.next())
   {
-    str arg = iter.current;
+    String arg = iter.current;
     if (arg.len > 1 && arg.ptr[0] == '-')
     {
       if (arg.len > 2 && arg.ptr[1] == '-')
@@ -583,7 +583,7 @@ extern "C"
 /* ----------------------------------------------------------------------------
  */
 EXPORT_DYNAMIC
-Target* lua__createSingleTarget(str path)
+Target* lua__createSingleTarget(String path)
 {
   Target* t = lake.target_pool.add();
   t->initSingle(path);
@@ -646,7 +646,7 @@ s32 lua__targetSetRecipe(Target* target)
     // TODO(sushi) targets that have their recipe set from the same directory 
     //             should use the same Path?? Probably better to store a set 
     //             (AVL) of cwd Paths and just have the thing on Target be a 
-    //             str.
+    //             String.
     target->recipe_working_directory = fs::Path::cwd();
 
     // get the next slot to fill and then set 'next' to whatever that slot 
@@ -726,7 +726,7 @@ b8 lua__targetAlreadyInGroup(Target* target)
 /* ----------------------------------------------------------------------------
  */
 EXPORT_DYNAMIC
-str lua__getTargetPath(Target* target)
+String lua__getTargetPath(Target* target)
 {
   assertSingle(target);
   return target->name();
@@ -781,7 +781,7 @@ u64 lua__getMonotonicClock()
 /* ----------------------------------------------------------------------------
  */
 EXPORT_DYNAMIC
-b8 lua__makeDir(str path, b8 make_parents)
+b8 lua__makeDir(String path, b8 make_parents)
 {
   return fs::Dir::make(path, make_parents);
 }
@@ -797,7 +797,7 @@ void lua__dirDestroy(fs::Dir* dir)
 /* ----------------------------------------------------------------------------
  */
 EXPORT_DYNAMIC
-ActiveProcess* lua__processSpawn(str* args, u32 args_count)
+ActiveProcess* lua__processSpawn(String* args, u32 args_count)
 {
   assert(args && args_count);
 
@@ -895,19 +895,19 @@ void lua__processClose(ActiveProcess* proc)
  */
 struct LuaGlobResult
 {
-  str* paths;
+  String* paths;
   s32 paths_count;
 };
 
 EXPORT_DYNAMIC
-LuaGlobResult lua__globCreate(str pattern)
+LuaGlobResult lua__globCreate(String pattern)
 {
-  auto matches = Array<str>::create();
+  auto matches = Array<String>::create();
   auto glob = fs::Globber::create(pattern);
   glob.run(
     [&matches](fs::Path& p)
     {
-      str match = p.buffer.asStr();
+      String match = p.buffer.asStr();
       *matches.push() = match.allocateCopy();
       return true;
     });
@@ -920,9 +920,9 @@ LuaGlobResult lua__globCreate(str pattern)
 EXPORT_DYNAMIC
 void lua__globDestroy(LuaGlobResult x)
 {
-  auto arr = Array<str>::fromOpaquePointer(x.paths);
+  auto arr = Array<String>::fromOpaquePointer(x.paths);
 
-  for (str& s : arr)
+  for (String& s : arr)
     mem::stl_allocator.free(s.ptr);
 
   arr.destroy();
@@ -964,7 +964,7 @@ int lua__importFile(lua_State* L)
 
   size_t len;
   const char* s = lua_tolstring(L, -1, &len);
-  str path = {(u8*)s, len};
+  String path = {(u8*)s, len};
 
   auto cwd = Path::cwd();
   defer { cwd.chdir(); cwd.destroy(); };
@@ -1021,7 +1021,7 @@ int lua__cwd(lua_State* L)
 /* ----------------------------------------------------------------------------
  */
 EXPORT_DYNAMIC
-b8 lua__chdir(str path)
+b8 lua__chdir(String path)
 {
   return fs::Path::chdir(path);
 }
@@ -1033,7 +1033,7 @@ int lua__canonicalizePath(lua_State* L)
 {
   size_t len;
   const char* s = lua_tolstring(L, 1, &len);
-  str path = {(u8*)s, len};
+  String path = {(u8*)s, len};
 
   auto canonicalized = fs::Path::from(path);
   defer { canonicalized.destroy(); };
@@ -1053,7 +1053,7 @@ int lua__canonicalizePath(lua_State* L)
 /* ----------------------------------------------------------------------------
  */
 EXPORT_DYNAMIC
-b8 lua__copyFile(str dst, str src)
+b8 lua__copyFile(String dst, String src)
 {
   return fs::File::copy(dst, src);
 }
@@ -1061,7 +1061,7 @@ b8 lua__copyFile(str dst, str src)
 /* ----------------------------------------------------------------------------
  */
 EXPORT_DYNAMIC
-b8 lua__rm(str path, b8 recursive, b8 force)
+b8 lua__rm(String path, b8 recursive, b8 force)
 {
   // TODO(sushi) move to iro
   using namespace fs;
@@ -1132,7 +1132,7 @@ b8 lua__rm(str path, b8 recursive, b8 force)
         continue;
       }
 
-      str s = str::from(dirent.asSlice());
+      String s = String::from(dirent.asSlice());
       if (s == "."_str || s == ".."_str)
         continue;
 
@@ -1191,7 +1191,7 @@ b8 lua__rm(str path, b8 recursive, b8 force)
 /* ----------------------------------------------------------------------------
  */
 EXPORT_DYNAMIC
-b8 lua__pathExists(str path)
+b8 lua__pathExists(String path)
 {
   return platform::fileExists(path);
 }
@@ -1207,7 +1207,7 @@ b8 lua__inRecipe()
 /* ----------------------------------------------------------------------------
  */
 EXPORT_DYNAMIC
-b8 lua__touch(str path)
+b8 lua__touch(String path)
 {
   return platform::touchFile(path);
 }

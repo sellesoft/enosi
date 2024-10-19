@@ -32,6 +32,8 @@ struct Lake
   TargetList active_recipes;
   u32 active_recipe_count;
 
+  TargetList explicit_requests;
+
   TargetList targets;
 
   Pool<Target> target_pool;
@@ -40,13 +42,13 @@ struct Lake
   LuaCLIArgList lua_cli_args; 
   LuaCLIArgList::Node* lua_cli_arg_iterator;
 
-  Pool<str> action_pool;
-  DList<str> action_queue;
+  Pool<String> action_pool;
+  DList<String> action_queue;
 
   s32          argc;
   const char** argv;
 
-  str initpath = nil;
+  String initpath = nil;
 
   u32 max_jobs; // --max-jobs <n> or -j <n>
   b8 max_jobs_set_on_cli;
@@ -60,7 +62,7 @@ struct Lake
   b8   init(const char** argv, int argc, mem::Allocator* allocator = &mem::stl_allocator);
   void deinit();
 
-  b8 processArgv(str* initfile);
+  b8 processArgv(String* initfile);
   b8 run();
 
 };
@@ -71,7 +73,7 @@ extern Logger log;
 // api used in the lua lake module 
 extern "C" 
 {
-  Target* lua__create_target(str path);
+  Target* lua__create_target(String path);
   void    lua__make_dep(Target* target, Target* dependent);
 
   typedef struct CLIargs
