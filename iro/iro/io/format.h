@@ -43,7 +43,7 @@ s64 format(IO* io, s64 x);
 s64 format(IO* io, f32 x);
 s64 format(IO* io, f64 x);
 s64 format(IO* io, b8  x);
-s64 format(IO* io, str x);
+s64 format(IO* io, String x);
 s64 format(IO* io, char x);
 s64 format(IO* io, void* x);
 s64 format(IO* io, const void* x);
@@ -69,8 +69,8 @@ s64 formatv(IO* io, Formattable auto&&... args)
  */ 
 struct SanitizeControlCharacters
 {
-  const str& x;
-  SanitizeControlCharacters(const str& in) : x(in) {};
+  const String& x;
+  SanitizeControlCharacters(const String& in) : x(in) {};
 };
 
 s64 format(IO* io, const SanitizeControlCharacters& x);

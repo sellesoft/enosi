@@ -92,7 +92,7 @@ struct File : public io::IO
   b8 is_pty = false; // TODO(sushi) put somewhere better later
 
   static File from(
-      str path, OpenFlags flags, 
+      String path, OpenFlags flags, 
       mem::Allocator* allocator = &mem::stl_allocator);
 
   static File from(
@@ -101,8 +101,8 @@ struct File : public io::IO
 
   static File from( Moved<Path> path, OpenFlags flags);
 
-  static b8 copy(str dst, str src);
-  static b8 unlink(str path);
+  static b8 copy(String dst, String src);
+  static b8 unlink(String path);
 
   [[deprecated("File cannot be opened without OpenFlags!")]]
   b8 open() override 
@@ -118,7 +118,7 @@ struct File : public io::IO
 
   static File fromFileDescriptor(u64 fd, OpenFlags flags);
   static File fromFileDescriptor(
-      u64 fd, str name, OpenFlags flags, 
+      u64 fd, String name, OpenFlags flags, 
       mem::Allocator* allocator = &mem::stl_allocator);
   static File fromFileDescriptor(u64 fd, Moved<Path> name, OpenFlags flags);
 
@@ -151,7 +151,7 @@ struct FileInfo
   TimePoint last_status_change_time;
   TimePoint birth_time;
 
-  static FileInfo of(str path);
+  static FileInfo of(String path);
   static FileInfo of(File file);
 };
 

@@ -28,14 +28,14 @@ namespace iro
 
   /* --------------------------------------------------------------------------
    */
-  void Log::newDestination(str name, io::IO* d, Dest::Flags flags)
+  void Log::newDestination(String name, io::IO* d, Dest::Flags flags)
   {
     destinations.push({name, flags, d});
   }
 
   /* --------------------------------------------------------------------------
    */
-  b8 Logger::init(str name, Verbosity verbosity)
+  b8 Logger::init(String name, Verbosity verbosity)
   {
     this->name = name;
     this->verbosity = verbosity;
@@ -55,7 +55,7 @@ namespace iro
       time_t t = time(0);
       struct tm* tm = localtime(&t);
       size_t written = strftime(buffer, 64, "[%Y-%m-%d %H:%M:%S] ", tm);
-      io::format(d.io, str{(u8*)buffer, written});
+      io::format(d.io, String{(u8*)buffer, written});
     }
 
     if (d.flags.test(ShowCategoryName))
@@ -141,7 +141,7 @@ u64 iro_loggerSize() { return sizeof(Logger); }
  *  Fill out the allocated logger.
  */
 EXPORT_DYNAMIC
-void iro_initLogger(Logger* logger, str name, u32 verbosity)
+void iro_initLogger(Logger* logger, String name, u32 verbosity)
 {
   logger->init(name, Logger::Verbosity(verbosity));
 }
@@ -150,7 +150,7 @@ void iro_initLogger(Logger* logger, str name, u32 verbosity)
  *  Change the loggers name.
  */
 EXPORT_DYNAMIC
-void iro_loggerSetName(Logger* logger, str name)
+void iro_loggerSetName(Logger* logger, String name)
 {
   logger->name = name;
 }
@@ -160,7 +160,7 @@ void iro_loggerSetName(Logger* logger, str name)
  *  first part if so.
  */
 EXPORT_DYNAMIC
-b8 iro_logFirst(Logger* logger, u32 verbosity, str s)
+b8 iro_logFirst(Logger* logger, u32 verbosity, String s)
 {
   if ((u32)logger->verbosity > verbosity)
     return false;
@@ -174,7 +174,7 @@ b8 iro_logFirst(Logger* logger, u32 verbosity, str s)
  *  Log the remaining parts, if any.
  */
 EXPORT_DYNAMIC
-void iro_logTrail(Logger* logger, u32 verbosity, str s)
+void iro_logTrail(Logger* logger, u32 verbosity, String s)
 {
   // no check for verbosity as the call to logFirst tells us if we should 
   // continue

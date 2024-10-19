@@ -86,7 +86,7 @@ struct AVL
 
   /* --------------------------------------------------------------------------
    */
-  b8 has(T* data)
+  b8 has(T* data) const
   {
     if (!root)
       return false;
@@ -117,7 +117,7 @@ struct AVL
 
   /* --------------------------------------------------------------------------
    */
-  T* find(u64 key)
+  T* find(u64 key) const
   {
     if (!root)
       return nullptr;
@@ -666,7 +666,7 @@ struct StringSet
   struct Elem
   {
     u64 hash;
-    str s;
+    String s;
   };
 
   typedef AVL<Elem, [](const Elem* elem) { return elem->hash; }> Map;
@@ -692,7 +692,7 @@ struct StringSet
     map.deinit();
   }
 
-  void add(str s)
+  void add(String s)
   {
     auto elem = Elem{s.hash(), s};
     if (map.find(elem.hash))
@@ -704,13 +704,12 @@ struct StringSet
     map.insert(nuelem);
   }
 
-  b8 has(str s)
+  b8 has(String s) const
   {
     if (isnil(s))
       return false;
     return map.find(s.hash()) != nullptr;
   }
-
 
   struct RangeIterator
   {
@@ -726,12 +725,12 @@ struct StringSet
       return map_iterator != rhs.map_iterator;
     }
 
-    str* operator->()
+    String* operator->()
     {
       return &map_iterator.current->data->s;
     }
 
-    str& operator*()
+    String& operator*()
     {
       return map_iterator.current->data->s;
     }

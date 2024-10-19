@@ -59,12 +59,12 @@ struct Process
   // data on stdout, the parent process wont wait for data like it normally 
   // does)
   static Process spawn(
-      str        file, 
-      Slice<str> args, 
-      Stream     streams[3], 
-      str        cwd);
+      String        file, 
+      Slice<String> args, 
+      Stream        streams[3], 
+      String        cwd);
 
-  static Process spawnpty(str file, Slice<str> args, fs::File* stream);
+  static Process spawnpty(String file, Slice<String> args, fs::File* stream);
 
   // Checks the status of this process and sets the status of the process.
   // If the process exits, 'exit_code' is set.

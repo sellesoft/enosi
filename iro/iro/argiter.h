@@ -18,7 +18,7 @@ struct ArgIter
   u32 argc = 0;
   u32 idx = 0;
 
-  str current = nil;
+  String current = nil;
 
   ArgIter(const char** argv, u32 argc) : argv(argv), argc(argc)
   {
@@ -34,7 +34,7 @@ struct ArgIter
       return;
     }
 
-    current = str::fromCStr(argv[idx++]);
+    current = String::fromCStr(argv[idx++]);
   }
 };
 

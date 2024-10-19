@@ -52,7 +52,7 @@ struct Object
 {
   struct Member
   {
-    str name;
+    String name;
     u64 hash;
     Value* value;
 
@@ -73,23 +73,23 @@ struct Object
   b8   init(mem::Allocator* allocator = &mem::stl_allocator);
   void deinit();
 
-  b8 addMember(str name, Value* value);
-  Value* findMember(str name);
+  b8 addMember(String name, Value* value);
+  Value* findMember(String name);
 
   Array* addArray(
     JSON* json, 
-    str name,
+    String name,
     s32 init_space = 8,
     mem::Allocator* allocator = &mem::stl_allocator);
 
   Object* addObject(
     JSON* json, 
-    str name,
+    String name,
     mem::Allocator* allocator = &mem::stl_allocator);
 
-  b8 addString(JSON* json, str name, str string);
+  b8 addString(JSON* json, String name, String string);
 
-  b8 addNull(JSON* json, str name);
+  b8 addNull(JSON* json, String name);
 };
 
 /* ============================================================================
@@ -114,7 +114,7 @@ struct Value
     Object object;
     Array  array;
     f64    number;
-    str    string;
+    String string;
   };
 
   Value() : kind(Kind::Null) {}
@@ -164,7 +164,7 @@ struct Value
 
 /* ----------------------------------------------------------------------------
  */
-static inline str getValueKindString(Value::Kind x)
+static inline String getValueKindString(Value::Kind x)
 {
   switch (x)
   {
@@ -206,7 +206,7 @@ struct JSON
   b8   init();
   void deinit();
 
-  str cacheString(str s);
+  String cacheString(String s);
 
   // Allocates a value of the given kind from the pool and returns a pointer 
   // to it.

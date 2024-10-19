@@ -33,11 +33,11 @@ concept GlobberCallback = requires(F f, Path& p)
   { f(p) } -> std::convertible_to<b8>;
 };
 
-/* ================================================================================================ Globber
+/* ============================================================================
  */
 struct Globber
 {
-    /* ============================================================================================ Globber::Part
+    /* ========================================================================
      */
   struct Part
   {
@@ -58,7 +58,7 @@ struct Globber
 
     Kind kind;
 
-    str raw;
+    String raw;
   };
 
   typedef Pool<Part> PartPool;
@@ -68,16 +68,18 @@ struct Globber
   PartList part_list;
 
   // NOTE(sushi) this is OWNED by this guy!!
-  str pattern;
+  String pattern;
 
   mem::Allocator* allocator;
 
 
-  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
    */
 
 
-  static Globber create(str pattern, mem::Allocator* allocator = &mem::stl_allocator);
+  static Globber create(
+    String pattern, 
+    mem::Allocator* allocator = &mem::stl_allocator);
   
   void destroy();
 
@@ -89,22 +91,25 @@ private:
   
   void compilePattern();
 
-  Part* pushPart(Part::Kind kind, str raw);
+  Part* pushPart(Part::Kind kind, String raw);
   
 };
 
-/* ------------------------------------------------------------------------------------------------ Globber::run
+/* ----------------------------------------------------------------------------
  *  Based on Crystal's globbing stuff:
- *    https://github.com/crystal-lang/crystal/blob/4cea10199/src/dir/glob.cr#L48
- *  Until I get a better idea of how this should be implemented or forever if it works well enough.
+ *  https://github.com/crystal-lang/crystal/blob/4cea10199/src/dir/glob.cr#L48
+ *  Until I get a better idea of how this should be implemented or forever if 
+ *  it works well enough.
  *
- *  TODO(sushi) eventually try and move as much of this logic into the cpp as possible. This is 
- *              only in the header atm because it uses a templated callback and so this func 
- *              should be reduced to only have to deal with that aspect of it (if possible).
+ *  TODO(sushi) eventually try and move as much of this logic into the cpp 
+ *              as possible. This is only in the header atm because it uses a 
+ *              templated callback and so this func should be reduced to only 
+ *              have to deal with that aspect of it (if possible).
  *
- *  NOTE(sushi) this uses quite a bit of memory cause im just tossing everything into a 
- *              bump allocator. maaaybe clean it up later, but im not too worried about it 
- *              because zsh uses more memory with the same globs so whatever.
+ *  NOTE(sushi) this uses quite a bit of memory cause im just tossing 
+ *              everything into a bump allocator. maaaybe clean it up later, 
+ *              but im not too worried about it because zsh uses more memory 
+ *              with the same globs so whatever.
  */
 void Globber::run(GlobberCallback auto callback)
 {
@@ -176,7 +181,10 @@ void Globber::run(GlobberCallback auto callback)
         INFO("ConstantDirectory: opening ", path, "\n");
         SCOPED_INDENT;
 
-        Path full = notnil(path)? path.copy() : Path::from(""_str, &bump);
+        Path full = 
+          notnil(path)? 
+          path.copy() : 
+          Path::from(""_str, &bump);
         full.makeDir().append(part->raw);
         
         INFO("full path is ", full, "\n");
@@ -225,7 +233,7 @@ void Globber::run(GlobberCallback auto callback)
           if (buffer.len == 0)
             break;
 
-          str entstr = str::from(buffer.asSlice());
+          String entstr = String::from(buffer.asSlice());
 
           if (entstr == "."_str || entstr == ".."_str)
             continue;
@@ -276,7 +284,7 @@ void Globber::run(GlobberCallback auto callback)
           if (buffer.len == 0)
             break;
 
-          str entstr = str::from(buffer.asSlice());
+          String entstr = String::from(buffer.asSlice());
 
           if (entstr == "."_str || entstr == ".."_str)
             continue;
@@ -311,7 +319,11 @@ void Globber::run(GlobberCallback auto callback)
 
         INFO("DoubleStar: opening ", path, "\n");
         SCOPED_INDENT;
-        dir_stack.pushHead(Dir::open(notnil(path)? path.copy() : Path::from("."_str, &bump)));
+        dir_stack.pushHead(
+          Dir::open(
+            notnil(path)? 
+            path.copy() : 
+            Path::from("."_str, &bump)));
 
         assert(node->next); // IDK if this will ever happen??
         Part* next_part = node->next->data;
@@ -367,11 +379,12 @@ void Globber::run(GlobberCallback auto callback)
             continue;
           }
           
-          str s = str::from(dirent.asSlice());
+          String s = String::from(dirent.asSlice());
 
           if (s == "."_str || s == ".."_str)
           {
-            INFO("skipping entry ", s, " because it is either the current or parent directory\n");
+            INFO("skipping entry ", s, " because it is either the current or "
+                 "parent directory\n");
             continue;
           }
 
@@ -384,7 +397,10 @@ void Globber::run(GlobberCallback auto callback)
           INFO("found entry ", s, "\n");
 
           Path dir_path = dir_path_stack.head();
-          Path full = notnil(dir_path)? dir_path.copy().makeDir().append(s) : Path::from(s, &bump);
+          Path full = 
+            notnil(dir_path)? 
+              dir_path.copy().makeDir().append(s) : 
+              Path::from(s, &bump);
 
           INFO("fullpath is ", full, "\n");
 

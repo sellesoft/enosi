@@ -155,7 +155,7 @@ b8 LuaState::loadbuffer(Bytes buffer, const char* name)
 {
   auto loader = [](lua_State* L, void* data, size_t* size) -> const char* 
   {
-    str* buffer = (str*)data;
+    String* buffer = (String*)data;
     if (buffer->isEmpty())
       return nullptr;
     *size = buffer->len;
@@ -197,6 +197,15 @@ b8 LuaState::dofile(const char* s)
 
 /* ----------------------------------------------------------------------------
  */
+b8 LuaState::dostring(const char* s)
+{
+  if (luaL_dostring(L, s))
+    return false;
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 LuaState::pcall(s32 nargs, s32 nresults, s32 errfunc)
 {
   if (lua_pcall(L, nargs, nresults, errfunc))
@@ -231,7 +240,7 @@ b8 LuaState::setfenv(s32 idx)
 
 /* ----------------------------------------------------------------------------
  */
-str LuaState::tostring(s32 idx)
+String LuaState::tostring(s32 idx)
 {
   size_t len;
   const char* s = lua_tolstring(L, idx, &len);
@@ -261,7 +270,7 @@ void* LuaState::tolightuserdata(s32 idx)
 
 /* ----------------------------------------------------------------------------
  */
-void LuaState::pushstring(str s)
+void LuaState::pushstring(String s)
 {
   // TODO(sushi) handle non-temrinated input
   lua_pushlstring(L, (char*)s.ptr, s.len);
@@ -392,7 +401,7 @@ b8 LuaState::dump(io::IO* dest)
 
 /* ------------------------------------------------------------------------------------------------
  */
-b8 LuaState::require(str modname, u32* out_ret)
+b8 LuaState::require(String modname, u32* out_ret)
 {
   u32 top = gettop();
 

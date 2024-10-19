@@ -36,37 +36,37 @@ struct Path
 
   // Makes a new Path from the given string.
   static Path from(
-      str s = {}, 
+      String s = {}, 
       mem::Allocator* allocator = &mem::stl_allocator);
 
   static Path cwd(mem::Allocator* allocator = &mem::stl_allocator);
 
   // Unlink a file. For directories use 'rmdir'.
-  static b8 unlink(str path);
+  static b8 unlink(String path);
 
   // Remove a directory.
-  static b8 rmdir(str path);
+  static b8 rmdir(String path);
 
   // Change the current working directory into the one at 'path'.
-  static b8 chdir(str path);
-  static b8 matches(str name, str pattern);
-  static b8 exists(str path);
-  static b8 isRegularFile(str path);
-  static b8 isDirectory(str path);
+  static b8 chdir(String path);
+  static b8 matches(String name, String pattern);
+  static b8 exists(String path);
+  static b8 isRegularFile(String path);
+  static b8 isDirectory(String path);
 
-  static str basename(str path);
-  static str removeBasename(str path);
+  static String basename(String path);
+  static String removeBasename(String path);
 
   // Compares the modification times of the given paths.
   //  0 is returned if they are equal, 
   //  1 is returned if path0 > path1,
   // -1 is returned if path1 < path0.
   // This function asserts if either of the files do not exist.
-  static s8 compareModTimes(str path0, str path1);
+  static s8 compareModTimes(String path0, String path1);
 
   b8   init(mem::Allocator* allocator = &mem::stl_allocator) 
     { return init({}, allocator); }
-  b8   init(str s, mem::Allocator* allocator = &mem::stl_allocator);
+  b8   init(String s, mem::Allocator* allocator = &mem::stl_allocator);
   void destroy();
 
   b8 unlink() { return unlink(buffer.asStr()); }
@@ -76,9 +76,9 @@ struct Path
 
   void clear();
 
-  Path& appendDir(str dir) { append("/"_str, dir); return *this; }
+  Path& appendDir(String dir) { append("/"_str, dir); return *this; }
   Path& appendDir(Slice<u8> dir) 
-    { append("/"_str, str::from(dir)); return *this; }
+    { append("/"_str, String::from(dir)); return *this; }
   Path& append(io::Formattable auto... args) 
     { io::formatv(&buffer, args...); return *this; }
 
@@ -100,7 +100,7 @@ struct Path
 
   // Returns the final component of this path eg.
   // src/fs/path.h -> path.h
-  str basename() { return basename(buffer.asStr()); }
+  String basename() { return basename(buffer.asStr()); }
 
   void removeBasename() { buffer.len = removeBasename(buffer.asStr()).len; }
 
@@ -138,7 +138,7 @@ struct Path
   // Returns if this path matches the given pattern
   // TODO(sushi) write up the specification of patterns that can be used here
   //             its just Linux shell globbing 
-  b8 matches(str pattern);
+  b8 matches(String pattern);
 
   typedef io::Memory::Rollback Rollback;
 

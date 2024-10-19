@@ -101,6 +101,7 @@ void* LenientBump::allocate(u64 size)
 
   if (cursor - start + total_size > slabs->size)
   {
+    // TODO(sushi) if there is still space in prev slab, keep using it!
     u64 new_size = total_size > slab_size ? total_size : slab_size;
     Slab* newslab = 
       (Slab*)mem::stl_allocator.allocate(sizeof(Slab) + new_size);

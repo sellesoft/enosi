@@ -5,7 +5,7 @@ namespace iro::fs
 
 /* ------------------------------------------------------------------------------------------------
  */
-Globber Globber::create(str pattern, mem::Allocator* allocator)
+Globber Globber::create(String pattern, mem::Allocator* allocator)
 {
   Globber out = {};
   out.allocator = allocator;
@@ -127,7 +127,7 @@ void Globber::compilePattern()
 
 /* ------------------------------------------------------------------------------------------------
  */
-Globber::Part* Globber::pushPart(Part::Kind kind, str raw)
+Globber::Part* Globber::pushPart(Part::Kind kind, String raw)
 {
   Part* p = part_pool.add();
   p->kind = kind;

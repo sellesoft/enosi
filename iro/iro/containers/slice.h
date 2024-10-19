@@ -8,6 +8,7 @@
 #define _iro_slice_h
 
 #include "../common.h"
+#include "assert.h"
 
 namespace iro
 {
@@ -24,6 +25,12 @@ struct Slice
   b8 isValid() { return ptr != nullptr; }
 
   b8 isEmpty() { return len == 0; }
+
+  Slice<T> sub(s32 start) const
+  {
+    assert(start >= 0 && start < len);
+    return { ptr + start, len - start };
+  }
 
   T* begin() { return ptr; }
   T* end()   { return ptr + len; }

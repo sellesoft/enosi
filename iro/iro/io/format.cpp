@@ -79,7 +79,7 @@ s64 format(IO* io, f64 x)
   return io->write({buffer, len});
 }
 
-s64 format(IO* io, str x)
+s64 format(IO* io, String x)
 {
   return io->write(x);
 }
@@ -118,7 +118,7 @@ s64 format(IO* io, const SanitizeControlCharacters& x)
   auto flush = [&buffer, io]() { io->write(buffer.asSlice()); buffer.len = 0; };
 
   s64 bytes_written = 0;
-  auto write = [&buffer, &bytes_written, flush](str s)
+  auto write = [&buffer, &bytes_written, flush](String s)
   {
     if (buffer.len + s.len > buffer.capacity())
       flush();
@@ -129,7 +129,7 @@ s64 format(IO* io, const SanitizeControlCharacters& x)
     bytes_written += s.len;
   };
 
-  str s = x.x;
+  String s = x.x;
   while (!s.isEmpty())
   {
     utf8::Codepoint c = s.advance();

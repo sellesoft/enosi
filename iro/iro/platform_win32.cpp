@@ -31,7 +31,7 @@ thread_local LPSTR win32_error_msg = nullptr;
 
 /* ----------------------------------------------------------------------------
  */
-static wchar_t* makeWin32Path(str input, u64 extra_bytes = 0,
+static wchar_t* makeWin32Path(String input, u64 extra_bytes = 0,
   u64* output_len = 0, b8 force_allocate = false)
 {
   wchar_t* output = win32_str;
@@ -79,12 +79,12 @@ static wchar_t* makeWin32Path(str input, u64 extra_bytes = 0,
   return output;
 }
 
-static str makeWin32ErrorMsg(DWORD error)
+static String makeWin32ErrorMsg(DWORD error)
 {
 	DWORD win32_error_msg_len = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER |
     FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, error,
     MAKELANGID(LANG_NEUTRAL,SUBLANG_DEFAULT), win32_error_msg, 0, NULL);
-  return str::from((u8*)win32_error_msg, (u64)win32_error_msg_len);
+  return String::from((u8*)win32_error_msg, (u64)win32_error_msg_len);
 }
 
 static void cleanupWin32ErrorMsg()
@@ -108,7 +108,7 @@ void sleep(TimeSpan time)
 
 /* ----------------------------------------------------------------------------
  */
-b8 open(fs::File::Handle* out_handle, str path, fs::OpenFlags flags)
+b8 open(fs::File::Handle* out_handle, String path, fs::OpenFlags flags)
 {
   using enum fs::OpenFlag;
   assert(out_handle != nullptr);
@@ -389,7 +389,7 @@ Timespec clock_monotonic()
 
 /* ----------------------------------------------------------------------------
  */
-b8 opendir(fs::Dir::Handle* out_handle, str path)
+b8 opendir(fs::Dir::Handle* out_handle, String path)
 {
   assert(out_handle != nullptr);
   
@@ -598,7 +598,7 @@ s64 readdir(fs::Dir::Handle handle, Bytes buffer)
 
 /* ----------------------------------------------------------------------------
  */
-b8 stat(fs::FileInfo* out_info, str path)
+b8 stat(fs::FileInfo* out_info, String path)
 {
   assert(out_info != nullptr);
   assert(notnil(path));
@@ -717,7 +717,7 @@ b8 stat(fs::FileInfo* out_info, str path)
 
 /* ----------------------------------------------------------------------------
  */
-b8 fileExists(str path)
+b8 fileExists(String path)
 {
   assert(notnil(path));
   assert(!path.isEmpty());
@@ -736,7 +736,7 @@ b8 fileExists(str path)
 
 /* ----------------------------------------------------------------------------
  */
-b8 copyFile(str dst, str src)
+b8 copyFile(String dst, String src)
 {
   assert(notnil(dst));
   assert(notnil(src));
@@ -772,7 +772,7 @@ b8 copyFile(str dst, str src)
 
 /* ----------------------------------------------------------------------------
  */
-b8 unlinkFile(str path)
+b8 unlinkFile(String path)
 {
   assert(notnil(path));
   assert(!path.isEmpty());
@@ -797,7 +797,7 @@ b8 unlinkFile(str path)
 
 /* ----------------------------------------------------------------------------
  */
-b8 removeDir(str path)
+b8 removeDir(String path)
 {
   assert(notnil(path));
   assert(!path.isEmpty());
@@ -822,7 +822,7 @@ b8 removeDir(str path)
 
 /* ----------------------------------------------------------------------------
  */
-b8 makeDir(str path, b8 make_parents)
+b8 makeDir(String path, b8 make_parents)
 {
   assert(notnil(path));
   
@@ -857,7 +857,7 @@ b8 makeDir(str path, b8 make_parents)
   {
     if (path.ptr[i] == '/' || i == path.len - 1)
     {
-      str partial_path = str{path.ptr, i+1};
+      String partial_path = String{path.ptr, i+1};
       
       if (wpath != win32_str) mem::stl_allocator.free(wpath);
       wchar_t* wpath = makeWin32Path(partial_path);
@@ -891,10 +891,10 @@ b8 makeDir(str path, b8 make_parents)
  */
 b8 processSpawn(
   Process::Handle* out_handle,
-  str file,
-  Slice<str> args,
+  String file,
+  Slice<String> args,
   Process::Stream streams[3],
-  str cwd)
+  String cwd)
 {
   assert(out_handle);
   assert(notnil(file));
@@ -1142,7 +1142,7 @@ b8 processSpawn(
   CloseHandle(process_info.hThread); // we don't need to track the thread
   
   ERROR("started process ", file, ":", process_info.hProcess, " with args:\n");
-  for (str s : args)
+  for (String s : args)
   {
     ERROR(s, "\n");
   }
@@ -1176,8 +1176,8 @@ b8 stopProcess(Process::Handle handle, s32 exit_code)
  */
 b8 processSpawnPTY(
   Process::Handle* out_handle,
-  str file,
-  Slice<str> args,
+  String file,
+  Slice<String> args,
   fs::File* stream)
 {
   assert(out_handle != nullptr);
@@ -1526,7 +1526,7 @@ fs::Path cwd(mem::Allocator* allocator)
 
 /* ----------------------------------------------------------------------------
  */
-b8 chdir(str path)
+b8 chdir(String path)
 {
   assert(notnil(path));
   
@@ -1569,7 +1569,7 @@ void termRestoreSettings(TermSettings settings, mem::Allocator* allocator)
 
 /* ----------------------------------------------------------------------------
  */
-b8 touchFile(str path)
+b8 touchFile(String path)
 {
   wchar_t* wpath = makeWin32Path(path);
   if (wpath == nullptr)

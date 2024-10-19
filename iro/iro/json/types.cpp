@@ -70,7 +70,7 @@ void Object::deinit()
 
 /* ------------------------------------------------------------------------------------------------
  */
-b8 Object::addMember(str name, Value* value)
+b8 Object::addMember(String name, Value* value)
 {
   Member* m = pool.add();
   if (!m)
@@ -87,7 +87,7 @@ b8 Object::addMember(str name, Value* value)
 
 /* ------------------------------------------------------------------------------------------------
  */
-Value* Object::findMember(str name)
+Value* Object::findMember(String name)
 {
   if (Member* member = members.find(name.hash()))
     return member->value;
@@ -98,7 +98,7 @@ Value* Object::findMember(str name)
  */
 Array* Object::addArray(
     JSON* json, 
-    str name,
+    String name,
     s32 init_space,
     mem::Allocator* allocator)
 {
@@ -125,7 +125,7 @@ Array* Object::addArray(
  */
 Object* Object::addObject(
     JSON* json,
-    str name,
+    String name,
     mem::Allocator* allocator)
 {
   Value* v = json->newValue(Value::Kind::Object);
@@ -149,7 +149,7 @@ Object* Object::addObject(
 
 /* ------------------------------------------------------------------------------------------------
  */
-b8 Object::addString(JSON* json, str name, str string)
+b8 Object::addString(JSON* json, String name, String string)
 {
   Value* v = json->newValue(Value::Kind::String);
   if (!v)
@@ -168,7 +168,7 @@ b8 Object::addString(JSON* json, str name, str string)
 
 /* ------------------------------------------------------------------------------------------------
  */
-b8 Object::addNull(JSON* json, str name)
+b8 Object::addNull(JSON* json, String name)
 {
   Value* v = json->newValue(Value::Kind::Null);
   if (!v)
@@ -204,7 +204,7 @@ void JSON::deinit()
 
 /* ------------------------------------------------------------------------------------------------
  */
-str JSON::cacheString(str s)
+String JSON::cacheString(String s)
 {
   return s.allocateCopy(&string_buffer);
 }

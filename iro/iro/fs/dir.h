@@ -24,7 +24,7 @@ struct Dir
 
   // Opens a directory stream at 'path'.
   // 'path' must be null-terminated.
-  static Dir open(str path);
+  static Dir open(String path);
   static Dir open(Path path);
 
   // Open a directory stream using a file handle, if that handle represents a 
@@ -33,7 +33,7 @@ struct Dir
 
   // Make a directory at 'path'. If 'make_parents' is true,
   // then all missing parents of the given path will be made as well.
-  static b8 make(str path, b8 make_parents = false);
+  static b8 make(String path, b8 make_parents = false);
   static b8 make(Path path, b8 make_parents = false);
 
   // Closes this directory stream.

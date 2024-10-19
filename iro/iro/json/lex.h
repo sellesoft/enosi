@@ -62,7 +62,7 @@ namespace iro::json
  */
 struct Lexer
 {
-  str stream_name = nil;
+  String stream_name = nil;
 
   io::Memory cache = nil;
   io::IO* in = nullptr;
@@ -74,12 +74,12 @@ struct Lexer
 
   jmp_buf* failjmp = nullptr;
 
-  b8 init(io::IO* input_stream, str stream_name, jmp_buf* failjmp);
+  b8 init(io::IO* input_stream, String stream_name, jmp_buf* failjmp);
   void deinit();
 
   Token nextToken();
 
-  str getRaw(Token t) { return { cache.ptr + t.loc, u64(t.len) }; }
+  String getRaw(Token t) { return { cache.ptr + t.loc, u64(t.len) }; }
 
 private:
 

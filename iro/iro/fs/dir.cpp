@@ -6,7 +6,7 @@ namespace iro::fs
 
 /* ------------------------------------------------------------------------------------------------
  */
-Dir Dir::open(str path)
+Dir Dir::open(String path)
 {
   Dir out = {};
 
@@ -47,7 +47,7 @@ s64 Dir::next(Bytes buffer)
 
 /* ------------------------------------------------------------------------------------------------
  */
-b8 Dir::make(str path, b8 make_parents)
+b8 Dir::make(String path, b8 make_parents)
 {
   return platform::makeDir(path, make_parents);
 }

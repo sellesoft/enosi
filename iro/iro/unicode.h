@@ -71,65 +71,90 @@ struct Codepoint
 //             if we're ever confident we're dealing with proper utf8 strings
 Codepoint decodeCharacter(u8* s, s32 slen);
 
-inline u64 stringHash(const struct str* x);
+inline u64 stringHash(const struct String* x);
 
 /* ============================================================================
  *  A string encoded in utf8.
+ *
+ *  TODO(sushi) this shares a lot of functionality with Slice<u8>. Consider
+ *              inheriting it here.
  */
-struct str
+struct String
 {
   u8* ptr = nullptr;
   u64 len = 0;
 
-  operator Bytes() { return {ptr, len}; }
+  operator Bytes() const { return {ptr, len}; }
 
   // where 'end' is a pointer to the byte AFTER the last of the range desired
-  static inline str from(u8* start, u8* end) 
+  static inline String from(u8* start, u8* end) 
     { assert(start <= end); return {start, u64(end - start)}; }
-  static inline str from(u8* start, u64 len) { return {start, len}; }
-  static inline str from(Slice<u8> slice) { return {slice.ptr, slice.len}; }
-  static str fromCStr(const char* s);
-  static str fromCStr(u8* ptr) { return fromCStr((char*)ptr); }
+  static inline String from(u8* start, u64 len) { return {start, len}; }
+  static inline String from(Slice<u8> slice) { return {slice.ptr, slice.len}; }
+  static String fromCStr(const char* s);
+  static String fromCStr(u8* ptr) { return fromCStr((char*)ptr); }
 
-  b8 isEmpty() { return len == 0; }
+  b8 isEmpty() const { return len == 0; }
 
-  u64 hash() { return stringHash(this); }
+  u64 hash() const { return stringHash(this); }
 
-  // Advances this str by 'n' codepoints and returns the last codepoint passed.
-  // This may return invalid codepoints if this str is not valid utf8!
+  bool operator ==(String s) const;
+
+  // Advances this String by 'n' codepoints and returns the last codepoint passed.
+  // This may return invalid codepoints if this String is not valid utf8!
   Codepoint advance(s32 n = 1);
 
+  // Increments this String by n bytes.
   void increment(s32 n) { n = (n > len? len : n); ptr += n; len -= n; }
 
   // If the provided buffer is large enough, copy this 
-  // str into it followed by a null terminator and return true.
+  // String into it followed by a null terminator and return true.
   // Otherwise return false;
-  b8 nullTerminate(u8* buffer, s32 buffer_len);
+  b8 nullTerminate(u8* buffer, s32 buffer_len) const;
 
-  str sub(s32 start) 
+  // Allocates a nullterminated copy of this string using the provided 
+  // allocator. The length of the returned string will be the same.
+  String nullTerminate(mem::Allocator* allocator) const;
+
+  String sub(s32 start) const
   { 
     assert(start >= 0 && start < len); 
     return {ptr + start, len - start}; 
   }
   
-  str sub(s32 start, s32 end) 
+  String sub(s32 start, s32 end) const
   { 
     assert(start >= 0 && start <= end && end <= len); 
     return {ptr + start, u64(end - start)};  
   }
 
-  bool operator ==(str s);
+  // Returns nil if no occurance of c is found.
+  String subFromFirst(u8 c) const;
+  String subToFirst(u8 c) const;
+  String subFromLast(u8 c) const;
+  String subToLast(u8 c) const;
+
+  // Returns nil if we only find c.
+  String subFromFirstNot(u8 c) const;
+  String subToFirstNot(u8 c) const;
+  String subFromLastNot(u8 c) const;
+  String subToLastNot(u8 c) const;
 
   u8* begin() { return ptr; }
   u8* end()   { return ptr + len; }
 
-  u8& last() { return *(end()-1); }
+  u8* begin() const { return ptr; }
+  u8* end()   const { return ptr + len; }
+
+  u8& last() const { return *(end()-1); }
 
   // returns how many characters there are in this string
-  u64 countCharacters();
+  u64 countCharacters() const;
 
-  b8 startsWith(str s);
-  b8 endsWith(str s);
+  b8 startsWith(String s) const;
+  b8 endsWith(String s) const;
+
+  b8 startsWith(u8 c) const { return ptr[0] == c; }
 
   struct pos
   {
@@ -142,16 +167,17 @@ struct str
     operator u64() { return x; }
   };
 
-  // each find function should provide a byte and codepoint variant
-  pos findFirst(u8 c);
-  pos findLast(u8 c);
+  pos findFirst(u8 c) const;
+  pos findLast(u8 c) const;
+  pos findFirstNot(u8 c) const;
+  pos findLastNot(u8 c) const;
 
   void split(
       u8 c, 
-      ExpandableContainer<str> auto* container, 
-      b8 remove_empty = true)
+      ExpandableContainer<String> auto* container, 
+      b8 remove_empty = true) const
   {
-    str scan = *this;
+    String scan = *this;
 
     while (not scan.isEmpty())
     {
@@ -178,10 +204,10 @@ struct str
     s32 column = 1;
   };
 
-  LineAndColumn findLineAndColumnAtOffset(s32 offset)
+  LineAndColumn findLineAndColumnAtOffset(s32 offset) const
   {
     LineAndColumn result = {};
-    str me = *this;
+    String me = *this;
     while (not me.isEmpty() && me.ptr - ptr < offset)
     {
       Codepoint c = me.advance();
@@ -198,9 +224,9 @@ struct str
     return result;
   }
 
-  str allocateCopy(mem::Allocator* allocator = &mem::stl_allocator)
+  String allocateCopy(mem::Allocator* allocator = &mem::stl_allocator) const
   {
-    str out;
+    String out;
     out.ptr = (u8*)allocator->allocate(len);
     out.len = len;
     mem::copy(out.ptr, ptr, len);
@@ -208,7 +234,7 @@ struct str
   }
 };
 
-inline u64 stringHash(const str* x)
+inline u64 stringHash(const String* x)
 {
   u64 seed = 14695981039;
   for (s32 i = 0; i < x->len; i++)
@@ -225,17 +251,18 @@ namespace iro
 {
 // since we only use utf8 internally, just bring the string type into the 
 // global namespace
-using str  = utf8::str;
+using String  = utf8::String;
 
-static str operator ""_str (const char* s, size_t len)
+static String operator ""_str (const char* s, size_t len)
 {
-  return str{(u8*)s, len};
+  return String{(u8*)s, len};
 }
 
 }
 
-DefineNilValue(iro::utf8::str, {nullptr}, { return x.ptr == nullptr; });
-DefineNilValue(iro::utf8::Codepoint, {(u32)-1}, { return x.codepoint == (u32)-1; });
+DefineNilValue(iro::utf8::String, {nullptr}, { return x.ptr == nullptr; });
+DefineNilValue(iro::utf8::Codepoint, {(u32)-1}, 
+    { return x.codepoint == (u32)-1; });
 
 #endif // _iro_unicode_h
 

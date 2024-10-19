@@ -53,7 +53,7 @@ struct Log
 {
   struct Dest
   {
-    str name;
+    String name;
 
     enum class Flag : u8
     {
@@ -90,7 +90,7 @@ struct Log
   b8   init();
   void deinit();
 
-  void newDestination(str name, io::IO* d, Dest::Flags flags);
+  void newDestination(String name, io::IO* d, Dest::Flags flags);
 };
 
 DefineFlagsOrOp(Log::Dest::Flags, Log::Dest::Flag);
@@ -125,7 +125,7 @@ enum class Color
 
 /* ----------------------------------------------------------------------------
  */
-static str getColor(color::Color col)
+static String getColor(color::Color col)
 {
 #define x(c, n) \
   case color::Color::c: return "\e[" n "m"_str;
@@ -226,7 +226,7 @@ s64 format(io::IO* out, color::Colored<T>& x)
  */
 struct Logger
 {
-  str name;
+  String name;
 
   enum class Verbosity : u8
   {
@@ -243,14 +243,14 @@ struct Logger
 
   b8 need_prefix;
 
-  static Logger create(str name, Verbosity verbosity)
+  static Logger create(String name, Verbosity verbosity)
   {
     Logger out = {};
     out.init(name, verbosity);
     return out;
   }
 
-  b8 init(str name, Verbosity verbosity);
+  b8 init(String name, Verbosity verbosity);
 
   struct Intercept : io::IO
   {

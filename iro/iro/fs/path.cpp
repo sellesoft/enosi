@@ -11,7 +11,7 @@ static Logger logger = Logger::create("iro.fs.path"_str, Logger::Verbosity::Trac
 
 /* ------------------------------------------------------------------------------------------------
  */
-Path Path::from(str s, mem::Allocator* allocator)
+Path Path::from(String s, mem::Allocator* allocator)
 {
   Path out = {};
   out.init(s, allocator);
@@ -27,28 +27,28 @@ Path Path::cwd(mem::Allocator* allocator)
 
 /* ------------------------------------------------------------------------------------------------
  */
-b8 Path::unlink(str s)
+b8 Path::unlink(String s)
 {
   return platform::unlinkFile(s);
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
-b8 Path::rmdir(str s)
+b8 Path::rmdir(String s)
 {
   return platform::removeDir(s);
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
-b8 Path::chdir(str s)
+b8 Path::chdir(String s)
 {
   return platform::chdir(s);
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
-b8 Path::init(str s, mem::Allocator* allocator)
+b8 Path::init(String s, mem::Allocator* allocator)
 {
   if (!buffer.open(s.len, allocator))
     return false;
@@ -90,7 +90,7 @@ b8 Path::makeAbsolute()
 
 /* ------------------------------------------------------------------------------------------------
  */
-str Path::basename(str path)
+String Path::basename(String path)
 {
   if (path.len == 0)
     return path;
@@ -113,7 +113,7 @@ str Path::basename(str path)
 
 /* ------------------------------------------------------------------------------------------------
  */
-str Path::removeBasename(str path)
+String Path::removeBasename(String path)
 {
   if (path.len == 0)
     return path;
@@ -135,14 +135,14 @@ str Path::removeBasename(str path)
 
 /* ------------------------------------------------------------------------------------------------
  */
-b8 Path::exists(str path)
+b8 Path::exists(String path)
 {
   return platform::fileExists(path);
 }
 
 /* ------------------------------------------------------------------------------------------------
  */
-b8 Path::isRegularFile(str path)
+b8 Path::isRegularFile(String path)
 {
   // this is kind of an inefficient way to check this but oh well
   return FileInfo::of(path).kind == FileKind::Regular;
@@ -150,7 +150,7 @@ b8 Path::isRegularFile(str path)
 
 /* ------------------------------------------------------------------------------------------------
  */
-b8 Path::isDirectory(str path)
+b8 Path::isDirectory(String path)
 {
   // this is kind of an inefficient way to check this but oh well
   return FileInfo::of(path).kind == FileKind::Directory;
@@ -158,7 +158,7 @@ b8 Path::isDirectory(str path)
 
 /* ------------------------------------------------------------------------------------------------
  */
-s8 Path::compareModTimes(str path0, str path1)
+s8 Path::compareModTimes(String path0, String path1)
 {
   assert(exists(path0) && exists(path1));
 
@@ -185,7 +185,7 @@ s8 Path::compareModTimes(str path0, str path1)
  *  Thanks to Robert A. van Engelen for this implementation.
  *  https://www.codeproject.com/Articles/5163931/Fast-String-Matching-with-Wildcards-Globs-and-Giti
  */
-b8 Path::matches(str name, str pattern)
+b8 Path::matches(String name, String pattern)
 {
   s64 name_pos = 0;
   s64 pattern_pos = 0;
@@ -266,7 +266,7 @@ b8 Path::matches(str name, str pattern)
 
 /* ------------------------------------------------------------------------------------------------
  */
-b8 Path::matches(str pattern)
+b8 Path::matches(String pattern)
 {
   return Path::matches(buffer.asStr(), pattern);
 }

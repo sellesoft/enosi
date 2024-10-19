@@ -39,7 +39,7 @@ b8 Parser::errorNoLocation(T... args)
 b8 Parser::init(
     io::IO*  input_stream, 
     JSON*    json, 
-    str      stream_name,
+    String   stream_name,
     jmp_buf* failjmp)
 {
   assert(input_stream && json);
@@ -160,7 +160,7 @@ b8 Parser::value()
     case TKind::String:
       if (Value* v = json->newValue(VKind::String))
       {
-        str s = lexer.getRaw(curt);
+        String s = lexer.getRaw(curt);
 
         // TODO(sushi) do better later
         io::Memory buffer;
@@ -263,7 +263,7 @@ b8 Parser::object()
           "expected a '}' or string for object member name (remember that "
           "trailing commas are not allowed in JSON!)");
 
-    str member_name = json->cacheString(lexer.getRaw(curt));
+    String member_name = json->cacheString(lexer.getRaw(curt));
 
     nextToken();
     if (!at(TKind::Colon))

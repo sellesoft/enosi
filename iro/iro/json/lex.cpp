@@ -10,6 +10,7 @@ namespace iro::json
 static auto logger = 
   Logger::create("json.lexer"_str, Logger::Verbosity::Notice);
 
+
 /* ----------------------------------------------------------------------------
  */
 u32 Lexer::current() { return current_codepoint.codepoint; }
@@ -122,7 +123,7 @@ void Lexer::skipWhitespace()
 
 /* ----------------------------------------------------------------------------
  */
-b8 Lexer::init(io::IO* input_stream, str stream_name, jmp_buf* failjmp)
+b8 Lexer::init(io::IO* input_stream, String stream_name, jmp_buf* failjmp)
 {
   TRACE("initializing with input stream ", (void*)input_stream);
 
@@ -281,7 +282,7 @@ Token Lexer::nextToken()
         while (isalpha(current()))
           advance();
 
-        str raw = {cache.ptr + curt.loc, current_offset - curt.loc };
+        utf8::String raw = {cache.ptr + curt.loc, current_offset - curt.loc };
         switch (raw.hash())
         {
         case "true"_hashed: 

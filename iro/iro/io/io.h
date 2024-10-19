@@ -128,14 +128,14 @@ struct Memory : public IO
   // Commits space reserved by reserve().
   void commit(s32 space);
 
-  str asStr() { return {ptr, len}; }
+  String asStr() { return {ptr, len}; }
 
   s64 write(Bytes slice) override;
   s64 read(Bytes slice) override;
 
   s64 readFrom(s64 pos, Bytes slice) override;
 
-  void set(str s)
+  void set(String s)
   {
     clear();
     write(s);
@@ -182,8 +182,11 @@ struct StaticBuffer : public IO
   u8  buffer[N+1] = {};
   s32 len = 0;
 
+  // Prevent having to call open where this is used.
+  StaticBuffer<N>() { open(); }
+
   inline static size_t capacity() { return N; }
-  str asStr() { return str{buffer, u64(len)}; }
+  String asStr() { return String{buffer, u64(len)}; }
 
   operator char*() { return (char*)buffer; }
 
@@ -216,14 +219,14 @@ struct StaticBuffer : public IO
 
 
 /* ============================================================================
- *  IO view over a str.
+ *  IO view over a String.
  */
 struct StringView : public IO
 {
-  str s = nil;
+  String s = nil;
   s32 pos = 0;
 
-  static StringView from(str s)
+  static StringView from(String s)
   {
     StringView out;
     out.s = s;

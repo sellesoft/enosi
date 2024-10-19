@@ -44,7 +44,7 @@ struct Parser
   b8 init(
       io::IO*  input_stream, 
       JSON*    json, 
-      str      stream_name, 
+      String   stream_name, 
       jmp_buf* failjmp = nullptr);
   void deinit();
 

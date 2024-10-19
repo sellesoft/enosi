@@ -54,7 +54,7 @@ void sleep(TimeSpan time)
 
 /* ----------------------------------------------------------------------------
  */
-b8 open(fs::File::Handle* out_handle, str path, fs::OpenFlags flags)
+b8 open(fs::File::Handle* out_handle, String path, fs::OpenFlags flags)
 {
   using enum fs::OpenFlag;
 
@@ -227,7 +227,7 @@ Timespec clock_monotonic()
 
 /* ----------------------------------------------------------------------------
  */
-b8 opendir(fs::Dir::Handle* out_handle, str path)
+b8 opendir(fs::Dir::Handle* out_handle, String path)
 {
   assert(out_handle);
 
@@ -307,7 +307,7 @@ s64 readdir(fs::Dir::Handle handle, Bytes buffer)
 
 /* ----------------------------------------------------------------------------
  */
-b8 stat(fs::FileInfo* out_info, str path)
+b8 stat(fs::FileInfo* out_info, String path)
 {
   assert(out_info && path.ptr && path.len);
 
@@ -366,7 +366,7 @@ b8 stat(fs::FileInfo* out_info, str path)
 
 /* ----------------------------------------------------------------------------
  */
-b8 fileExists(str path)
+b8 fileExists(String path)
 {
   return access((char*)path.ptr, F_OK) == 0;
 }
@@ -376,7 +376,7 @@ b8 fileExists(str path)
  *  sure if that'll ever be a problem. sendfile is more efficient than simply 
  *  read/writing because it doesnt require moving mem around in userspace.
  */ 
-b8 copyFile(str dst, str src)
+b8 copyFile(String dst, String src)
 {
   assert(notnil(dst) and notnil(src) and 
          not dst.isEmpty() and not src.isEmpty());
@@ -419,7 +419,7 @@ b8 copyFile(str dst, str src)
 
 /* ----------------------------------------------------------------------------
  */
-b8 unlinkFile(str path)
+b8 unlinkFile(String path)
 {
   assert(notnil(path) and not path.isEmpty());
 
@@ -432,7 +432,7 @@ b8 unlinkFile(str path)
 
 /* ----------------------------------------------------------------------------
  */
-b8 removeDir(str path)
+b8 removeDir(String path)
 {
   assert(notnil(path) and not path.isEmpty());
 
@@ -445,7 +445,7 @@ b8 removeDir(str path)
 
 /* ----------------------------------------------------------------------------
  */
-b8 makeDir(str path, b8 make_parents)
+b8 makeDir(String path, b8 make_parents)
 {
   assert(notnil(path));
 
@@ -500,10 +500,10 @@ b8 makeDir(str path, b8 make_parents)
  */
 b8 processSpawn(
     Process::Handle* out_handle, 
-    str file, 
-    Slice<str> args, 
+    String file, 
+    Slice<String> args, 
     Process::Stream streams[3], 
-    str cwd)
+    String cwd)
 {
   assert(out_handle);
 
@@ -657,8 +657,8 @@ b8 stopProcess(Process::Handle handle, s32 exit_code)
  */
 b8 processSpawnPTY(
     Process::Handle* out_handle,
-    str file,
-    Slice<str> args,
+    String file,
+    Slice<String> args,
     fs::File* stream)
 {
   int master, slave;
@@ -849,7 +849,7 @@ fs::Path cwd(mem::Allocator* allocator)
 
 /* ----------------------------------------------------------------------------
  */
-b8 chdir(str path)
+b8 chdir(String path)
 {
   if (-1 == ::chdir((char*)path.ptr))
     return reportErrno(
@@ -885,7 +885,7 @@ void termRestoreSettings(TermSettings settings, mem::Allocator* allocator)
 
 /* ----------------------------------------------------------------------------
  */
-b8 touchFile(str path)
+b8 touchFile(String path)
 {
   struct stat info;
   if (-1 == stat((char*)path.ptr, &info))

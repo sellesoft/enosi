@@ -9,9 +9,9 @@ namespace iro::fs
 static Logger logger = 
   Logger::create("iro.fs.file"_str, Logger::Verbosity::Notice);
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
-File File::from(str path, OpenFlags flags, mem::Allocator* allocator)
+File File::from(String path, OpenFlags flags, mem::Allocator* allocator)
 {
   return from(move(Path::from(path, allocator)), flags);
 }
@@ -37,21 +37,21 @@ File File::from(Moved<Path> path, OpenFlags flags)
   return out;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
-b8 File::copy(str dst, str src)
+b8 File::copy(String dst, String src)
 {
   return platform::copyFile(dst, src);
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
-b8 File::unlink(str path)
+b8 File::unlink(String path)
 {
   return platform::unlinkFile(path);
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 File::open(Moved<Path> path, OpenFlags flags)
 {
@@ -82,7 +82,7 @@ b8 File::open(Moved<Path> path, OpenFlags flags)
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 void File::close()
 {
@@ -104,7 +104,7 @@ void File::close()
   *this = nil;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 s64 File::write(Bytes bytes)
 {
@@ -183,7 +183,11 @@ File File::fromFileDescriptor(u64 fd, OpenFlags flags)
   return out;
 }
 
-File File::fromFileDescriptor(u64 fd, str name, OpenFlags flags, mem::Allocator* allocator)
+File File::fromFileDescriptor(
+    u64 fd, 
+    String name, 
+    OpenFlags flags, 
+    mem::Allocator* allocator)
 {
   return fromFileDescriptor(fd, move(Path::from(name, allocator)), flags);
 }
@@ -195,16 +199,16 @@ File File::fromFileDescriptor(u64 fd, Moved<Path> name, OpenFlags flags)
   return out;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 FileInfo File::getInfo()
 {
   return FileInfo::of(*this);
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
-FileInfo FileInfo::of(str path)
+FileInfo FileInfo::of(String path)
 {
   assert(notnil(path) && path.len);
 

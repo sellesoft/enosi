@@ -39,7 +39,7 @@ void sleep(TimeSpan time);
  *  TODO(sushi) gather permission mode flags from windows and linux and pass 
  *              them here.
  */
-b8 open(fs::File::Handle* out_handle, str path, fs::OpenFlags flags);
+b8 open(fs::File::Handle* out_handle, String path, fs::OpenFlags flags);
 
 /* ----------------------------------------------------------------------------
  *  Closes a file opened by a previous call to open(). 
@@ -116,7 +116,7 @@ Timespec clock_monotonic();
  *
  *  'path' must be null terminated.
  */ 
-b8 opendir(fs::Dir::Handle* out_handle, str path);
+b8 opendir(fs::Dir::Handle* out_handle, String path);
 
 /* ----------------------------------------------------------------------------
  *  Opens a directory stream using an already existing file handle, assuming 
@@ -140,20 +140,20 @@ s64 readdir(fs::Dir::Handle handle, Bytes buffer);
  *  Fills out the given fs::FileInfo with information about the file at the 
  *  given path.
  */
-b8 stat(fs::FileInfo* out_info, str path);
+b8 stat(fs::FileInfo* out_info, String path);
 
 /* ----------------------------------------------------------------------------
  *  Perform a basic check that a file exists at 'path'.
  *  'path' must be null-terminated.
  */
-b8 fileExists(str path);
+b8 fileExists(String path);
 
 /* ----------------------------------------------------------------------------
  *  Copies the file at path 'src' to the path 'dst'. At the moment this always 
  *  overwrites the file at 'dst' with 'src'. Maybe someone will add options 
  *  later, maybe even me.
  */
-b8 copyFile(str dst, str src);
+b8 copyFile(String dst, String src);
 
 /* ----------------------------------------------------------------------------
  *  Equivalent to 'unlink' on Linux. IDK how this will behave on Windows/Mac 
@@ -162,18 +162,18 @@ b8 copyFile(str dst, str src);
  *  This works on any kind of file except directories. Use 'rmdir' to delete 
  *  those.
  */
-b8 unlinkFile(str path);
+b8 unlinkFile(String path);
 
 /* ----------------------------------------------------------------------------
  *  Equivalent to 'rmdir' on Linux. The directory must be empty to be deleted.
  */
-b8 removeDir(str path);
+b8 removeDir(String path);
 
 /* ----------------------------------------------------------------------------
  *  Create the directory at 'path'. If make_parents is true, any missing 
  *  parent directories will be created as well.
  */
-b8 makeDir(str path, b8 make_parents);
+b8 makeDir(String path, b8 make_parents);
 
 /* ----------------------------------------------------------------------------
  *  Creates a new process and writes its handle into 'out_handle'. If 'cwd' is 
@@ -185,10 +185,10 @@ b8 makeDir(str path, b8 make_parents);
  */
 b8 processSpawn(
     Process::Handle* out_handle, 
-    str              file, 
-    Slice<str>       args, 
+    String           file, 
+    Slice<String>    args, 
     Process::Stream  streams[3], 
-    str              cwd);
+    String           cwd);
 
 /* ----------------------------------------------------------------------------
  *  Stops a running process and it's threads with the 'exit_code'.
@@ -200,8 +200,8 @@ b8 stopProcess(Process::Handle handle, s32 exit_code);
  */
 b8 processSpawnPTY(
     Process::Handle* out_handle,
-    str              file,
-    Slice<str>       args,
+    String           file,
+    Slice<String>    args,
     fs::File*        stream);
 
 /* ----------------------------------------------------------------------------
@@ -236,7 +236,7 @@ b8 realpath(fs::Path* path);
 /* ----------------------------------------------------------------------------
  *  Returns the current working directory. This always allocates memory with 
  *  the given allocator and needs to be freed later if the function is 
- *  successful, so a Path is returned rather than a plain str.
+ *  successful, so a Path is returned rather than a plain String.
  *
  *  NOTE that this function may need to try to allocate a buffer large enough 
  *  to fit the cwd multiple times! If the given allocator does not support 
@@ -251,7 +251,7 @@ fs::Path cwd(mem::Allocator* allocator = &mem::stl_allocator);
  *  Changes the working directory of the program to the one specified at 
  *  'path'.
  */
-b8 chdir(str path);
+b8 chdir(String path);
 
 /* ----------------------------------------------------------------------------
  *  Sets the terminal to be non-canonical, eg. disable buffering stdin until 
@@ -277,7 +277,7 @@ void termRestoreSettings(
  *
  *  Returns false on failure.
  */
-b8 touchFile(str path);
+b8 touchFile(String path);
 
 /* ----------------------------------------------------------------------------
  *  Open a 'pseudo-terminal' eg. a file handle that masquerades as a normal 

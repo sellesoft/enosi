@@ -56,6 +56,7 @@ struct LuaState
   b8 loadfile(const char* path);
   b8 loadstring(const char* s);
   b8 dofile(const char* s);
+  b8 dostring(const char* s);
 
   b8 pcall(s32 nargs = 0, s32 nresults = 0, s32 errfunc = 0);
 
@@ -64,10 +65,10 @@ struct LuaState
   void getfenv(s32 idx);
   b8   setfenv(s32 idx);
 
-  str   tostring(s32 idx = -1);
-  f32   tonumber(s32 idx = -1);
-  b8    toboolean(s32 idx = -1);
-  void* tolightuserdata(s32 idx = -1);
+  String tostring(s32 idx = -1);
+  f32    tonumber(s32 idx = -1);
+  b8     toboolean(s32 idx = -1);
+  void*  tolightuserdata(s32 idx = -1);
 
   template<typename T>
   T* tolightuserdata(s32 idx = -1)
@@ -75,7 +76,7 @@ struct LuaState
     return (T*)tolightuserdata(idx);
   }
 
-  void pushstring(str s);
+  void pushstring(String s);
   void pushlightuserdata(void* data);
   void pushinteger(s32 i);
   void pushvalue(s32 idx);
@@ -109,7 +110,7 @@ struct LuaState
   // Call Lua's (or whatever require is available..) require to import 
   // 'modname'.Leaves the return values of the module at the top of the stack.
   // If 'nret' is given, the number of values returned will be written to it.
-  b8 require(str modname, u32* out_nret = nullptr);
+  b8 require(String modname, u32* out_nret = nullptr);
 
   void stackDump(u32 max_depth = 1);
   void stackDump(io::IO* out, u32 max_depth = 1);

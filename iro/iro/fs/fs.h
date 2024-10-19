@@ -28,7 +28,7 @@ concept DirWalkCallback = requires(F f, MayMove<Path>& path)
 
 // Walk the given directory using callback 'f' starting at 'path'.
 // The callback controls the walk by returning one of DirWalkResult.
-void walk(str path, DirWalkCallback auto f, mem::Allocator* allocator = &mem::stl_allocator);
+void walk(String path, DirWalkCallback auto f, mem::Allocator* allocator = &mem::stl_allocator);
 
 namespace __internal
 {
@@ -112,7 +112,7 @@ b8 walkForReal(Path& path, DirWalkCallback auto f)
 
 /* ------------------------------------------------------------------------------------------------
  */
-void walk(str pathin, DirWalkCallback auto f, mem::Allocator* allocator)
+void walk(String pathin, DirWalkCallback auto f, mem::Allocator* allocator)
 {
   auto path = scoped(Path::from(pathin, allocator));
   __internal::walkForReal(path, f);

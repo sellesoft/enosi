@@ -202,9 +202,9 @@ Codepoint decodeCharacter(u8* s, s32 slen)
 
 /* ------------------------------------------------------------------------------------------------
  */
-str str::fromCStr(const char* s)
+String String::fromCStr(const char* s)
 {
-  str out;
+  String out;
   out.ptr = (u8*)s;
   out.len = 0;
   while (s[0])
@@ -217,7 +217,7 @@ str str::fromCStr(const char* s)
 
 /* ------------------------------------------------------------------------------------------------
  */
-Codepoint str::advance(s32 n)
+Codepoint String::advance(s32 n)
 {
   Codepoint c;
 
@@ -235,7 +235,7 @@ Codepoint str::advance(s32 n)
 
 /* ------------------------------------------------------------------------------------------------
  */
-bool str::operator==(str s)
+bool String::operator==(String s) const
 {
   if (len != s.len)
     return false;
@@ -251,7 +251,67 @@ bool str::operator==(str s)
 
 /* ------------------------------------------------------------------------------------------------
  */
-b8 str::nullTerminate(u8* buffer, s32 buffer_len)
+String String::subFromFirst(u8 c) const
+{
+  auto pos = findFirst(c);
+  if (pos.notFound())
+    return nil;
+  return sub(pos.x);
+}
+
+/* ------------------------------------------------------------------------------------------------
+ */
+String String::subToFirst(u8 c) const
+{
+  auto pos = findFirst(c);
+  if (pos.notFound())
+    return nil;
+  return sub(0, pos.x);
+}
+
+/* ------------------------------------------------------------------------------------------------
+ */
+String String::subFromLast(u8 c) const
+{
+  auto pos = findLast(c);
+  if (pos.notFound())
+    return nil;
+  return sub(pos.x);
+}
+
+/* ------------------------------------------------------------------------------------------------
+ */
+String String::subToLast(u8 c) const
+{
+  auto pos = findLast(c);
+  if (pos.notFound())
+    return nil;
+  return sub(0, pos.x);
+}
+
+/* ------------------------------------------------------------------------------------------------
+ */
+String String::subFromLastNot(u8 c) const
+{
+  auto pos = findLastNot(c);
+  if (pos.notFound())
+    return nil;
+  return sub(pos.x);
+}
+
+/* ------------------------------------------------------------------------------------------------
+ */
+String String::subToLastNot(u8 c) const
+{
+  auto pos = findLastNot(c);
+  if (pos.notFound())
+    return nil;
+  return sub(0, pos.x);
+}
+
+/* ------------------------------------------------------------------------------------------------
+ */
+b8 String::nullTerminate(u8* buffer, s32 buffer_len) const
 {
   if (buffer_len <= len)
     return false;
@@ -261,11 +321,23 @@ b8 str::nullTerminate(u8* buffer, s32 buffer_len)
   return true;
 }
 
+/* ------------------------------------------------------------------------------------------------
+ */
+String String::nullTerminate(mem::Allocator* allocator) const
+{
+  String out = {};
+  out.ptr = (u8*)allocator->allocate(len+1);
+  out.len = len;
+  mem::copy(out.ptr, ptr, len);
+  out.ptr[len] = '\0';
+  return out;
+}
+
 /* ------------------------------------------------------------------------------------------------ 
  */
-u64 str::countCharacters()
+u64 String::countCharacters() const
 {
-  str scan = *this;
+  String scan = *this;
   u64 accum = 0;
   for (;;)
   {
@@ -279,7 +351,7 @@ u64 str::countCharacters()
 
 /* ------------------------------------------------------------------------------------------------ 
  */
-str::pos str::findFirst(u8 c)
+String::pos String::findFirst(u8 c) const 
 {
   for (s32 i = 0; i < len; i++)
   {
@@ -291,7 +363,7 @@ str::pos str::findFirst(u8 c)
 
 /* ------------------------------------------------------------------------------------------------ 
  */
-str::pos str::findLast(u8 c)
+String::pos String::findLast(u8 c) const 
 {
   for (s32 i = len-1; i >= 0; i--)
   {
@@ -303,7 +375,31 @@ str::pos str::findLast(u8 c)
 
 /* ------------------------------------------------------------------------------------------------ 
  */
-b8 str::startsWith(str s)
+String::pos String::findFirstNot(u8 c) const 
+{
+  for (s32 i = 0; i < len; ++i)
+  {
+    if (ptr[i] != c)
+      return pos::found(i);
+  }
+  return pos::notFound();
+}
+
+/* ------------------------------------------------------------------------------------------------ 
+ */
+String::pos String::findLastNot(u8 c) const 
+{
+  for (s32 i = len+1; i >= 0; --i)
+  {
+    if (ptr[i] != c)
+      return pos::found(i);
+  }
+  return pos::notFound();
+}
+
+/* ------------------------------------------------------------------------------------------------ 
+ */
+b8 String::startsWith(String s) const 
 {
   if (s.len > len)
     return false;
@@ -317,7 +413,7 @@ b8 str::startsWith(str s)
 
 /* ------------------------------------------------------------------------------------------------ 
  */
-b8 str::endsWith(str s)
+b8 String::endsWith(String s) const 
 {
   if (s.len > len)
     return false;
