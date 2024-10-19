@@ -103,7 +103,7 @@ struct DrawCmd
     
     struct
     {
-      str name;
+      String name;
       union
       {
         vec2f v;
@@ -149,9 +149,9 @@ struct Renderer
   void pushDraw(u64 index_start, u64 index_count, u64 vertex_start);
   void pushSetScissor(vec2i pos, vec2i size);
   void pushBindTexture(Texture* texture);
-  void pushUniformVec2(str name, vec2f v);
-  void pushUniformFloat(str name, f32 f);
-  void pushUniformBool(str name, b8 b);
+  void pushUniformVec2(String name, vec2f v);
+  void pushUniformFloat(String name, f32 f);
+  void pushUniformBool(String name, b8 b);
   
   Renderer() {}
 

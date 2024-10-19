@@ -5,7 +5,7 @@ $ local reflect = require "reflection.Reflector"
 #include "iro/unicode.h"
 using namespace iro;
 
-str getKeyStr(Key key)
+String getKeyStr(Key key)
 {
 $local gen = function()
 $  local type = assert(reflect.ctx:lookupType "Key", "failed to lookup type")
@@ -23,7 +23,7 @@ $ end
   @gen
 }
 
-str getMouseButtonStr(MouseButton button)
+String getMouseButtonStr(MouseButton button)
 {
 $local gen = function()
 $  local type = 

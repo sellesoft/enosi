@@ -20,7 +20,7 @@ typedef io::StaticBuffer<512> PathBuffer;
 
 /* ----------------------------------------------------------------------------
  */
-s64 Texture::writeDataPath(io::IO* io, str name, AssetMgr& assetmgr)
+s64 Texture::writeDataPath(io::IO* io, String name, AssetMgr& assetmgr)
 {
   return io::formatv(io, 
       assetmgr.getDataDir(), "/textures/", name, ".texture");
@@ -44,7 +44,7 @@ b8 TextureData::serialize(io::IO* out)
  */
 b8 Texture::load(
     Texture* out,
-    str name,
+    String name,
     AssetMgr& assetmgr)
 {
   using namespace fs;

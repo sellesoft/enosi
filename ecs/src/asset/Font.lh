@@ -121,25 +121,25 @@ struct Font
 
   static s64 writeAssetPath(
     io::IO* out, 
-    str name, 
-    str ext, 
+    String name, 
+    String ext, 
     AssetMgr& assetmgr);
 
   static s64 writeDataPath(
     io::IO* out, 
-    str name, 
+    String name, 
     AssetMgr& assetmgr);
 
   static b8 load(
     Font* out,
-    str name, 
+    String name, 
     AssetMgr& assetmgr);
 
   struct CompileParams
   {
-    str name;
-    str asset_path;
-    str data_path;
+    String name;
+    String asset_path;
+    String data_path;
     CodepointRanges ranges;
     mem::Allocator* allocator;
     AssetMgr* assetmgr;

@@ -17,7 +17,7 @@ namespace ui
 
 /* ----------------------------------------------------------------------------
  */
-b8 TextState::init(UI* ui, str init)
+b8 TextState::init(UI* ui, String init)
 {
   if (!buffer.open())
   {
@@ -46,7 +46,7 @@ void TextState::deinit()
 
 /* ----------------------------------------------------------------------------
  */
-void TextState::checkFont(str name, UI* ui)
+void TextState::checkFont(String name, UI* ui)
 {
   if (font == nullptr)
   {
@@ -94,8 +94,8 @@ void TextState::findTextBreaks(
 
   breaks->push({0, {0.f, 0.f}});
 
-  str scan = buffer.asStr();
-  str last_space_or_tab = scan;
+  String scan = buffer.asStr();
+  String last_space_or_tab = scan;
 
   // Cache off space width since its used in a couple places.
   PackedChar space_char;
@@ -286,7 +286,7 @@ void TextState::draw(
 /* ----------------------------------------------------------------------------
  */
 template<>
-Text* UI::make(str id, str init)
+Text* UI::make(String id, String init)
 {
   Text* text = mem::stl_allocator.construct<Text>();
   if (!initItem(id, text))

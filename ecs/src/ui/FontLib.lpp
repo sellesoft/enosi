@@ -33,7 +33,7 @@ void FontLib::deinit()
 /* ----------------------------------------------------------------------------
  */
 Font* FontLib::findOrLoadFont(
-    str name, 
+    String name, 
     AssetMgr& assetmgr,
     gfx::Renderer& gfx)
 {

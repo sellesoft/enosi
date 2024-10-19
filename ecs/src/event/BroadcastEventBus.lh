@@ -4,7 +4,8 @@ $ local beb = require "event.BroadcastEventBus"
 
 struct BroadcastEventBusData
 {
-$ for e,d in pairs(event.events) do
+$ event.list:each(function(event)
+$ local e = event.name
   struct $(e)Subscriber
   {
     void* subscriber;
@@ -12,10 +13,11 @@ $ for e,d in pairs(event.events) do
   };
   Pool<$(e)Subscriber> $(e)Subscriber_pool;
   SList<$(e)Subscriber> $(e)Subscriber_list;
-$ end
+$ end)
 };
 
-$for e,d in pairs(event.events) do
+$ event.list:each(function(event)
+$ local e = event.name
 template<>
 void BroadcastEventBus::subscribeTo<$(e)>(
   void* subscriber, 
@@ -26,6 +28,7 @@ void BroadcastEventBus::subscribeTo<$(e)>(
   sub->callback = callback;
   data->$(e)Subscriber_list.push(sub);
 }
+
 template<>
 void BroadcastEventBus::raise<$(e)>($(e)& event) const
 {
@@ -34,15 +37,16 @@ void BroadcastEventBus::raise<$(e)>($(e)& event) const
     sub.callback(sub.subscriber, event);
   }
 }
-$ end
+$ end)
 
 b8 BroadcastEventBus::init()
 {
   data = (BroadcastEventBusData*)mem::stl_allocator.allocate(
     sizeof(BroadcastEventBusData));
-$ for e,d in pairs(event.events) do
+$ event.list:each(function(event)
+$ local e = event.name
   if (!data->$(e)Subscriber_list.init()) return false;
   if (!data->$(e)Subscriber_pool.init()) return false;
-$ end
+$ end)
   return true;
 }

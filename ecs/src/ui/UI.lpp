@@ -7,7 +7,7 @@ $ local ui = require "ui.UI"
 @@lpp.import "Engine.lh"
 @@lpp.import "graphics/Renderer.lh"
 @@lpp.import "window/Window.lh"
-@@lpp.import "window/WindowEvents.lh"
+@@lpp.import "window/Window.events.lh"
 @@lpp.import "math/util.h"
 
 #include "iro/logger.h"
@@ -23,7 +23,7 @@ static Logger logger =
 
 /* ----------------------------------------------------------------------------
  */
-b8 UI::initItem(str id, Item* item)
+b8 UI::initItem(String id, Item* item)
 {
   item->name = id;
   item->node = &item_tree.addLast(item_stack.head->data->node, item);
@@ -36,7 +36,7 @@ b8 UI::initItem(str id, Item* item)
 /* ----------------------------------------------------------------------------
  */
 template<>
-Item* UI::make<Item>(str id)
+Item* UI::make<Item>(String id)
 {
   Item* item = mem::stl_allocator.construct<Item>();
   if (!initItem(id, item))

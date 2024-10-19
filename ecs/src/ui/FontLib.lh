@@ -40,7 +40,7 @@ struct FontLib
   b8 init();
   void deinit();
 
-  Font* findOrLoadFont(str name, AssetMgr& assetmgr, gfx::Renderer& gfx);
+  Font* findOrLoadFont(String name, AssetMgr& assetmgr, gfx::Renderer& gfx);
 };
 
 }

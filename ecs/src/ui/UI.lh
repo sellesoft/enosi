@@ -71,7 +71,7 @@ struct UI
 
   b8 update(Engine& engine);
 
-  b8 initItem(str id, Item* item);
+  b8 initItem(String id, Item* item);
 
   // TODO(sushi) maybe move away from make/begin being template based as it's
   //             not really necessary and probably just slows down compile 
@@ -80,15 +80,15 @@ struct UI
 
   // TODO(sushi) someway to reuse styles if we ever need it.
   template<typename TItem>
-  TItem* make(str id = nil);
+  TItem* make(String id = nil);
 
   // It's actually wild that this works and I'm not sure how much I like it
   // but it's nice.
   template<typename TItem, typename... TArgs>
-  TItem* make(str id, TArgs... args);
+  TItem* make(String id, TArgs... args);
 
   template<typename TItem>
-  TItem* begin(str id = nil) 
+  TItem* begin(String id = nil) 
   {
     TItem* item = make<TItem>(id);
     item_stack.push(item);
@@ -96,7 +96,7 @@ struct UI
   }
 
   template<typename TItem, typename... TArgs>
-  TItem* begin(str id, TArgs... args)
+  TItem* begin(String id, TArgs... args)
   {
     TItem* item = make<TItem>(id, args...);
     item_stack.push(item);

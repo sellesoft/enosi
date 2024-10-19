@@ -17,7 +17,7 @@ namespace ui
 /* ----------------------------------------------------------------------------
  */
 template<>
-Button* UI::make(str id, Button::Action action, void* userdata)
+Button* UI::make(String id, Button::Action action, void* userdata)
 {
   auto* button = mem::stl_allocator.construct<Button>();
 
@@ -42,7 +42,7 @@ Button* UI::make(str id, Button::Action action, void* userdata)
 /* ----------------------------------------------------------------------------
  */
 template<>
-Button* UI::make(str id, Button::Action action)
+Button* UI::make(String id, Button::Action action)
 {
   return make<Button>(id, action, (void*)nullptr);
 }
@@ -50,7 +50,7 @@ Button* UI::make(str id, Button::Action action)
 /* ----------------------------------------------------------------------------
  */
 template<>
-Button* UI::make(str id)
+Button* UI::make(String id)
 {
   return make<Button>(id, (Button::Action)nullptr, (void*)nullptr);
 }

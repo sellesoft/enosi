@@ -72,7 +72,7 @@ struct StyleMap
     } value;
 
     u64 hash;
-    str name;
+    String name;
 
     Elem() : hash(0), name(), kind(Kind::Invalid), value(0) {}
   };
@@ -89,11 +89,11 @@ struct StyleMap
   // Optionally passed an item whose parents we search for properties
   // when this property is set as Inherit.
   template<typename T>
-  T getAs(str name, T def = {}, Item* item = nullptr);
+  T getAs(String name, T def = {}, Item* item = nullptr);
 
   // Optionally passed an item to set dirty after set is used.
   template<typename T>
-  void setAs(str name, T val, Item* item = nullptr);
+  void setAs(String name, T val, Item* item = nullptr);
 
   template<typename T>
   Elem* find(u64 id);

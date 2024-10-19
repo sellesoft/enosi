@@ -61,7 +61,7 @@ struct AssetMgr
   b8 init(u64 asset_capacity, mem::Allocator* allocator);
   void deinit();
 
-  AssetHandle loadAsset(str path);
+  AssetHandle loadAsset(String path);
 
   // Unloads the asset pointed to by the given handle.
   // This also sets the handle to nil for you.
@@ -69,7 +69,7 @@ struct AssetMgr
   //             still referred to elsewhere.
   void unloadAsset(AssetHandle& handle);
 
-  AssetHandle findAsset(str path);
+  AssetHandle findAsset(String path);
 
   Asset* getAsset(AssetHandle handle);
 
@@ -81,8 +81,8 @@ struct AssetMgr
     return (T*)getAsset(handle)->data;
   }
 
-  static b8 checkNeedsCompiled(str asset_path, str data_path);
+  static b8 checkNeedsCompiled(String asset_path, String data_path);
 
-  str getAssetDir() { return "assets"_str; }
-  str getDataDir() { return "data"_str; }
+  String getAssetDir() { return "assets"_str; }
+  String getDataDir() { return "data"_str; }
 };

@@ -68,14 +68,14 @@ void Font::getPackedChar(PackedChar* out, PackRange* range, u32 codepoint)
 
 /* ----------------------------------------------------------------------------
  */
-s64 Font::writeAssetPath(io::IO* io, str name, str ext, AssetMgr& assetmgr)
+s64 Font::writeAssetPath(io::IO* io, String name, String ext, AssetMgr& assetmgr)
 {
   return io::formatv(io, assetmgr.getAssetDir(), "/fonts/", name, '.', ext);
 }
 
 /* ----------------------------------------------------------------------------
  */
-s64 Font::writeDataPath(io::IO* io, str name, AssetMgr& assetmgr)
+s64 Font::writeDataPath(io::IO* io, String name, AssetMgr& assetmgr)
 {
   return io::formatv(io, assetmgr.getDataDir(), "/fonts/", name, ".font");
 }
@@ -84,7 +84,7 @@ s64 Font::writeDataPath(io::IO* io, str name, AssetMgr& assetmgr)
  */
 b8 Font::load(
     Font* out,
-    str name, 
+    String name, 
     AssetMgr& assetmgr)
 {
   INFO("loading font '", name, "'\n");

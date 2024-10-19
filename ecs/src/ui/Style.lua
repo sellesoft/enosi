@@ -27,7 +27,7 @@ pushPropKind("Color", "color", "Color")
 pushPropKind("vec2f", "v2", "Vec2f")
 pushPropKind("vec4f", "v4", "Vec4f")
 pushPropKind("f32", "_f32", "Float")
-pushPropKind("str", "string", "String")
+pushPropKind("String", "string", "String")
 
 --- Helpers for forming the code to set a property on a style map.
 

@@ -17,7 +17,7 @@ namespace ui
 /* ----------------------------------------------------------------------------
  */
 template<>
-CollapsingHeader* UI::make(str id, str init)
+CollapsingHeader* UI::make(String id, String init)
 {
   CollapsingHeader* ch = mem::stl_allocator.construct<CollapsingHeader>();
   if (!initItem(id, ch))

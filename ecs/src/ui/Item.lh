@@ -197,7 +197,7 @@ schema
     MouseScroll,
   };
 
-  font: str = "gohu";
+  font: String = "gohu";
   font_height: f32 = 11;
   text_color: Color = 0xc5c9c5ff;
 
@@ -272,7 +272,7 @@ schema
 },
 struct
 {
-  str name;
+  String name;
   StyleMap style;
 
   ItemNode* node;

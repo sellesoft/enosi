@@ -130,14 +130,14 @@ b8 Font::compileBDF(CompileParams& params)
     advance();
   };
 
-  auto consumeKeyword = [&]() -> str
+  auto consumeKeyword = [&]() -> String
   {
     for (;;)
     {
       u8* start = scan;
       while (not eof and (atAlpha() or at('_')))
         advance();
-      auto kw = str::from(start, scan);
+      auto kw = String::from(start, scan);
       if (kw == "COMMENT"_str)
         skipLine();
       else 
@@ -163,7 +163,7 @@ b8 Font::compileBDF(CompileParams& params)
     while(not eof and atDigit())
       advance();
     
-    auto num = str::from(start, scan);
+    auto num = String::from(start, scan);
 
     u8 buffer[32];
     num.nullTerminate(buffer, 32);
@@ -173,7 +173,7 @@ b8 Font::compileBDF(CompileParams& params)
   };
 
   {
-    str start = consumeKeyword();
+    String start = consumeKeyword();
     if (start != "STARTFONT"_str)
       return error("BDF font does not start with STARTFONT");
     skipLine();
@@ -184,7 +184,7 @@ b8 Font::compileBDF(CompileParams& params)
   // Parse pre properties.
   for (;;)
   {
-    str kw = consumeKeyword();
+    String kw = consumeKeyword();
 
     if (eof)
       return error("unexpected end of file\n");
@@ -211,7 +211,7 @@ b8 Font::compileBDF(CompileParams& params)
   // Parse properties.
   for (;;)
   {
-    str kw = consumeKeyword();
+    String kw = consumeKeyword();
 
     if (eof)
       return error("unexpected end of file\n");
@@ -231,7 +231,7 @@ b8 Font::compileBDF(CompileParams& params)
 
   s32 num_chars = 0;
   {
-    str kw = consumeKeyword();
+    String kw = consumeKeyword();
     if (kw != "CHARS"_str)
       return error("expected CHARS after ENDPROPERTIES\n");
     num_chars = consumeNumber();
@@ -255,7 +255,7 @@ b8 Font::compileBDF(CompileParams& params)
 
   for (s32 char_idx = 0; char_idx < num_chars; ++char_idx)
   {
-    str kw = consumeKeyword();
+    String kw = consumeKeyword();
     if (kw != "STARTCHAR"_str)
       return error("expected STARTCHAR\n");
   
@@ -297,7 +297,7 @@ b8 Font::compileBDF(CompileParams& params)
 
     for (u32 row_idx = 0;; ++row_idx)
     {
-      if (str::from(
+      if (String::from(
             scan, buffer.ptr + buffer.len).startsWith("ENDCHAR"_str))
       {
         skipLine();

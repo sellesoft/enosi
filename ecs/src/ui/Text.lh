@@ -40,7 +40,7 @@ struct TextState
 
   // The name of the loaded font so we may reload it if the user changes
   // it.
-  str font_name;
+  String font_name;
 
   // TODO(sushi) replace with text manipulation helper like 
   //             we have in deshi.
@@ -48,10 +48,10 @@ struct TextState
 
   DrawCmd* dc;
 
-  b8   init(UI* ui, str init);
+  b8   init(UI* ui, String init);
   void deinit();
 
-  void checkFont(str name, UI* ui);
+  void checkFont(String name, UI* ui);
 
   void allocDrawCmd(DrawCmd* dc);
   

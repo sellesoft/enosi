@@ -15,11 +15,22 @@ end)
 
 proj:dependsOn("iro")
 
-local ecs = lake.target(builddir.."ecs")
+local ecspath
+if enosi.patch then
+  ecspath = builddir.."ecs.patch"..enosi.patch..".so"
+else
+  ecspath = builddir.."ecs"
+  proj:reportExecutable(ecspath)
+end
 
-proj:reportExecutable(ecs.path)
+local ecs = lake.target(ecspath)
 
 local cpp_driver = Driver.Cpp.new()
+
+if enosi.getProject "hreload" then
+  proj:dependsOn "hreload"
+  proj:reportDefine { "ECS_HRELOAD", "1" }
+end
 
 cpp_driver.include_dirs:push{ "src", proj:collectIncludeDirs() }
 
@@ -122,6 +133,9 @@ link_driver.shared_libs = proj:collectSharedLibs()
 link_driver.inputs = inputs
 link_driver.libdirs = proj:collectLibDirs()
 link_driver.output = ecs.path
+if enosi.patch then
+  link_driver.shared_lib = true
+end
 
 link_driver.shared_libs:push
 {
@@ -131,3 +145,41 @@ link_driver.shared_libs:push
 }
 
 ecs:recipe(recipes.linker(link_driver, proj))
+
+local hrf = lake.target(builddir.."ecs.hrf")
+hrf:dependsOn(ecs.path)
+  :recipe(function()
+    local f = io.open(hrf.path, "w")
+    if not f then 
+      error("failed to open '"..hrf.path.."' for writing")
+    end
+
+    -- Filter out luajit object files.
+    -- TODO(sushi) get the absolute path. Need to setup projects storing their
+    --             working directory.
+    lake.find("../luajit/obj/*.o"):each(function(ofile)
+      f:write("-o", ofile, "\n")
+    end)
+
+    --- Filter out external libs.
+    f:write("-lexplain\n",
+            "-lX11\n",
+            "-lXrandr\n",
+            "-lXcursor\n")
+
+    -- We want all of our symbols.
+    proj.artifacts.obj_files:each(function(ofile)
+      f:write("+o", ofile, "\n")
+    end)
+
+    -- We want all of iro's symbols.
+    enosi.getProject"iro".artifacts.obj_files:each(function(ofile)
+      f:write("+o", ofile, "\n")
+    end)
+
+    -- Don't reload the reloaders functions.
+    enosi.getProject"hreload".artifacts.obj_files:each(function(ofile)
+      f:write("-o", ofile)
+    end)
+    f:close()
+  end)

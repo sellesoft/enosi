@@ -68,19 +68,19 @@ struct Texture
   // Handle to the gfx representation of this Texture.
   u32 gfx_handle;
 
-  static s64 writeAssetPath(io::IO* io, str name, AssetMgr& assetmgr);
-  static s64 writeDataPath(io::IO* io, str name, AssetMgr& assetmgr);
+  static s64 writeAssetPath(io::IO* io, String name, AssetMgr& assetmgr);
+  static s64 writeDataPath(io::IO* io, String name, AssetMgr& assetmgr);
 
   static b8 load(
     Texture* texture,
-    str name, 
+    String name, 
     AssetMgr& assetmgr);
 
   struct CompileParams
   {
-    str name;
-    str asset_path;
-    str data_path;
+    String name;
+    String asset_path;
+    String data_path;
     u32 width;
     u32 height;
     ImageFormat format;

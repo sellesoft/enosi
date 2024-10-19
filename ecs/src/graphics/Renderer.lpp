@@ -5,7 +5,7 @@ $ local reflect = require "reflection.Reflector"
 
 @@lpp.import "Engine.lh"
 @@lpp.import "window/Window.lh"
-@@lpp.import "window/WindowEvents.lh"
+@@lpp.import "window/Window.events.lh"
 
 @@lpp.import "asset/AssetMgr.lh"
 @@lpp.import "asset/Texture.lh"
@@ -196,7 +196,7 @@ b8 Renderer::update()
 
 /* ----------------------------------------------------------------------------
  */
-static b8 compileShader(str path, int kind, u32* out_shader_id)
+static b8 compileShader(String path, int kind, u32* out_shader_id)
 {
   using namespace fs;
   auto file = File::from(path, OpenFlag::Read);
@@ -456,7 +456,7 @@ void Renderer::pushBindTexture(Texture* texture)
 
 /* ----------------------------------------------------------------------------
  */
-void Renderer::pushUniformVec2(str name, vec2f v)
+void Renderer::pushUniformVec2(String name, vec2f v)
 {
   DrawCmd cmd;
   cmd.kind = DrawCmd::Kind::PushUniformVec2;
@@ -467,7 +467,7 @@ void Renderer::pushUniformVec2(str name, vec2f v)
 
 /* ----------------------------------------------------------------------------
  */
-void Renderer::pushUniformFloat(str name, f32 f)
+void Renderer::pushUniformFloat(String name, f32 f)
 {
   DrawCmd cmd;
   cmd.kind = DrawCmd::Kind::PushUniformFloat;
@@ -478,7 +478,7 @@ void Renderer::pushUniformFloat(str name, f32 f)
 
 /* ----------------------------------------------------------------------------
  */
-void Renderer::pushUniformBool(str name, b8 b)
+void Renderer::pushUniformBool(String name, b8 b)
 {
   DrawCmd cmd;
   cmd.kind = DrawCmd::Kind::PushUniformBool;

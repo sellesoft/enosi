@@ -13,6 +13,50 @@ $ local event = require "event.Event"
 static Logger logger = 
   Logger::create("ecs"_str, Logger::Verbosity::Trace);
 
+b8 doReload(hr::Reloader* r)
+{
+  io::StaticBuffer<32> patchnumbuf;
+  patchnumbuf.open();
+  io::format(&patchnumbuf, getPatchNumber(r));
+
+  String args[2] =
+  {
+    "patch"_str,
+    patchnumbuf.asStr(),
+  };
+
+  Process::Stream streams[3] =
+  {
+    { false, nullptr },
+    { false, nullptr },
+    { false, nullptr },
+  };
+
+  auto lake = 
+    Process::spawn(
+      "/home/sushi/src/enosi/bin/lake"_str,
+      Slice<String>::from(args, 2),
+      streams,
+      "/home/sushi/src/enosi"_str);
+
+  while (lake.status == Process::Status::Running)
+    lake.checkStatus();
+
+  void* dlhandle = dlopen(nullptr, RTLD_LAZY);
+
+  hr::ReloadContext context;
+  context.hrfpath = "build/debug/test.hrf"_str;
+  context.exepath = "build/debug/test"_str;
+  context.reloadee_handle = dlhandle;
+
+  hr::ReloadResult result;
+
+  if (!hr::doReload(r, context, &result))
+    return ERROR("failed to reload symbols\n");
+
+  return true;
+}
+
 int main()
 {
   iro::log.init();
@@ -45,6 +89,8 @@ int main()
 
     iro::log.newDestination("stdout"_str, &fs::stdout, flags);
   }
+
+  auto* reloader = hr::createReloader();
 
   Engine engine = {};
   if (!engine.init())

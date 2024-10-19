@@ -118,7 +118,7 @@ void StyleMap::setAs(u64 id, $(pk.typename) val, Item* item)
 /* ----------------------------------------------------------------------------
  */
 template<>
-$(pk.typename) StyleMap::getAs(str name, $(pk.typename) def, Item* item)
+$(pk.typename) StyleMap::getAs(String name, $(pk.typename) def, Item* item)
 {
   return getAs(name.hash(), def);
 }
@@ -126,7 +126,7 @@ $(pk.typename) StyleMap::getAs(str name, $(pk.typename) def, Item* item)
 /* ----------------------------------------------------------------------------
  */
 template<>
-void StyleMap::setAs(str name, $(pk.typename) val, Item* item)
+void StyleMap::setAs(String name, $(pk.typename) val, Item* item)
 {
   return setAs(name.hash(), val, item);
 }

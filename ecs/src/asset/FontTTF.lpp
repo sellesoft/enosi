@@ -31,7 +31,7 @@ b8 Font::compileTTF(CompileParams& params)
   mem::Allocator* allocator = params.allocator;
 
   // Ensure the data directories exist.
-  str data_dir = Path::removeBasename(params.data_path);
+  String data_dir = Path::removeBasename(params.data_path);
 
   if (!platform::makeDir(data_dir, true))
     return ERROR("failed to make directory for data at '", 

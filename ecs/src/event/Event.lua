@@ -6,12 +6,12 @@ local CGen = require "cgen"
 local ctx = reflect.ctx
 
 local Event = {}
-Event.events = {}
+Event.list = List{}
+Event.map = {}
 
 setmetatable(Event,
 {
   __call = function(self)
-    local beb = require "event.BroadcastEventBus"
     local sec = assert(lpp.getSectionAfterMacro(),
       "attempt to create an Event but no section follows.")
 
@@ -20,6 +20,7 @@ setmetatable(Event,
 
     ctx:loadString(sec:getString())
 
+    -- Why the hell am I using clang to parse this?
     local result = ctx:parseTopLevelDecl()
 
     local decl = assert(result.decl,
@@ -29,7 +30,8 @@ setmetatable(Event,
         
     -- print("registering event "..declname)
 
-    self.events[declname] = decl
+    self.map[declname] = decl
+    self.list:push{ name=declname, decl=decl }
   end
 })
 

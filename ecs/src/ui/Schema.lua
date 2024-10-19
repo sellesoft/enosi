@@ -187,7 +187,7 @@ Schema.parse = function(self, def, file_offset)
             "defined")
         end
         defval = type.elems.map[elem]
-      elseif typename == "str" then
+      elseif typename == "String" then
         defval = 
           parser:expectPattern('".-"', "a string")
         defval = defval.."_str"
@@ -753,7 +753,7 @@ end
 -- * --------------------------------------------------------------------------
 
 CType.set = function(self, property, val)
-  if self.name == "str" then
+  if self.name == "String" then
     return makeStr('"',val,'"_str')
   end
   return val
@@ -809,7 +809,7 @@ CType.valueParser = function(self, property, parser)
       return "{"..r..","..g..","..b..","..a.."}"
     end
   end,
-  str = function()
+  String = function()
     return '"'..parser:expectString(true)..'"_str'
   end,
   }

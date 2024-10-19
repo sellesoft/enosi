@@ -18,7 +18,7 @@ namespace ui
 /* ----------------------------------------------------------------------------
  */
 template<>
-Separator* UI::make<Separator>(str id)
+Separator* UI::make<Separator>(String id)
 {
   auto* sep = mem::stl_allocator.construct<Separator>();
   if (!initItem(id, sep))

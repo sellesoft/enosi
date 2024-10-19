@@ -3,8 +3,8 @@ $ local reflect = require "reflection.Reflector"
 $ local CGen = require "cgen"
 $ local List = require "list"
 
-@@lpp.import "input/InputEvents.lh"
-@@lpp.import "window/WindowEvents.lh"
+@@lpp.import "input/Input.events.lh"
+@@lpp.import "window/Window.events.lh"
 @@lpp.import "Engine.lh"
 
 #include "iro/logger.h"
@@ -67,7 +67,7 @@ static int window_event_masks =
 
 /* ----------------------------------------------------------------------------
  */
-b8 Window::init(str title)
+b8 Window::init(String title)
 {
   Display* display = x11.display;
   int screen = x11.screen;
