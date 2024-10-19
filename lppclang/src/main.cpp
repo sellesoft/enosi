@@ -222,7 +222,7 @@ int testLookup()
   
   Type* type = lookupType(ctx, "Apple<int>"_str);
   
-  str name = getTypeName(ctx, type);
+  String name = getTypeName(ctx, type);
 
   printf("%s\n", name.ptr);
   
@@ -283,7 +283,7 @@ int testParseStmt()
     return 1;
   defer { destroyContext(ctx); };
 
-  str test = R"cpp(
+  String test = R"cpp(
     int a = 1 + 2;
     int b = 3 + 4;
     int c = a + b;
@@ -306,7 +306,7 @@ int testParseStmt()
       return false;
     }
 
-    str s = {test.ptr+offset};
+    String s = {test.ptr+offset};
     if (result.offset == -1)
       s.len = test.ptr  + test.len - s.ptr;
     else
@@ -351,7 +351,7 @@ int testParsePartialStmt()
   assert(result.stmt);
 
   INFO("parsed statement: ", 
-      str{mem.ptr+offset, u64(result.offset-offset)}, "\n");
+      String{mem.ptr+offset, u64(result.offset-offset)}, "\n");
 
   offset = result.offset;
 
@@ -362,13 +362,13 @@ int testParsePartialStmt()
   s64 newstart = mem.len;
   mem.write(" a + 2; "_str);
 
-  loadString(ctx, str{mem.ptr+offset, u64(mem.len-offset)});
+  loadString(ctx, String{mem.ptr+offset, u64(mem.len-offset)});
 
   result = parseStatement(ctx);
   assert(result.stmt);
 
   INFO("parsed statement: ", 
-      str{mem.ptr+offset, u64(mem.len-offset)}, "\n");
+      String{mem.ptr+offset, u64(mem.len-offset)}, "\n");
 
   return 0;
 }
@@ -380,7 +380,7 @@ int testLookupName()
     return 1;
   defer { destroyContext(ctx); };
 
-  str test = R"cpp(
+  String test = R"cpp(
     int a = 1 + 2;
     int b = 2 + 3;
   )cpp"_str;
@@ -422,7 +422,7 @@ int testLookupName()
 
 int testArgs()
 {
-  str args[] =
+  String args[] =
   {
     "-I/home/sushi/src/enosi/iro"_str,
     "-DHELLO"_str,
@@ -456,7 +456,7 @@ int testArgs()
 
 int testDepedencies()
 {
-  str args[] = 
+  String args[] = 
   {
     "-Iiro"_str,
   };

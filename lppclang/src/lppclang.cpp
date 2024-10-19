@@ -82,7 +82,7 @@ struct LLVMIO : llvm::raw_ostream
 
 /* ----------------------------------------------------------------------------
  */
-inline llvm::StringRef strRef(str s)
+inline llvm::StringRef strRef(String s)
 {
   return llvm::StringRef((char*)s.ptr, s.len);
 }
@@ -283,7 +283,7 @@ struct Context
 
   LexerPool lexers;
 
-  DLinkedPool<str> include_dirs;
+  DLinkedPool<String> include_dirs;
 
   Up<clang::CompilerInstance> clang;
 
@@ -384,7 +384,7 @@ struct Context
 
   /* --------------------------------------------------------------------------
    */
-  b8 init(Slice<str> args)
+  b8 init(Slice<String> args)
   {
     using namespace clang;
 
@@ -586,7 +586,7 @@ struct Context
 static b8 startNewBuffer(
     clang::SourceManager& srcmgr, 
     clang::Preprocessor& preprocessor,
-    str s)
+    String s)
 {
   using namespace clang;
 
@@ -749,7 +749,7 @@ public:
 
   /* --------------------------------------------------------------------------
    */
-  Decl* lookupName(str s)
+  Decl* lookupName(String s)
   {
     Preprocessor& preprocessor = clang.getPreprocessor();
     IdentifierInfo* ii = preprocessor.getIdentifierInfo(strRef(s));
@@ -884,7 +884,7 @@ public:
 
 /* ----------------------------------------------------------------------------
  */
-Context* createContext(str* args, u64 argc)
+Context* createContext(String* args, u64 argc)
 {
   auto ctx = new Context;
   if (!ctx->init({args, argc}))
@@ -923,7 +923,7 @@ inline static clang::QualType getClangType(Type* type)
 
 /* ----------------------------------------------------------------------------
  */
-Lexer* createLexer(Context* ctx, str s)
+Lexer* createLexer(Context* ctx, String s)
 {
   assert(ctx);
 
@@ -979,7 +979,7 @@ Token* lexerNextToken(Lexer* lexer)
 
 /* ----------------------------------------------------------------------------
  */
-str tokenGetRaw(Context* ctx, Lexer* l, Token* t)
+String tokenGetRaw(Context* ctx, Lexer* l, Token* t)
 {
   assert(ctx);
   assert(l);
@@ -1049,7 +1049,7 @@ TokenKind tokenGetKind(Token* t)
 
 /* ----------------------------------------------------------------------------
  */
-b8 createASTFromString(Context* ctx, str s)
+b8 createASTFromString(Context* ctx, String s)
 { 
   assert(ctx);
 
@@ -1092,7 +1092,7 @@ b8 createASTFromString(Context* ctx, str s)
 
 /* ----------------------------------------------------------------------------
  */
-Decl* parseString(Context* ctx, str s)
+Decl* parseString(Context* ctx, String s)
 {
   assert(ctx);
 
@@ -1122,7 +1122,7 @@ Decl* parseString(Context* ctx, str s)
 
 /* ----------------------------------------------------------------------------
  */
-b8 loadString(Context* ctx, str s)
+b8 loadString(Context* ctx, String s)
 {
   using namespace clang;
 
@@ -1247,7 +1247,7 @@ ParseTypeNameResult parseTypeName(Context* ctx)
 
 /* ----------------------------------------------------------------------------
  */
-Decl* lookupName(Context* ctx, str s)
+Decl* lookupName(Context* ctx, String s)
 {
   assert(ctx);
 
@@ -1367,7 +1367,7 @@ DeclKind getDeclKind(Decl* decl)
 
 /* ----------------------------------------------------------------------------
  */
-str getDeclName(Decl* decl)
+String getDeclName(Decl* decl)
 {
   assert(decl);
 
@@ -1400,7 +1400,7 @@ Type* getDeclType(Decl* decl)
 
 /* ----------------------------------------------------------------------------
  */
-str getClangDeclSpelling(Decl* decl)
+String getClangDeclSpelling(Decl* decl)
 {
   assert(decl);
   const char* s = getClangDecl(decl)->getDeclKindName();
@@ -1615,7 +1615,7 @@ Type* getUnqualifiedCanonicalType(Type* type)
 
 /* ----------------------------------------------------------------------------
  */
-str getTypeName(Context* ctx, Type* type)
+String getTypeName(Context* ctx, Type* type)
 {
   assert(ctx && type);
 
@@ -1639,7 +1639,7 @@ str getTypeName(Context* ctx, Type* type)
 
 /* ----------------------------------------------------------------------------
  */
-str getCanonicalTypeName(Context* ctx, Type* type)
+String getCanonicalTypeName(Context* ctx, Type* type)
 {
   assert(ctx && type);
   return getTypeName(ctx, getCanonicalType(type));
@@ -1647,7 +1647,7 @@ str getCanonicalTypeName(Context* ctx, Type* type)
 
 /* ----------------------------------------------------------------------------
  */
-str getUnqualifiedTypeName(Context* ctx, Type* type)
+String getUnqualifiedTypeName(Context* ctx, Type* type)
 {
   assert(ctx && type);
   return getTypeName(ctx, getUnqualifiedType(type));
@@ -1655,7 +1655,7 @@ str getUnqualifiedTypeName(Context* ctx, Type* type)
 
 /* ----------------------------------------------------------------------------
  */
-str getUnqualifiedCanonicalTypeName(Context* ctx, Type* type)
+String getUnqualifiedCanonicalTypeName(Context* ctx, Type* type)
 {
   assert(ctx && type);
   return getTypeName(ctx, getUnqualifiedCanonicalType(type));
@@ -1766,7 +1766,7 @@ Decl* getNextEnum(EnumIter* iter)
 
 /* ----------------------------------------------------------------------------
  */
-Type* lookupType(Context* ctx, str name)
+Type* lookupType(Context* ctx, String name)
 {
   assert(ctx && notnil(name));
 
@@ -1792,7 +1792,7 @@ Type* lookupType(Context* ctx, str name)
 // I dont really care for doing this but I dont feel like figuring out their
 // error thing right now so whatever.
 llvm::ExitOnError exit_on_error;
-void addIncludeDir(Context* ctx, str s)
+void addIncludeDir(Context* ctx, String s)
 {
   assert(ctx);
   using namespace clang;
@@ -1809,7 +1809,7 @@ void addIncludeDir(Context* ctx, str s)
 
 /* ----------------------------------------------------------------------------
  */
-str getDependencies(str file, str* args, u64 argc)
+String getDependencies(String file, String* args, u64 argc)
 {
   using namespace clang;
   using namespace clang::tooling::dependencies;
@@ -1860,7 +1860,7 @@ str getDependencies(str file, str* args, u64 argc)
 
   std::string result = *result_or_err;
 
-  str out;
+  String out;
   out.ptr = (u8*)mem::stl_allocator.allocate(result.size());
   mem::copy(out.ptr, result.data(), result.size());
   out.len = result.size();
@@ -1870,14 +1870,14 @@ str getDependencies(str file, str* args, u64 argc)
 
 /* ----------------------------------------------------------------------------
  */
-void destroyDependencies(str deps)
+void destroyDependencies(String deps)
 {
   mem::stl_allocator.free(deps.ptr);
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 beginNamespace(Context* ctx, str name)
+b8 beginNamespace(Context* ctx, String name)
 {
   using namespace clang;
 
@@ -1945,7 +1945,7 @@ void endNamespace(Context* ctx)
   Parser::ParseScope* ns_scope = ctx->parse_scopes.popTail();
   delete ns_scope;
 
-  static const str endstr = "}\n"_str;
+  static const String endstr = "}\n"_str;
 
   startNewBuffer(srcmgr, preprocessor, endstr);
   parser.ConsumeAnyToken();

@@ -49,7 +49,7 @@ typedef enum
 
 //!ffiapi end
 
-static const str declkind_strs[] =
+static const String declkind_strs[] =
 {
   "Invalid"_str,
   "Unknown"_str,
@@ -157,7 +157,7 @@ typedef struct ParseExprResult
  */
 typedef struct ParseIdentifierResult
 {
-  str id;
+  String id;
   s64 offset;
 } ParseIdentifierResult;
 
@@ -165,14 +165,14 @@ typedef struct ParseIdentifierResult
  */
 typedef struct
 {
-  str raw;
+  String raw;
   u64 start_offset;
   u64 end_offset;
 } TokenRawAndLoc;
 
 // **** EXPERIMENTAL ****
-LPPCFUNC void addIncludeDir(Context* ctx, str s);
-LPPCFUNC Type* lookupType(Context* ctx, str name);
+LPPCFUNC void addIncludeDir(Context* ctx, String s);
+LPPCFUNC Type* lookupType(Context* ctx, String name);
 LPPCFUNC ParseStmtResult parseStatement(Context* ctx);
 // Returns the declaration of the given statement, or nullptr if the given
 // stmt is not a declaration.
@@ -182,11 +182,11 @@ LPPCFUNC ParseDeclResult parseTopLevelDecl(Context* ctx);
 LPPCFUNC ParseTopLevelDeclsResult parseTopLevelDecls(Context* ctx);
 LPPCFUNC ParseExprResult parseExpr(Context* ctx);
 LPPCFUNC ParseIdentifierResult parseIdentifier(Context* ctx);
-LPPCFUNC Decl* lookupName(Context* ctx, str s);
-LPPCFUNC b8 loadString(Context* ctx, str s);
-LPPCFUNC str getDependencies(str file, str* args, u64 argc);
-LPPCFUNC void destroyDependencies(str deps);
-LPPCFUNC b8 beginNamespace(Context* ctx, str name);
+LPPCFUNC Decl* lookupName(Context* ctx, String s);
+LPPCFUNC b8 loadString(Context* ctx, String s);
+LPPCFUNC String getDependencies(String file, String* args, u64 argc);
+LPPCFUNC void destroyDependencies(String deps);
+LPPCFUNC b8 beginNamespace(Context* ctx, String name);
 LPPCFUNC void endNamespace(Context* ctx);
 // **** EXPERIMENTAL ****
 
@@ -195,13 +195,13 @@ LPPCFUNC void endNamespace(Context* ctx);
  |  also various things that we must dynamically allocate.
  */
 
-LPPCFUNC Context* createContext(str* args, u64 argc);
+LPPCFUNC Context* createContext(String* args, u64 argc);
 LPPCFUNC void     destroyContext(Context*);
 
 /* ----------------------------------------------------------------------------
  |  Create a lexer over the given string.
  */
-LPPCFUNC Lexer* createLexer(Context* ctx, str s);
+LPPCFUNC Lexer* createLexer(Context* ctx, String s);
 
 /* ----------------------------------------------------------------------------
  |  Returns a pointer to the next token in the string or nullptr if none are 
@@ -210,9 +210,9 @@ LPPCFUNC Lexer* createLexer(Context* ctx, str s);
 LPPCFUNC Token* lexerNextToken(Lexer* l);
 
 /* ----------------------------------------------------------------------------
- |  Returns a str representing the raw text the given token spans.
+ |  Returns a String representing the raw text the given token spans.
  */ 
-LPPCFUNC str tokenGetRaw(Context* ctx, Lexer* l, Token* t);
+LPPCFUNC String tokenGetRaw(Context* ctx, Lexer* l, Token* t);
 
 /* ----------------------------------------------------------------------------
  |  Get the kind of a token.
@@ -222,11 +222,11 @@ LPPCFUNC TokenKind tokenGetKind(Token* t);
 /* ----------------------------------------------------------------------------
  |  Create an AST from the given string for the given Context.
  */ 
-LPPCFUNC b8 createASTFromString(Context* ctx, str s);
+LPPCFUNC b8 createASTFromString(Context* ctx, String s);
 
 /* ----------------------------------------------------------------------------
  */
-LPPCFUNC Decl* parseString(Context* ctx, str s);
+LPPCFUNC Decl* parseString(Context* ctx, String s);
 
 /* ----------------------------------------------------------------------------
  |  Prints clang's textual representation of the given decl to stdout
@@ -265,7 +265,7 @@ LPPCFUNC DeclKind getDeclKind(Decl* decl);
 /* ----------------------------------------------------------------------------
  |  Assuming 'decl' is a named declaration, retrieve its name
  */ 
-LPPCFUNC str getDeclName(Decl* decl);
+LPPCFUNC String getDeclName(Decl* decl);
 
 /* ----------------------------------------------------------------------------
  |  Assuming 'decl' is a value declaration (eg. a declaration with an 
@@ -352,7 +352,7 @@ LPPCFUNC Type* getUnqualifiedCanonicalType(Type* type);
  |  Returns a string representing the name of the given type. What is returned 
  |  depends on the sugar and qualifications present on the type. 
  */
-LPPCFUNC str getTypeName(Context* ctx, Type* type);
+LPPCFUNC String getTypeName(Context* ctx, Type* type);
 
 /* ----------------------------------------------------------------------------
  |  Returns a string containing the 'canonical' spelling of 
@@ -379,12 +379,12 @@ LPPCFUNC str getTypeName(Context* ctx, Type* type);
  |  To get the typename as it is written in source code
  |  use getTypeName().
  */
-LPPCFUNC str getCanonicalTypeName(Context* ctx, Type* type);
+LPPCFUNC String getCanonicalTypeName(Context* ctx, Type* type);
 
 /* ----------------------------------------------------------------------------
  |  Same as getCanonicalTypeName but with qualifiers removed.
  */
-LPPCFUNC str getUnqualifiedCanonicalTypeName(Context* ctx, Type* type);
+LPPCFUNC String getUnqualifiedCanonicalTypeName(Context* ctx, Type* type);
 
 // Retrieve the size in BITS of the given type.
 LPPCFUNC u64 getTypeSize(Context* ctx, Type* type);
@@ -413,7 +413,7 @@ LPPCFUNC void dumpAST(Context* ctx);
  |  Retrieves clang's internal naming of the given decl for debugging decl 
  |  kinds unknown to the api.
  */
-LPPCFUNC str getClangDeclSpelling(Decl* decl);
+LPPCFUNC String getClangDeclSpelling(Decl* decl);
 
 //!ffiapi end
 
