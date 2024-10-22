@@ -18,10 +18,10 @@ ffi.cdef
   } Verbosity;
 
   u64 iro_loggerSize();
-  void iro_initLogger(void* logger, str name, u32 verbosity);
-  b8 iro_logFirst(void* logger, u32 verbosity, str s);
-  void iro_logTrail(void* logger, u32 verbosity, str s);
-  void iro_loggerSetName(void* logger, str name);
+  void iro_initLogger(void* logger, String name, u32 verbosity);
+  b8 iro_logFirst(void* logger, u32 verbosity, String s);
+  void iro_logTrail(void* logger, u32 verbosity, String s);
+  void iro_loggerSetName(void* logger, String name);
 
 ]]
 local C = ffi.C
@@ -37,7 +37,7 @@ Verbosity =
   Fatal  = C.Fatal,
 }
 
-local str_type = ffi.typeof("str")
+local str_type = ffi.typeof("String")
 
 local makeStr = function(s)
   return str_type(s, #s)
@@ -75,7 +75,7 @@ end
 local createLogger = function(name, verbosity)
   local logger = ffi.new(logger_type)
 
-  local name = ffi.new("str", name, #name)
+  local name = ffi.new("String", name, #name)
 
   C.iro_initLogger(logger, name, verbosity)
 

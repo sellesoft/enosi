@@ -137,3 +137,44 @@ Globber::Part* Globber::pushPart(Part::Kind kind, String raw)
 }
 
 }
+
+extern "C"
+{
+
+using namespace iro;
+using namespace iro::fs;
+
+struct GlobResult
+{
+  String* paths;
+  s32 path_count;
+};
+
+EXPORT_DYNAMIC
+GlobResult iro_glob(String pattern)
+{
+  auto glob = Globber::create(pattern);
+  auto matches = Array<String>::create();
+  glob.run(
+    [&matches](fs::Path& p)
+    {
+      String match = p.buffer.asStr();
+      *matches.push() = match.allocateCopy();
+      return true;
+    });
+  glob.destroy();
+
+  return {matches.arr, matches.len()};
+}
+
+EXPORT_DYNAMIC
+void iro_globFree(GlobResult result)
+{
+  auto arr = Array<String>::fromOpaquePointer(result.paths);
+  for (String& s : arr)
+    mem::stl_allocator.free(s.ptr);
+
+  arr.destroy();
+}
+
+}
