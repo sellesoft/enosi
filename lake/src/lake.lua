@@ -469,7 +469,7 @@ lake.find = function(pattern)
   local glob = C.lua__globCreate(make_str(pattern))
 
   if not glob.paths then
-    return {}
+    return List{}
   end
 
   local out = List()
