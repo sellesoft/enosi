@@ -132,40 +132,6 @@ void printTranslationUnitDecls(Context* ctx, DeclIter* iter)
 
 }
 
-int testContext()
-{
-  auto testfile = fs::File::from("src/test.cpp"_str, fs::OpenFlag::Read);
-  if (isnil(testfile))
-    return 1;
-  defer { testfile.close(); };
-
-  io::Memory buffer;
-  buffer.open();
-  defer { buffer.close(); };
-
-  for (;;)
-  {
-    buffer.reserve(32);
-    u64 bytes_read = testfile.read({buffer.ptr + buffer.len, 32});
-    if (!bytes_read)
-      break;
-    buffer.commit(bytes_read);
-  }
-
-
-  Context* ctx = createContext(nullptr, 0);
-  defer { destroyContext(ctx); };
-
-  if (!createASTFromString(ctx, buffer.asStr()))
-    return 1;
-
-  Decl* tu = getTranslationUnitDecl(ctx);
-  DeclIter* toplevel = createDeclIter(ctx, tu);
-  printTranslationUnitDecls(ctx, toplevel);
-
-  return 0;
-}
-
 int testLexer()
 {
   Context* ctx = createContext(nullptr, 0);
@@ -526,6 +492,44 @@ int debugEnumParse()
   return 0;
 }
 
+int testFieldOffset()
+{
+  auto ctx = createContext(nullptr, 0);
+  if (!ctx)
+    return 1;
+  defer { destroyContext(ctx); };
+
+  parseString(ctx, R"cpp(
+    struct Thing
+    {
+      int a;
+      int b;
+      int c;
+    };
+  )cpp"_str);
+
+  auto type = lookupType(ctx, "Thing"_str);
+  auto decl = getTypeDecl(type);
+
+  dumpDecl(decl);
+
+  auto iter = createDeclIter(ctx, decl);
+
+  for (;;)
+  {
+    auto member = getNextDecl(iter);
+    if (member == nullptr)
+      break;
+
+    if (getDeclKind(member) == DeclKind_Field)
+    {
+      INFO(getDeclName(member), " ", getFieldOffset(ctx, member), "\n");
+    }
+  }
+
+  return 0;
+}
+
 int main()
 {
   if (!log.init())
@@ -544,7 +548,6 @@ int main()
 
   // playground();
 
-  // return testContext();
   // return testLexer();
   // return testLookup();
   // return testMultipleParses();
@@ -554,6 +557,7 @@ int main()
   // return testArgs();
   // return testDepedencies();
   // return testFakeNamespace();
-  return debugEnumParse();
+  // return debugEnumParse();
+  return testFieldOffset();
 }
 

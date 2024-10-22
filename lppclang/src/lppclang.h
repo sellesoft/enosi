@@ -285,6 +285,17 @@ LPPCFUNC u64 getDeclBegin(Context* ctx, Decl* decl);
 LPPCFUNC u64 getDeclEnd(Context* ctx, Decl* decl);
 
 /* ----------------------------------------------------------------------------
+ */
+LPPCFUNC b8 isStruct(Decl* decl);
+LPPCFUNC b8 isUnion(Decl* decl);
+LPPCFUNC b8 isEnum(Decl* decl);
+
+/* ----------------------------------------------------------------------------
+ |  If this is the 'canonical' decl.
+ */
+LPPCFUNC b8 isCanonicalDecl(Decl* decl);
+
+/* ----------------------------------------------------------------------------
  |  If the given decl is a function declaration, retrieve its return type. 
  |  Otherwise nullptr is returned.
  */
@@ -328,8 +339,17 @@ LPPCFUNC Decl*      getNextParam(ParamIter* iter);
 LPPCFUNC b8 isCanonical(Type* type);
 LPPCFUNC b8 isUnqualified(Type* type);
 LPPCFUNC b8 isUnqualifiedAndCanonical(Type* type);
-
 LPPCFUNC b8 isConst(Type* type);
+
+/* ----------------------------------------------------------------------------
+ |  Helpers for dealing with pointers.
+ */
+LPPCFUNC b8 isPointer(Type* type);
+LPPCFUNC Type* getPointeeType(Type* type);
+
+LPPCFUNC b8 isArray(Type* type);
+LPPCFUNC Type* getArrayElementType(Context* ctx, Type* type);
+LPPCFUNC u64 getArrayLen(Context* ctx, Type* type);
 
 /* ----------------------------------------------------------------------------
  |  Retrieves the canonical type of the given type, eg. the underlying type 

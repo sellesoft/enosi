@@ -267,8 +267,6 @@ inline static u64 getTokenEndOffset(
 
 struct Context
 {
-  ASTUnitPtr ast_unit;
-
   LLVMIO* io;
 
   // diagnositics handling
@@ -568,16 +566,9 @@ struct Context
 
   /* --------------------------------------------------------------------------
    */
-  void takeAST(ASTUnitPtr& ptr)
-  {
-    ptr.swap(ast_unit);
-  }
-
-  /* --------------------------------------------------------------------------
-   */
   clang::ASTContext* getASTContext()
   {
-    return &ast_unit->getASTContext();
+    return &clang->getASTContext();
   }
 };
 
@@ -1049,49 +1040,6 @@ TokenKind tokenGetKind(Token* t)
 
 /* ----------------------------------------------------------------------------
  */
-b8 createASTFromString(Context* ctx, String s)
-{ 
-  assert(ctx);
-
-  struct SuppressDiagnostics : clang::DiagnosticConsumer
-  {
-    // suppress diags being output to stdout
-    void HandleDiagnostic(
-        clang::DiagnosticsEngine::Level DiagLevel, 
-        const clang::Diagnostic &Info) {}
-  };
-  SuppressDiagnostics suppressor;
-
-  std::vector<std::string> args;
-
-  for (auto& d : ctx->include_dirs)
-  {
-    std::string arg = "-I";
-    arg += std::string((char*)d.ptr, d.len);
-    args.push_back(arg);
-  }
-
-  ASTUnitPtr unit = 
-    clang::tooling::buildASTFromCodeWithArgs(
-      llvm::StringRef((char*)s.ptr, s.len), 
-      args,
-      "lppclang-string.cc",
-      "lppclang",
-      std::make_shared<clang::PCHContainerOperations>(),
-      clang::tooling::getClangStripDependencyFileAdjuster(),
-      clang::tooling::FileContentMappings(),
-      nullptr);
-
-  if (!unit)
-    return false;
-
-  ctx->takeAST(unit);
-
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
 Decl* parseString(Context* ctx, String s)
 {
   assert(ctx);
@@ -1301,7 +1249,7 @@ DeclIter* createDeclIter(Context* ctx, Decl* decl)
 
   auto dctx = clang::Decl::castToDeclContext(cdecl);
   if (dctx->decls_empty())
-    return nullptr;
+      return nullptr;
 
   auto range = ctx->allocate<DeclIterator>();
   range->initContext(dctx);
@@ -1358,6 +1306,7 @@ DeclKind getDeclKind(Decl* decl)
     kindcase(Enum,      Enum);
     kindcase(Record,    Record);
     kindcase(CXXRecord, Record); // not handling C++ specific stuff atm
+    kindcase(ClassTemplateSpecialization, Record); // mmm
 
 #undef kindcase
   }
@@ -1449,6 +1398,53 @@ u64 getDeclEnd(Context* ctx, Decl* decl)
     srcmgr.getDecomposedSpellingLoc(
         getClangDecl(decl)->getEndLoc());
   return offset;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 isStruct(Decl* decl)
+{
+  assert(decl);
+  auto cdecl = getClangDecl(decl);
+  if (clang::TagDecl::classof(cdecl))
+  {
+    switch (((clang::TagDecl*)cdecl)->getTagKind())
+    {
+    case clang::TagTypeKind::Struct:
+    case clang::TagTypeKind::Class:
+      return true;
+    }
+  }
+  return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 isUnion(Decl* decl)
+{
+  assert(decl);
+  auto cdecl = getClangDecl(decl);
+  if (clang::TagDecl::classof(cdecl))
+    return clang::TagTypeKind::Union == ((clang::TagDecl*)cdecl)->getTagKind();
+  return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 isEnum(Decl* decl)
+{
+  assert(decl);
+  auto cdecl = getClangDecl(decl);
+  if (clang::TagDecl::classof(cdecl))
+    return clang::TagTypeKind::Enum == ((clang::TagDecl*)cdecl)->getTagKind();
+  return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 isCanonicalDecl(Decl* decl)
+{
+  return getClangDecl(decl)->isCanonicalDecl();
 }
 
 /* ----------------------------------------------------------------------------
@@ -1591,6 +1587,56 @@ b8 isUnqualifiedAndCanonical(Type* type)
 
 /* ----------------------------------------------------------------------------
  */
+b8 isPointer(Type* type)
+{
+  assert(type);
+  return getClangType(type)->isPointerType();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Type* getPointeeType(Type* type)
+{
+  assert(type && isPointer(type));
+  return (Type*)getClangType(type)->getPointeeType().getAsOpaquePtr();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 isArray(Type* type)
+{
+  assert(type);
+  return getClangType(type)->isArrayType();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Type* getArrayElementType(Context* ctx, Type* type)
+{
+  assert(ctx && type && isArray(type));
+  auto at = ctx->getASTContext()->getAsArrayType(getClangType(type));
+  if (!at)
+    return nullptr;
+  return (Type*)at->getElementType().getAsOpaquePtr();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+u64 getArrayLen(Context* ctx, Type* type)
+{
+  assert(ctx && type && isArray(type));
+  auto at = ctx->getASTContext()->getAsArrayType(getClangType(type));
+  if (!at)
+    return -1;
+  if (!clang::ConstantArrayType::classof(at))
+    return -1;
+
+  // yeah idk this will probably break at some point 
+  return *((clang::ConstantArrayType*)at)->getSize().getRawData();
+}
+
+/* ----------------------------------------------------------------------------
+ */
 Type* getCanonicalType(Type* type)
 {
   assert(type);
@@ -1702,17 +1748,18 @@ Decl* getTypeDecl(Type* type)
 FieldIter* createFieldIter(Context* ctx, Decl* decl)
 {
   assert(decl);
-
   auto cdecl = getClangDecl(decl);
-  auto rdecl = (clang::RecordDecl*)cdecl;
-
-  if (rdecl->field_empty())
-    return nullptr;
-
-  auto iter = ctx->allocate<FieldIterator>();
-  iter->current = rdecl->field_begin();
-  iter->end = rdecl->field_end();
-  return (FieldIter*)iter;
+  if (clang::RecordDecl::classof(cdecl))
+  {
+    auto rdecl = (clang::RecordDecl*)cdecl;
+    if (rdecl->field_empty())
+      return nullptr;
+    auto iter = ctx->allocate<FieldIterator>();
+    iter->current = rdecl->field_begin();
+    iter->end = rdecl->field_end();
+    return (FieldIter*)iter;
+  }
+  return nullptr;
 }
 
 /* ----------------------------------------------------------------------------

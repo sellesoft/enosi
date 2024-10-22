@@ -9,6 +9,7 @@
 local ffi = require "ffi"
 
 ffi.cdef [[
+
 typedef enum
 {
   DeclKind_Invalid,
@@ -71,17 +72,17 @@ typedef struct ParseExprResult
 } ParseExprResult;
 typedef struct ParseIdentifierResult
 {
-  str id;
+  String id;
   s64 offset;
 } ParseIdentifierResult;
 typedef struct
 {
-  str raw;
+  String raw;
   u64 start_offset;
   u64 end_offset;
 } TokenRawAndLoc;
- void addIncludeDir(Context* ctx, str s);
- Type* lookupType(Context* ctx, str name);
+ void addIncludeDir(Context* ctx, String s);
+ Type* lookupType(Context* ctx, String name);
  ParseStmtResult parseStatement(Context* ctx);
  Decl* getStmtDecl(Context* ctx, Stmt* stmt);
  ParseTypeNameResult parseTypeName(Context* ctx);
@@ -89,31 +90,35 @@ typedef struct
  ParseTopLevelDeclsResult parseTopLevelDecls(Context* ctx);
  ParseExprResult parseExpr(Context* ctx);
  ParseIdentifierResult parseIdentifier(Context* ctx);
- Decl* lookupName(Context* ctx, str s);
- b8 loadString(Context* ctx, str s);
- str getDependencies(str file, str* args, u64 argc);
- void destroyDependencies(str deps);
- b8 beginNamespace(Context* ctx, str name);
+ Decl* lookupName(Context* ctx, String s);
+ b8 loadString(Context* ctx, String s);
+ String getDependencies(String file, String* args, u64 argc);
+ void destroyDependencies(String deps);
+ b8 beginNamespace(Context* ctx, String name);
  void endNamespace(Context* ctx);
- Context* createContext(str* args, u64 argc);
+ Context* createContext(String* args, u64 argc);
  void destroyContext(Context*);
- Lexer* createLexer(Context* ctx, str s);
+ Lexer* createLexer(Context* ctx, String s);
  Token* lexerNextToken(Lexer* l);
- str tokenGetRaw(Context* ctx, Lexer* l, Token* t);
+ String tokenGetRaw(Context* ctx, Lexer* l, Token* t);
  TokenKind tokenGetKind(Token* t);
- b8 createASTFromString(Context* ctx, str s);
- Decl* parseString(Context* ctx, str s);
+ b8 createASTFromString(Context* ctx, String s);
+ Decl* parseString(Context* ctx, String s);
  void dumpDecl(Decl* decl);
  Decl* getTranslationUnitDecl(Context* ctx);
  DeclIter* createDeclIter(Context* ctx, Decl* decl);
  Decl* getNextDecl(DeclIter* iter);
  DeclIter* getContextOfDecl(Context* ctx, Decl* decl);
  DeclKind getDeclKind(Decl* decl);
- str getDeclName(Decl* decl);
+ String getDeclName(Decl* decl);
  Type* getDeclType(Decl* decl);
  Type* getTypeDeclType(Context* ctx, Decl* decl);
  u64 getDeclBegin(Context* ctx, Decl* decl);
  u64 getDeclEnd(Context* ctx, Decl* decl);
+ b8 isStruct(Decl* decl);
+ b8 isUnion(Decl* decl);
+ b8 isEnum(Decl* decl);
+ b8 isCanonicalDecl(Decl* decl);
  Type* getFunctionReturnType(Decl* decl);
  b8 functionHasBody(Decl* decl);
  u32 getFunctionBodyBegin(Decl* decl);
@@ -128,12 +133,17 @@ typedef struct
  b8 isUnqualified(Type* type);
  b8 isUnqualifiedAndCanonical(Type* type);
  b8 isConst(Type* type);
+ b8 isPointer(Type* type);
+ Type* getPointeeType(Type* type);
+ b8 isArray(Type* type);
+ Type* getArrayElementType(Context* ctx, Type* type);
+ u64 getArrayLen(Context* ctx, Type* type);
  Type* getCanonicalType(Type* type);
  Type* getUnqualifiedType(Type* type);
  Type* getUnqualifiedCanonicalType(Type* type);
- str getTypeName(Context* ctx, Type* type);
- str getCanonicalTypeName(Context* ctx, Type* type);
- str getUnqualifiedCanonicalTypeName(Context* ctx, Type* type);
+ String getTypeName(Context* ctx, Type* type);
+ String getCanonicalTypeName(Context* ctx, Type* type);
+ String getUnqualifiedCanonicalTypeName(Context* ctx, Type* type);
  u64 getTypeSize(Context* ctx, Type* type);
  b8 typeIsBuiltin(Type* type);
  Decl* getTypeDecl(Type* type);
@@ -143,7 +153,9 @@ typedef struct
  EnumIter* createEnumIter(Context* ctx, Decl* decl);
  Decl* getNextEnum(EnumIter* iter);
  void dumpAST(Context* ctx);
- str getClangDeclSpelling(Decl* decl);]]
+ String getClangDeclSpelling(Decl* decl);
+
+]]
 
 -- set to the lpp object when loaded
 local lpp = require "lpp"
@@ -152,7 +164,7 @@ local lpp = require "lpp"
 local lppclang
 
 -- helpers
-local strtype = ffi.typeof("str")
+local strtype = ffi.typeof("String")
 local make_str = function(s)
   return strtype(s, #s)
 end
@@ -199,7 +211,7 @@ Ctx = makeStruct()
 Ctx.new = function(args)
   local o = setmetatable({}, Ctx)
 
-  local carr = ffi.new("str["..args:len().."]")
+  local carr = ffi.new("String["..args:len().."]")
 
   args:eachWithIndex(function(arg, i)
     carr[i-1] = make_str(arg)
@@ -237,6 +249,14 @@ end
 ---@param code string
 Ctx.loadString = function(self, code)
   assert(0 ~= lppclang.loadString(self.handle, make_str(code)))
+end
+
+--- Gets the toplevel node of the AST.
+---
+---@return Decl
+Ctx.getTranslationUnitDecl = function(self)
+  return Decl.new(self,
+    lppclang.getTranslationUnitDecl(self.handle))
 end
 
 ---@class ParseDeclResult
@@ -441,6 +461,11 @@ Decl.getDeclIter = function(self)
   return DeclIter.new(self.ctx, iter)
 end
 
+Decl.getFieldIter = function(self)
+  return FieldIter.new(self.ctx, 
+    lppclang.createFieldIter(self.ctx.handle, self.handle))
+end
+
 --- Get a string of the name of this Decl
 ---
 ---@return string
@@ -451,10 +476,18 @@ end
 
 --- Retrieve the Type of this declaration.
 ---
----@return Type
+---@return Type?
 Decl.type = function(self)
   local t = lppclang.getDeclType(self.handle)
   return Type.new(self.ctx, t)
+end
+
+--- Gets the Type representation of this Type declaration.
+---
+---@return Type?
+Decl.getTypeDeclType = function(self)
+  return Type.new(self.ctx, 
+    lppclang.getTypeDeclType(self.ctx.handle, self.handle))
 end
 
 --- Get the offset into the string this Decl was parsed from that
@@ -477,14 +510,21 @@ end
 ---
 ---@return boolean
 Decl.isEnum = function(self)
-  return lppclang.getDeclKind(self.handle) == lppclang.DeclKind_Enum
+  return 0 ~= lppclang.isEnum(self.handle)
 end
 
---- Test if this Decl is a struct.
+--- Test if this Decl is a struct or class.
 ---
 ---@return boolean
 Decl.isStruct = function(self)
-  return lppclang.getDeclKind(self.handle) == lppclang.DeclKind_Record
+  return 0 ~= lppclang.isStruct(self.handle)
+end
+
+--- Test if this Decl is a union.
+---
+---@return boolean
+Decl.isUnion = function(self)
+  return 0 ~= lppclang.isUnion(self.handle)
 end
 
 --- Test if this Decl is a variable.
@@ -499,6 +539,14 @@ end
 ---@return boolean
 Decl.isField = function(self)
   return lppclang.getDeclKind(self.handle) == lppclang.DeclKind_Field
+end
+
+--- Test if this Decl is the canonical declaration of whatever it is 
+--- referring to.
+---
+---@return boolean
+Decl.isCanonical = function(self)
+  return 0 ~= lppclang.isCanonicalDecl(self.handle)
 end
 
 --- Given that this Decl is an enum, creates and returns an iterator
@@ -589,6 +637,9 @@ Type = makeStruct()
 ---@param ctx Ctx
 ---@param handle userdata
 Type.new = function(ctx, handle)
+  if handle == nil then
+    return nil
+  end
   return setmetatable(
   {
     ctx = ctx,
@@ -659,6 +710,15 @@ Type.isBuiltin = function(self)
   return 0 ~= lppclang.typeIsBuiltin(self.handle)
 end
 
+--- Get the offset of a field decl in bits.
+---
+---@param decl Decl
+---@return number
+Type.getFieldOffset = function(self, decl)
+  assert(decl and decl.handle)
+  return tonumber(lppclang.getFieldOffset(self.ctx.handle, decl.handle))
+end
+
 Type.getDecl = function(self)
   local result = lppclang.getTypeDecl(self.handle)
   if nil == result then
@@ -677,6 +737,31 @@ end
 
 Type.getUnqualifiedCanonicalTypeName = function(self)
   return strToLua(lppclang.getUnqualifiedCanonicalTypeName(self.ctx.handle, self.handle))
+end
+
+Type.isPointer = function(self)
+  return 0 ~= lppclang.isPointer(self.handle)
+end
+
+Type.getPointeeType = function(self)
+  return Type.new(self.ctx, lppclang.getPointeeType(self.handle))
+end
+
+Type.isEnum = function(self)
+  return 0 ~= lppclang.isEnum(self.handle)
+end
+
+Type.isArray = function(self)
+  return 0 ~= lppclang.isArray(self.handle)
+end
+
+Type.getArrayElementType = function(self)
+  return Type.new(self.ctx, 
+    lppclang.getArrayElementType(self.ctx.handle, self.handle))
+end
+
+Type.getArrayLen = function(self)
+  return tonumber(lppclang.getArrayLen(self.ctx.handle, self.handle))
 end
 
 EnumIter = {}
@@ -698,6 +783,27 @@ EnumIter.next = function(self)
     return nil
   end
   return Decl.new(self.ast, ne)
+end
+
+FieldIter = {}
+FieldIter.__index = FieldIter
+
+FieldIter.new = function(ctx, handle)
+  if handle == nil then
+    return
+  end
+  local o = {}
+  o.ctx = ctx
+  o.handle = handle
+  return setmetatable(o, FieldIter)
+end
+
+FieldIter.next = function(self)
+  local n = lppclang.getNextField(self.handle)
+  if n == nil then
+    return
+  end
+  return Decl.new(self.ctx, n)
 end
 
 --- An instance of a clang Lexer over some string.
@@ -872,7 +978,7 @@ clang.createContext = function(args)
 end
 
 clang.generateMakeDepFile = function(file, args)
-  local carr = ffi.new("str["..args:len().."]")
+  local carr = ffi.new("String["..args:len().."]")
 
   args:eachWithIndex(function(arg, i)
     carr[i-1] = make_str(arg)
