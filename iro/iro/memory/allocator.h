@@ -30,6 +30,15 @@ struct Allocator
   }
 
   template<typename T>
+  T* constructArray(u64 count)
+  {
+    T* arr = allocateType<T>(count);
+    for (u64 i = 0; i < count; ++i)
+      new (arr + i)T();
+    return arr;
+  }
+
+  template<typename T>
   void deconstruct(T* ptr)
   {
     ptr->~T();

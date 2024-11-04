@@ -1,16 +1,7 @@
---
---
--- List of strings that can be initialized and concatenated in
--- a convenient way, eg.
---
---   local t = Twine "here" "are" "my" "strings!"
---
---
-
 local List = require "list"
 
---- A list of strings that provides a nice syntax for concatenating
---- strings. For example, one can type:
+--- A type that provides a nice syntax for concatenating
+--- strings into a List. For example, one can type:
 --- ```lua
 ---   local t = Twine.new
 ---     "hello!"
@@ -41,7 +32,6 @@ end
 ---@return Twine
 Twine.new = function(init)
   local o = {}
-  setmetatable(o, Twine)
   o.arr = {}
 
   if init then
@@ -49,6 +39,7 @@ Twine.new = function(init)
     List.push(o, init)
   end
 
+  setmetatable(o, Twine)
   return o
 end
 

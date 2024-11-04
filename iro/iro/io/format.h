@@ -67,13 +67,18 @@ s64 formatv(IO* io, Formattable auto&&... args)
 
 /* ============================================================================
  */ 
+template<typename T>
 struct SanitizeControlCharacters
 {
-  const String& x;
-  SanitizeControlCharacters(const String& in) : x(in) {};
+  const T& x;
+  SanitizeControlCharacters<T>(const T& in) : x(in) {}
 };
 
-s64 format(IO* io, const SanitizeControlCharacters& x);
+template<typename T> // deduction guide
+SanitizeControlCharacters(T x) -> SanitizeControlCharacters<T>;
+
+s64 format(IO* io, const SanitizeControlCharacters<char>& x);
+s64 format(IO* io, const SanitizeControlCharacters<String>& x);
 
 /* ============================================================================
  */ 
@@ -81,7 +86,6 @@ template<typename T>
 struct Hex
 {
   T& x;
-
   Hex(T& x) : x(x) {}
 };
 

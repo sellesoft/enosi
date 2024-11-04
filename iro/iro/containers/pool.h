@@ -46,7 +46,6 @@ struct Pool
     Chunk* next = nullptr;
     Slot   slots[N_slots_per_chunk];
   };
-  
 
   Chunk* current_chunk = nullptr;
   Slot*  free_slot = nullptr;

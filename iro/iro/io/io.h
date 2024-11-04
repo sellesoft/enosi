@@ -34,13 +34,6 @@ typedef iro::Flags<Flag> Flags;
 
 /* ============================================================================
  *  Base interface for input/output
- *
- *  TODO(sushi) try to make a trait that handles this behavior so we don't have 
- *              to use vtables to support this. Though I guess then we lose 
- *              dynamic dispatch? I dunno, maybe traits could do something with 
- *              virtual stuff to move the vtables off of the actual structures 
- *              implementing the behavior? I just dont like how this makes me 
- *              need to use 'new' but there's probably no escaping that.
  */
 struct IO
 {
@@ -48,7 +41,16 @@ struct IO
 
   // Writes the contents of 'slice' into this IO and returns the number of 
   // bytes written.
+  //
+  // Note that it is currently assumed that all IO is copy on write. A large 
+  // portion of the use of this function passes in pointers to stack.
   virtual s64 write(Bytes slice) = 0;
+
+  // Helper for directly writing out the data of a type.
+  void writeData(auto&& x)
+  {
+    write({(u8*)&x, sizeof(x)});
+  }
 
   // Reads the contents of this IO into the buffer at 'buffer.ptr' up to 
   // 'buffer.len' and returns the number of bytes read.

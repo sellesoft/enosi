@@ -14,21 +14,14 @@
 --
 -- 
 
+local Type = require "Type"
+
 --- A wrapper around Lua's table mostly just cause I don't like using 
 --- Lua's table as an array.
 ---
 ---@class List
 ---@field arr any[]?
-local List = {}
-
-List.__index = function(self, n)
-  if type(n) == "number" then
-    return rawget(self, "arr")[n]
-  end
-  return rawget(List, n)
-end
-
-setmetatable(List, List)
+local List = Type.make()
 
 local isList = function(x) return getmetatable(x) == List end
 
@@ -46,29 +39,21 @@ List.new = function(init)
     init = {}
   end
 
-  local o = {}
-  setmetatable(o, List)
-
   if isList(init) then
-    o.arr = {}
+    local o = setmetatable({}, List)
     for elem in init:each() do
       o:push(elem)
     end
+    return o
   else
-    o.arr = init
+    return setmetatable(init, List)
   end
-
-  return o
-end
-
-List.__call = function(self, init)
-  return List.new(init)
 end
 
 --- Returns the length of this List.
 ---@return number
 List.len = function(self)
-  return #self.arr
+  return #self
 end
 
 --- Test if this list is empty
@@ -77,19 +62,24 @@ List.isEmpty = function(self)
   return 0 == self:len()
 end
 
+--- Retrieves the last element of this List.
+List.last = function(self)
+  return self[#self]
+end
+
 --- Pushes the given element.
 ---@params elem T
 List.push = function(self, elem)
-  table.insert(self.arr, elem)
+  table.insert(self, elem)
   return self
 end
 
 List.pop = function(self)
-  return table.remove(self.arr)
+  return table.remove(self)
 end
 
 List.pushFront = function(self, elem)
-  table.insert(self.arr, 1, elem)
+  table.insert(self, 1, elem)
   return self
 end
 
@@ -100,15 +90,15 @@ end
 
 List.insert = function(self, idx, elem)
   if not elem then
-    table.insert(self.arr, idx)
+    table.insert(self, idx)
   else
-    table.insert(self.arr, idx, elem)
+    table.insert(self, idx, elem)
   end
   return self
 end
 
 List.remove = function(self, idx)
-  return table.remove(self.arr, idx)
+  return table.remove(self, idx)
 end
 
 --- Returns an iterator function that gives each element of 
@@ -124,7 +114,7 @@ List.each = function(self, f)
     if i > self:len() then
       return nil
     end
-    return self.arr[i]
+    return self[i]
   end
 
   if f then
@@ -150,7 +140,7 @@ List.eachReverse = function(self, f)
     if i == 0 then
       return nil
     end
-    return self.arr[i]
+    return self[i]
   end
 
   if f then
@@ -220,16 +210,18 @@ List.eachWithIndex = function(self, f)
   end
 end
 
-List.__concat = function(self, rhs)
-  assert(type(rhs) == "table" or isList(rhs), "List can only concat with tables or other Lists!")
-
-  local out = List(self)
-
-  for _,elem in rhs.arr or rhs do
-    out:push(elem)
+--- Skips elements until the callback returns true and returns the element 
+--- arrived. If the element is not found we return nil or the optional not
+--- found value.
+---@param f function
+---@param not_found_value any?
+List.skipUntil = function(self, f, not_found_value)
+  for e in self:each() do
+    if f(e) then
+      return e
+    end
   end
-
-  return out
+  return not_found_value
 end
 
 --- Apply function 'f' to each element of this List and return
@@ -240,7 +232,7 @@ end
 ---@param f function
 ---@return List
 List.map = function(self, f)
-  local new = List()
+  local new = List{}
   for e in self:each() do
     new:push(f(e))
   end

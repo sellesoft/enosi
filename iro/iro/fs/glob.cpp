@@ -40,7 +40,6 @@ void Globber::compilePattern()
 
   auto processPart = [&]()
   {
-
     if (start >= end)
       return;
 
@@ -123,6 +122,21 @@ void Globber::compilePattern()
   }
 
   processPart();
+
+  if (part_list.head->next == nullptr &&
+      last_part->kind == Part::Kind::MatchEntry)
+  {
+    // If we only have a single MatchEntry (eg. '*.cpp') inject a current
+    // directory part before it. This solves some issue in the actual 
+    // processing of parts where there's no initial directory to match
+    // the glob in. There is probably a better way to handle this (and 
+    // I think it even worked at one point?) but its been so long since 
+    // I worked on this I don't remember how it works (and its copied from
+    // Crystal, and looking back at their stuff to figure out if they handle
+    // this is not a fun task).
+    
+    pushPart(Part::Kind::ConstantDirectory, "."_str);
+  }
 }
 
 /* ------------------------------------------------------------------------------------------------

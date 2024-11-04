@@ -111,7 +111,33 @@ s64 format(IO* io, const char* x)
   return io->write(slice);
 }
 
-s64 format(IO* io, const SanitizeControlCharacters& x)
+static String getSanitizedCharacter(char c)
+{
+  switch (c)
+  {
+    case '\a': return "\\a"_str;
+    case '\b': return "\\b"_str;
+    case '\e': return "\\e"_str;
+    case '\f': return "\\f"_str;
+    case '\n': return "\\n"_str;
+    case '\r': return "\\r"_str;
+    case '\t': return "\\t"_str;
+    case '\v': return "\\v"_str;
+    case '\0': return "\\0"_str;
+  }
+  return nil;
+}
+
+s64 format(IO* io, const SanitizeControlCharacters<char>& x)
+{
+  String sanitized = getSanitizedCharacter(x.x);
+  if (isnil(sanitized))
+    return format(io, x.x);
+  else
+    return io->write(sanitized);
+}
+
+s64 format(IO* io, const SanitizeControlCharacters<String>& x)
 {
   StackArray<u8, 255> buffer;
   
@@ -133,24 +159,16 @@ s64 format(IO* io, const SanitizeControlCharacters& x)
   while (!s.isEmpty())
   {
     utf8::Codepoint c = s.advance();
-
-    switch (c.codepoint)
+    if (c.advance == 1)
     {
-      case '\a': write("\\a"_str); break;
-      case '\b': write("\\b"_str); break;
-      case '\e': write("\\e"_str); break;
-      case '\f': write("\\f"_str); break;
-      case '\n': write("\\n"_str); break;
-      case '\r': write("\\r"_str); break;
-      case '\t': write("\\t"_str); break;
-      case '\v': write("\\v"_str); break;
-      case '\0': write("\\0"_str); break;
-      default: {
-        // lol
-        utf8::Char ch = utf8::encodeCharacter(c.codepoint);
-        write({ch.bytes, ch.count});
-      } break;
+      String sanitized = getSanitizedCharacter(c.codepoint);
+      if (isnil(sanitized))
+        write(String::from((u8*)&c.codepoint, c.advance));
+      else
+        write(sanitized);
     }
+    else
+      write(String::from((u8*)&c.codepoint, c.advance));
   }
 
   if (buffer.len)

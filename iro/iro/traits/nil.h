@@ -127,25 +127,4 @@ constexpr Nil nil = Nil();
 //  inline static bool isNil(const NilOr<T>& x) { return NilValue<T>::isNil(x); }
 // };
 
-/* ----------------------------------------------------------------------------
- *  Some nil value definitions for the common types.
- */
-
-#define DefineTrivialNilValue(T, V) \
-  DefineNilValue(T, V, { return x == Value; })
-
-DefineTrivialNilValue(u8,   0);
-DefineTrivialNilValue(u16,  0);
-DefineTrivialNilValue(u32,  0);
-DefineTrivialNilValue(u64,  0);
-DefineTrivialNilValue(s8,   0);
-DefineTrivialNilValue(s16,  0);
-DefineTrivialNilValue(s32,  0);
-DefineTrivialNilValue(s64,  0);
-DefineTrivialNilValue(f32,  0.f);
-DefineTrivialNilValue(f64,  0.f);
-DefineTrivialNilValue(void*, nullptr);
-
-#undef DefineTrivialNilValue
-
 #endif

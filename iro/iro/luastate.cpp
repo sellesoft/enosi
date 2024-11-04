@@ -34,6 +34,10 @@ b8 LuaState::init()
 
 #undef addGlobalCFunc
 
+  if (!require("cdefs"_str))
+    return ERROR("failed to load cdefs module\n");
+  pop(); // Pop the boolean that will be left on the stack.
+
   return true;
 }
 
@@ -458,7 +462,7 @@ static void writeLuaValue(LuaState* L, io::IO* dest, int idx)
     break;
   default:
     io::formatv(dest, 
-        "<unhandle type in writeLuaValue: ", L->typeName(t), ">");
+        "<unhandled type in writeLuaValue: ", L->typeName(t), ">");
     break;
   }
 }
