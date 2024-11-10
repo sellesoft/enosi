@@ -1,0 +1,322 @@
+$ local cmn = require "common"
+
+@@lpp.import "asset/SourceDataParser.lh"
+@@lpp.import "asset/SourceDataFile.lh"
+
+#include "iro/logger.h"
+
+@cmn.defFileLogger(srcdata.parse, Info)
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SourceDataParser::init(SourceDataFile* file, io::IO* in)
+{
+  this->file = file;
+
+  if (!cache.open())
+    return ERROR("failed to open cache\n");
+
+  if (!scanner.init(in))
+    return ERROR("failed to init scanner\n");
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SourceDataParser::deinit()
+{
+  cache.close();
+}
+
+/* ============================================================================
+ */
+struct Token
+{
+  enum class Kind
+  {
+    Invalid,
+
+    Return,
+    Identifier,
+    String,
+    Number,
+
+    LBrace,
+    RBrace,
+
+    Comma,
+    Equal,
+
+    Eof,
+  };
+
+  Kind kind;
+
+  // When applicable. Strings are cached into the SourceDataFile.
+  String raw;
+
+  u64 line, column;
+};
+
+using TK = Token::Kind;
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SourceDataParser::parse()
+{
+  for (;;)
+  {
+    auto tok = nextToken();
+
+    switch (tok.kind)
+    {
+    case TK::Return:
+      if (!parseReturn())
+        return false;
+      return true;
+
+    case TK::Identifier:
+      if (!parseAuxData(tok))
+        return false;
+      break;
+
+    default:
+      return ERROR("expected auxillary data or return\n");
+    }
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SourceDataParser::parseAuxData(Token tok)
+{
+  SourceData* data = file->addAuxData();
+
+  if (!parseNamedOrPossiblyTypedData(data))
+    return false;
+
+  if (isnil(data->name))
+    return ERROR("aux data must be named\n");
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SourceDataParser::parseReturn()
+{
+  SourceData* data = file->addReturnData();
+  
+  if (!parsePossiblyTypedData(data))
+    return false;
+
+  auto tok = nextToken();
+  if (tok.kind != TK::Eof)
+    return ERROR("expected eof after return data\n");
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SourceDataParser::parsePossiblyTypedData(SourceData* data)
+{
+  auto tok = nextToken();
+  switch (tok.kind)
+  {
+  case TK::Identifier:
+    {
+      auto obj = data->setAsObject();
+      obj->type = tok.raw;
+
+      tok = nextToken();
+      if (tok.kind != TK::LBrace)
+        return ERROR("expected object data after typename\n");
+
+      if (!parseObjectData(obj))
+        return false;
+    }
+    break;
+
+  default:
+    if (!parseValueOrUntypedObject(tok, data))
+      return false;
+    break;
+  }
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SourceDataParser::parseObjectData(SourceDataObject* obj)
+{
+  SourceData* first = nullptr;
+
+  for (;;)
+  {
+    auto tok = nextToken();
+    if (tok.kind == TK::RBrace)
+      break;
+  
+    auto data = file->allocateSourceData();
+
+    if (!parseNamedOrPossiblyTypedData(data))
+      return false;
+
+    if (first == nullptr)
+    {
+      first = data;
+    }
+    else
+    {
+      if (isnil(first->name) != isnil(data->name))
+        return ERROR("named and unnamed source data cannot be mixed in "
+                     "objects\n");
+    }
+
+    obj->children.push(data);
+
+    tok = nextToken();
+    if (tok.kind != TK::Comma)
+    {
+      if (tok.kind != TK::RBrace)
+        return ERROR("expected ',' or '}'\n");
+      break;
+    }
+  }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SourceDataParser::parseNamedOrPossiblyTypedData(SourceData* data)
+{
+  return parseNamedOrPossiblyTypedData(nextToken(), data);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SourceDataParser::parseNamedOrPossiblyTypedData(Token tok, SourceData* data)
+{
+  switch (tok.kind)
+  {
+  case TK::Identifier:
+    {
+      auto id = tok;
+      tok = nextToken();
+      switch (tok.kind)
+      {
+      case TK::Equal:
+        data->name = id.raw;
+        if (!parsePossiblyTypedData(data))
+          return false;
+        break;
+
+      case TK::LBrace:
+        {
+          auto obj = data->setAsObject();
+          obj->type = id.raw;
+
+          if (!parseObjectData(obj))
+            return false;
+        }
+        break;
+
+      default: 
+        return ERROR("expected named or typed data\n");
+      }
+    }
+    break;
+
+  default:
+    if (!parseValueOrUntypedObject(tok, data))
+      return false;
+    break;
+  }
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SourceDataParser::parseValueOrUntypedObject(Token tok, SourceData* data)
+{
+  switch (tok.kind)
+  {
+  case TK::LBrace:
+    {
+      auto obj = data->setAsObject();
+
+      if (!parseObjectData(obj))
+        return false;
+    }
+    break;
+
+  case TK::Number:
+  case TK::String:
+    {
+      auto val = data->setAsValue();
+      val->val = tok.raw;
+    }
+    break;
+
+  default:
+    return ERROR("expected a value or object\n");
+  }
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Token SourceDataParser::nextToken()
+{
+  using TK = Token::Kind;
+
+  Token out = {};
+  out.kind = TK::Invalid;
+  out.raw = nil;
+
+  scanner.skipWhitespaceAndComments();
+
+  out.line = scanner.line;
+  out.column = scanner.column;
+
+  if (scanner.atFirstIdentifierChar())
+  {
+    auto id = scanner.scanIdentifier();
+    if (id == "return"_str)
+    {
+      out.kind = TK::Return;
+    }
+    else
+    {
+      out.kind = TK::Identifier;
+      out.raw = id.allocateCopy(&file->string_cache);
+    }
+  }
+  else if (scanner.at('"'))
+  {
+    out.kind = TK::String;
+    out.raw = scanner.scanString().allocateCopy(&file->string_cache);
+  }
+  else
+  {
+    switch (scanner.current())
+    {
+$$$
+local map = 
+{
+  LBrace = "{",
+  RBrace = "}",
+  Comma = ",",
+  Equal = "=",
+}
+$$$
+$ for k,v in pairs(map) do
+    case '$(v)': out.kind = TK::$(k); scanner.advance(); break;  
+$ end
+    }
+  }
+
+  return out;
+}

@@ -4,6 +4,7 @@
 
 $ local lpp = require "lpp"
 $ local reflect = require "reflection.Reflector"
+$ local SourceData = require "asset.SourceData"
 
 #include "iro/common.h"
 #include "iro/unicode.h"

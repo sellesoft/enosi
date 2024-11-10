@@ -1,0 +1,54 @@
+/*
+ *  Parser for source data.
+ */
+
+$ local cmn = require "common"
+
+#include "iro/common.h"
+#include "iro/unicode.h"
+#include "iro/memory/allocator.h"
+#include "iro/io/io.h"
+#include "iro/Scanner.h"
+
+using namespace iro;
+
+@@lpp.import "asset/SourceData.lh"
+
+using namespace iro;
+
+struct Token;
+struct SourceDataFile;
+
+/* ============================================================================
+ */
+struct SourceDataParser
+{
+  // Text cached during lexing. Should be cleared when we know we no longer
+  // need whatever is in it as we parse.
+  io::Memory cache;
+
+  // The file being parsed.
+  SourceDataFile* file;
+
+  // Input stream.
+  io::IO* in;
+
+  b8   init(SourceDataFile* file, io::IO* in);
+  void deinit();
+
+  b8 parse();
+
+private:
+
+  Scanner scanner;
+
+  b8 parseReturn();
+  b8 parseAuxData(Token tok);
+  b8 parsePossiblyTypedData(SourceData* data);
+  b8 parseObjectData(SourceDataObject* obj);
+  b8 parseNamedOrPossiblyTypedData(SourceData* data);
+  b8 parseNamedOrPossiblyTypedData(Token tok, SourceData* data);
+  b8 parseValueOrUntypedObject(Token tok, SourceData* data);
+
+  Token nextToken();
+};

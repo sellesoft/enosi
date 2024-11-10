@@ -5,7 +5,91 @@
 #include "iro/common.h"
 #include "iro/containers/array.h"
 
+struct SourceData;
+
+struct SourceDataValue
+{
+  String val = nil;
+};
+
+struct SourceDataObject
+{
+  String type = nil;
+  Array<SourceData*> children;
+
+  b8 init()
+  {
+    if (!children.init())
+      return false;
+    return true;
+  }
+
+  void deinit()
+  {
+    children.destroy();
+  }
+};
+
 struct SourceData
 {
-  
+  String name;
+
+  enum class Kind
+  {
+    Invalid,
+    Value,
+    Object,
+  };
+
+  Kind kind;
+
+  b8 isValue() const { return kind == Kind::Value; }
+  b8 isObject() const { return kind == Kind::Object; }
+
+  SourceDataValue* getAsValue()
+  {
+    assert(isValue());
+    return &data.value;
+  }
+
+  SourceDataObject* getAsObject()
+  {
+    assert(isObject());
+    return &data.object;
+  }
+
+  SourceDataValue* setAsValue()
+  {
+    if (isValue())
+      return &data.value;
+
+    if (isObject())
+      data.object.deinit();
+
+    kind = Kind::Value;
+    return new (&data.value) SourceDataValue;
+  }
+
+  SourceDataObject* setAsObject()
+  {
+    if (isObject())
+      return &data.object;
+
+    kind = Kind::Object;
+    new (&data.object) SourceDataObject;
+    data.object.init();
+    return &data.object;
+  }
+
+  SourceData() : kind(Kind::Invalid), data({}) {}
+
+private:
+
+  union
+  {
+    SourceDataValue value;
+    SourceDataObject object;
+  } data;
+
+
 };

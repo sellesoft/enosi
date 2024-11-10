@@ -1,0 +1,58 @@
+$ local cmn = require "common"
+
+@@lpp.import "asset/SourceDataFile.lh"
+
+#include "iro/logger.h"
+
+@cmn.defFileLogger(srcdata.file, Info)
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SourceDataFile::init()
+{
+  if (!string_cache.init())
+    return ERROR("failed to init string cache\n");
+
+  if (!data_pool.init())
+    return ERROR("failed to init data pool\n");
+
+  if (!aux_data_list.init())
+    return ERROR("failed to init aux data list\n");
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SourceDataFile::deinit()
+{
+  string_cache.deinit();
+  data_pool.deinit();
+  aux_data_list.deinit();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+SourceData* SourceDataFile::allocateSourceData()
+{
+  return data_pool.add();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+SourceData* SourceDataFile::addAuxData()
+{
+  auto out = allocateSourceData();
+  aux_data_list.pushTail(out);
+  return out;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+SourceData* SourceDataFile::addReturnData()
+{
+  assert(returned_data == nullptr);
+  returned_data = allocateSourceData();
+  return returned_data;
+}
+

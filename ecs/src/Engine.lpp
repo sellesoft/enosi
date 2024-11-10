@@ -23,6 +23,9 @@ using namespace iro;
 @@lpp.import "game/Component.lh"
 @@lpp.import "game/Entity.lh"
 @@lpp.import "game/Transform.comp.lh"
+@@lpp.import "asset/SourceDataParser.lh"
+@@lpp.import "asset/SourceDataFile.lh"
+
 
 static Logger logger = 
   Logger::create("ecs.eng"_str, Logger::Verbosity::Info);
@@ -155,6 +158,16 @@ b8 Engine::init()
   @inspector.style.set.background_color(0x446fbfff);
 
   INFO("done!\n");
+
+  fs::File test = 
+    fs::File::from("assets/fonts/gohu.font"_str, 
+      fs::OpenFlag::Read);
+
+  SourceDataFile sfile;
+  sfile.init();
+  SourceDataParser sparse;
+  sparse.init(&sfile, &test);
+  sparse.parse();
 
   return true;
 }
