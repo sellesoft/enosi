@@ -42,7 +42,27 @@ end
 Parser.errorHere = function(self, ...)
   local line, column = 
     lpp.getLineAndColumnFromOffset(self.file_offset + self.offset - 1)
-  error("\nat "..line..":"..column..": "..makeStr(...), 2)
+
+  local scan = self.offset
+
+  print(scan)
+
+  while true do
+    if self.text:sub(scan,scan) == "\n" or
+       scan == 1
+    then
+      break
+    end
+
+    scan = scan - 1
+  end
+
+  local start,stop = self.text:find("[^\n]+", scan)
+  print(start, stop)
+
+  error("\nat "..line..":"..column..": "..makeStr(...).."\n"..
+        self.text:sub(start, stop).."\n"..
+        (" "):rep(column).."^", 2)
 end
 
 -- * --------------------------------------------------------------------------

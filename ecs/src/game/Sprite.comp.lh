@@ -1,0 +1,19 @@
+/*
+ *  Component used for displaying an entity as a sprite.
+ */
+
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local Comp = require "game.Component"
+
+@@lpp.import "game/Component.lh"
+
+#include "Color.h"
+#include "math/vec.h"
+
+@Comp.def(Sprite,
+{
+  vec2f size;
+  Color color;
+})
+

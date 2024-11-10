@@ -15,6 +15,9 @@ $ local reflect = require "reflection.Reflector"
 using namespace iro;
 
 #include "math/vec.h"
+#include "math/mat.h"
+
+@@lpp.import "graphics/Geo.lh"
 
 struct Engine;
 struct Window;
@@ -60,6 +63,10 @@ struct Buffer
       u64 stride,
       u64 offset);
 
+  // Sets the vertex attributes of this buffer to gfx's default 
+  // Vertex/Index stuff.
+  void setGfxAttributes();
+
   void map();
   void unmap();
 };
@@ -78,6 +85,7 @@ struct DrawCmd
     PushUniformVec2,
     PushUniformFloat,
     PushUniformBool,
+    PushUniformMat3x2,
   };
 
   Kind kind;
@@ -109,12 +117,15 @@ struct DrawCmd
         vec2f v;
         f32 f;
         b8 b;
+        mat3x2 m;
       };
     } push_uniform;
   };
 
   DrawCmd() : kind(Kind::Invalid), bind_buffer() {}
 };
+
+static Pool<Buffer>::Chunk __test;
 
 /* ============================================================================
  */
@@ -152,6 +163,7 @@ struct Renderer
   void pushUniformVec2(String name, vec2f v);
   void pushUniformFloat(String name, f32 f);
   void pushUniformBool(String name, b8 b);
+  void pushUniformMat3x2(String name, const mat3x2& m);
   
   Renderer() {}
 

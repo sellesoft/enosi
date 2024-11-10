@@ -17,9 +17,14 @@ $ local reflect = require "reflection.Reflector"
 @@lpp.import "asset/AssetMgr.lh"
 @@lpp.import "asset/Font.lh"
 
+@@lpp.import "game/GameMgr.lh"
+
 #include "event/BroadcastEventBus.h"
 
-struct Font;
+namespace ui
+{
+struct Inspector;
+}
 
 struct Engine
 {
@@ -41,6 +46,10 @@ struct Engine
   TimePoint start_time;
 
   hr::Reloader* reloader;
+
+  ui::Inspector* inspector;
+
+  GameMgr gamemgr;
 
   b8 init();
   void deinit();

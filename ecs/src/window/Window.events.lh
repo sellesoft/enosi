@@ -6,7 +6,7 @@ $ local reflect = require "reflection.Reflector"
 @reflect.include "input/Keys.h"
 @reflect.include "math/vec.h"
 
-@event WindowResized
+@event.broad(WindowResized,
 {
   vec2f size;
-};
+})

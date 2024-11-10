@@ -65,10 +65,7 @@ b8 Font::compileTTF(CompileParams& params)
   // Initialize font info.
   stbtt_fontinfo info = {};
   if (!stbtt_InitFont(&info, raw, 0))
-  {
-    ERROR("stbtt_InitFont failed\n");
-    return nil;
-  }
+    return ERROR("stbtt_InitFont failed\n");
 
 	//Codepoint Ranges to Load:
 	// ASCII              32 - 126  ~  94 chars

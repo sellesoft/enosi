@@ -31,6 +31,56 @@ struct TextBreak
 typedef SmallArray<TextBreak, 64> TextBreaks;
 
 /* ============================================================================
+ *  Helper for rendering text.
+ */
+struct TextRenderer
+{
+  String text;
+
+  vec2f size;
+  TextBreaks breaks;
+
+  Font* font;
+  f32 font_height;
+  f32 tab_spaces;
+  f32 max_width;
+  u32 wrap;
+  Color color;
+
+  void init(
+      String text,
+      Font* font,
+      f32 font_height,
+      f32 tab_spaces,
+      f32 max_width,
+      u32 wrap,
+      Color color)
+  {
+    this->text = text;
+    this->font = font;
+    this->font_height = font_height;
+    this->tab_spaces = tab_spaces;
+    this->max_width = max_width;
+    this->wrap = wrap;
+    this->color = color;
+  }
+
+  void deinit()
+  {
+    text = nil;
+    breaks.deinit();
+  }
+
+  void findTextBreaks();
+
+  // Draws text at the given position. This overload will call findTextBreaks
+  // internally with the provided information. If it has already been called,
+  // eg. in the case where the text size needed to be known before hand, you
+  // may use the following overload instead.
+  void draw(UI* ui, vec2f pos, DrawCmd* dc);
+};
+
+/* ============================================================================
  *  General text state for use by widgets that need to display text.
  */
 struct TextState
@@ -48,41 +98,38 @@ struct TextState
 
   DrawCmd* dc;
 
+  TextRenderer* renderer;
+
+  void cacheRenderer();
+
+  void initRenderer(
+    f32 font_height,
+    f32 tab_spaces,
+    f32 max_width,
+    u32 wrap,
+    Color color);
+
+  void freeRenderer();
+
+  void draw(UI* ui, vec2f pos);
+
   b8   init(UI* ui, String init);
   void deinit();
 
   void checkFont(String name, UI* ui);
 
-  void allocDrawCmd(DrawCmd* dc);
-  
-  void findTextBreaks(
-    vec2f*      size, 
-    TextBreaks* breaks,
-    f32         font_height,
-    f32         tab_spaces,
-    f32         max_width,
-    u32         wrap);
+  operator io::IO*() { return &buffer; }
 
-  // Draws text at the given position. This overload will call findTextBreaks
-  // internally with the provided information. If it has already been called,
-  // eg. in the case where the text size needed to be known before hand, you
-  // may use the following overload instead.
-  void draw(
-    UI*      ui,
-    vec2f    pos,
-    Color    text_color,
-    f32      font_height,
-    f32      tab_spaces,
-    f32      max_width,
-    u32      wrap);
+  void clear()
+  {
+    buffer.clear();
+  }
 
-  // Draws text at the given position using the precomputed text breaks 
-  // as would be given by findTextBreaks.
-  void draw(
-    UI*               ui,
-    vec2f             pos,
-    Color             text_color,
-    const TextBreaks& breaks);
+  void set(String s)
+  {
+    clear();
+    buffer.write(s);
+  }
 };
 
 
@@ -115,6 +162,8 @@ struct
   virtual void evaluate(UI* ui) override;
 
   virtual void generate(UI* ui) override;
+
+  virtual void update(UI* ui, UpdateReason reason) override;
 
   virtual void cleanup() override;
 

@@ -63,7 +63,7 @@ ui.widget = function(name, ...)
       local buf = buffer.new()
       buf:put("one of:\n")
       for k in pairs(switch) do
-        buf:put(" ",k)
+        buf:put(" ",k,"\n")
       end
       return buf:get()
     end

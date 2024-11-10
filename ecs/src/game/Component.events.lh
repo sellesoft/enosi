@@ -1,0 +1,7 @@
+/*
+ *  Events relevant to all Components.
+ */
+
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local Event = require "event.Event"

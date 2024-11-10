@@ -6,7 +6,7 @@ $ local reflect = require "reflection.Reflector"
 @reflect.include "input/Keys.h"
 @reflect.include "math/vec.h"
 
-@event PreReload {};
-@event PostReload {};
+@event.broad(PreReload, {})
+@event.broad(PostReload, {});
 
 

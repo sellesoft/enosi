@@ -1,0 +1,11 @@
+/*
+ *  Internal representation of our source data format.
+ */
+
+#include "iro/common.h"
+#include "iro/containers/array.h"
+
+struct SourceData
+{
+  
+};

@@ -1,3 +1,8 @@
+/*
+ *  Definition of Vertex and Index types used for drawing as well as helpers
+ *  for drawing primitives.
+ */
+
 $ local lpp = require "lpp"
 $ local reflect = require "reflection.Reflector"
 $ local List = require "list"
@@ -5,7 +10,7 @@ $ local List = require "list"
 #include "math/vec.h"
 #include "Color.h"
 
-namespace ui
+namespace gfx
 {
 
 struct Vertex
@@ -235,6 +240,7 @@ $ end
 
 
 $$$
+    -- TODO(sushi) this data is kinda useless.
     local i = 
     {
       [4] = 

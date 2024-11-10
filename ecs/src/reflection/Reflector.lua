@@ -34,6 +34,10 @@ end
 ---@field ctx Ctx
 local Reflect = {}
 
+Reflect.createContext = function()
+  return lpp.clang.createContext(args)
+end
+
 -- Create the clang context.
 Reflect.ctx = lpp.clang.createContext(args)
 

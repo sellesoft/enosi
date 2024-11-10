@@ -1,0 +1,101 @@
+/*
+ *  Base of Components.
+ */
+
+
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local ui = require "ui.UI"
+
+#include "iro/common.h"
+#include "iro/unicode.h"
+#include "iro/containers/linked_pool.h"
+
+using namespace iro;
+
+@@lpp.import "game/EntityId.lh"
+
+struct CompPools;
+
+/* ============================================================================
+ */
+struct Component
+{
+  u64 kind = 0;
+  EntityId owner = nil;
+  
+  static u64 getKind(const Component* cmp) { return cmp->kind; }
+
+  b8 is(u64 kind) const { return this->kind == kind; }
+
+  b8 init(u64 kind)
+  {
+    assert(kind != 0);
+
+    this->kind = kind;
+    
+    return true;
+  }
+};
+
+DefineNilValue(Component, {0}, { return x.kind == 0; });
+
+template<typename T>
+u64 getComponentKind();
+
+template<typename T>
+struct ComponentIterState
+{
+  typedef SLinkedPool<T>::Node Node;
+
+  Node* node;
+
+  Node* operator++()
+  {
+    node = node->next;
+    return node;
+  }
+
+  b8 operator !=(const ComponentIterState<T>& rhs)
+  {
+    return node != rhs.node;
+  }
+
+  T* operator->()
+  {
+    return node->data;
+  }
+
+  T& operator *()
+  {
+    return *node->data;
+  }
+};
+
+/* ============================================================================
+ */
+template<typename T>
+struct ComponentIter
+{
+  typedef SLinkedPool<T>::Node Node;
+  Node* start;
+
+  ComponentIterState<T> begin() { return ComponentIterState<T>{start}; }
+  ComponentIterState<T> end() { return ComponentIterState<T>{nullptr}; }
+};
+
+/* ============================================================================
+ */
+struct ComponentMgr
+{
+  CompPools* pools;
+
+  b8 init();
+
+  template<typename T>
+  T* allocateComponent();
+
+  template<typename T>
+  ComponentIter<T> iterate();
+};
+

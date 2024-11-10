@@ -1,0 +1,19 @@
+/*
+ *  Entity system for rendering entities containing renderable components.
+ */
+
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+#include "iro/common.h"
+
+namespace gfx { struct Buffer; }
+struct GameMgr;
+
+struct RenderSys
+{
+  gfx::Buffer* gfxbuf;
+
+  b8 init(GameMgr& gamemgr);
+  b8 update(GameMgr& gamemgr);
+};

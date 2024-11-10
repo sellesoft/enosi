@@ -1,0 +1,99 @@
+
+#include "iro/common.h"
+
+template<typename T, u64 size>
+struct IndexedPool
+{
+  struct Slot
+  {
+    Slot* next_free = nullptr;
+    u32 salt = 0;
+    T elem = {};
+
+    b8 isUsed()
+    {
+      return next_free == (Slot*)(-1);
+    }
+
+    void setUsed()
+    {
+      next_free = (Slot*)(-1);
+    }
+  };
+
+  Slot* pool = nullptr;
+  Slot* next_free = nullptr;
+
+  b8 init()
+  {
+    pool = mem::stl_allocator.constructArray<Slot>(size);
+    mem::zero(pool, sizeof(Slot) * size);
+    
+    next_free = pool;
+    for (u32 i = 0; i < size; ++i)
+    {
+      Slot* slot = pool + i;
+      if (i != size-1)
+        slot->next_free = slot + 1;
+    }
+
+    return true;
+  }
+
+  void deinit()
+  {
+    mem::stl_allocator.free(pool);
+    // TODO(sushi) actual clean up
+  }
+
+  T* add()
+  {
+    Slot* next = next_free;
+    if (next == nullptr)
+      return nullptr;
+
+    next_free = next->next_free;
+
+    next->salt += 1;
+    next->setUsed();
+
+    return &next->elem;
+  }
+
+  Slot* getSlotFromElem(T* e) const
+  {
+    return (Slot*)((u8*)e - offsetof(Slot, elem));
+  }
+
+  void remove(T* e)
+  {
+    Slot* slot = getSlotFromElem(e);
+
+    assert(slot->isUsed());
+
+    slot->next_free = next_free;
+    next_free = slot;
+  }
+
+  void formId(T* e, u32* value, u32* salt) const
+  {
+    Slot* slot = getSlotFromElem(e);
+    assert(slot->isUsed());
+
+    *value = slot - pool + 1;
+    *salt = slot->salt;
+  }
+
+  T* getFromId(u32 value, u32 salt) const
+  {
+    if (value == 0)
+      return nullptr;
+
+    Slot* slot = pool + value - 1;
+
+    assert(slot->isUsed());
+    assert(slot->salt == salt);
+
+    return &slot->elem;
+  }
+};

@@ -87,6 +87,8 @@ b8 Renderer::init(Engine& engine)
 
   this->engine = &engine;
 
+  frame = 0;
+
   INFO("done!\n");
   
   return true;
@@ -178,6 +180,31 @@ b8 Renderer::update()
             shader_program, 
             (char*)cmd.push_uniform.name.ptr);
         glUniform1i(loc, cmd.push_uniform.b);
+      }
+      break;
+
+    case DrawCmd::Kind::PushUniformMat3x2:
+      {
+        TRACE("pushing bool uniform ", cmd.push_uniform.name, "\n");
+        u32 loc = 
+          glGetUniformLocation(
+            shader_program, 
+            (char*)cmd.push_uniform.name.ptr);
+
+        auto& m = cmd.push_uniform.m;
+
+        f32 extended[3*3] = 
+        {
+          m.get(0,0), m.get(0,1), 0.f,
+          m.get(1,0), m.get(1,1), 0.f,
+          m.get(2,0), m.get(2,1), 1.f,
+        };
+
+        glUniformMatrix3fv(
+          loc,
+          1,
+          GL_FALSE,
+          extended);
       }
       break;
     }
@@ -489,6 +516,17 @@ void Renderer::pushUniformBool(String name, b8 b)
 
 /* ----------------------------------------------------------------------------
  */
+void Renderer::pushUniformMat3x2(String name, const mat3x2& m)
+{
+  DrawCmd cmd;
+  cmd.kind = DrawCmd::Kind::PushUniformMat3x2;
+  cmd.push_uniform.name = name;
+  cmd.push_uniform.m = m;
+  drawcmds.push(cmd);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 static void setAttrib(
     u32 bufferidx, 
     u32 idx, 
@@ -535,6 +573,18 @@ void Buffer::setF32AttribU8(
 {
   glBindVertexArray(vao);
   setAttrib(vbo, idx, len, GL_UNSIGNED_BYTE, normalized, stride, offset);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Buffer::setGfxAttributes()
+{
+  setF32AttribF32(
+      0, 2, false, sizeof(Vertex), offsetof(Vertex, pos));
+  setF32AttribF32(
+      1, 2, false, sizeof(Vertex), offsetof(Vertex, uv));
+  setF32AttribU8(
+      2, 4, true,  sizeof(Vertex), offsetof(Vertex, color));
 }
 
 /* ----------------------------------------------------------------------------

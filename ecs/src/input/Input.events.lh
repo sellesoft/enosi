@@ -6,33 +6,33 @@ $ local reflect = require "reflection.Reflector"
 @reflect.include "input/Keys.h"
 @reflect.include "math/vec.h"
 
-@event KeyPressed
+@event.broad(KeyPressed,
 {
   Key key;
-};
+})
 
-@event KeyReleased
+@event.broad(KeyReleased,
 {
   Key key;
-};
+})
 
-@event MouseScroll
+@event.broad(MouseScroll,
 {
   f32 scroll;
-};
+})
 
-@event MouseMoved
+@event.broad(MouseMoved,
 {
   vec2f window_pos;
   vec2f screen_pos;
-};
+})
 
-@event MousePressed
+@event.broad(MousePressed,
 {
   MouseButton button;
-};
+})
 
-@event MouseReleased
+@event.broad(MouseReleased,
 {
   MouseButton button;
-};
+})

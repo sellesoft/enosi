@@ -1,7 +1,121 @@
 /*
  *  Debug tool for inspecting the state of the Engine.
  */
-
 $ local lpp = require "lpp"
 $ local reflect = require "reflection.Reflector"
 $ local ui = require "ui.UI"
+
+#include "iro/common.h"
+#include "iro/unicode.h"
+#include "iro/containers/avl.h"
+#include "iro/memory/bump.h"
+
+@@lpp.import "ui/UI.lh"
+
+struct Engine;
+
+namespace ui
+{
+
+struct TypeState;
+struct MemState;
+struct TreeWorkingData;
+
+/* ============================================================================
+ */
+struct AddressSet
+{
+  struct Elem
+  {
+    void* addr;
+    void* state;
+  };
+
+  typedef AVL<Elem, [](const Elem* elem) { return (u64)elem->addr; }> Map;
+
+  Pool<Elem> pool;
+  Map map;
+
+  b8 init()
+  {
+    if (!pool.init()) return false;
+    if (!map.init()) return false;
+    return true;
+  }
+
+  void deinit()
+  {
+    pool.deinit();
+    map.deinit();
+  }
+
+  template<typename T>
+  b8 getOrCreateState(void* addr, void** out_state, mem::Allocator* allocator);
+};
+
+/* ============================================================================
+ */
+@ui.widget(InspectorEngineTree,
+schema
+{
+  font = inherit;
+  font_height = inherit;
+  text_color = inherit;
+},
+struct
+{
+  Engine* eng = nullptr;
+
+  f32 max_name_width = 0.f;
+  f32 max_value_width = 0.f;
+
+  TypeState* tstate = nullptr;
+  MemState* mem_state = nullptr;
+  TreeWorkingData* wdata = nullptr;
+
+  void* current_state;
+  u64   current_type;
+  void* current_addr;
+  Font* font;
+
+  AddressSet addresses;
+  mem::LenientBump states;
+
+  vec2f content_pos;
+  vec2f content_size;
+  
+  static InspectorEngineTree* create(UI& ui, Engine* engine);
+
+  b8 focusAddress(UI& ui, void* addr, u64 type_idx);
+
+  template<typename T>
+  b8 focusAddress(UI& ui, T* addr);
+
+  virtual void evaluate(UI* ui) override;
+  virtual void generate(UI* ui) override;
+  virtual void reportDrawCmds(
+    UI* ui, 
+    DrawCmdList& pre, 
+    DrawCmdList& post) override;
+
+  virtual void update(UI* ui, UpdateReason reason) override;
+})
+
+/* ============================================================================
+ */
+@ui.widget(Inspector,
+schema
+{
+  font = inherit;
+  font_height = inherit;
+  text_color = inherit;
+},
+struct
+{
+  InspectorEngineTree* tree;
+
+  static Inspector* create(UI& ui, Engine* engine);
+  void destroy();
+})
+
+}

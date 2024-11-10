@@ -1,0 +1,384 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local ui = require "ui.UI"
+
+@@lpp.import "ui/widgets/Text.lh"
+@@lpp.import "ui/UI.lh"
+@@lpp.import "Engine.lh"
+
+#include "iro/containers/SmallArray.h"
+
+static Logger logger = 
+  Logger::create("ui.text"_str, Logger::Verbosity::Info);
+
+namespace ui
+{
+
+/* ----------------------------------------------------------------------------
+ *  Search for locations in the text buffer where we need to perform line 
+ *  breaks. This is done in generation and evaluation.
+ */
+void TextRenderer::findTextBreaks()
+{
+  if (breaks.isInit())
+    return;
+
+  breaks.init();
+
+  $ local Text = ui.widgets.Text.schema
+
+  b8 should_wrap = wrap != @Text.wrap.none;
+
+  breaks.push({0, {0.f, 0.f}});
+
+  String scan = text;
+  String last_space_or_tab = scan;
+
+  // Cache off space width since its used in a couple places.
+  PackedChar space_char;
+  font->getPackedChar(&space_char, ' ');
+  f32 space_width = space_char.xadvance;
+
+  f32 width_since_last_word = 0.f;
+  vec2f offset = {};
+
+  while (scan.len)
+  {
+    utf8::Codepoint cp = scan.advance();
+    switch (cp.codepoint)
+    {
+    case '\n':
+      width_since_last_word = 0.f;
+      offset.y += font_height;
+      offset.x = 0.f;
+      breaks.push({scan.ptr - text.ptr, offset});
+      break;
+
+    case '\t':
+      width_since_last_word = 0.f;
+      offset.x += tab_spaces * space_width;
+      last_space_or_tab = scan;
+      breaks.push({scan.ptr - text.ptr, offset});
+      break;
+
+    case ' ':
+      width_since_last_word = 0.f;
+      last_space_or_tab = scan;
+      offset.x += space_width;
+      break;
+
+    default:
+      {
+        PackedChar c;
+        font->getPackedChar(&c, cp.codepoint);
+        width_since_last_word += c.xadvance;
+        offset.x += c.xadvance;
+      }
+      break;
+    }
+
+    if (offset.x > max_width)
+    {
+      switch (wrap)
+      {
+      case @Text.wrap.char:
+        offset.x = 0.f;
+        offset.y += font_height;
+
+        if (cp.codepoint == '\t')
+        {
+          breaks.last()->placement = {0.f, offset.y};
+        }
+        else
+        {
+          s64 prev_offset = scan.ptr - cp.advance - text.ptr;
+          if (prev_offset > breaks.last()->offset)
+          {
+            breaks.push({prev_offset, offset});
+          }
+          else if (prev_offset == breaks.last()->offset)
+          {
+            breaks.last()->placement = { 0.f, offset.y };
+          }
+        }
+        {
+          PackedChar pc;
+          font->getPackedChar(&pc, cp.codepoint);
+          offset.x = pc.xadvance;
+        }
+        break;
+
+      case @Text.wrap.word:
+        offset.x = 0.f;
+        offset.y += font_height;
+        {
+          s64 offset_from_last_space = 
+            last_space_or_tab.ptr - text.ptr;
+          if (offset_from_last_space == breaks.last()->offset)
+          {
+            breaks.last()->placement = offset;
+          }
+          else if (offset_from_last_space > breaks.last()->offset)
+          {
+            breaks.push({offset_from_last_space, offset});
+          }
+        }
+        offset.x = width_since_last_word;
+        break;
+      }
+    }
+    size.x = max(size.x, offset.x);
+    size.y = offset.y + font_height;
+  }
+  breaks.push({ s64(text.len), offset });
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void TextRenderer::draw(
+    UI*      ui,
+    vec2f    pos,
+    DrawCmd* dc)
+{
+  findTextBreaks();
+
+  vec2i counts = {};
+
+  u32 nchars = text.countCharacters();
+  vec2i nucounts = gfx::putFilledRectCounts() * nchars;
+  auto [vp, ip] = dc->realloc(ui, nucounts);
+  dc->tex = &font->texture;
+  
+  vec2f cursor = pos;
+  FontData* font_data = font->data;
+
+  for (s32 breakidx = 0; breakidx < breaks.len - 1; ++breakidx)
+  {
+    auto this_break = breaks[breakidx];
+    auto next_break = breaks[breakidx+1];
+    cursor = this_break.placement + pos;
+    for (s32 charidx = 0; 
+         charidx < next_break.offset - this_break.offset; 
+         ++charidx)
+    {
+      PackedChar pc;
+      font->getPackedChar(&pc, *(text.ptr + this_break.offset + charidx));
+
+      auto uv0 = 
+        vec2f(f32(pc.x0) / font_data->size_x, f32(pc.y0) / font_data->size_y);
+      auto uv1 = 
+        vec2f(f32(pc.x1) / font_data->size_x, f32(pc.y1) / font_data->size_y);
+
+      counts += 
+        gfx::putFilledRect(
+          vp, 
+          ip, 
+          counts, 
+          cursor, 
+          vec2f(pc.x1 - pc.x0, pc.y1 - pc.y0),
+          { uv0.x, uv1.y },
+          { uv1.x, uv1.y },
+          { uv1.x, uv0.y },
+          { uv0.x, uv0.y },
+          color);
+
+      cursor.x += pc.xadvance;
+    }
+  }
+
+  dc->counts_used = counts;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 TextState::init(UI* ui, String init)
+{
+  if (!buffer.open())
+  {
+    ERROR("failed to open text buffer\n");
+    return false;
+  }
+
+  dc = ui->drawcmds.add();
+  if (notnil(init))
+  {
+    dc->alloc(ui, gfx::putFilledRectCounts() * init.countCharacters());
+    buffer.write(init);
+  }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void TextState::deinit()
+{
+  buffer.close();
+  font = nullptr;
+  font_name = nil;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void TextState::checkFont(String name, UI* ui)
+{
+  if (font == nullptr)
+  {
+    DEBUG("font not loaded yet\n");
+
+    if (name == "null"_str)
+    {
+      WARN("evaluate called on a Text item with a null font set\n");
+      return;
+    }
+
+    DEBUG("item specifies font ", name, "\n");
+
+    font = ui->fontlib.findOrLoadFont(
+      name,
+      ui->eng->assetmgr,
+      ui->eng->renderer);
+
+    DEBUG("loaded font at ", font, "\n");
+    
+    if (font ==nullptr)
+    {
+      ERROR("evaluate called on a Text item with font '", name, "' ",
+            "but the font failed to load\n");
+      return;
+    }
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void TextState::draw(UI* ui, vec2f pos)
+{
+  renderer->draw(ui, pos, dc);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void TextState::cacheRenderer()
+{
+  if (renderer)
+    mem::stl_allocator.free(renderer);
+  renderer = mem::stl_allocator.construct<TextRenderer>();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void TextState::initRenderer(
+    f32 font_height,
+    f32 tab_spaces,
+    f32 max_width,
+    u32 wrap,
+    Color color)
+{
+  assert(renderer);
+
+  renderer->init(
+    buffer.asStr(),
+    font,
+    font_height,
+    tab_spaces,
+    max_width,
+    wrap,
+    color);
+
+  renderer->findTextBreaks();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void TextState::freeRenderer()
+{
+  if (renderer)
+  {
+    renderer->deinit();
+    mem::stl_allocator.free(renderer);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+Text* UI::make(String id, String init)
+{
+  Text* text = mem::stl_allocator.construct<Text>();
+  if (!initItem(id, text))
+  {
+    mem::stl_allocator.free(text);
+    return nullptr;
+  }
+
+  if (!text->state.init(this, init))
+  {
+    mem::stl_allocator.free(text);
+    return nullptr;
+  }
+
+  $ local text = ui.createItemContext("Text", "text")
+  @text.style.set.sizing(auto);
+
+  return text;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Text::evaluate(UI* ui)
+{
+  $ local text = ui.createItemContext("Text", "this")
+  $ local style = text.style
+
+  @@style:lookup(
+    font,
+    wrap,
+    font_height,
+    tab_spaces,
+    text_color)
+
+  state.checkFont(@style.font, ui);
+
+  Item* parent = node->parent->data;
+  $ local parent = ui.createItemContext("Item", "parent")
+
+  @@parent.style:lookup(
+    margin, 
+    border, 
+    padding)
+
+  state.cacheRenderer();
+
+  state.initRenderer(
+    @style.font_height,
+    @style.tab_spaces,
+    @parent.getPaddedWidth,
+    @style.wrap,
+    @style.text_color);
+
+  size = state.renderer->size;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Text::generate(UI* ui)
+{
+  state.draw(ui, pos_screen);
+  state.freeRenderer();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Text::update(UI* ui, UpdateReason reason)
+{
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Text::cleanup()
+{
+  state.deinit();
+}
+
+}

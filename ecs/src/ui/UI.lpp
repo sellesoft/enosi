@@ -3,8 +3,8 @@ $ local reflect = require "reflection.Reflector"
 $ local ui = require "ui.UI"
 
 @@lpp.import "ui/UI.lh"
-@@lpp.import "ui/Geo.lh"
 @@lpp.import "Engine.lh"
+@@lpp.import "Engine.events.lh"
 @@lpp.import "graphics/Renderer.lh"
 @@lpp.import "window/Window.lh"
 @@lpp.import "window/Window.events.lh"
@@ -81,16 +81,11 @@ b8 UI::init(Engine& engine)
   if (!buffer)
     return ERROR("failed to create gfx::Buffer\n");
   if (!buffer->init(
-        sizeof(ui::Vertex) * 8224, 
-        sizeof(ui::Index) * 4096))
+        sizeof(gfx::Vertex) * 0xffffff, 
+        sizeof(gfx::Index) * 0xffffff))
     return ERROR("failed to init gfx::Buffer\n");
 
-  buffer->setF32AttribF32(
-      0, 2, false, sizeof(ui::Vertex), offsetof(ui::Vertex, pos));
-  buffer->setF32AttribF32(
-      1, 2, false, sizeof(ui::Vertex), offsetof(ui::Vertex, uv));
-  buffer->setF32AttribU8(
-      2, 4, true,  sizeof(ui::Vertex), offsetof(ui::Vertex, color));
+  buffer->setGfxAttributes();
 
   // NOTE(sushi) I do not like making root manually here but in order
   //             to not have to put a branch in make just to handle this
@@ -114,6 +109,7 @@ b8 UI::init(Engine& engine)
   vertex_next = index_next = 0;
 
   engine.subscribeToBroadcast<WindowResized>(this, &UI::onWindowResized);
+  engine.subscribeToBroadcast<PostReload>(this, &UI::onPostReload);
 
   // Store a reference to the engine incase widgets need to access 
   // information from it.
@@ -143,26 +139,42 @@ b8 UI::update(Engine& engine)
   TRACE("  binding buffer ", buffer, "\n");
   renderer.pushBindBuffer(buffer);
 
-  renderer.pushUniformVec2(
-    "scale"_str,
-    { 2.f / engine.window.size.x, -2.f / engine.window.size.y });
+  // renderer.pushUniformVec2(
+  //   "scale"_str,
+  //   { 2.f / engine.window.size.x, -2.f / engine.window.size.y });
 
-  renderer.pushUniformVec2(
-    "translation"_str,
-    { -1.f, 1.f });
+  // renderer.pushUniformVec2(
+  //   "translation"_str,
+  //   { -1.f, 1.f });
+
+  mat3x2 proj, view;
+  mat3x2::calcScreenMatrices(engine.window.size, &proj, &view);
+
+  mat3x2 model = 
+    mat3x2::createTransform(
+      vec2f(0.f, 0.f),
+      0.f);
+
+  renderer.pushUniformMat3x2("proj"_str, proj);
+  renderer.pushUniformMat3x2("view"_str, view);
+  renderer.pushUniformMat3x2("model"_str, model);
 
   renderer.pushSetScissor(vec2i(0,0), vec2i(window.size.x, window.size.y));
 
   TRACE("  mapping buffer\n");
   buffer->map();
 
+  temp_alloc.init();
+
   updateTree(root->node);
+
+  temp_alloc.deinit();
   
   TRACE("  unmapping buffer\n");
   buffer->unmap();
 
   // idk
-  buffer->num_indexes = buffer->index_size / sizeof(Index);
+  buffer->num_indexes = buffer->index_size / sizeof(gfx::Index);
   
   if (scrolling_item)
   {
@@ -284,14 +296,15 @@ void UI::updateTree(ItemNode* node)
   //             sucks. Maybe try storing a map from item to cached 
   //             information about it that we need here? Sorta defeats the 
   //             purpose of the style map stuff though.
-  @@style:lookup(margin, border, update_triggers)
+  @@style:lookup(margin, border)
   
 $ local tryUpdate = function(reason, cond)
-  if ($(style.update_triggers.test(reason)) && ($(cond or "true")))
+  if (item->update_triggers.test(UpdateReason::$(reason)) && 
+      ($(cond or "true")))
     item->update(this, UpdateReason::$(reason));
 $ end
 
-  @tryUpdate(DirtyBeforeEval, item->dirty)
+  @tryUpdate(Start)
 
   if (item->isHovered(this, Item::HoverKind::Topmost))
   {
@@ -333,7 +346,7 @@ $ end
     genItemBranch(sspar);
   }
 
-  @tryUpdate(DirtyAfterEval)
+  @tryUpdate(Fin)
 
   vec2f scoff;
   vec2f scext;
@@ -450,8 +463,6 @@ $ end
 
   auto emitDrawCmds = [&](DrawCmdList& drawcmds)
   {
-     renderer.pushSetScissor(
-      vec2i(scoff.x, window.size.y - (scoff.y+scext.y)), scext);
 
     TRACE("pushing draw cmds \n");
 
@@ -461,13 +472,18 @@ $ end
 
   if (item_in_view)
   {
+     renderer.pushSetScissor(
+      vec2i(scoff.x, window.size.y - (scoff.y+scext.y)), scext);
+
     // Emit background if we have one.
     if (item->builtin.background)
       emitDrawCmd(item->builtin.background);
 
     // Ask the Item if it has any drawcmds.
     DrawCmdList precmds;
+    precmds.init();
     DrawCmdList postcmds;
+    postcmds.init();
     item->reportDrawCmds(this, precmds, postcmds);
 
     // Emit pre-children commands.
@@ -480,6 +496,10 @@ $ end
       for (ItemNode* child = node->first_child; child; child = child->next)
         updateTree(child);
     }
+
+    // Children likely changed scissor, so we have to set it back.
+    renderer.pushSetScissor(
+      vec2i(scoff.x, window.size.y - (scoff.y+scext.y)), scext);
 
     // Emit post-children commands.
     if (postcmds.len != 0)
@@ -1063,7 +1083,7 @@ void UI::genItemBranch(ItemNode* node)
     if (item->builtin.background == nullptr)
     {
       item->builtin.background = drawcmds.add();
-      item->builtin.background->alloc(this, putFilledRectCounts());
+      item->builtin.background->alloc(this, gfx::putFilledRectCounts());
     }
 
     auto [vp, ip] = item->builtin.background->getPtrs(this);
@@ -1071,14 +1091,14 @@ void UI::genItemBranch(ItemNode* node)
     vec2i sum = {};
 
     sum += 
-      putFilledRect(
+      gfx::putFilledRect(
         vp,
         ip,
         sum,
         item->pos_screen + 
         @item.style.margin.top_left + 
         @item.style.padding.top_left,
-        @item.getPaddedArea,
+        @item.getBorderedArea,
         @item.style.background_color);
 
     item->builtin.background->counts_used = sum;
@@ -1090,14 +1110,14 @@ void UI::genItemBranch(ItemNode* node)
     if (item->builtin.borders == nullptr)
     {
       item->builtin.borders = drawcmds.add();
-      item->builtin.borders->alloc(this, putBordersCounts());
+      item->builtin.borders->alloc(this, gfx::putBordersCounts());
     }
 
     vec2i sum = {};
     auto [vp, ip] = item->builtin.borders->getPtrs(this);
 
     sum +=
-      putBorders(
+      gfx::putBorders(
         vp,
         ip,
         sum,
@@ -1120,7 +1140,7 @@ void UI::genItemBranch(ItemNode* node)
     {
       // Allocate draw information for this item's scrollbars.
       item->builtin.scrollbars = drawcmds.add();
-      item->builtin.scrollbars->alloc(this, putFilledRectCounts() * 4);
+      item->builtin.scrollbars->alloc(this, gfx::putFilledRectCounts() * 4);
     }
 
     @@item.style:lookup(
@@ -1144,7 +1164,7 @@ void UI::genItemBranch(ItemNode* node)
         &handle_pos, &handle_size);
 
       sum += 
-        putFilledRect(
+        gfx::putFilledRect(
           vp,
           ip,
           sum,
@@ -1153,7 +1173,7 @@ void UI::genItemBranch(ItemNode* node)
           @item.style.scrollbar_color);
 
       sum += 
-        putFilledRect(
+        gfx::putFilledRect(
           vp,
           ip,
           sum,
@@ -1170,7 +1190,7 @@ void UI::genItemBranch(ItemNode* node)
         &handle_pos, &handle_size);
 
       sum += 
-        putFilledRect(
+        gfx::putFilledRect(
           vp,
           ip,
           sum,
@@ -1179,7 +1199,7 @@ void UI::genItemBranch(ItemNode* node)
           @item.style.scrollbar_color);
 
       sum += 
-        putFilledRect(
+        gfx::putFilledRect(
           vp,
           ip,
           sum,
@@ -1225,6 +1245,13 @@ void UI::onWindowResized(WindowResized& event)
 {
   $ local root = ui.createItemContext("Item", "root")
   @root.style.set.size(event.size);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::onPostReload(PostReload& _)
+{
+  root->dirty = true;
 }
 
 }

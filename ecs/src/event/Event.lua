@@ -2,36 +2,94 @@ local lpp = require "lpp"
 local reflect = require "reflection.Reflector"
 local List = require "list"
 local CGen = require "cgen"
+local buffer = require "string.buffer"
 
-local ctx = reflect.ctx
+local log = require "logger" ("event", Verbosity.Info)
 
 local Event = {}
 Event.list = List{}
 Event.map = {}
 
+Event.events =
+{
+  comp = 
+  {
+    list = List{},
+    map = {},
+  },
+  broad = 
+  {
+    list = List{},
+    map = {}
+  }
+}
+
+Event.comp = function(name, def)
+  if Event.events.comp.map[name] then
+    error("event with name '"..name.."' already defined")
+  end
+  Event.events.comp.map[name] = def
+  Event.events.comp.list:push { name=name, def=def }
+
+  local start, stop = def:find("%b{}")
+  if not start then
+    log:fatal("expected a def")
+    os.exit(1)
+  end
+
+  def = def:sub(start+1,stop-1)
+
+  local buf = buffer.new()
+
+  buf:put("struct ", name, "\n{\n", def)
+  buf:put("\n};\n")
+
+  return buf:get()
+end
+
+Event.broad = function(name, def)
+  if Event.events.broad.map[name] then
+    error("event with name '"..name.."' already defined")
+  end
+  Event.events.broad.map[name] = def
+  Event.events.broad.list:push { name=name, def=def }
+
+  local start, stop = def:find("%b{}")
+  if not start then
+    log:fatal("expected a def")
+    os.exit(1)
+  end
+
+  def = def:sub(start+1,stop-1)
+
+  local buf = buffer.new()
+
+  buf:put("struct ", name, "\n{\n", def)
+  buf:put("\n};\n")
+
+  return buf:get()
+end
+
 setmetatable(Event,
 {
-  __call = function(self)
-    local sec = assert(lpp.getSectionAfterMacro(),
-      "attempt to create an Event but no section follows.")
+  __call = function(self, name, def)
+    self.map[name] = def
+    self.list:push{ name=name, def=def }
 
-    -- Insert missing 'struct'
-    sec:insertString(0, "struct ")
+    local start, stop = def:find("%b{}")
+    if not start then
+      log:fatal("expected a def")
+      os.exit(1)
+    end
 
-    ctx:loadString(sec:getString())
+    def = def:sub(start+1,stop-1)
 
-    -- Why the hell am I using clang to parse this?
-    local result = ctx:parseTopLevelDecl()
+    local buf = buffer.new()
 
-    local decl = assert(result.decl,
-      "failed to parse event")
+    buf:put("struct ", name, "\n{\n", def)
+    buf:put("\n};\n")
 
-    local declname = decl:name()
-        
-    -- print("registering event "..declname)
-
-    self.map[declname] = decl
-    self.list:push{ name=declname, decl=decl }
+    return buf:get()
   end
 })
 

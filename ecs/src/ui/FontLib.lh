@@ -11,7 +11,6 @@ $ local ui = require "ui.UI"
 @@lpp.import "asset/Font.lh"
 
 struct AssetMgr;
-struct Graphics;
 
 namespace gfx
 {

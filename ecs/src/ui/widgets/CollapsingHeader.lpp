@@ -2,7 +2,7 @@ $ local lpp = require "lpp"
 $ local reflect = require "reflection.Reflector"
 $ local ui = require "ui.UI"
 
-@@lpp.import "ui/CollapsingHeader.lh"
+@@lpp.import "ui/widgets/CollapsingHeader.lh"
 @@lpp.import "ui/UI.lh"
 @@lpp.import "Engine.lh"
 
@@ -32,15 +32,7 @@ CollapsingHeader* UI::make(String id, String init)
     return nullptr;
   }
 
-  $ local ch = ui.createItemContext("CollapsingHeader", "ch")
-
-  // TODO(sushi) remove this from Style and make it just straight flags
-  //             on Item. It doesn't make sense anymore for someone to define
-  //             this property when writing UI because they have to override
-  //             the update method to utilize it. The ability for the user
-  //             to hook into these things should be provided by widgets 
-  //             eg. Button.
-  @ch.style.set.update_triggers(MouseReleased);
+  ch->update_triggers = UpdateReason::MouseReleased;
 
   return ch;
 }
@@ -69,17 +61,24 @@ vec2f CollapsingHeader::getMinSize(UI* ui)
  */
 void CollapsingHeader::update(UI* ui, UpdateReason reason)
 {
-  $ local this = ui.createItemContext("CollapsingHeader", "this")
-  @@this.style:lookup(header_height)
-
-  vec2f mpos = ui->eng->input.mouse.window;
-  if (math::pointInRect(
-        ui->eng->input.mouse.window,
-        pos_screen,
-        vec2f(size.x, @this.style.header_height)))
+  switch (reason)
   {
-    open = !open;
-    dirty = true;
+  case UpdateReason::MouseReleased:
+    {
+      $ local this = ui.createItemContext("CollapsingHeader", "this")
+      @@this.style:lookup(header_height)
+
+      vec2f mpos = ui->eng->input.mouse.window;
+      if (math::pointInRect(
+            ui->eng->input.mouse.window,
+            pos_screen,
+            vec2f(size.x, @this.style.header_height)))
+      {
+        open = !open;
+        dirty = true;
+      }
+    }
+    break;
   }
 }
 
@@ -109,7 +108,7 @@ void CollapsingHeader::generate(UI* ui)
     if (header_bg == nullptr)
     {
       header_bg = ui->drawcmds.add();
-      header_bg->alloc(ui, putFilledRectCounts());
+      header_bg->alloc(ui, gfx::putFilledRectCounts());
     }
 
     auto [vp, ip] = header_bg->getPtrs(ui);
@@ -117,7 +116,7 @@ void CollapsingHeader::generate(UI* ui)
     vec2i sum = {};
 
     sum +=
-      putFilledRect(
+      gfx::putFilledRect(
         vp,
         ip,
         sum,
@@ -141,7 +140,7 @@ void CollapsingHeader::generate(UI* ui)
     if (content_bg == nullptr)
     {
       content_bg = ui->drawcmds.add();
-      content_bg->alloc(ui, putFilledRectCounts());
+      content_bg->alloc(ui, gfx::putFilledRectCounts());
     }
 
     auto [vp, ip] = content_bg->getPtrs(ui);
@@ -149,7 +148,7 @@ void CollapsingHeader::generate(UI* ui)
     vec2i sum = {};
 
     sum +=
-      putFilledRect(
+      gfx::putFilledRect(
         vp,
         ip,
         sum,
@@ -160,21 +159,17 @@ void CollapsingHeader::generate(UI* ui)
     content_bg->counts_used = sum;
   }
 
-  vec2f text_size = {};
-  TextBreaks breaks;
-  if (!breaks.init())
-  {
-    ERROR("failed to initialize text breaks\n");
-    return;
-  }
+  header_text.cacheRenderer();
+  defer { header_text.freeRenderer(); };
 
-  header_text.findTextBreaks(
-    &text_size,
-    &breaks,
+  header_text.initRenderer(
     @this.style.font_height,
     1.f,
     999.f,
-    @Text.wrap.none);
+    @Text.wrap.none,
+    @this.style.text_color);
+
+  vec2f text_size = header_text.renderer->size;
 
   auto text_pos = vec2f(
     cpos.x + @this.style.header_text_align.x * (csiz.x - text_size.x),
@@ -182,11 +177,7 @@ void CollapsingHeader::generate(UI* ui)
       @this.style.header_text_align.y * 
       (@this.style.header_height - text_size.y));
   
-  header_text.draw(
-    ui,
-    text_pos,
-    @this.style.text_color,
-    breaks);
+  header_text.draw(ui,text_pos);
 }
 
 /* ----------------------------------------------------------------------------

@@ -7,10 +7,11 @@ in vec4 in_col;
 layout (location = 0) out vec4 out_col;
 layout (location = 1) out vec2 out_uv;
 
-uniform vec2  scale;
-uniform vec2  translation;
-uniform float rotation;
-uniform bool  has_texture;
+uniform bool has_texture;
+
+uniform mat3 view;
+uniform mat3 proj;
+uniform mat3 model;
 
 void main()
 {
@@ -21,10 +22,7 @@ void main()
   else
     out_uv = vec2(-1.f, -1.f);
 
-  vec2 pos = scale * in_pos + translation;
+  vec3 pos = proj * view * model * vec3(in_pos, 1.f);
 
-  pos.x = pos.x * cos(rotation) - pos.y * sin(rotation);
-  pos.y = pos.y * sin(rotation) + pos.y * cos(rotation);
-
-  gl_Position = vec4(pos.x, pos.y, 0.0, 1.0);
+  gl_Position = vec4(pos.xy, 0.0, 1.0);
 }

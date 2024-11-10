@@ -1,0 +1,14 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local comp = require "game.Component"
+
+@@lpp.import "game/Component.lh"
+
+#include "math/vec.h"
+
+@comp.def(Transform,
+{
+  vec2f pos = {};
+  f32   rotation = 0.f;
+})
+

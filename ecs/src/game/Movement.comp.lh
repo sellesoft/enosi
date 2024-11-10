@@ -1,0 +1,14 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local comp = require "game.Component"
+
+@@lpp.import "game/Component.lh"
+
+#include "math/vec.h"
+
+@comp.def(Movement,
+{
+  f32 speed = 0.1f;
+
+  vec2f input = {0,0};
+})

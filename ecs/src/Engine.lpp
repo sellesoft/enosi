@@ -9,17 +9,20 @@ $ local ui = require "ui.UI"
 using namespace iro;
 
 // Introduce events and the event bus definitions.
-@@lpp.import "input/Input.events.lh"
-@@lpp.import "window/Window.events.lh"
-@@lpp.import "Engine.events.lh"
 @@lpp.import "event/BroadcastEventBus.lh"
 
 @@lpp.import "asset/Font.lh"
 
-@@lpp.import "ui/Text.lh"
-@@lpp.import "ui/Button.lh"
-@@lpp.import "ui/Separator.lh"
-@@lpp.import "ui/CollapsingHeader.lh"
+@@lpp.import "ui/widgets/Text.lh"
+@@lpp.import "ui/widgets/Button.lh"
+@@lpp.import "ui/widgets/Separator.lh"
+@@lpp.import "ui/widgets/CollapsingHeader.lh"
+
+@@lpp.import "ui/Inspector.lh"
+
+@@lpp.import "game/Component.lh"
+@@lpp.import "game/Entity.lh"
+@@lpp.import "game/Transform.comp.lh"
 
 static Logger logger = 
   Logger::create("ecs.eng"_str, Logger::Verbosity::Info);
@@ -88,6 +91,18 @@ namespace ui
 
 ui::Demo demo;
 
+
+$ local initSystem = function(act, name)
+    {
+      INFO("initializing $(name)\n");
+      auto start = TimePoint::now();
+      if (!$(act))
+        return ERROR("failed to initialize $(name)\n");
+      INFO("finished initializing $(name) in ", 
+           WithUnits(TimePoint::now() - start), "\n");
+    }
+$ end
+
 /* ----------------------------------------------------------------------------
  */ 
 b8 Engine::init()
@@ -95,33 +110,21 @@ b8 Engine::init()
   INFO("initializing engine...\n");
   start_time = TimePoint::now();
 
-  if (!eventbus.broadcast.init())
-    return ERROR("failed to initialize broadcast event bus\n");
-
-  if (!Window::initializeBackend())
-    return ERROR("failed to initialize window backend\n");
-
-  if (!window.init("ecs"_str))
-    return ERROR("failed to initialize window\n");
-
-  if (!renderer.init(*this))
-    return ERROR("failed to initialize renderer\n");
-
-  if (!assetmgr.init(4096, &mem::stl_allocator))
-    return ERROR("failed to initialize assetmgr\n");
-
-  if (!input.init(*this))
-    return ERROR("failed to initialize input\n");
-
-  if (!ui.init(*this))
-    return ERROR("failed to initialize ui\n");
+  @initSystem(eventbus.broadcast.init(),                broadcast event bus);
+  @initSystem(Window::initializeBackend(),              window backend);
+  @initSystem(window.init("ecs"_str),                   window);
+  @initSystem(renderer.init(*this),                     renderer);
+  @initSystem(assetmgr.init(4096, &mem::stl_allocator), assetmgr);
+  @initSystem(input.init(*this),                        input);
+  @initSystem(ui.init(*this),                           ui);
+  @initSystem(gamemgr.init(this),                       gamemgr);
 
   reloader = hr::createReloader();
   if (reloader == nullptr)
     return ERROR("failed to create hot reloader\n");
 
   INFO("done initializing in ", 
-    (TimePoint::now() - start_time).toSeconds(), "s\n");
+    WithUnits(TimePoint::now() - start_time), "\n");
 
   CodepointRange ascii =
   {
@@ -141,7 +144,15 @@ b8 Engine::init()
 
   Font::compileBDF(params);
 
-  demo.place(ui);
+  // demo.place(ui);
+
+  inspector = ui::Inspector::create(ui, this);
+
+  $ local inspector = ui.createItemContext("Inspector", "inspector")
+
+  @inspector.style.set.size({400, 500});
+  @inspector.style.set.padding({5,5,5,5});
+  @inspector.style.set.background_color(0x446fbfff);
 
   INFO("done!\n");
 
@@ -154,6 +165,8 @@ b8 Engine::checkReload()
 {
   if (!input.wasKeyPressed(Key::R))
     return true;
+
+  eventbus.broadcast.raise<PreReload>({});
 
   io::StaticBuffer<32> patchnumbuf;
   patchnumbuf.open();
@@ -194,8 +207,9 @@ b8 Engine::checkReload()
   if (!hr::doReload(reloader, context, &result))
     return ERROR("failed to reload symbols\n");
 
-  return true;
+  eventbus.broadcast.raise<PostReload>({});
 
+  return true;
 }
 
 /* ----------------------------------------------------------------------------
@@ -211,37 +225,15 @@ b8 Engine::update()
   if (!renderer.update())
     return ERROR("failed to update renderer\n");
 
-  auto ch = demo.root.collapsingheader0.item;
-
-  if (input.scroll != 0.f)
-  {
-    ch->dirty = true;
-    ch->scroll.y += input.scroll;
-    ch->scroll.y = min(max(ch->scroll.y, ch->max_scroll.y), 0.f);
-  }
-
   if (!input.update(*this))
     return ERROR("failed to update input\n");
 
-  // f32 t = (TimePoint::now() - start_time).toSeconds();
-
-  // ch->scroll.y = (sin(t) + 1.f) / 2.f * ch->max_scroll.y;
-  // ch->dirty = true;
-
-  auto hi = demo.root.hovered_info;
-
-  if (ui.hovered)
-  {
-    hi->state.buffer.clear();
-    io::formatv(&hi->state.buffer, "hello!!!\n",
-        "item: ", ui.hovered->name,
-      "\n  vs: ", ui.hovered->visible_size, 
-      "\n  mp: ", input.mouse.window, "\n");
-    hi->dirty = true;
-  }
-
   if (!ui.update(*this))
     return ERROR("failed to update ui\n");
+
+  gamemgr.update();
+
+  // ui.root->dirty = true;
 
   return true;
 }

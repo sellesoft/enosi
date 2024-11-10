@@ -1,0 +1,91 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local ui = require "ui.UI"
+$ local Comp = require "game.Component"
+$ local glob = require "Glob"
+$ local buffer = require "string.buffer"
+$ local List = require "list"
+$ local util = require "util"
+
+#include "iro/logger.h"
+#include "iro/containers/linked_pool.h"
+
+using namespace iro;
+
+static Logger logger =
+  Logger::create("cmp"_str, Logger::Verbosity::Info);
+
+@@lpp.import "game/Component.lh"
+
+$ local buf = buffer.new()
+$ glob "src/game/**/*.comp.lh" :each(function(path)
+$   local result = lpp.import(path:sub(#"src/"+1))
+$   if result then
+$     buf:put(result)
+$   end
+$ end)
+$(buf:get())
+
+$ Comp.sort()
+
+struct CompPools
+{
+
+$ for comp in Comp.components.list:each() do
+  SLinkedPool<$(comp.name)> $(comp.name)_pool;
+$ end
+
+  b8 init()
+  {
+$ for comp in Comp.components.list:each() do
+    if (!$(comp.name)_pool.init())
+      return ERROR("failed to init $(comp.name) component pool\n");
+$ end
+    return true;
+  }
+
+  template<typename T>
+  T* allocateComponent();
+};
+
+$ for comp,i in Comp.components.list:eachWithIndex() do
+
+template<>
+u64 getComponentKind<$(comp.name)>()
+{
+  return $(i);
+}
+
+template<>
+$(comp.name)* ComponentMgr::allocateComponent<$(comp.name)>()
+{
+  auto* cmp = pools->$(comp.name)_pool.push()->data;
+  cmp->init();
+  return cmp;
+}
+
+template<>
+ComponentIter<$(comp.name)> ComponentMgr::iterate<$(comp.name)>()
+{
+  return ComponentIter<$(comp.name)>{pools->$(comp.name)_pool.headNode()};
+}
+
+b8 $(comp.name)::init()
+{
+  return Component::init($(i)); 
+}
+
+$ end
+
+
+b8 ComponentMgr::init()
+{
+  pools = mem::stl_allocator.construct<CompPools>();
+
+  if (!pools->init())
+    return false;
+
+  return true;
+}
+
+

@@ -1,0 +1,35 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+@@lpp.import "Engine.lh"
+@@lpp.import "input/InputMgr.lh"
+@@lpp.import "game/Mind.sys.lh"
+@@lpp.import "game/Movement.comp.lh"
+
+b8 MindSys::update(GameMgr& gamemgr)
+{
+  if (isnil(attached))
+    return true;
+
+  Engine& engine = *gamemgr.engine;
+  InputMgr& input = engine.input;
+  EntityMgr& entmgr = gamemgr.entmgr;
+  
+  Entity* attached_ent = entmgr.getEntity(attached);
+  auto* movement = attached_ent->tryComp<Movement>();
+  if (movement == nullptr)
+    return true;
+
+  if (input.isKeyDown(Key::W))
+    movement->input.y += 1.f;
+  if (input.isKeyDown(Key::S))
+    movement->input.y -= 1.f;
+  if (input.isKeyDown(Key::D))
+    movement->input.x += 1.f;
+  if (input.isKeyDown(Key::A))
+    movement->input.x -= 1.f;
+
+  movement->input.normalize();
+
+  return true;
+}

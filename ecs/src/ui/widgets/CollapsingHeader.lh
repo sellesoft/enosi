@@ -8,7 +8,7 @@ $ local reflect = require "reflection.Reflector"
 $ local ui = require "ui.UI"
 
 @@lpp.import "ui/Item.lh"
-@@lpp.import "ui/Text.lh"
+@@lpp.import "ui/widgets/Text.lh"
 
 namespace ui
 {

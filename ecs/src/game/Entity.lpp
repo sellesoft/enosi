@@ -1,0 +1,43 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local ui = require "ui.UI"
+
+@@lpp.import "game/Entity.lh"
+
+#include "iro/logger.h"
+
+static Logger logger = 
+  Logger::create("entity"_str, Logger::Verbosity::Info);
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Entity::init(String name)
+{
+  this->name = name;
+
+  if (!components.init())
+    return ERROR("failed to initialize component map for entity ", name, "\n");
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Entity::deinit()
+{
+  components.deinit();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Entity::addComp(Component* cmp)
+{
+  assert(isnil(cmp->owner));
+
+  if (components.find(cmp->kind))
+    return false;
+
+  components.insert(cmp);
+
+  return true;
+}

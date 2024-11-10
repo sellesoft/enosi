@@ -1,10 +1,22 @@
 $ local lpp = require "lpp"
-$ local event = require "event.Event"
+$ local Event = require "event.Event"
 $ local beb = require "event.BroadcastEventBus"
+$ local glob = require "Glob"
+$ local buffer = require "string.buffer"
+
+// Import all event def files.
+$ local importEvents = function()
+$   local buf = buffer.new()
+$   glob "**/*.events.lh" :each(function(eventpath)
+$     buf:put(lpp.import(eventpath:sub(5)))
+$   end)
+$   return buf:get()
+$ end
+@@importEvents
 
 struct BroadcastEventBusData
 {
-$ event.list:each(function(event)
+$ Event.events.broad.list:each(function(event)
 $ local e = event.name
   struct $(e)Subscriber
   {
@@ -16,37 +28,4 @@ $ local e = event.name
 $ end)
 };
 
-$ event.list:each(function(event)
-$ local e = event.name
-template<>
-void BroadcastEventBus::subscribeTo<$(e)>(
-  void* subscriber, 
-  void (*callback)(void*, $(e)&))
-{
-  auto* sub = data->$(e)Subscriber_pool.add();
-  sub->subscriber = subscriber;
-  sub->callback = callback;
-  data->$(e)Subscriber_list.push(sub);
-}
 
-template<>
-void BroadcastEventBus::raise<$(e)>($(e)& event) const
-{
-  for (auto& sub : data->$(e)Subscriber_list)
-  {
-    sub.callback(sub.subscriber, event);
-  }
-}
-$ end)
-
-b8 BroadcastEventBus::init()
-{
-  data = (BroadcastEventBusData*)mem::stl_allocator.allocate(
-    sizeof(BroadcastEventBusData));
-$ event.list:each(function(event)
-$ local e = event.name
-  if (!data->$(e)Subscriber_list.init()) return false;
-  if (!data->$(e)Subscriber_pool.init()) return false;
-$ end)
-  return true;
-}

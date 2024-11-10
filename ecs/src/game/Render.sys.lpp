@@ -1,0 +1,92 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+@@lpp.import "game/Render.sys.lh"
+@@lpp.import "game/GameMgr.lh"
+@@lpp.import "ui/UI.lh"
+@@lpp.import "graphics/Renderer.lh"
+@@lpp.import "Engine.lh"
+@@lpp.import "game/Sprite.comp.lh"
+@@lpp.import "game/Transform.comp.lh"
+
+#include "iro/logger.h"
+
+static Logger logger = 
+  Logger::create("rendersys"_str, Logger::Verbosity::Info);
+
+b8 RenderSys::init(GameMgr& gamemgr)
+{
+  gfx::Renderer& renderer = gamemgr.engine->renderer;
+
+  gfxbuf = renderer.createBuffer();
+  if (!gfxbuf)
+    return ERROR("failed to create gfx::Buffer\n");
+  if (!gfxbuf->init(
+        sizeof(gfx::Vertex) * 0xffffff, 
+        sizeof(gfx::Index) * 0xffffff))
+    return ERROR("failed to init gfx::Buffer\n");
+
+  gfxbuf->setGfxAttributes();
+
+  return true;
+}
+
+b8 RenderSys::update(GameMgr& gamemgr)
+{
+  Engine& engine = *gamemgr.engine;
+  gfx::Renderer& renderer = engine.renderer;
+  ComponentMgr& cmpmgr = gamemgr.cmpmgr;
+  EntityMgr& entmgr = gamemgr.entmgr;
+  EyeSys& eye = gamemgr.eye;
+
+  renderer.pushBindBuffer(gfxbuf);
+
+  mat3x2 view;
+  eye.getViewMat(&view);
+
+  auto proj = mat3x2::identity();
+  proj.set(0, 0, EyeSys::pixels_per_meter * 2.f / engine.window.size.x);
+  proj.set(1, 1, EyeSys::pixels_per_meter * 2.f / engine.window.size.y);
+
+  renderer.pushUniformMat3x2("proj"_str, proj);
+  renderer.pushUniformMat3x2("view"_str, view);
+
+  gfxbuf->map();
+
+  auto vp = (gfx::Vertex*)gfxbuf->mapped.vp;
+  auto ip = (gfx::Index*)gfxbuf->mapped.ip;
+
+  vec2i sum = {};
+
+  for (Sprite& sprite : cmpmgr.iterate<Sprite>())
+  {
+    Entity* owner = entmgr.getEntity(sprite.owner);
+
+    if (auto* transform = owner->tryComp<Transform>())
+    {
+      mat3x2 tm = 
+        mat3x2::createTransform(
+          vec2f(0,0),
+          0.f);
+
+      renderer.pushUniformMat3x2("model"_str, tm);
+
+      sum +=
+        gfx::putFilledRect(
+          vp,
+          ip,
+          sum,
+          transform->pos,
+          vec2f(1,1),
+          0xff00004f);
+    }
+  }
+
+  gfxbuf->unmap();
+
+  gfxbuf->num_indexes = gfxbuf->index_size / sizeof(gfx::Index);
+
+  renderer.pushDraw(0, sum.y, 0);
+
+  return true;
+}

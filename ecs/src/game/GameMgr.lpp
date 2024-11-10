@@ -1,0 +1,77 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+@@lpp.import "game/GameMgr.lh"
+@@lpp.import "game/Transform.comp.lh"
+@@lpp.import "game/Sprite.comp.lh"
+@@lpp.import "game/Movement.comp.lh"
+
+#include "iro/logger.h"
+
+using namespace iro;
+
+static Logger logger = 
+  Logger::create("gamemgr"_str, Logger::Verbosity::Info);
+
+b8 GameMgr::init(Engine* eng)
+{
+  INFO("initializing\n");
+  SCOPED_INDENT;
+
+  engine = eng;
+
+  if (!entmgr.init())
+    return ERROR("failed to initialize entity mgr\n");
+
+  if (!cmpmgr.init())
+    return ERROR("failed to initialize component mgr\n");
+
+  if (!rendersys.init(*this))
+    return ERROR("failed to initialize render sys\n");
+
+$ local makeEnt = function(name, pos)
+  auto $(name) = entmgr.createEntity("$(name)"_str);
+  {
+    auto t = cmpmgr.allocateComponent<Transform>();
+    auto s = cmpmgr.allocateComponent<Sprite>();
+    auto mov = cmpmgr.allocateComponent<Movement>();
+
+    entmgr.addComp($(name), mov); 
+    entmgr.addComp($(name), t);
+    entmgr.addComp($(name), s);
+
+    t->pos = $(pos);
+  }
+$ end
+
+  @makeEnt(player, {0.f,0.f});
+  mindsys.attach(player);
+  eye.attach(player);
+
+  @makeEnt(thing, {5.f, 5.f});
+  @makeEnt(thing2, {-5.f, 10.f});
+
+  return true;
+}
+
+void GameMgr::deinit()
+{
+  entmgr.deinit();
+}
+
+b8 GameMgr::update()
+{
+  if (!mindsys.update(*this))
+    return false;
+
+  if (!movesys.update(*this))
+    return false;
+
+  if (!eye.update(*this))
+    return false;
+
+  if (!rendersys.update(*this))
+    return false;
+
+  return true;
+}

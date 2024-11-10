@@ -1,0 +1,90 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+@@lpp.import "game/EntityMgr.lh"
+
+static Logger logger = 
+  Logger::create("entmgr"_str, Logger::Verbosity::Info);
+
+b8 EntityMgr::init()
+{
+  INFO("initializing\n");
+  SCOPED_INDENT;
+
+  if (!ent_pool.init())
+    return ERROR("failed to init entity pool\n");
+
+  INFO("done!\n");
+  return true;
+}
+
+void EntityMgr::deinit()
+{
+  ent_pool.deinit();
+  // TODO(sushi) actual clean up 
+}
+
+EntityId EntityMgr::createEntity(String name)
+{
+  Entity* ent = ent_pool.add();
+  ent->init(name);
+
+  EntityId id = {};
+  ent_pool.formId(ent, &id.value, &id.salt);
+
+  DEBUG("created entity ", name, " (", id.value, ":", id.salt, ")\n");
+
+  return id;
+}
+
+void EntityMgr::destroyEntity(EntityId id)
+{
+  if (isnil(id))
+    return;
+
+  Entity* ent = ent_pool.getFromId(id.value, id.salt);
+  if (ent == nullptr)
+    return;
+
+  DEBUG(
+    "destroying entity ", ent->name,
+    " (", id.value, ":", id.salt, ")\n");
+
+  ent->deinit();
+
+  ent_pool.remove(ent);
+}
+
+Entity* EntityMgr::getEntity(EntityId id) const
+{
+  if (isnil(id))
+    return nullptr;
+
+  return ent_pool.getFromId(id.value, id.salt);
+}
+
+b8 EntityMgr::addComp(Entity* ent, EntityId id, Component* cmp) const
+{
+  assert(isnil(cmp->owner));
+
+  if (ent->components.find(cmp->kind))
+    return false;
+
+  cmp->owner = id;
+  ent->components.insert(cmp);
+
+  return true;
+}
+
+b8 EntityMgr::addComp(Entity* ent, Component* cmp) const
+{
+  EntityId id;
+  ent_pool.formId(ent, &id.value, &id.salt);
+
+  return addComp(ent, id, cmp);
+}
+
+b8 EntityMgr::addComp(EntityId id, Component* cmp) const
+{
+  return addComp(getEntity(id), id, cmp);
+}

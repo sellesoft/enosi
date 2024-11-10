@@ -6,7 +6,7 @@ $ local reflect = require "reflection.Reflector"
 #include "iro/Pair.h"
 #include "math/vec.h"
 
-@lpp.import "ui/Geo.lh"
+@lpp.import "graphics/Geo.lh"
 
 using namespace iro;
 
@@ -33,10 +33,11 @@ struct DrawCmd
   Pair<s32, b8> findIndex(UI* ui);
 
   void alloc(UI* ui, vec2i counts);
-  Pair<Vertex*, Index*> realloc(UI* ui, vec2i counts);
+  Pair<gfx::Vertex*, gfx::Index*> realloc(UI* ui, vec2i counts);
   void remove(UI* ui);
 
-  Pair<Vertex*, Index*> getPtrs(UI* ui);
+  Pair<gfx::Vertex*, gfx::Index*> getPtrs(UI* ui);
 };
 
 }
+

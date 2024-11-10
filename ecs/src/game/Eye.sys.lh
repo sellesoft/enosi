@@ -1,0 +1,27 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+#include "iro/common.h"
+#include "math/vec.h"
+#include "math/mat.h"
+
+@@lpp.import "game/EntityId.lh"
+
+struct GameMgr;
+
+struct EyeSys
+{
+  static const u32 pixels_per_meter = 32;
+
+  vec2f pos = {};
+  f32   rotation = 0.f;
+
+  EntityId attached = nil;
+
+  void attach(EntityId id) { attached = id; }
+
+  b8 update(GameMgr& gamemgr);
+
+  void getViewMat(mat3x2* view);
+};
+

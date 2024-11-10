@@ -32,11 +32,8 @@ typedef SmallArray<DrawCmd*, 8> DrawCmdList;
  */
 enum class UpdateReason
 {
-  DirtyBeforeEval,
-  DirtyAfterEval,
-
-  AlwaysBeforeEval,
-  AlwaysAfterEval,
+  // Called before anything happens on this Item.
+  Start,
 
   MouseHover,
   MouseHoverChild,
@@ -45,7 +42,12 @@ enum class UpdateReason
   MouseReleased,
   MouseDown,
   MouseScroll,
+
+  // Last callback ever invoked on an Item.
+  Fin,
 };
+typedef Flags<UpdateReason> UpdateReasonFlags;
+DefineFlagsOrOp(UpdateReasonFlags, UpdateReason);
 
 /* ============================================================================
  */
@@ -180,23 +182,6 @@ schema
 
   background_color: Color = 0x00000000;
 
-  update_triggers: flags
-  {
-    DirtyBeforeEval,
-    DirtyAfterEval,
-
-    AlwaysBeforeEval,
-    AlwaysAfterEval,
-
-    MouseHover,
-    MouseHoverChild,
-
-    MousePressed,
-    MouseReleased,
-    MouseDown,
-    MouseScroll,
-  };
-
   font: String = "gohu";
   font_height: f32 = 11;
   text_color: Color = 0xc5c9c5ff;
@@ -211,14 +196,14 @@ schema
     %.border.bottom
   }
 
-  vertical_scrollbar_width: f32 = 5;
-  horizontal_scrollbar_height: f32 = 5;
+  vertical_scrollbar_width: f32 = 7;
+  horizontal_scrollbar_height: f32 = 7;
 
   scrollbar_color: Color = 0x16161dff;
   scrollbar_handle_color: Color = 0x717c7c;
 
-  vertical_scrollbar_handle_width: f32 = 3;
-  horizontal_scrollbar_handle_height: f32 = 3;
+  vertical_scrollbar_handle_width: f32 = 5;
+  horizontal_scrollbar_handle_height: f32 = 5;
 
   overflow: enum
   {
@@ -276,6 +261,8 @@ struct
   StyleMap style;
 
   ItemNode* node;
+
+  UpdateReasonFlags update_triggers;
 
   // I would like to not do this, but since these properties are a part of 
   // all Items I feel it is appropriate to force being able to use them
@@ -339,6 +326,10 @@ struct
   // we decide what to send to the Renderer for this Item. DrawCmds stored in
   // 'pre' will be emitted before any of its children's draw cmds while those
   // in 'post' will be emitted after.
+  // 
+  // TODO(sushi) maybe pass in a callback and a context to gather these 
+  //             as copying out into a temp array kinda sucks when an Item
+  //             has a ton of draw commands.
   virtual void reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post) { }
 
   // Allows a widget to tell evaluate if it should place children or not.

@@ -396,6 +396,13 @@ struct vec4
       z * rhs.z + 
       w * rhs.w;
   }
+
+  /* --------------------------------------------------------------------------
+   */
+  inline vec4 xadd(T v) const { return vec4(x+v,y,z,w); }
+  inline vec4 yadd(T v) const { return vec4(x,y+v,z,w); }
+  inline vec4 zadd(T v) const { return vec4(x,y,z+v,w); }
+  inline vec4 wadd(T v) const { return vec4(x,y,z,w+v); }
 };
 
 typedef vec4<s32> vec4i;

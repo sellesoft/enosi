@@ -1,0 +1,11 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+#include "iro/common.h"
+
+struct GameMgr;
+
+struct MovementSys
+{
+  b8 update(GameMgr& gamemgr);
+};

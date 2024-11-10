@@ -1,0 +1,22 @@
+/*
+ *  Unique opaque id representing an entity.
+ */
+
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local ui = require "ui.UI"
+
+#include "iro/common.h"
+#include "iro/unicode.h"
+
+/* ============================================================================
+ */
+struct EntityId
+{
+  u32 value = 0;
+  u32 salt = 0;
+
+  bool operator == (const EntityId& rhs) const { return value == rhs.value; }
+};
+
+DefineNilValue(EntityId, {0}, { return x.value == 0; });

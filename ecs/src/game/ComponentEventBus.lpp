@@ -1,0 +1,34 @@
+
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local glob = require "Glob"
+$ local buffer = require "string.buffer"
+$ local Comp = require "game.Component"
+
+@@lpp.import "game/ComponentEventBus.lh"
+
+$$$
+
+local imported = buffer.new()
+
+local doImport = function(mod)
+  glob(mod):each(function(path)
+    local result = lpp.import(path:sub(#"src/"+1))
+    if result then
+      imported:put(result)
+    end
+  end)
+end
+
+doImport "src/game/**/*.events.lh"
+doImport "src/game/**/*.comp.lh"
+
+$$$
+$(imported:get())
+
+struct CompSubLists
+{
+
+
+
+};

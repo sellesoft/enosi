@@ -1,0 +1,44 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local ui = require "ui.UI"
+$ local Comp = require "game.Component"
+$ local glob = require "Glob"
+$ local buffer = require "string.buffer"
+$ local List = require "list"
+$ local util = require "util"
+
+#include "iro/common.h"
+#include "iro/containers/linked_pool.h"
+
+@@lpp.import "game/Entity.lh"
+@@lpp.import "game/IndexedPool.lh"
+@@lpp.import "game/Component.lh"
+
+static const u32 c_entmgr_pool_size = 4096;
+
+struct EntityMgr
+{
+  typedef IndexedPool<Entity, 4096> EntityPool;
+
+  EntityPool ent_pool;
+
+  b8 init();
+  void deinit();
+
+  EntityId createEntity(String name);
+  void destroyEntity(EntityId id);
+
+  Entity* getEntity(EntityId id) const;
+
+  b8 addComp(Entity* ent, EntityId id, Component* cmp) const;
+  b8 addComp(Entity* ent, Component* cmp) const;
+  b8 addComp(EntityId id, Component* cmp) const;
+
+  template<typename T>
+  T* tryComp(EntityId id)
+  {
+    if (isnil(id))
+      return nullptr;
+    return getEntity(id)->tryComp<T>();
+  }
+};

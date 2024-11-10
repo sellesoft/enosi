@@ -1,0 +1,25 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+@@lpp.import "game/GameMgr.lh"
+
+@@lpp.import "game/Movement.sys.lh"
+@@lpp.import "game/Movement.comp.lh"
+@@lpp.import "game/Transform.comp.lh"
+
+b8 MovementSys::update(GameMgr& gamemgr)
+{
+  EntityMgr& entmgr = gamemgr.entmgr;
+  ComponentMgr& cmpmgr = gamemgr.cmpmgr;
+
+  for (Movement& movement : cmpmgr.iterate<Movement>())
+  {
+    if (auto* transform = entmgr.tryComp<Transform>(movement.owner))
+    {
+      transform->pos += movement.input * movement.speed;
+    }
+    movement.input = {};
+  }
+
+  return true;
+}

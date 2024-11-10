@@ -1,0 +1,25 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+
+@@lpp.import "game/Eye.sys.lh"
+
+@@lpp.import "game/GameMgr.lh"
+@@lpp.import "game/Transform.comp.lh"
+
+b8 EyeSys::update(GameMgr& gamemgr)
+{
+  if (auto* transform = gamemgr.entmgr.tryComp<Transform>(attached))
+  {
+    pos = transform->pos;
+    rotation = transform->rotation;
+  }
+  return true;
+}
+
+void EyeSys::getViewMat(mat3x2* view)
+{
+  *view = 
+    mat3x2::createInverseTransform(
+      pos,
+      rotation);
+}

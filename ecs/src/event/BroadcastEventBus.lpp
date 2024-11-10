@@ -1,0 +1,42 @@
+$ local lpp = require "lpp"
+$ local event = require "event.Event"
+$ local beb = require "event.BroadcastEventBus"
+$ local glob = require "Glob"
+$ local buffer = require "string.buffer"
+
+@@lpp.import "event/BroadcastEventBus.lh"
+
+$ event.events.broad.list:each(function(event)
+$ local e = event.name
+template<>
+void BroadcastEventBus::subscribeTo<$(e)>(
+  void* subscriber, 
+  void (*callback)(void*, $(e)&))
+{
+  auto* sub = data->$(e)Subscriber_pool.add();
+  sub->subscriber = subscriber;
+  sub->callback = callback;
+  data->$(e)Subscriber_list.push(sub);
+}
+
+template<>
+void BroadcastEventBus::raise<$(e)>($(e)& event) const
+{
+  for (auto& sub : data->$(e)Subscriber_list)
+  {
+    sub.callback(sub.subscriber, event);
+  }
+}
+$ end)
+
+b8 BroadcastEventBus::init()
+{
+  data = (BroadcastEventBusData*)mem::stl_allocator.allocate(
+    sizeof(BroadcastEventBusData));
+$ event.events.broad.list:each(function(event)
+$ local e = event.name
+  if (!data->$(e)Subscriber_list.init()) return false;
+  if (!data->$(e)Subscriber_pool.init()) return false;
+$ end)
+  return true;
+}

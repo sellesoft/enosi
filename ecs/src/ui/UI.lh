@@ -15,6 +15,7 @@ $ local ui = require "ui.UI"
 #include "iro/containers/pool.h"
 #include "iro/containers/linked_pool.h"
 #include "iro/containers/Tree.h"
+#include "iro/memory/bump.h"
 
 namespace gfx
 {
@@ -25,6 +26,7 @@ namespace gfx
 struct Window;
 struct Engine;
 struct WindowResized;
+struct PostReload;
 
 namespace ui
 {
@@ -65,6 +67,8 @@ struct UI
   vec2f scrollbar_offset;
   Item* scrolling_item;
   b8 horizontal_scroll;
+
+  mem::LenientBump temp_alloc;
 
   b8 init(Engine& engine);
   void deinit();
@@ -132,6 +136,8 @@ private:
   b8 findHoveredItem(ItemTree::Node* node);
 
   void onWindowResized(WindowResized& x);
+
+  void onPostReload(PostReload& _);
 };
 
 }

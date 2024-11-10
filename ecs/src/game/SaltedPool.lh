@@ -1,0 +1,11 @@
+#include "iro/common.h"
+
+template<typename T>
+struct SaltedPool
+{
+  struct Slot
+  {
+    
+  };
+
+};

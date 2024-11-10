@@ -1,0 +1,34 @@
+$ local lpp = require "lpp"
+$ local reflect = require "reflection.Reflector"
+$ local ui = require "ui.UI"
+$ local Comp = require "game.Component"
+$ local glob = require "Glob"
+$ local buffer = require "string.buffer"
+$ local List = require "list"
+$ local util = require "util"
+
+@@lpp.import "game/EntityMgr.lh"
+@@lpp.import "game/Component.lh"
+@@lpp.import "game/Render.sys.lh"
+@@lpp.import "game/Mind.sys.lh"
+@@lpp.import "game/Movement.sys.lh"
+@@lpp.import "game/Eye.sys.lh"
+
+struct Engine;
+
+struct GameMgr
+{
+  Engine* engine;
+
+  EntityMgr entmgr;
+  ComponentMgr cmpmgr;
+  RenderSys rendersys;
+  MindSys mindsys;
+  MovementSys movesys;
+  EyeSys eye;
+
+  b8 init(Engine* eng);
+  void deinit();
+
+  b8 update();
+};

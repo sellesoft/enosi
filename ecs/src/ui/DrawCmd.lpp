@@ -130,7 +130,7 @@ void DrawCmd::alloc(UI* ui, vec2i counts)
   {
     vertex_offset = ui->vertex_next;
     ui->vertex_next += counts.x;
-    assert(ui->vertex_next < ui->buffer->vertex_size / sizeof(Vertex) &&
+    assert(ui->vertex_next < ui->buffer->vertex_size / sizeof(gfx::Vertex) &&
            "UI has run out of vertex space on the GPU buffer!");
   }
   else
@@ -140,7 +140,7 @@ void DrawCmd::alloc(UI* ui, vec2i counts)
   {
     index_offset = ui->index_next;
     ui->index_next += counts.y;
-    assert(ui->index_next < ui->buffer->index_size / sizeof(Index) &&
+    assert(ui->index_next < ui->buffer->index_size / sizeof(gfx::Index) &&
            "UI has run out of index space on the GPU buffer!");
   }
   else
@@ -151,7 +151,7 @@ void DrawCmd::alloc(UI* ui, vec2i counts)
 
 /* ----------------------------------------------------------------------------
  */
-Pair<Vertex*, Index*> DrawCmd::realloc(UI* ui, vec2i counts)
+Pair<gfx::Vertex*, gfx::Index*> DrawCmd::realloc(UI* ui, vec2i counts)
 {
   if (counts_reserved.x >= counts.x && counts_reserved.y >= counts.y)
     return getPtrs(ui);
@@ -260,12 +260,12 @@ void DrawCmd::remove(UI* ui)
 
 /* ----------------------------------------------------------------------------
  */
-Pair<Vertex*, Index*> DrawCmd::getPtrs(UI* ui)
+Pair<gfx::Vertex*, gfx::Index*> DrawCmd::getPtrs(UI* ui)
 {
   return
   {
-    (Vertex*)ui->buffer->mapped.vp + vertex_offset,
-    (Index*)ui->buffer->mapped.ip + index_offset
+    (gfx::Vertex*)ui->buffer->mapped.vp + vertex_offset,
+    (gfx::Index*)ui->buffer->mapped.ip + index_offset
   };
 }
 
