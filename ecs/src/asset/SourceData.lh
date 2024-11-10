@@ -3,12 +3,24 @@
  */
 
 #include "iro/common.h"
+#include "iro/unicode.h"
 #include "iro/containers/array.h"
+#include "iro/io/io.h"
+
+using namespace iro;
 
 struct SourceData;
 
 struct SourceDataValue
 {
+  enum class Kind
+  {
+    String,
+    Number,
+  };
+
+  Kind kind;
+
   String val = nil;
 };
 
@@ -83,6 +95,9 @@ struct SourceData
 
   SourceData() : kind(Kind::Invalid), data({}) {}
 
+  void dump(u32 depth = 0);
+  void dump(io::IO* out, u32 depth = 0);
+
 private:
 
   union
@@ -90,6 +105,4 @@ private:
     SourceDataValue value;
     SourceDataObject object;
   } data;
-
-
 };

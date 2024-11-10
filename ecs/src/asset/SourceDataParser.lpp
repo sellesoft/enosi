@@ -9,9 +9,37 @@ $ local cmn = require "common"
 
 /* ----------------------------------------------------------------------------
  */
-b8 SourceDataParser::init(SourceDataFile* file, io::IO* in)
+void SourceDataParser::ScopedStage::onEnter(const char* funcname)
+{
+  log("> ", funcname, "\n");
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SourceDataParser::ScopedStage::onLeave()
+{
+  log("<\n");
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<typename... T>
+void SourceDataParser::ScopedStage::log(T... args)
+{
+  for (u32 i = 0; i < parser.stage_depth; ++i)
+    DEBUG(" ");
+  DEBUG(args...);
+}
+
+#define PARSER_STAGE \
+  ScopedStage stage(*this, __func__)
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SourceDataParser::init(SourceDataFile* file, io::IO* in, String in_name)
 {
   this->file = file;
+  this->in_name = in_name;
 
   if (!cache.open())
     return ERROR("failed to open cache\n");
@@ -33,22 +61,31 @@ void SourceDataParser::deinit()
  */
 struct Token
 {
+$$$
+  local tkinds = 
+  {
+    "Invalid",
+
+    "Return",
+    "Identifier",
+    "String",
+    "Number",
+
+    "LBrace",
+    "RBrace",
+
+    "Comma",
+    "Equal",
+
+    "Eof",
+  }
+$$$
+
   enum class Kind
   {
-    Invalid,
-
-    Return,
-    Identifier,
-    String,
-    Number,
-
-    LBrace,
-    RBrace,
-
-    Comma,
-    Equal,
-
-    Eof,
+$ for _,v in ipairs(tkinds) do
+    $(v),
+$ end
   };
 
   Kind kind;
@@ -61,10 +98,22 @@ struct Token
 
 using TK = Token::Kind;
 
+String getTokenKindString(TK tk)
+{
+  switch (tk)
+  {
+$ for _,v in ipairs(tkinds) do
+  case TK::$(v): return "$(v)"_str;
+$ end
+  }
+  return "** invalid token kind **"_str;
+}
+
 /* ----------------------------------------------------------------------------
  */
 b8 SourceDataParser::parse()
 {
+  PARSER_STAGE;
   for (;;)
   {
     auto tok = nextToken();
@@ -82,7 +131,7 @@ b8 SourceDataParser::parse()
       break;
 
     default:
-      return ERROR("expected auxillary data or return\n");
+      return errorAt(tok, "expected auxillary data or return\n");
     }
   }
 }
@@ -91,13 +140,14 @@ b8 SourceDataParser::parse()
  */
 b8 SourceDataParser::parseAuxData(Token tok)
 {
+  PARSER_STAGE;
   SourceData* data = file->addAuxData();
 
   if (!parseNamedOrPossiblyTypedData(data))
     return false;
 
   if (isnil(data->name))
-    return ERROR("aux data must be named\n");
+    return errorAt(tok, "aux data must be named\n");
 
   return true;
 }
@@ -106,6 +156,7 @@ b8 SourceDataParser::parseAuxData(Token tok)
  */
 b8 SourceDataParser::parseReturn()
 {
+  PARSER_STAGE;
   SourceData* data = file->addReturnData();
   
   if (!parsePossiblyTypedData(data))
@@ -113,7 +164,10 @@ b8 SourceDataParser::parseReturn()
 
   auto tok = nextToken();
   if (tok.kind != TK::Eof)
-    return ERROR("expected eof after return data\n");
+    return errorAt(tok, "expected eof after return data\n");
+
+  data->dump();
+
   return true;
 }
 
@@ -121,6 +175,7 @@ b8 SourceDataParser::parseReturn()
  */
 b8 SourceDataParser::parsePossiblyTypedData(SourceData* data)
 {
+  PARSER_STAGE;
   auto tok = nextToken();
   switch (tok.kind)
   {
@@ -131,7 +186,7 @@ b8 SourceDataParser::parsePossiblyTypedData(SourceData* data)
 
       tok = nextToken();
       if (tok.kind != TK::LBrace)
-        return ERROR("expected object data after typename\n");
+        return errorAt(tok, "expected object data after typename\n");
 
       if (!parseObjectData(obj))
         return false;
@@ -150,6 +205,7 @@ b8 SourceDataParser::parsePossiblyTypedData(SourceData* data)
  */
 b8 SourceDataParser::parseObjectData(SourceDataObject* obj)
 {
+  PARSER_STAGE;
   SourceData* first = nullptr;
 
   for (;;)
@@ -160,7 +216,7 @@ b8 SourceDataParser::parseObjectData(SourceDataObject* obj)
   
     auto data = file->allocateSourceData();
 
-    if (!parseNamedOrPossiblyTypedData(data))
+    if (!parseNamedOrPossiblyTypedData(tok, data))
       return false;
 
     if (first == nullptr)
@@ -170,7 +226,7 @@ b8 SourceDataParser::parseObjectData(SourceDataObject* obj)
     else
     {
       if (isnil(first->name) != isnil(data->name))
-        return ERROR("named and unnamed source data cannot be mixed in "
+        return errorAt(tok, "named and unnamed source data cannot be mixed in "
                      "objects\n");
     }
 
@@ -180,7 +236,7 @@ b8 SourceDataParser::parseObjectData(SourceDataObject* obj)
     if (tok.kind != TK::Comma)
     {
       if (tok.kind != TK::RBrace)
-        return ERROR("expected ',' or '}'\n");
+        return errorAt(tok, "expected ',' or '}'\n");
       break;
     }
   }
@@ -199,6 +255,7 @@ b8 SourceDataParser::parseNamedOrPossiblyTypedData(SourceData* data)
  */
 b8 SourceDataParser::parseNamedOrPossiblyTypedData(Token tok, SourceData* data)
 {
+  PARSER_STAGE;
   switch (tok.kind)
   {
   case TK::Identifier:
@@ -224,7 +281,7 @@ b8 SourceDataParser::parseNamedOrPossiblyTypedData(Token tok, SourceData* data)
         break;
 
       default: 
-        return ERROR("expected named or typed data\n");
+        return errorAt(tok, "expected named or typed data\n");
       }
     }
     break;
@@ -241,6 +298,7 @@ b8 SourceDataParser::parseNamedOrPossiblyTypedData(Token tok, SourceData* data)
  */
 b8 SourceDataParser::parseValueOrUntypedObject(Token tok, SourceData* data)
 {
+  PARSER_STAGE;
   switch (tok.kind)
   {
   case TK::LBrace:
@@ -257,11 +315,15 @@ b8 SourceDataParser::parseValueOrUntypedObject(Token tok, SourceData* data)
     {
       auto val = data->setAsValue();
       val->val = tok.raw;
+      if (tok.kind == TK::Number)
+        val->kind = SourceDataValue::Kind::Number;
+      else
+        val->kind = SourceDataValue::Kind::String;
     }
     break;
 
   default:
-    return ERROR("expected a value or object\n");
+    return errorAt(tok, "expected a value or object\n");
   }
   return true;
 }
@@ -270,6 +332,7 @@ b8 SourceDataParser::parseValueOrUntypedObject(Token tok, SourceData* data)
  */
 Token SourceDataParser::nextToken()
 {
+  PARSER_STAGE;
   using TK = Token::Kind;
 
   Token out = {};
@@ -281,7 +344,11 @@ Token SourceDataParser::nextToken()
   out.line = scanner.line;
   out.column = scanner.column;
 
-  if (scanner.atFirstIdentifierChar())
+  if (scanner.eof())
+  {
+    out.kind = TK::Eof;
+  }
+  else if (scanner.atFirstIdentifierChar())
   {
     auto id = scanner.scanIdentifier();
     if (id == "return"_str)
@@ -293,6 +360,11 @@ Token SourceDataParser::nextToken()
       out.kind = TK::Identifier;
       out.raw = id.allocateCopy(&file->string_cache);
     }
+  }
+  else if (scanner.atDigit())
+  {
+    out.kind = TK::Number;
+    out.raw = scanner.scanNumber();
   }
   else if (scanner.at('"'))
   {
@@ -318,5 +390,13 @@ $ end
     }
   }
 
+  stage.log("Token(", getTokenKindString(out.kind), ", ", out.raw, ")\n");
+
   return out;
+}
+
+template<typename... Args>
+b8 SourceDataParser::errorAt(Token tok, Args... args)
+{
+  return ERROR(in_name,":",tok.line,":",tok.column,": ", args...);
 }

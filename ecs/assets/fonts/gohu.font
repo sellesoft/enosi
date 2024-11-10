@@ -1,10 +1,10 @@
 return Font
 {
   name = "gohu",
-   asset_path = "assets/fonts/gohu.bdf",
-   ranges =
-   {
-     // ascii
-     { 32, 94 }
-   }
+  asset_path = "assets/fonts/gohu.bdf",
+  ranges =
+  {
+    // ascii
+    { 32, 94 }
+  }
 }

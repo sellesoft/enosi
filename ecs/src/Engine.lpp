@@ -166,7 +166,7 @@ b8 Engine::init()
   SourceDataFile sfile;
   sfile.init();
   SourceDataParser sparse;
-  sparse.init(&sfile, &test);
+  sparse.init(&sfile, &test, test.path.buffer.asStr());
   sparse.parse();
 
   return true;

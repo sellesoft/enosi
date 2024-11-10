@@ -30,10 +30,9 @@ struct SourceDataParser
   // The file being parsed.
   SourceDataFile* file;
 
-  // Input stream.
-  io::IO* in;
+  String in_name;
 
-  b8   init(SourceDataFile* file, io::IO* in);
+  b8   init(SourceDataFile* file, io::IO* in, String in_name);
   void deinit();
 
   b8 parse();
@@ -51,4 +50,33 @@ private:
   b8 parseValueOrUntypedObject(Token tok, SourceData* data);
 
   Token nextToken();
+
+  template<typename... Args>
+  b8 errorAt(Token tok, Args... args);
+
+  u32 stage_depth = 0;
+
+  struct ScopedStage
+  {
+    SourceDataParser& parser;
+
+    ScopedStage(SourceDataParser& parser, const char* funcname)
+      : parser(parser)
+    {
+      onEnter(funcname);
+      parser.stage_depth += 1;
+    }
+
+    ~ScopedStage()
+    {
+      parser.stage_depth -= 1;
+      onLeave();
+    }
+
+    void onEnter(const char* funcname);
+    void onLeave();
+
+    template<typename... T>
+    void log(T... args);
+  };
 };

@@ -1,0 +1,67 @@
+$ local cmn = require "common"
+
+@@lpp.import "asset/SourceData.lh"
+
+#include "iro/fs/file.h"
+
+void SourceData::dump(io::IO* out, u32 depth)
+{
+  auto indent = [&]()
+  {
+    for (u32 i = 0; i < depth; ++i)
+      out->write("  "_str);
+  };
+
+  indent();
+  if (notnil(name))
+    io::formatv(out, name, " = ");
+
+  switch (kind)
+  {
+  case Kind::Invalid: io::format(out, "Invalid"); break;
+  
+  case Kind::Value:
+    {
+      auto val = getAsValue();
+      if (val->kind == SourceDataValue::Kind::Number)
+        io::format(out, val->val);
+      else
+        io::formatv(out, '"', val->val, '"');
+    }
+    break;
+
+  case Kind::Object:
+    {
+      if (notnil(name))
+      {
+        io::format(out, "\n");
+        indent();
+      }
+      
+      auto obj = getAsObject();
+
+      if (notnil(obj->type))
+      {
+        io::formatv(out, obj->type, '\n');
+        indent();
+      }
+
+      io::format(out, "{\n");
+
+      for (SourceData* child : obj->children)
+      {
+        child->dump(depth + 1);
+        io::format(out, ",\n");
+      }
+
+      indent();
+      io::format(out, "}");
+    }
+    break;
+  }
+}
+
+void SourceData::dump(u32 depth)
+{
+  dump(&fs::stdout, depth);
+}
