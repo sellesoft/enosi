@@ -11,6 +11,7 @@ $ local ui = require "ui.UI"
 #include "iro/memory/bump.h"
 
 @@lpp.import "ui/UI.lh"
+@@lpp.import "ui/widgets/Text.lh"
 
 struct Engine;
 
@@ -115,6 +116,8 @@ schema
 struct
 {
   InspectorEngineTree* tree;
+
+  Text* fps;
 
   static Inspector* create(UI& ui, Engine* engine);
   void destroy();

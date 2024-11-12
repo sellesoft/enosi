@@ -153,9 +153,6 @@ b8 Engine::init()
 
   $ local inspector = ui.createItemContext("Inspector", "inspector")
 
-  @inspector.style.set.size({400, 500});
-  @inspector.style.set.padding({5,5,5,5});
-
   INFO("done!\n");
 
   fs::File test = 
@@ -228,6 +225,8 @@ b8 Engine::checkReload()
  */ 
 b8 Engine::update()
 {
+  auto start = TimePoint::now();
+
   if (!checkReload())
     return ERROR("error occured while reloading\n");
 
@@ -244,6 +243,12 @@ b8 Engine::update()
     return ERROR("failed to update ui\n");
 
   gamemgr.update();
+
+  inspector->fps->dirty = true;
+  
+  io::StaticBuffer<255> fps;
+  io::format(&fps, 1.f / (TimePoint::now() - start).toSeconds());
+  inspector->fps->set(fps.asStr());
 
   // ui.root->dirty = true;
 

@@ -801,9 +801,13 @@ $ end
   size.x = 
     max_name_width + spacing_between_name_and_value + max_value_width + 
     @this.style.padding.left + @this.style.padding.right +
+    @this.style.border.left + @this.style.border.right + 
+    @this.style.margin.left + @this.style.margin.right + 
     2.f * row_text_padding;
   size.y = 
-    y + @this.style.padding.top + @this.style.padding.bottom;
+    y + @this.style.padding.top + @this.style.padding.bottom +
+    @this.style.border.top + @this.style.border.bottom + 
+    @this.style.margin.top + @this.style.margin.bottom;
 }
 
 /* ----------------------------------------------------------------------------
@@ -820,7 +824,9 @@ $ local this = ui.createItemContext("InspectorEngineTree", "this")
       vp,
       ip,
       vec2i(0,0),
-      pos_screen,
+      pos_screen + 
+      @this.style.margin.top_left +
+      @this.style.border.top_left,
       @this.getBorderedArea,
       odd_row_color);
 
@@ -831,10 +837,6 @@ $ local this = ui.createItemContext("InspectorEngineTree", "this")
     @this.style.padding.top_left;
 
   content_size = @this.getPaddedArea;
-
-  INFO("csize: ", content_size, "\n",
-       "size:  ", size, "\n",
-       "padd:  ", @this.style.padding, "\n");
 
   wdata->member_data_iter = wdata->member_data_list.headNode();
 
@@ -911,13 +913,18 @@ Inspector* UI::make(String id)
 Inspector* Inspector::create(UI& ui, Engine* engine)
 {
   auto ins = ui.begin<Inspector>("Inspector"_str);
+$ local this = ui.createItemContext("Inspector", "ins")
+  @this.style.set.background_color(0);
+  @this.style.set.sizing(auto_x | percent_y);
+  @this.style.set.size({0, 100});
+  @this.style.set.border({1,1,1,1});
+  @this.style.set.border_color(0x99bbbbff);
+
+  ins->fps = ui.make<Text>("Inspector.fps"_str, ""_str);
+
   auto tree = ins->tree = InspectorEngineTree::create(ui, engine);
 
-$ local this = ui.createItemContext("Inspector", "ins")
-  @this.style.set.background_color(even_row_color);
-
 $ local tree = ui.createItemContext("InspectorEngineTree", "tree")
-  
   @tree.style.set.background_color(even_row_color);
   @tree.style.set.padding({5,5,5,5});
 

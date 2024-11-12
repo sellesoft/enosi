@@ -157,7 +157,12 @@ schema
 },
 struct
 {
-  TextState state;
+  TextState state = {};
+
+  void set(String s)
+  {
+    state.set(s);
+  }
 
   virtual void evaluate(UI* ui) override;
 

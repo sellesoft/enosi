@@ -261,8 +261,7 @@ void TextState::draw(UI* ui, vec2f pos)
  */
 void TextState::cacheRenderer()
 {
-  if (renderer)
-    mem::stl_allocator.free(renderer);
+  freeRenderer();
   renderer = mem::stl_allocator.construct<TextRenderer>();
 }
 
@@ -297,6 +296,7 @@ void TextState::freeRenderer()
   {
     renderer->deinit();
     mem::stl_allocator.free(renderer);
+    renderer = nullptr;
   }
 }
 
