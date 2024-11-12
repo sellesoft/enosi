@@ -3,7 +3,7 @@
 ---
 
 local lpp = require "lpp"
-local reflect = require "reflection.Reflector"
+local reflect = require "reflect.Reflector"
 local ui = require "ui.UI"
 local buffer = require "string.buffer"
 local Placeable = require "ui.Placeable"
@@ -13,6 +13,23 @@ local glob = require "Glob"
 local log = require "logger" ("ui.inspector", Verbosity.Info)
 local LuaType = require "Type"
 local util = require "util"
+
+local ast = require "reflect.AST"
+local Processor = require "reflect.Processor"
+
+local buf = buffer.new()
+
+glob"**/*.lh":each(function(path)
+  local result = lpp.import(path:sub(#"src/"+1))
+  if result then
+    buf:put(result)
+  end
+end)
+
+local p = Processor.new(buf:get())
+p:run()
+
+do return end
 
 local Inspector = {}
 

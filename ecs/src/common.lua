@@ -7,7 +7,7 @@ lpp = require "lpp"
 
 local common = {}
 
-common.reflect = require "reflection.Reflector"
+common.reflect = require "reflect.Reflector"
 common.buffer = require "string.buffer"
 
 common.defFileLogger = function(name, verbosity)

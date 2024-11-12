@@ -1,5 +1,5 @@
 $ local event = require "event.Event"
-$ local reflect = require "reflection.Reflector"
+$ local reflect = require "reflect.Reflector"
 
 #include "iro/common.h"
 #include "event/BroadcastEventBus.h"

@@ -5,6 +5,7 @@
 #include "iro/common.h"
 #include "iro/unicode.h"
 #include "iro/containers/array.h"
+#include "iro/containers/avl.h"
 #include "iro/io/io.h"
 
 using namespace iro;
@@ -45,6 +46,9 @@ struct SourceDataObject
 struct SourceData
 {
   String name;
+
+  typedef AVL<u64, [](const u64* x) { return *x; }> Test;
+  Test x;
 
   enum class Kind
   {

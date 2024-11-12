@@ -1,5 +1,5 @@
 $ local lpp = require "lpp"
-$ local reflect = require "reflection.Reflector"
+$ local reflect = require "reflect.Reflector"
 $ local ui = require "ui.UI"
 
 @@lpp.import "Engine.lh"
@@ -155,7 +155,6 @@ b8 Engine::init()
 
   @inspector.style.set.size({400, 500});
   @inspector.style.set.padding({5,5,5,5});
-  @inspector.style.set.background_color(0x446fbfff);
 
   INFO("done!\n");
 

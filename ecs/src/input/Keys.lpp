@@ -1,4 +1,4 @@
-$ local reflect = require "reflection.Reflector"
+$ local reflect = require "reflect.Reflector"
 
 @reflect.include "input/Keys.h"
 

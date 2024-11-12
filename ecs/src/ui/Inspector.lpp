@@ -1,47 +1,34 @@
 $ local lpp = require "lpp"
-$ local reflect = require "reflection.Reflector"
+$ local reflect = require "reflect.Reflector"
 $ local ui = require "ui.UI"
 $ local buffer = require "string.buffer"
 $ local Placeable = require "ui.Placeable"
 $ local List = require "list"
 $ local CGen = require "cgen"
-$ local Inspector = require "ui.Inspector"
 $ local util = require "util"
 $ local log = require "logger" ("inspector", Verbosity.Info)
+$ local ast = require "reflect.AST"
+$ local Processor = require "reflect.Processor"
+$ local glob = require "Glob"
 
 #include "math/util.h"
 
-@@Inspector.importHeaders
-
-// TODO(sushi) SmallArray of avg member count
-$ local avg_member_count = 0
-$ local max_member_count = 0
-$ Inspector.structs.list:each(function(struct)
-$   local count = struct.members:len()
-$   avg_member_count = avg_member_count + count
-$   if count > max_member_count then
-$     max_member_count = count
+$ local buf = buffer.new()
+$ glob"**/*.lh":each(function(path)
+$   local result = lpp.import(path:sub(#"src/"+1))
+$   if result then
+$     buf:put(result)
 $   end
 $ end)
-$ total_member_count = avg_member_count
-$ avg_member_count = 
-$   math.ceil(avg_member_count / Inspector.structs.list:len())
-$$$
 
-local scalars = List
-{
-  "u8", "u16", "u32", "u64",
-  "s8", "s16", "s32", "s64",
-  "f32", "f64",
-  "int",
-  "short",
-  "long",
-  "long long",
-  "unsigned short",
-  "unsigned int",
-  "unsigned long",
-  "unsigned long long",
-}
+$(tostring(buf))
+
+$ local p = Processor.new(buf:get())
+$ p:run()
+
+// ABCDEFG
+
+$$$
 
 local formatters = 
 {
@@ -54,10 +41,6 @@ local formatters =
   TimePoint = "LocalDate(%)"
 }
 
-scalars:each(function(scalar)
-  formatters[scalar] = '%'
-end)
-
 $$$
 
 #undef None
@@ -65,10 +48,15 @@ $$$
 namespace ui
 {
 
+const f32 row_height = 13.f;
+const f32 nest_indent = 12.f;
+const f32 row_text_padding = 5.f;
+const f32 spacing_between_name_and_value = 10.f;
+const Color even_row_color = 0x08141eff;
+const Color odd_row_color = 0x14281eff;
+
 static Logger logger = 
   Logger::create("ui.inspector"_str, Logger::Verbosity::Info);
-
-const f32 nested_indent = 12.f;
 
 /* ============================================================================
  */
@@ -124,7 +112,7 @@ struct MemberState
 
   b8 open = false;
 
-  b8 init(UI& ui, String namestr)
+  b8 init(UI& ui)
   {
     name_bounds = {};
     name = ui.drawcmds.add();
@@ -140,169 +128,55 @@ struct MemberState
     ui.drawcmds.remove(value);
     ui.drawcmds.remove(bg);
   }
-};
 
-/* ----------------------------------------------------------------------------
- */
-template<typename T>
-String getEnumString(T x);
-
-$ Inspector.enums.list:each(function(enum)
-template<>
-String getEnumString($(enum.canonical_name) x)
-{
-  using Enum = $(enum.canonical_name);
-  switch (x)
+  void evaluate(
+      UI* ui,
+      InspectorEngineTree* tree,
+      TreeMemberWorkingData* wdata,
+      void* ptr,
+      f32 x,
+      f32* y,
+      String name)
   {
-$   enum.elems:each(function(elem)
-  case Enum::$(elem): return "$(elem)"_str;
-$   end)
+    evalNameAndBounds(tree, wdata, name, x, y);
   }
-}
-$ end)
 
-$ local placeMemberState = function(member, cb)
-$   local is_struct = member.type:is(Inspector.Struct)
-    // $(member.name): $(member.type.name or member.type.canonical_name)
-    struct Member$(member.idx) : public MemberState
+  void evalNameAndBounds(
+      InspectorEngineTree* tree,
+      TreeMemberWorkingData* wdata, 
+      String name,
+      f32 x, 
+      f32* y)
+  {
+    wdata->name_render.init(
+      name,
+      tree->font,
+      11.f,
+      1.f,
+      999.f,
+      0,
+      {255,255,255,255});
+    wdata->name_render.findTextBreaks();
+
+    name_bounds = 
     {
-$   if is_struct then
-      StructState$(member.type.type_idx) struct_state;   
-$   end
-      $(cb.fields and cb.fields() or "")
+      x,
+      *y,
+      wdata->name_render.size.x,
+      wdata->name_render.size.y,
+    };
 
-      b8 init(UI& ui)
-      {
-        if (!MemberState::init(ui, "$(member.name)"_str))
-          return false;
-$     if is_struct then
-        struct_state.init(ui);  
-$     end
-        $(cb.init and cb.init() or "")
-        return true;
-      }
+    *y += row_height;
 
-      void deinit(UI& ui)
-      {
-        MemberState::deinit(ui);
-$     if is_struct then
-        struct_state.deinit(ui);
-$     end
-        $(cb.deinit and cb.deinit() or "")
-      }
+    tree->max_name_width = 
+      max(tree->max_name_width,
+          x + name_bounds.z);
+  }
 
-      void evaluate(
-          UI* ui, 
-          InspectorEngineTree* tree,
-          TreeMemberWorkingData* wdata, 
-          void* ptr, 
-          f32 x, 
-          f32* y)
-      {
-        wdata->name_render.init(
-$     if is_struct then
-          (open? 
-            "- $(member.name)"_str :
-            "+ $(member.name)"_str),
-$     else
-          "$(member.name)"_str,
-$     end
-          tree->font,
-          11.f,
-          1.f,
-          999.f,
-          0,
-          {255,255,255,255});
-
-        wdata->name_render.findTextBreaks();
-
-        name_bounds.x = x;
-        name_bounds.y = *y;
-        name_bounds.z = wdata->name_render.size.x;
-        name_bounds.w = wdata->name_render.size.y;
-        *y += 13.f;
-$     if is_struct then
-        if (open)
-        {
-          struct_state.evaluate(
-            ui, 
-            tree, 
-            (u8*)ptr + $(member.offset / 8),
-            x + 12.f,
-            y);
-        }
-$     end
-        tree->max_name_width = 
-          max(tree->max_name_width,
-              x + wdata->name_render.size.x);
-        $(cb.eval and cb.eval() or "")
-      }
-
-      void generate(
-          UI* ui, 
-          InspectorEngineTree* tree, 
-          TreeMemberWorkingData* wdata)
-      {
-        wdata->name_render.draw(ui, tree->content_pos + name_bounds.xy(), name);
-
-        {
-          auto [vp,ip] = bg->getPtrs(ui);
-
-          bg->counts_used = 
-            gfx::putFilledRect(
-              vp,
-              ip,
-              vec2i(0,0),
-              tree->content_pos.yadd(name_bounds.y),
-              { tree->content_size.x, 13.f },
-              (wdata->idx % 2?
-                0x14281eff :
-                0x08141eff));
-        }
-        
-
-$     if is_struct then
-        if (open)
-          struct_state.generate(ui, tree);
-$     end
-        $(cb.gen and cb.gen() or "")
-      }
-
-      void reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post)
-      {
-        if (bg) pre.push(bg);
-        if (name) pre.push(name);
-        if (value) pre.push(value);
-$     if is_struct then
-        if (open)
-          struct_state.reportDrawCmds(ui, pre, post);
-$     end
-      }
-
-      void update(
-          UI* ui, 
-          UpdateReason reason, 
-          InspectorEngineTree* tree)
-      {
-        if (reason == UpdateReason::MousePressed)
-        {
-          if (math::pointInRect(
-                ui->eng->input.mouse.window,
-                tree->content_pos + name_bounds.xy(),
-                name_bounds.zw()))
-          {
-            open = !open;
-            tree->dirty = true;
-          }
-        }
-$     if is_struct then
-        struct_state.update(ui, reason, tree);
-$     end
-      }
-    } member$(member.idx);
-$ end
-
-$ local initValueRender = function()
+  void evalValue(
+      InspectorEngineTree* tree,
+      TreeMemberWorkingData* wdata)
+  {
     wdata->value_render.init(
       wdata->value_buffer.asStr(),
       tree->font,
@@ -312,91 +186,81 @@ $ local initValueRender = function()
       0,
       {255,255,255,255});
     wdata->value_render.findTextBreaks();
+
     tree->max_value_width = 
-      max(
-        tree->max_value_width, 
-        wdata->value_render.size.x);
-$ end
-
-$ local writeAndMeasureValue = function(m)
-$   if Inspector.Pointer:isTypeOf(m.type) then
-      io::format(&wdata->value_buffer, *(void**)((u8*)ptr + $(m.offset / 8)));
-$   else
-$     local typename = m.type.canonical_name
-$     if m.type.member_path then
-$       typename = "decltype("..m.type.member_path..")"
-$     end
-      io::format(
-        &wdata->value_buffer, *($(typename)*)((u8*)ptr + $(m.offset / 8)));
-$   end
-$   initValueRender()
-$ end
-
-/* ----------------------------------------------------------------------------
- */
-$ local putUnionCode = function(union)
-// $(union.canonical_name)
-struct UnionState$(union.type_idx)
-{
-$ -- Place member states.
-$ union.members:each(function(member)
-$ if Inspector.Struct:isTypeOf(member.type) then
-$   placeMemberState(member, 
-$   {
-$     eval = function()
-      {
-      }
-$     end,
-$     report = function()
-$     end,
-$   })
-$ elseif Inspector.Pointer:isTypeOf(member.type) then
-$   placeMemberState(member,
-$   {
-$     eval = function()
-$       writeAndMeasureValue(member)
-$     end,
-$   })
-$ elseif Inspector.Scalar:isTypeOf(member.type) then
-$   placeMemberState(member,
-$   {
-$     eval = function()
-$       writeAndMeasureValue(member)
-$     end
-$   })
-$ else
-$   placeMemberState(member, {})
-$ end
-$ end)
-
-  b8 init(UI& ui)
-  {
-$ for member in union.members:each() do
-$ end
-    return true;
+      max(tree->max_value_width,
+          wdata->value_render.size.x);
   }
 
-  void deinit(UI& ui)
-  {
-$ for member in union.members:each() do
-$ end
-  }
-
-  void evaluate(
-      UI* ui,
+  void evalPointerValue(
       InspectorEngineTree* tree,
-      void* ptr,
-      f32 x,
-      f32* y)
+      TreeMemberWorkingData* wdata,
+      void* ptr)
   {
-$ for member in union.members:each() do
-$ end
+    wdata->value_render.init(
+      wdata->value_buffer.asStr(),
+      tree->font,
+      11.f,
+      1.f,
+      999.f,
+      0,
+      {255,255,255,255});
+    wdata->value_render.findTextBreaks();
+
+    tree->max_value_width = 
+      max(tree->max_value_width,
+          wdata->value_render.size.x);
   }
 
-  void generate(UI* ui, InspectorEngineTree* tree)
+  void drawNameAndBackground(
+    UI* ui,
+    InspectorEngineTree* tree,
+    TreeMemberWorkingData* wdata)
   {
-$ for member in union.members:each() do
-$ end
+    f32 y = name_bounds.y + 0.5f * (row_height - 11.f);
+
+    wdata->name_render.draw(
+      ui,
+      tree->content_pos + vec2f(name_bounds.x+row_text_padding, y),
+      name);
+
+    // Draw background.
+    {
+      auto [vp,ip] = bg->getPtrs(ui);
+
+      bg->counts_used = 
+        gfx::putFilledRect(
+          vp,
+          ip,
+          vec2i(0,0),
+          tree->content_pos.yadd(name_bounds.y),
+          { tree->content_size.x, row_height },
+          (wdata->idx % 2?
+            odd_row_color :
+            even_row_color));
+    }
+  }
+
+  void drawValue(
+      UI* ui, 
+      InspectorEngineTree* tree, 
+      TreeMemberWorkingData* wdata)
+  {
+    auto pos = 
+      tree->content_pos +
+      vec2f(
+        tree->max_name_width + 
+        spacing_between_name_and_value + 
+        row_text_padding,
+        name_bounds.y + 0.5f * (row_height - 11.f));
+    wdata->value_render.draw(ui, pos, value);
+  }
+
+  void reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post)
+  {
+    pre.push(bg);
+    pre.push(name);
+    pre.push(value);
   }
 
   void update(
@@ -404,193 +268,284 @@ $ end
       UpdateReason reason, 
       InspectorEngineTree* tree)
   {
-$ for member,i in union.members:eachWithIndex() do
-$ end
+    if (reason == UpdateReason::MousePressed)
+    {
+      if (math::pointInRect(
+            ui->eng->input.mouse.window,
+            tree->content_pos + name_bounds.xy(),
+            name_bounds.zw()))
+      {
+        open = !open;
+        tree->dirty = true;
+      }
+    }
   }
 
-  void reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post)
+  void generate(
+      UI* ui, 
+      InspectorEngineTree* tree, 
+      TreeMemberWorkingData* wdata)
   {
-$ for member in union.members:each() do
-$ end
+    drawNameAndBackground(ui, tree, wdata);
   }
 };
 
-$ end
-
-$ -- * ------------------------------------------------------------------------
-
-$ local placeStructAnonymousStructMember = function(member)
-// anon: $(member.type.canonical_name)
-$   placeMemberState(member,
-$   {
-$   })
-$ end
-
-$ -- * ------------------------------------------------------------------------
-
-$ local placeStructStructMember = function(member)
-// anon: $(member.type.canonical_name)
-$   placeMemberState(member,
-$   {
-$     gen = function()
-      {
-      }
-$     end,
-$     report = function()
-$     end,
-$   })
-$ end
-
-$ -- * ------------------------------------------------------------------------
-
-$ local placeStructScalarMember = function(member)
-$ placeMemberState(member,
-$ {
-$   eval = function()
-$     writeAndMeasureValue(member)
-$   end,
-$   gen = function()
-    {
-      auto pos = 
-        tree->content_pos + 
-        vec2f(
-          tree->max_name_width + 5.f,
-          name_bounds.y);
-      wdata->value_render.draw(ui, pos, value);
-    }
-$   end,
-$ })
-$ end
-
-$ -- * ------------------------------------------------------------------------
-
-$ local formatMemberValue = function(member)
-    using T = decltype($(member.type.member_path));
-    auto& val = *(T*)((u8*)ptr + $(member.offset / 8));
-    io::format(
-      &wdata->value_buffer, 
-      $(formatters[member.type.name]:gsub("%%", "val")));
-$   initValueRender()
-$ end
-
-$ local placeStructFormattedMember = function(member)
-$   placeMemberState(member, 
-$   {   
-$     eval = function()
-$       formatMemberValue(member)
-$     end,
-$     gen = function()
-      {
-        auto pos = 
-          tree->content_pos + 
-          vec2f(
-            tree->max_name_width + 5.f,
-            name_bounds.y);
-        wdata->value_render.draw(ui, pos, value);
-      }
-$     end,
-$   })
-$ end
-
-$ -- * ------------------------------------------------------------------------
-
-$ local placeStructEnumMember = function(member)
-$   placeMemberState(member,
-$   {
-$     eval = function()
-      {
-        auto* val = 
-          ($(member.type.canonical_name)*)((u8*)ptr + $(member.offset / 8));
-        io::format(&wdata->value_buffer, getEnumString(*val));
-$       initValueRender()
-      }
-$     end,
-$     gen = function()
-      {
-        auto pos = 
-          tree->content_pos + 
-          vec2f(
-            tree->max_name_width + 5.f,
-            name_bounds.y);
-        wdata->value_render.draw(ui, pos, value);
-      }
-$     end,
-$   })
-$ end
-
-$ local placeStructPointerMember = function(member)
-$ placeMemberState(member,
-$ {
-$   eval = function()
-$     writeAndMeasureValue(member)
-$   end,
-$   gen = function()
-    {
-        auto pos = 
-          tree->content_pos + 
-          vec2f(
-            tree->max_name_width + 5.f,
-            name_bounds.y);
-        wdata->value_render.draw(ui, pos, value);
-    }
-$   end,
-$ })
-$ end
-
-$ local placeStructUnhandledMember = function(member)
-$   placeMemberState(member, 
-$   {   
-$   })
-$ end
-
-
-$ -- * ------------------------------------------------------------------------
-
-
-$ local putStructCode = function(struct, member_path)
-// $(struct.canonical_name)
-// $(struct.member_path or "")
-struct StructState$(struct.type_idx)
+/* ============================================================================
+ */
+template<typename T>
+struct RecordMemberState : public MemberState
 {
-$ for member in struct.members:each() do
-$   if member.is_anonymous then
-$     if member.type:is(Inspector.Struct) then
-$       placeStructAnonymousStructMember(member)
-$     else
-$       placeStructUnhandledMember(member)
-$     end
-$   else
-$     if member.type:is(Inspector.Struct) then
-$       if formatters[member.type.name] then
-$         placeStructFormattedMember(member)
-$       else
-$         placeStructStructMember(member)
-$       end
-$     elseif member.type:is(Inspector.Scalar) then
-$       placeStructScalarMember(member)
-$     elseif member.type:is(Inspector.Enum) then
-$      placeStructEnumMember(member)
-$     elseif member.type:is(Inspector.Pointer) then
-$      placeStructPointerMember(member)
-$     else
-$       placeStructUnhandledMember(member)
-$     end
-$   end
-$ end
+  T state;
 
   b8 init(UI& ui)
   {
-$ struct.members:each(function(member)
-    member$(member.idx).init(ui);
-$ end)
+    if (!MemberState::init(ui))
+      return false;
+
+    if (!state.init(ui))
+      return false;
+
     return true;
   }
 
   void deinit(UI& ui)
   {
-$ struct.members:each(function(member)
-    member$(member.idx).deinit(ui);
-$ end)
+    MemberState::deinit(ui);
+    state.deinit(ui);
+  }
+
+  void evaluate(
+      UI* ui,
+      InspectorEngineTree* tree,
+      TreeMemberWorkingData* wdata,
+      void* ptr,
+      f32 x,
+      f32* y,
+      String name)
+  {
+    MemberState::evaluate(ui, tree, wdata, ptr, x, y, name);
+
+    if (open)
+    {
+      state.evaluate(
+        ui,
+        tree,
+        (u8*)ptr,
+        x + nest_indent,
+        y);
+    }
+  }
+
+  void generate(
+      UI* ui, 
+      InspectorEngineTree* tree, 
+      TreeMemberWorkingData* wdata)
+  {
+    MemberState::generate(ui, tree, wdata);
+
+    if (open)
+      state.generate(ui, tree);
+  }
+
+  void reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post)
+  {
+    MemberState::reportDrawCmds(ui, pre, post);
+    if (open)
+      state.reportDrawCmds(ui, pre, post);
+  }
+
+  void update(
+      UI* ui, 
+      UpdateReason reason, 
+      InspectorEngineTree* tree)
+  {
+    MemberState::update(ui, reason, tree);
+    state.update(ui, reason, tree);
+  }
+};
+
+/* ============================================================================
+ */
+struct PointerMemberState : public MemberState
+{
+  void evaluate(
+      UI* ui,
+      InspectorEngineTree* tree,
+      TreeMemberWorkingData* wdata,
+      void* ptr,
+      f32 x,
+      f32* y,
+      String name)
+  {
+    MemberState::evaluate(ui, tree, wdata, ptr, x, y, name);
+
+    io::format(&wdata->value_buffer, *(void**)ptr);
+
+    evalValue(tree, wdata);
+  }
+
+  void generate(
+      UI* ui, 
+      InspectorEngineTree* tree, 
+      TreeMemberWorkingData* wdata)
+  {
+    MemberState::generate(ui, tree, wdata);
+    drawValue(ui, tree, wdata);
+  }
+};
+
+template<typename T>
+String getEnumString(T x);
+
+/* ============================================================================
+ */
+template<typename T>
+struct EnumMemberState : public MemberState
+{
+  void evaluate(
+      UI* ui,
+      InspectorEngineTree* tree,
+      TreeMemberWorkingData* wdata,
+      void* ptr,
+      f32 x,
+      f32* y,
+      String name)
+  {
+    MemberState::evaluate(ui, tree, wdata, ptr, x, y, name);
+
+    io::format(&wdata->value_buffer, getEnumString(*(T*)ptr));
+
+    evalValue(tree, wdata);
+  }
+
+  void generate(
+      UI* ui, 
+      InspectorEngineTree* tree, 
+      TreeMemberWorkingData* wdata)
+  {
+    MemberState::generate(ui, tree, wdata);
+    drawValue(ui, tree, wdata);
+  }
+};
+
+/* ============================================================================
+ */
+template<typename T>
+struct BuiltinMemberState : public MemberState
+{
+  void evaluate(
+      UI* ui,
+      InspectorEngineTree* tree,
+      TreeMemberWorkingData* wdata,
+      void* ptr,
+      f32 x,
+      f32* y,
+      String name)
+  {
+    MemberState::evaluate(ui, tree, wdata, ptr, x, y, name);
+
+    io::format(&wdata->value_buffer, *(T*)ptr);
+
+    evalValue(tree, wdata);
+  }
+
+  void generate(
+      UI* ui, 
+      InspectorEngineTree* tree, 
+      TreeMemberWorkingData* wdata)
+  {
+    MemberState::generate(ui, tree, wdata);
+    drawValue(ui, tree, wdata);
+  }
+};
+
+template<typename T>
+struct FormattedMemberState : public MemberState {};
+
+$ for type,formatter in pairs(formatters) do
+/* ============================================================================
+ */
+template<>
+struct FormattedMemberState<$(type)> : public MemberState
+{
+  void evaluate(
+      UI* ui,
+      InspectorEngineTree* tree,
+      TreeMemberWorkingData* wdata,
+      void* ptr,
+      f32 x,
+      f32* y,
+      String name)
+  {
+    MemberState::evaluate(ui, tree, wdata, ptr, x, y, name);
+  
+    auto& val = *($(type)*)ptr;
+
+$ local formatted = formatter:gsub("%%", "val")
+    io::formatv(&wdata->value_buffer, $(formatted));
+
+    evalValue(tree, wdata);
+  }
+
+  void generate(
+      UI* ui, 
+      InspectorEngineTree* tree, 
+      TreeMemberWorkingData* wdata)
+  {
+    MemberState::generate(ui, tree, wdata);
+    drawValue(ui, tree, wdata);
+  }
+};
+
+$ end
+
+
+$ -- * ------------------------------------------------------------------------
+
+$ local handleRecord = function(record)
+/* ============================================================================
+ *  $(record.name)
+ */
+struct RecordState$(record.decl_idx)
+{
+$   for field,i in record:eachFieldWithIndex() do
+  // $(field.name): $(field.type:tostring())
+$     local record = field.type:getRecordDecl()
+$     local enum = field.type:getEnumDecl()
+$     if formatters[field.type.name] then
+  FormattedMemberState<$(field.type.name)> member$(i);
+$     elseif record then
+  RecordMemberState<RecordState$(record.decl_idx)> member$(i);
+$     elseif enum then
+  EnumMemberState<$(enum.name)> member$(i);
+$     elseif field.type:is(ast.PointerType) then
+  PointerMemberState member$(i);
+$     else
+$       local type = field.type
+$       if type:is(ast.ElaboratedType) then
+$          type = type.desugared
+$       end
+$       if type:is(ast.BuiltinType) then
+  BuiltinMemberState<$(field.type.name)> member$(i);
+$       else
+  MemberState member$(i);
+$       end
+$     end
+$   end
+
+  b8 init(UI& ui)
+  {
+$ for field,i in record:eachFieldWithIndex() do
+    member$(i).init(ui);
+$ end
+    return true;
+  }
+
+  void deinit(UI& ui)
+  {
+$ for field,i in record:eachFieldWithIndex() do
+    member$(i).deinit(ui);
+$ end
   }
 
   void evaluate(
@@ -600,32 +555,49 @@ $ end)
       f32 x,
       f32* y)
   {
-$ for member,i in struct.members:eachWithIndex() do
+$ for field,i in record:eachFieldWithIndex() do
+$   local record = field.type:getRecordDecl()
+$   if record then
     {
       TreeMemberWorkingData* member_data = tree->wdata->addMemberData();
-    
-      member$(member.idx).evaluate(
-        ui, 
+      String name = 
+        (member$(i).open? 
+          "- $(field.name)"_str :
+          "+ $(field.name)"_str);
+
+      member$(i).evaluate(
+        ui,
         tree,
         member_data,
-        ptr, 
+        (u8*)ptr + $(field.offset),
         x,
-        y);
+        y,
+        name);
     }
+$   else
+    {
+      TreeMemberWorkingData* member_data = tree->wdata->addMemberData();
+      member$(i).evaluate(
+        ui,
+        tree,
+        member_data,
+        (u8*)ptr + $(field.offset),
+        x,
+        y,
+        "$(field.name)"_str);
+    }
+$   end
 $ end
   }
 
   void generate(UI* ui, InspectorEngineTree* tree)
   {
-$ for member,i in struct.members:eachWithIndex() do
+$ for field,i in record:eachFieldWithIndex() do
     {
       auto* wdata = tree->wdata->member_data_iter->data;
       tree->wdata->member_data_iter = tree->wdata->member_data_iter->next;
-      member$(member.idx).generate(
-        ui, 
-        tree,
-        wdata);
-    }
+      member$(i).generate(ui, tree, wdata);
+    }   
 $ end
   }
 
@@ -634,80 +606,54 @@ $ end
       UpdateReason reason, 
       InspectorEngineTree* tree)
   {
-$ for member,i in struct.members:eachWithIndex() do
-    {
-      member$(member.idx).update(
-        ui, 
-        reason,
-        tree);
-    }
+$ for field,i in record:eachFieldWithIndex() do
+    member$(i).update(ui, reason, tree);
 $ end
   }
 
   void reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post)
   {
-$ for member in struct.members:each() do
-    member$(member.idx).reportDrawCmds(ui, pre, post);
+$ for field,i in record:eachFieldWithIndex() do
+    member$(i).reportDrawCmds(ui, pre, post);
 $ end
   }
 
 };
 $ end
 
-$$$
+$ local handleEnum = function(enum)
+template<>
+String getEnumString($(enum.name) x)
+{
+  using Enum = $(enum.name);
+  switch (x)
+  {
+$   for elem in enum.elems:each() do
+  case Enum::$(elem): return "$(elem)"_str;
+$   end
+  }
+}
+$ end
 
--- * --------------------------------------------------------------------------
+$ -- * ------------------------------------------------------------------------
 
-local placed_types = {}
+$ local handleTagDecl = function(decl)
+$   if decl:is(ast.Record) then
+$     handleRecord(decl)
+$   elseif decl:is(ast.Enum) then
+$     handleEnum(decl)
+$   else
+$     error("unhandled TagDecl kind")
+$   end
+$ end
 
-local tryPlaceType = function(type, f)
-  if placed_types[type.type_idx] then return end
-  f()
-  placed_types[type.type_idx] = true
-end
+$ -- * ------------------------------------------------------------------------
 
--- * --------------------------------------------------------------------------
-
-local placeUnionCode,
-      placeStructCode
-
-local function enterMember(member)
-  if Inspector.Struct:isTypeOf(member.type) then
-    placeStructCode(member.type)
-  elseif Inspector.Union:isTypeOf(member.type) then
-    placeUnionCode(member.type)
-  end
-end
-
-placeUnionCode = function(union)
-  union.members:each(function(member)
-    enterMember(member)
-  end)
-  tryPlaceType(union, function()
-    putUnionCode(union)
-  end)
-end
-
-placeStructCode = function(struct)
-  struct.members:each(function(member)
-    enterMember(member)
-  end)
-  tryPlaceType(struct, function()
-    putStructCode(struct)
-  end)
-end
-
-local function placeStructStateDefs()
-  Inspector.structs.list:each(function(struct)
-    if not struct.is_anonymous then
-      placeStructCode(struct)
-    end
-  end)
-end
-
-$$$
-
-@@placeStructStateDefs
+$ for decl in p.decls.list:each() do
+$   if decl.decl:is(ast.TagDecl) then
+$     handleTagDecl(decl.decl)
+$   end
+$ end
 
 /* ----------------------------------------------------------------------------
  */
@@ -765,48 +711,28 @@ InspectorEngineTree* InspectorEngineTree::create(UI& ui, Engine* engine)
   tree->focusAddress(
     ui, 
     engine, 
-    $(Inspector.types.map["struct Engine"].type_idx));
+    $(p.decls.map["struct Engine"].decl_idx));
 
   tree->font = ui.fontlib.findOrLoadFont(
     "gohu"_str,
     ui.eng->assetmgr,
     ui.eng->renderer);
 
+  tree->bg = ui.drawcmds.add();
+  tree->bg->alloc(&ui, gfx::putFilledRectCounts());
+
   return tree;
 }
 
-$$$
-local getTypeStateName = function(type)
-  local name
-  if Inspector.Struct:isTypeOf(type) then
-    name = "StructState"
-  elseif Inspector.Union:isTypeOf(type) then
-    name = "UnionState"
-  end
-  return name..type.type_idx
-end
-$$$
-
-$ local placed_focus = {}
-$ Inspector.types.list:each(function(type)
-$   if not type.member_path then return end
-$   if type.is_anonymous then return end
-$   if not placed_types[type.type_idx] then return end
-$   local typename = type.canonical_name
-$   if type.member_path then
-$     typename = "decltype("..type.member_path..")"
-$   end
-$   if placed_focus[typename] then return end
-$   placed_focus[typename] = true
-$   
+$ for name,decl,i in p:eachRecordDeclWithIndex() do
 /* ----------------------------------------------------------------------------
  */
-template<>
-b8 InspectorEngineTree::focusAddress(UI& ui, $(typename)* addr)
-{
-  return focusAddress(ui, addr, $(type.type_idx));
-}
-$ end)
+// template<>
+// b8 InspectorEngineTree::focusAddress(UI& ui, TODO FIX THIS* addr)
+// {
+//   return focusAddress(ui, addr, TODO FIX THIS);
+// }
+$ end
 
 /* ----------------------------------------------------------------------------
  */
@@ -836,15 +762,12 @@ b8 InspectorEngineTree::focusAddress(UI& ui, void* addr, u64 type_idx)
 
   switch (current_type)
   {
-$ Inspector.types.list:each(function(type)
-$   if placed_types[type.type_idx] then
-  // $(type.name)
-  // $(type.canonical_name)
-  case $(type.type_idx): 
-    current_state = checkState<$(getTypeStateName(type))>(ui, this, addr);
+$ for name,decl,i in p:eachRecordDeclWithIndex() do
+  // $(name)
+  case $(i): 
+    current_state = checkState<RecordState$(i)>(ui, this, addr);
     break;
-$   end
-$ end)
+$ end
   default:
     assert(!"invalid type idx");
   }
@@ -855,6 +778,9 @@ $ end)
  */
 void InspectorEngineTree::evaluate(UI* ui)
 {
+$ local this = ui.createItemContext("InspectorEngineTree", "this")
+  @@this.style:lookup(margin, border, padding)
+
   wdata = ui->temp_alloc.construct<TreeWorkingData>();
   wdata->init(ui);
 
@@ -863,19 +789,21 @@ void InspectorEngineTree::evaluate(UI* ui)
   f32 y = 0.f;
   switch(current_type)
   {
-$ Inspector.types.list:each(function(type)
-$   if placed_types[type.type_idx] then
-  case $(type.type_idx):
-    (($(getTypeStateName(type))*)current_state)->evaluate(
+$ for name,decl,i in p:eachRecordDeclWithIndex() do
+  // $(name)
+  case $(i):
+    ((RecordState$(i)*)current_state)->evaluate(
       ui, this, current_addr, 0.f, &y);
     break;
-$   end
-$ end)
-
+$ end
   }
   
-  size.x = max_name_width + 5.f + max_value_width + 10.f;
-  size.y = y + 13.f + 10.f;
+  size.x = 
+    max_name_width + spacing_between_name_and_value + max_value_width + 
+    @this.style.padding.left + @this.style.padding.right +
+    2.f * row_text_padding;
+  size.y = 
+    y + @this.style.padding.top + @this.style.padding.bottom;
 }
 
 /* ----------------------------------------------------------------------------
@@ -885,33 +813,41 @@ void InspectorEngineTree::generate(UI* ui)
 $ local this = ui.createItemContext("InspectorEngineTree", "this")
   @@this.style:lookup(margin, border, padding)
 
-  auto parent = node->parent->data;
-$ local parent = ui.createItemContext("Item", "parent")
-  @@parent.style:lookup(padding)
+  auto [vp,ip] = bg->getPtrs(ui);
+
+  bg->counts_used = 
+    gfx::putFilledRect(
+      vp,
+      ip,
+      vec2i(0,0),
+      pos_screen,
+      @this.getBorderedArea,
+      odd_row_color);
 
   content_pos = 
     pos_screen + 
     @this.style.margin.top_left +
     @this.style.border.top_left +
-    @this.style.padding.top_left +
-    vec2f(5,5);
+    @this.style.padding.top_left;
 
   content_size = @this.getPaddedArea;
-  content_size -= vec2f(5,5);
+
+  INFO("csize: ", content_size, "\n",
+       "size:  ", size, "\n",
+       "padd:  ", @this.style.padding, "\n");
 
   wdata->member_data_iter = wdata->member_data_list.headNode();
 
   switch(current_type)
   {
-$ Inspector.types.list:each(function(type)
-$   if placed_types[type.type_idx] then
-  case $(type.type_idx):
-    (($(getTypeStateName(type))*)current_state)->generate(
+$ for name,decl,i in p:eachRecordDeclWithIndex() do
+  // $(name)
+  case $(i):
+    ((RecordState$(i)*)current_state)->generate(
       ui, 
       this);
     break;
-$   end
-$ end)
+$ end
   }
 }
 
@@ -925,13 +861,12 @@ void InspectorEngineTree::update(UI* ui, UpdateReason reason)
     {
       switch(current_type)
       {
-$ for type in Inspector.types.list:each() do
-$   if placed_types[type.type_idx] then
-      case $(type.type_idx):
-        (($(getTypeStateName(type))*)current_state)->update(
+$ for name,decl,i in p:eachRecordDeclWithIndex() do
+      // $(name)
+      case $(i):
+        ((RecordState$(i)*)current_state)->update(
           ui, reason, this);
         break;
-$   end
 $ end
       }
     }
@@ -946,15 +881,14 @@ void InspectorEngineTree::reportDrawCmds(
     DrawCmdList& pre,
     DrawCmdList& post)
 {
+  pre.push(bg);
   switch(current_type)
   {
-$ Inspector.types.list:each(function(type)
-$   if placed_types[type.type_idx] then
-  case $(type.type_idx):
-    (($(getTypeStateName(type))*)current_state)->reportDrawCmds(ui, pre, post);
+$ for name,decl,i in p:eachRecordDeclWithIndex() do
+  case $(i):
+    ((RecordState$(i)*)current_state)->reportDrawCmds(ui, pre, post);
     break;
-$   end
-$ end)
+$ end
   }
 }
 
@@ -979,15 +913,18 @@ Inspector* Inspector::create(UI& ui, Engine* engine)
   auto ins = ui.begin<Inspector>("Inspector"_str);
   auto tree = ins->tree = InspectorEngineTree::create(ui, engine);
 
+$ local this = ui.createItemContext("Inspector", "ins")
+  @this.style.set.background_color(even_row_color);
+
 $ local tree = ui.createItemContext("InspectorEngineTree", "tree")
   
-  @tree.style.set.background_color(0x08141eff);
+  @tree.style.set.background_color(even_row_color);
+  @tree.style.set.padding({5,5,5,5});
 
   ui.end<Inspector>();
 
   return ins;
 }
 
-}
-
+} // namespace ui
 

@@ -93,6 +93,11 @@ struct vec2
     return { -x, -y };
   }
 
+  inline bool operator == (const vec2& rhs) const
+  {
+    return x == rhs.x && y == rhs.y;
+  }
+
   /* --------------------------------------------------------------------------
    */
   inline vec2& set(T x, T y)

@@ -1,5 +1,5 @@
 $ local lpp = require "lpp"
-$ local reflect = require "reflection.Reflector"
+$ local reflect = require "reflect.Reflector"
 $ local ui = require "ui.UI"
  
 @@lpp.import "ui/Item.lh"

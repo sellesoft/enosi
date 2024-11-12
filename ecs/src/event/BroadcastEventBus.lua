@@ -1,5 +1,5 @@
 local lpp = require "lpp"
-local reflect = require "reflection.Reflector"
+local reflect = require "reflect.Reflector"
 local event = require "event.Event"
 local List = require "list"
 local CGen = require "cgen"
