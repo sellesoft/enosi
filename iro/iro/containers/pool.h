@@ -22,7 +22,8 @@ namespace iro
 template
 <
   typename T, // element type
-  s32 N_slots_per_chunk = 16
+  s32 N_slots_per_chunk = 16,
+  bool can_grow = true
 >
 struct Pool 
 {
@@ -94,8 +95,13 @@ struct Pool
     Slot* slot = free_slot;
     if (!slot->next_free_slot)
     {
-      newChunk();
-      slot->next_free_slot = current_chunk->slots;
+      if (can_grow)
+      {
+        newChunk();
+        slot->next_free_slot = current_chunk->slots;
+      }
+      else
+        return nullptr;
     }
 
     free_slot = slot->next_free_slot;

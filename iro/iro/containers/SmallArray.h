@@ -40,8 +40,6 @@ struct SmallArray
   s32 len = 0;
   s32 space = N;
 
-  b8 is_small = true;
-
   SmallArray() : small_arr() {}
 
   /* --------------------------------------------------------------------------
@@ -54,9 +52,17 @@ struct SmallArray
 
   /* --------------------------------------------------------------------------
    */ 
+  b8 isInit() const
+  {
+    return big_allocator != nullptr;
+  }
+
+  /* --------------------------------------------------------------------------
+   */ 
   void deinit()
   {
     clear();
+    big_allocator = nullptr;
   }
 
   b8 isSmall()

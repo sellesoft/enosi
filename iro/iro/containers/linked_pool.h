@@ -74,7 +74,6 @@ struct SLinkedPool
   List::RangeIterator end() { return list.end(); }
 };
 
-// TODO(sushi) update to init/deinit
 template<typename T>
 struct DLinkedPool
 {
