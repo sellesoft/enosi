@@ -119,6 +119,10 @@ String Scanner::scanNumber()
     u64 start = cache_offset;
     while (atDigit())
       advance(true);
+    if (at('.'))
+      advance(true);
+    while (atDigit())
+      advance(true);
     return String::from(cache.ptr+start, cache_offset-start);
   }
   else

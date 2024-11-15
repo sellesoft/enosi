@@ -254,9 +254,9 @@ bool String::operator==(String s) const
 String String::subFromFirst(u8 c) const
 {
   auto pos = findFirst(c);
-  if (pos.notFound())
-    return nil;
-  return sub(pos.x);
+  if (pos.found())
+    return sub(pos.x);
+  return nil;
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -264,9 +264,9 @@ String String::subFromFirst(u8 c) const
 String String::subToFirst(u8 c) const
 {
   auto pos = findFirst(c);
-  if (pos.notFound())
-    return nil;
-  return sub(0, pos.x);
+  if (pos.found())
+    return sub(0, pos.x);
+  return nil;
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -274,9 +274,9 @@ String String::subToFirst(u8 c) const
 String String::subFromLast(u8 c) const
 {
   auto pos = findLast(c);
-  if (pos.notFound())
-    return nil;
-  return sub(pos.x);
+  if (pos.found())
+    return sub(pos.x);
+  return nil;
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -284,9 +284,9 @@ String String::subFromLast(u8 c) const
 String String::subToLast(u8 c) const
 {
   auto pos = findLast(c);
-  if (pos.notFound())
-    return nil;
-  return sub(0, pos.x);
+  if (pos.found())
+    return sub(0, pos.x);
+  return nil;
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -294,9 +294,9 @@ String String::subToLast(u8 c) const
 String String::subFromLastNot(u8 c) const
 {
   auto pos = findLastNot(c);
-  if (pos.notFound())
-    return nil;
-  return sub(pos.x);
+  if (pos.found())
+    return sub(pos.x);
+  return nil;
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -304,9 +304,9 @@ String String::subFromLastNot(u8 c) const
 String String::subToLastNot(u8 c) const
 {
   auto pos = findLastNot(c);
-  if (pos.notFound())
-    return nil;
-  return sub(0, pos.x);
+  if (pos.found())
+    return sub(0, pos.x);
+  return nil;
 }
 
 /* ------------------------------------------------------------------------------------------------

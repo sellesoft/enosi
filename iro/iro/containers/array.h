@@ -94,16 +94,16 @@ struct Array
 
   /* --------------------------------------------------------------------------
    */ 
-  __attribute__((noinline))
   Header* getHeader();
-  __attribute__((noinline))
   s32& len();
-  __attribute__((noinline))
   s32& space();
-  __attribute__((noinline))
   mem::Allocator* allocator();
 
-  b8 isEmpty() { return len() == 0; }
+  const Header* getHeader() const { return (Header*)arr - 1; }
+  s32 len() const { return getHeader()->len; }
+  s32 space() const { return getHeader()->space; }
+
+  b8 isEmpty() const { return len() == 0; }
 
   /* --------------------------------------------------------------------------
    */ 
@@ -112,9 +112,6 @@ struct Array
     growIfNeeded(1);
 
     return array::push(arr, &len());
-
-    // len() += 1;
-    // return new (arr + len() - 1) T; 
   }
 
   void push(const T& x)
@@ -122,9 +119,6 @@ struct Array
     growIfNeeded(1);
 
     array::push(arr, &len(), x);
-
-    // arr[len()] = x;
-    // len() += 1;
   }
 
   /* --------------------------------------------------------------------------
@@ -133,8 +127,6 @@ struct Array
   {
     assert(len() != 0);
     array::pop(arr, &len());
-
-    // len() -= 1;
   }
 
   /* --------------------------------------------------------------------------
@@ -145,15 +137,6 @@ struct Array
     growIfNeeded(1);
 
     array::insert(arr, &len(), idx, x);
-
-    // if (!len()) 
-    //   push(x);
-    // else
-    // {
-    //   mem::move(arr + idx + 1, arr + idx, sizeof(T) * (len() - idx));
-    //   len() += 1;
-    //   arr[idx] = x;
-    // }
   }
 
   T* insert(s32 idx)
@@ -162,14 +145,6 @@ struct Array
     growIfNeeded(1);
 
     return array::insert(arr, &len(), idx);
-
-    // if (idx == len())
-    //   return push();
-
-    // growIfNeeded(1);
-    // mem::move(arr + idx + 1, arr + idx, sizeof(T) * (len() - idx));
-    // len() += 1;
-    // return new (arr + idx) T;
   }
 
   /* --------------------------------------------------------------------------
@@ -183,8 +158,6 @@ struct Array
   {
     assert(idx >= 0 && idx < len());
     array::remove(arr, &len(), idx);
-    // mem::move(arr + idx + 1, arr + idx, sizeof(T) * (len() - idx));
-    // len() -= 1;
   }
 
   /* --------------------------------------------------------------------------
@@ -192,12 +165,35 @@ struct Array
   void clear()
   {
     array::clear(arr, &len());
-
-    // for (s32 i = 0; i < len(); i++)
-    //   (arr + i)->~T();
-    // len() = 0;
   }
 
+  /* --------------------------------------------------------------------------
+   */ 
+  void resize(u64 new_len)
+  {
+    if (new_len == 0)
+    {
+      clear();
+      return;
+    }
+
+    if (new_len < len())
+    {
+      for (u64 i = new_len + 1; i < len(); ++i)
+        arr[i].~T();
+
+      len() = new_len;
+    }
+    else if (new_len > len())
+    {
+      growIfNeeded(new_len - len());
+
+      for (u64 i = len(); i < new_len; ++i)
+        new (arr + i) T;
+  
+      len() = new_len;
+    }
+  }
 
   /* --------------------------------------------------------------------------
    */ 
@@ -205,6 +201,9 @@ struct Array
 
   T* begin() { return arr; }
   T* end()   { return arr + len(); }
+
+  const T* begin() const { return arr; }
+  const T* end()   const { return arr + len(); }
 
   T* first() { return begin(); } 
   T* last() { return end() - 1; }
