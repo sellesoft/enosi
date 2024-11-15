@@ -1,0 +1,46 @@
+
+$ local cmn = require "common"
+$ local Schema = require "asset.Schema"
+
+#include "iro/common.h"
+#include "iro/unicode.h"
+#include "iro/containers/array.h"
+#include "iro/containers/slice.h"
+
+#include "math/vec.h"
+
+using namespace iro;
+
+/* ============================================================================
+ */
+enum class BlockKind
+{
+  Wall,
+  Floor,
+};
+
+/* ============================================================================
+ */
+struct MapBlockDef
+{
+  BlockKind kind;
+  vec2i pos;
+};
+
+/* ============================================================================
+ */
+struct MapLayerDef
+{
+  vec2i size;
+  vec2i pos;
+  Array<MapBlockDef> blocks;
+};
+
+/* ============================================================================
+ */
+@Schema.def(MapDef,
+{
+  String name;
+  vec2i size;
+  Array<MapLayerDef> layers;
+})

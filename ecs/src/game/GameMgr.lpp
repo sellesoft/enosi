@@ -5,6 +5,9 @@ $ local reflect = require "reflect.Reflector"
 @@lpp.import "game/Transform.comp.lh"
 @@lpp.import "game/Sprite.comp.lh"
 @@lpp.import "game/Movement.comp.lh"
+@@lpp.import "asset/SourceDataParser.lh"
+@@lpp.import "asset/SourceDataFile.lh"
+@@lpp.import "asset/Packing.lh"
 
 #include "iro/logger.h"
 
@@ -29,27 +32,40 @@ b8 GameMgr::init(Engine* eng)
   if (!rendersys.init(*this))
     return ERROR("failed to initialize render sys\n");
 
-$ local makeEnt = function(name, pos)
-  auto $(name) = entmgr.createEntity("$(name)"_str);
-  {
-    auto t = cmpmgr.allocateComponent<Transform>();
-    auto s = cmpmgr.allocateComponent<Sprite>();
-    auto mov = cmpmgr.allocateComponent<Movement>();
+  using namespace fs;
 
-    entmgr.addComp($(name), mov); 
-    entmgr.addComp($(name), t);
-    entmgr.addComp($(name), s);
+  auto testent = 
+    entmgr.createEntityFromAsset(
+      "assets/entities/Test.ent"_str,
+      cmpmgr);
 
-    t->pos = $(pos);
-  }
-$ end
+  mindsys.attach(testent);
+  eye.attach(testent);
 
-  @makeEnt(player, {0.f,0.f});
-  mindsys.attach(player);
-  eye.attach(player);
+  auto test_map = 
+    File::from("assets/maps/Test.map"_str, OpenFlag::Read);
+  defer { test_map.close(); };
 
-  @makeEnt(thing, {5.f, 5.f});
-  @makeEnt(thing2, {-5.f, 10.f});
+  SourceDataFile test_map_source_data_file;
+  if (!test_map_source_data_file.init())
+    return ERROR("failed to init test map source data file\n");
+
+  SourceDataParser parser;
+  if (!parser.init(&test_map_source_data_file, &test_map, "Test.map"_str))
+    return ERROR("failed to init source data parser\n");
+  
+  if (!parser.parse())
+    return ERROR("failed to parse test map source data\n");
+
+  auto map_def = mem::stl_allocator.construct<MapDef>();
+
+  packSourceDataIntoType(
+    *test_map_source_data_file.returned_data,
+    map_def);
+  
+  INFO(map_def->name, "\n");
+
+  map.init(*map_def);
 
   return true;
 }

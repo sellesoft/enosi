@@ -13,9 +13,12 @@ $ local util = require "util"
 @@lpp.import "game/Mind.sys.lh"
 @@lpp.import "game/Movement.sys.lh"
 @@lpp.import "game/Eye.sys.lh"
+@@lpp.import "game/map/Map.lh"
 
 struct Engine;
 
+/* ============================================================================
+ */
 struct GameMgr
 {
   Engine* engine;
@@ -26,6 +29,7 @@ struct GameMgr
   MindSys mindsys;
   MovementSys movesys;
   EyeSys eye;
+  Map map;
 
   b8 init(Engine* eng);
   void deinit();

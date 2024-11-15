@@ -1,0 +1,17 @@
+/*
+ *  Creates an entity from a source data file.
+ */
+
+$ local cmn = require "common"
+
+struct EntityId;
+struct SourceDataFile;
+struct EntityMgr;
+struct ComponentMgr;
+
+/* ----------------------------------------------------------------------------
+ */
+EntityId loadEntity(
+  const SourceDataFile& sfile, 
+  EntityMgr& entmgr,
+  ComponentMgr& cmpmgr);

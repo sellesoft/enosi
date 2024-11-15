@@ -1,0 +1,60 @@
+$ local cmn = require "common"
+
+@@lpp.import "game/map/Map.lh"
+
+#include "iro/logger.h"
+
+@cmn.defFileLogger(game.map, Info)
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Block::init(const MapBlockDef& def)
+{
+  this->def = &def;
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Layer::init(const MapLayerDef& def)
+{
+  this->def = &def;
+
+  if (!blocks.init())
+    return ERROR("failed to initialize block array\n");
+
+  blocks.resize(def.size.x * def.size.y);
+
+  for (const MapBlockDef& block_def : def.blocks)
+  {
+    Block* block = blocks.arr + block_def.pos.x + block_def.pos.y * def.size.x;
+
+    if (!block->init(block_def))
+      return false;
+  }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Map::init(const MapDef& def)
+{
+  this->def = &def;
+
+  if (!layers.init())
+    return ERROR("failed to initialize layer array\n");
+
+  layers.resize(def.layers.len());
+  
+  for (u32 i = 0; i < def.layers.len(); ++i)
+  {
+    MapLayerDef* layer_def = def.layers.arr + i;
+    Layer* layer = layers.arr + i;
+    
+    if (!layer->init(*layer_def))
+      return false;
+  }
+
+  return true;
+}

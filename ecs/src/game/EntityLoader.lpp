@@ -1,0 +1,143 @@
+$ local cmn = require "common"
+$ local Comp = require "game.Component"
+$ local glob = require "Glob"
+$ local List = require "list"
+
+@@lpp.import "game/EntityLoader.lh"
+
+@@lpp.import "game/EntityMgr.lh"
+@@lpp.import "game/Component.lh"
+@@lpp.import "asset/SourceDataFile.lh"
+@@lpp.import "asset/Packing.lh"
+
+#include "iro/common.h"
+#include "iro/unicode.h"
+#include "iro/logger.h"
+
+@cmn.defFileLogger(ent.loader, Info);
+
+$ local buf = cmn.buffer.new()
+$ glob "src/game/**/*.comp.lh" :each(function(path)
+$   local result = lpp.import(path:sub(#"src/"+1))
+$   if result then
+$     buf:put(result)
+$   end
+$ end)
+@buf:get
+
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
+b8 loadComponentType(
+    const SourceData& data, 
+    EntityId ent,
+    EntityMgr& entmgr,
+    ComponentMgr& cmpmgr);
+
+$ for comp in Comp.components.list:each() do
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 loadComponentType<$(comp.name)>(
+    const SourceData& data, 
+    EntityId ent,
+    EntityMgr& entmgr,
+    ComponentMgr& cmpmgr)
+{
+  using TComp = $(comp.name);
+
+  TComp* comp = cmpmgr.allocateComponent<TComp>();
+
+  if (comp == nullptr)
+    return ERROR("failed to allocate $(comp.name) component\n");
+
+  if (!packSourceDataIntoType(data, comp))
+    return false;
+
+  entmgr.addComp(ent, comp);
+
+  return true;
+}
+$ end
+
+/* ----------------------------------------------------------------------------
+ */
+b8 loadComponent(
+    const SourceData& data, 
+    EntityId ent,
+    EntityMgr& entmgr,
+    ComponentMgr& cmpmgr)
+{
+  switch (data.getAsObject()->type.hash())
+  {
+$ for comp in Comp.components.list:each() do
+  case "$(comp.name)"_hashed:
+    return loadComponentType<$(comp.name)>(data, ent, entmgr, cmpmgr);
+$ end
+  default: 
+    return ERROR("no component named ", data.getAsObject()->type, "\n");
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+EntityId loadEntity(
+    const SourceDataFile& sfile, 
+    EntityMgr& entmgr,
+    ComponentMgr& cmpmgr)
+{
+  const SourceData* entdata = sfile.returned_data;
+
+$ local function failIf(cond, ...)
+$   local args = cmn.buffer.new()
+$   local first = true
+$   for arg in List{...}:each() do
+$     if first then
+$       first = false
+$     else
+$       args:put ","
+$     end
+$     args:put(arg)
+$   end
+  if ($(cond))
+  {
+    ERROR($(args));
+    return nil;
+  }
+$ end
+
+  @failIf(!entdata->isObject(), "expected object data to define entity\n");
+
+  const SourceDataObject* entobj = entdata->getAsObject();
+
+  const SourceData* name = entobj->findChildByName("name"_str);
+
+  @failIf(name == nullptr, "all entities must be assigned a name\n");
+  @failIf(!name->isValue(), "expected a value for name of entity\n");
+
+  const SourceDataValue* name_val = name->getAsValue();
+
+  EntityId entid = entmgr.createEntity(name_val->val);
+
+  @failIf(isnil(entid), "failed to create entity\n");
+
+  const SourceData* component_data = entobj->findChildByName("components"_str);
+  
+  @failIf(component_data == nullptr, 
+    "all entities must have a 'components' array");
+
+  @failIf(!component_data->isObject(), 
+    "expected an array for 'components' field");
+
+  const SourceDataObject* component_arr = component_data->getAsObject();
+
+  for (const SourceData* component : component_arr->children)
+  {
+    @failIf(!component->isObject(), "expected object data for component\n");
+
+    @failIf(!loadComponent(*component, entid, entmgr, cmpmgr), 
+      "failed to load component\n");
+  }
+
+  return entid;
+}

@@ -2,10 +2,17 @@ $ local lpp = require "lpp"
 $ local reflect = require "reflect.Reflector"
 
 @@lpp.import "game/EntityMgr.lh"
+@@lpp.import "game/EntityLoader.lh"
+@@lpp.import "asset/SourceDataFile.lh"
+@@lpp.import "asset/SourceDataParser.lh"
+
+#include "iro/fs/file.h"
 
 static Logger logger = 
   Logger::create("entmgr"_str, Logger::Verbosity::Info);
 
+/* ----------------------------------------------------------------------------
+ */
 b8 EntityMgr::init()
 {
   INFO("initializing\n");
@@ -18,12 +25,16 @@ b8 EntityMgr::init()
   return true;
 }
 
+/* ----------------------------------------------------------------------------
+ */
 void EntityMgr::deinit()
 {
   ent_pool.deinit();
   // TODO(sushi) actual clean up 
 }
 
+/* ----------------------------------------------------------------------------
+ */
 EntityId EntityMgr::createEntity(String name)
 {
   Entity* ent = ent_pool.add();
@@ -37,6 +48,44 @@ EntityId EntityMgr::createEntity(String name)
   return id;
 }
 
+/* ----------------------------------------------------------------------------
+ */
+EntityId EntityMgr::createEntityFromAsset(String path, ComponentMgr& cmpmgr)
+{
+  using namespace fs;
+
+  auto file = File::from(path, OpenFlag::Read);
+
+  if (isnil(file))
+  {
+    ERROR("failed to open entity asset file at ", path, "\n");
+    return nil;
+  }
+
+  defer { file.close(); };
+
+  SourceDataFile sfile;
+  if (!sfile.init())
+  {
+    ERROR("failed to init source data file\n");
+    return nil;
+  }
+
+  SourceDataParser parser;
+  if (!parser.init(&sfile, &file, path))
+  {
+    ERROR("failed to init source data parser\n");
+    return nil;
+  }
+
+  if (!parser.parse())
+    return nil;
+
+  return loadEntity(sfile, *this, cmpmgr);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 void EntityMgr::destroyEntity(EntityId id)
 {
   if (isnil(id))
@@ -55,6 +104,8 @@ void EntityMgr::destroyEntity(EntityId id)
   ent_pool.remove(ent);
 }
 
+/* ----------------------------------------------------------------------------
+ */
 Entity* EntityMgr::getEntity(EntityId id) const
 {
   if (isnil(id))
@@ -63,6 +114,8 @@ Entity* EntityMgr::getEntity(EntityId id) const
   return ent_pool.getFromId(id.value, id.salt);
 }
 
+/* ----------------------------------------------------------------------------
+ */
 b8 EntityMgr::addComp(Entity* ent, EntityId id, Component* cmp) const
 {
   assert(isnil(cmp->owner));
@@ -76,6 +129,8 @@ b8 EntityMgr::addComp(Entity* ent, EntityId id, Component* cmp) const
   return true;
 }
 
+/* ----------------------------------------------------------------------------
+ */
 b8 EntityMgr::addComp(Entity* ent, Component* cmp) const
 {
   EntityId id;
@@ -84,6 +139,8 @@ b8 EntityMgr::addComp(Entity* ent, Component* cmp) const
   return addComp(ent, id, cmp);
 }
 
+/* ----------------------------------------------------------------------------
+ */
 b8 EntityMgr::addComp(EntityId id, Component* cmp) const
 {
   return addComp(getEntity(id), id, cmp);

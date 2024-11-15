@@ -21,7 +21,7 @@ struct Entity
 {
   typedef AVL<Component, Component::getKind> ComponentMap;
 
-  String name;
+  String name; // owned
   ComponentMap components;
 
   b8 init(String name);

@@ -14,8 +14,8 @@ $ local util = require "util"
 @@lpp.import "game/IndexedPool.lh"
 @@lpp.import "game/Component.lh"
 
-static const u32 c_entmgr_pool_size = 4096;
-
+/* ============================================================================
+ */
 struct EntityMgr
 {
   typedef IndexedPool<Entity, 4096> EntityPool;
@@ -26,6 +26,8 @@ struct EntityMgr
   void deinit();
 
   EntityId createEntity(String name);
+  EntityId createEntityFromAsset(String path, ComponentMgr& cmpmgr);
+
   void destroyEntity(EntityId id);
 
   Entity* getEntity(EntityId id) const;

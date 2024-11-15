@@ -5,6 +5,7 @@ $ local ui = require "ui.UI"
 @@lpp.import "game/Entity.lh"
 
 #include "iro/logger.h"
+#include "iro/memory/allocator.h"
 
 static Logger logger = 
   Logger::create("entity"_str, Logger::Verbosity::Info);
@@ -13,7 +14,7 @@ static Logger logger =
  */
 b8 Entity::init(String name)
 {
-  this->name = name;
+  this->name = name.allocateCopy(&mem::stl_allocator);
 
   if (!components.init())
     return ERROR("failed to initialize component map for entity ", name, "\n");
@@ -25,6 +26,7 @@ b8 Entity::init(String name)
  */
 void Entity::deinit()
 {
+  mem::stl_allocator.free(name.ptr);
   components.deinit();
 }
 

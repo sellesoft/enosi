@@ -38,6 +38,7 @@ b8 RenderSys::update(GameMgr& gamemgr)
   ComponentMgr& cmpmgr = gamemgr.cmpmgr;
   EntityMgr& entmgr = gamemgr.entmgr;
   EyeSys& eye = gamemgr.eye;
+  Map& map = gamemgr.map;
 
   renderer.pushBindBuffer(gfxbuf);
 
@@ -58,19 +59,52 @@ b8 RenderSys::update(GameMgr& gamemgr)
 
   vec2i sum = {};
 
+  mat3x2 tm = 
+    mat3x2::createTransform(
+      vec2f(0,0),
+      0.f);
+
+  renderer.pushUniformMat3x2("model"_str, tm);
+
+  u32 layer_idx = 0;
+  for (Layer& layer : map.layers)
+  {
+    for (const Block& block : layer.blocks)
+    {
+      if (block.def == nullptr)
+        continue;
+
+      const MapBlockDef& def = *block.def;
+      
+      Color color;
+
+      switch (def.kind)
+      {
+      case BlockKind::Wall: color = 0x00ff00ff; break;
+      case BlockKind::Floor: color = 0x0000ffff; break;
+      }
+
+      color *= 1.f - layer_idx * 0.25f;
+
+      sum += 
+        gfx::putFilledRect(
+          vp,
+          ip,
+          sum,
+          layer.def->pos + def.pos,
+          vec2f(1,1),
+          color);
+    }
+
+    layer_idx += 1;
+  }
+
   for (Sprite& sprite : cmpmgr.iterate<Sprite>())
   {
     Entity* owner = entmgr.getEntity(sprite.owner);
 
     if (auto* transform = owner->tryComp<Transform>())
     {
-      mat3x2 tm = 
-        mat3x2::createTransform(
-          vec2f(0,0),
-          0.f);
-
-      renderer.pushUniformMat3x2("model"_str, tm);
-
       sum +=
         gfx::putFilledRect(
           vp,
@@ -78,7 +112,7 @@ b8 RenderSys::update(GameMgr& gamemgr)
           sum,
           transform->pos,
           vec2f(1,1),
-          0xff00004f);
+          0xff0000ff);
     }
   }
 

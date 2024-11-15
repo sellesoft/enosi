@@ -1,0 +1,40 @@
+$ local cmn = require "common"
+
+#include "iro/common.h"
+#include "iro/unicode.h"
+
+@@lpp.import "game/map/Map.schema.lh"
+
+/* ============================================================================
+ */
+struct Block
+{
+  const MapBlockDef* def = nullptr;
+
+  b8 init(const MapBlockDef& def);
+  void deinit();
+};
+
+/* ============================================================================
+ */
+struct Layer
+{
+  const MapLayerDef* def = nullptr; 
+
+  Array<Block> blocks;
+
+  b8 init(const MapLayerDef& def);
+  void deinit();
+};
+
+/* ============================================================================
+ */
+struct Map
+{
+  const MapDef* def = nullptr;
+
+  Array<Layer> layers;
+
+  b8 init(const MapDef& def);
+  void deinit();
+};
