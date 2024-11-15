@@ -1,0 +1,111 @@
+/*
+ *  Ref counted handle to a SourceDataFile.
+ *  
+ *  These are retrieved from the SourceDataFileReg.
+ */
+
+$ local cmn = require "common"
+
+#include "iro/common.h"
+#include "iro/traits/nil.h"
+#include "assert.h"
+
+@@lpp.import "RefCounting.lh"
+
+struct SourceDataFileReg;
+struct SourceDataFile;
+
+/* ============================================================================
+ *  Header of SourceDataFiles allocated by the SourceDataFileReg. Handles
+ *  point to this.
+ */
+struct SourceDataFileHeader
+{
+  // Pointer to registry so we may automatically clean this up when we find
+  // no more refs exist.
+  SourceDataFileReg* reg = nullptr;
+
+  // Ref count to this SourceDataFile.
+  RefCounter rc = {};
+  
+  SourceDataFile* getFile() const
+  {
+    return (SourceDataFile*)(this + 1);
+  }
+};
+
+/* ============================================================================
+ */
+struct SourceDataFileHandle
+{
+  constexpr SourceDataFileHandle() {}
+  constexpr SourceDataFileHandle(Nil) {} 
+  constexpr ~SourceDataFileHandle() { assert(header == nullptr); }
+
+  SourceDataFileHandle& operator=(Nil)
+  {
+    release();
+    return *this;
+  }
+
+  // Disallow implicit copying.
+  SourceDataFileHandle(const SourceDataFileHandle& rhs) = delete;
+
+  SourceDataFileHandle(SourceDataFileHandle&& rhs)
+  {
+    header = rhs.header;
+    rhs.header = nullptr;
+  }
+
+  SourceDataFileHandle copy()
+  {
+    assert(header && "attempt to copy a nil SourceDataFileHandle!");
+    header->rc.addRef();
+    return SourceDataFileHandle{header};
+  }
+
+  SourceDataFileHandle move()
+  {
+    assert(header && "attempt to move a nil SourceDataFileHandle!");
+    auto out = SourceDataFileHandle{header};
+    header = nullptr;
+    return out;
+  }
+
+  void release();
+
+  SourceDataFile* getFile() const 
+    { return header? header->getFile() : nullptr; }
+
+  b8 isValid() const { return header != nullptr; }
+
+private:
+  
+  SourceDataFileHeader* header = nullptr;
+
+  // Only the registry may create handles.
+  friend SourceDataFileReg;
+
+  SourceDataFileHandle(SourceDataFileHeader* header) : header(header) {}
+};
+
+DefineNilValue(SourceDataFileHandle, {}, 
+  { return !x.isValid(); });
+
+/* ============================================================================
+ *  A helper for automatically releasing a SourceDataFileHandle at the end of 
+ *  a scope.
+ */
+struct ScopedSourceDataFileHandle : public SourceDataFileHandle
+{
+  ScopedSourceDataFileHandle(SourceDataFileHandle&& handle)
+    : SourceDataFileHandle(
+        // Force the compiler to move handle into the actual constructor.
+        static_cast<decltype(handle)&&>(handle)) { }
+
+  ~ScopedSourceDataFileHandle()
+  {
+    release();
+  }
+};
+

@@ -101,17 +101,29 @@ local imported = {}
 
 -- TODO(sushi) this needs to be a part of lpp itself.
 lpp.import = function(path)
-  if imported[path] then
+  local full_path = path
+  if full_path:sub(1,1) ~= "/" then
+    local src_path = full_path
+    if not full_path:find("^src/") then
+      full_path = "src/"..full_path
+    end
+    full_path = lpp.getFileFullPathIfExists(full_path)
+  end
+  if not full_path or full_path == "" then
+    error("could not form full path to "..path)
+  end
+
+  if imported[full_path] then
     return 
   end
 
-  imported[path] = true
-  local result = lpp.processFile("src/"..path)
+  imported[full_path] = true
+  local result = lpp.processFile(full_path)
 
   local expansion = lpp.MacroExpansion.new()
   expansion:pushBack(
     lpp.MacroPart.new(
-      path, 0, 0, result))
+      full_path, 0, 0, result))
 
   return result
 end
@@ -119,17 +131,18 @@ end
 if lpp.generating_dep_file then
   lpp.registerFinal(function(result)
     local makedeps = 
-      lpp.clang.generateMakeDepFile(result, args)
+      lpp.clang.generateMakeDepFile(
+        lpp.getCurrentInputSourceName(), result, args)
 
-    local count = 0
     for f in makedeps:gmatch("%S+") do
-      -- NOTE(sushi) skip the first two since they are they the phony 
-      --             cpp file passed to clang and its obj file.
+      -- NOTE(sushi) filtering out unwanted stuff here. This will unfortunately
+      --             break subtley if cpp files are ever included. But I 
+      --             currently don't plan to do this anyways.
       -- TODO(sushi) write a custom dependency consumer thing so that 
       --             we dont have to do this and can instead directly
       --             output a newline delimited list.
-      if count < 2 or f:sub(-1) == ":" or f == "\\" then
-        count = count + 1
+      if f:sub(-1) == ":" or f == "\\" or f:find(".cpp$") or f:find("^/usr/") 
+      then
         goto continue
       end
 

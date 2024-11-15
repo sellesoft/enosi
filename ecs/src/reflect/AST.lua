@@ -89,6 +89,21 @@ Type.getEnumDecl = function(self)
   end
 end
 
+Type.getDecl = function(self)
+  local type = self:getDesugared()
+  if type:is(ast.TagType) then
+    return type.decl
+  end
+end
+
+Type.getDesugared = function(self)
+  local type = self
+  if type:is(ast.ElaboratedType) then
+    type = type.desugared
+  end
+  return type
+end
+
 local BuiltinType = Type:derive()
 ast.BuiltinType = BuiltinType
 
@@ -283,10 +298,14 @@ Record.addMember = function(self, name, obj)
   self.members.list:push{ name=name, obj=obj }
 end
 
+Record.tostring = function(self)
+  return self.ast_kind.."("..self.name..")"
+end
+
 Record.dump = function(self, out)
   local buf = out or PrettyPrinter.new()
 
-  buf:write("\n",self.ast_kind, "(", self.name, ")\n{")
+  buf:write("\n",self:tostring(),"\n{")
   buf:incDepth()
 
   for member in self.members.list:each() do
@@ -345,6 +364,31 @@ ast.Union = Union
 Union.new = function(name)
   local o = Record.new(name)
   return setmetatable(o, Union)
+end
+
+local TemplateSpecialization = Record:derive()
+ast.TemplateSpecialization = TemplateSpecialization
+
+TemplateSpecialization.new = function(name, specialized_name)
+  local o = Record.new(name)
+  o.template_args = List{}
+  o.specialized_name = specialized_name
+  return setmetatable(o, TemplateSpecialization)
+end
+
+TemplateSpecialization.tostring = function(self)
+  local buf = buffer.new()
+  buf:put("TemplateSpecialization("..self.specialized_name)
+  for arg in self.template_args:each() do
+    buf:put ","
+    if type(arg) == "number" then
+      buf:put(arg)
+    else
+      buf:put(arg:tostring())
+    end
+  end
+  buf:put ")"
+  return buf:get()
 end
 
 return ast

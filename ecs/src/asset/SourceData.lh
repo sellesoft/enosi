@@ -41,6 +41,10 @@ struct SourceDataObject
   {
     children.destroy();
   }
+
+  const SourceData* findChildByName(String name) const;
+  SourceData* findChildByName(String name) 
+    { return (SourceData*)findChildByName(name); }
 };
 
 struct SourceData
@@ -68,7 +72,19 @@ struct SourceData
     return &data.value;
   }
 
+  const SourceDataValue* getAsValue() const
+  {
+    assert(isValue());
+    return &data.value;
+  }
+
   SourceDataObject* getAsObject()
+  {
+    assert(isObject());
+    return &data.object;
+  }
+
+  const SourceDataObject* getAsObject() const
   {
     assert(isObject());
     return &data.object;
@@ -99,8 +115,8 @@ struct SourceData
 
   SourceData() : kind(Kind::Invalid), data({}) {}
 
-  void dump(u32 depth = 0);
-  void dump(io::IO* out, u32 depth = 0);
+  void dump(u32 depth = 0) const;
+  void dump(io::IO* out, u32 depth = 0) const;
 
 private:
 

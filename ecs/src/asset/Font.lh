@@ -15,8 +15,8 @@ $ local SourceData = require "asset.SourceData"
 using namespace iro;
 
 @@lpp.import "asset/AssetHandle.lh"
-
 @@lpp.import "asset/Texture.lh"
+@@lpp.import "asset/Font.schema.lh"
 
 struct AssetMgr;
 
@@ -49,16 +49,6 @@ struct PackRange
   s32 num_chars;
   PackedChar* chardata;
 };
-
-/* ============================================================================
- */
-struct CodepointRange
-{
-  s32 first_codepoint;
-  s32 num_codepoints;
-};
-
-typedef Slice<CodepointRange> CodepointRanges;
 
 /* ============================================================================
  */

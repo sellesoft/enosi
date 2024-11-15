@@ -4,7 +4,21 @@ $ local cmn = require "common"
 
 #include "iro/fs/file.h"
 
-void SourceData::dump(io::IO* out, u32 depth)
+/* ----------------------------------------------------------------------------
+ */
+const SourceData* SourceDataObject::findChildByName(String name) const
+{
+  for (const SourceData* child : children)
+  {
+    if (child->name == name)
+      return child;
+  }
+  return nullptr;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SourceData::dump(io::IO* out, u32 depth) const
 {
   auto indent = [&]()
   {
@@ -48,7 +62,7 @@ void SourceData::dump(io::IO* out, u32 depth)
 
       io::format(out, "{\n");
 
-      for (SourceData* child : obj->children)
+      for (const SourceData* child : obj->children)
       {
         child->dump(depth + 1);
         io::format(out, ",\n");
@@ -61,7 +75,9 @@ void SourceData::dump(io::IO* out, u32 depth)
   }
 }
 
-void SourceData::dump(u32 depth)
+/* ----------------------------------------------------------------------------
+ */
+void SourceData::dump(u32 depth) const
 {
   dump(&fs::stdout, depth);
 }

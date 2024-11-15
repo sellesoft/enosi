@@ -1,0 +1,304 @@
+$ local cmn = require "common"
+$ local Schema = require "asset.Schema"
+$ local glob = require "Glob"
+$ local Processor = require "reflect.Processor"
+$ local ast = require "reflect.AST"
+$ local List = require "list"
+
+#include "iro/logger.h"
+
+#include "stdlib.h"
+
+using namespace iro;
+
+@cmn.defFileLogger(packing, Info)
+
+@@lpp.import "asset/Packing.lh"
+@@lpp.import "asset/SourceData.lh"
+
+$$$
+local imported = cmn.buffer.new()
+
+local importPattern = function(pattern)
+  glob(pattern):each(function(path)
+    if path and path:find("%S") then
+      imported:put(lpp.import(path))
+    end
+  end)
+end
+
+importPattern "**/*.schema.lh"
+importPattern "**/*.comp.lh"
+
+
+local p = Processor.new(tostring(imported))
+p:run()
+$$$
+@imported:get
+
+template<typename T>
+b8 packSourceDataIntoEnum(const SourceData& data, T* out);
+
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
+b8 packArray(const SourceDataObject& data, Array<T>* out)
+{
+  for (const SourceData* child : data.children)
+  {
+    if (notnil(child->name))
+      return ERROR("arrays cannot contain named elements\n");
+    
+    T* elem = out->push();
+    packSourceDataIntoType<T>(*child, elem);
+  }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 packString(const SourceData& data, String* out)
+{
+  if (data.kind != SourceData::Kind::Value)
+    return ERROR("expected a string\n");
+
+  auto* val = data.getAsValue();
+  if (val->kind != SourceDataValue::Kind::String)
+    return ERROR("expected a string\n");
+
+  *out = val->val;
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
+b8 packNumber(const SourceData& data, T* out)
+{
+  if (data.kind != SourceData::Kind::Value)
+    return ERROR("expected a string\n");
+
+  auto* val = data.getAsValue();
+  if (val->kind != SourceDataValue::Kind::Number)
+    return ERROR("expected a number\n");
+
+  *out = strtof((char*)val->val.ptr, nullptr);
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
+b8 packVec2(const SourceData& data, T* out)
+{
+  if (data.kind != SourceData::Kind::Object)
+    return ERROR("expected an object to pack vec2\n");
+
+  auto* obj = data.getAsObject();
+  for (const SourceData* child : obj->children)
+  {
+    if (!child->isValue())
+      return ERROR("vec2 members can only be values\n");
+
+    switch (child->name.hash())
+    {
+    case "x"_hashed:
+      out->x = strtof((char*)child->getAsValue()->val.ptr, nullptr);
+      break;
+    case "y"_hashed:
+      out->y = strtof((char*)child->getAsValue()->val.ptr, nullptr);
+      break;
+    default:
+      return ERROR("no member named ", child->name, " in vec2\n");
+    }
+  }
+
+  return true;
+}
+
+$ -- * ------------------------------------------------------------------------
+
+$ local putEnumPacker = function(name, decl)
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 packSourceDataIntoEnum(const SourceData& data, $(name)* out)
+{
+  if (!data.isValue())
+    return ERROR("expected a value for enum data\n");
+
+  auto* val = data.getAsValue();
+
+  switch (val->val.hash())
+  {
+$ for elem in decl.elems:each() do
+  case "$(elem)"_hashed: *out = $(name)::$(elem); break;
+$ end
+
+  default:
+    return ERROR("no element ", val->val, " in enum $(name)\n");
+  }
+
+  return true;
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local putArrayPackCase = function(declname, field, decl, prereqs)
+$   prereqs:push(decl.template_args[1]:getDecl())
+    out->$(field.name).init();
+    if (!child->isObject())
+      return ERROR("expected an object for array field $(field.name)\n");
+    if (!packArray(*child->getAsObject(), &out->$(field.name)))
+      return ERROR("failed to pack array data for field $(field.name)\n");
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local putStringPackCase = function(declname, field, prereqs)
+    if (!packString(*child, &out->$(field.name)))
+      return ERROR("failed to pack string data for field $(field.name)");
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local putNumberPackCase = function(declname, field, prereqs)
+    if (!packNumber(*child, &out->$(field.name)))
+      return ERROR("failed to pack number data for field $(field.name)");
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local putStructPackCase = function(declname, field, prereqs)
+$   prereqs:push(field.type:getDecl())
+    if (!packSourceDataIntoType(*child, &out->$(field.name)))
+      return ERROR("failed to pack struct data for field $(field.name)\n");
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local putVec2PackCase = function(declname, field, prereqs)
+    if (!packVec2(*child, &out->$(field.name)))
+      return ERROR("failed to pack vec2 data for field $(field.name)\n");
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local putEnumPackCase = function(declname, field, prereqs)
+$   prereqs:push(field.type:getDecl())
+    if (!packSourceDataIntoEnum(*child, &out->$(field.name)))
+      return ERROR("failed to pack $(declname) data for field $(field.name)");
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local putPackCase = function(declname, field, prereqs)
+$   local type = field.type
+$   if type.name == "String" then
+$     return (putStringPackCase(declname, field, prereqs))
+$   end
+$   
+$   type = type:getDesugared()
+$   if type:is(ast.BuiltinType) then
+$     return (putNumberPackCase(declname, field, prereqs))
+$   end
+$
+$   if type:is(ast.TagType) then
+$     local decl = type:getDecl()
+$     if decl:is(ast.TemplateSpecialization) then
+$       if decl.specialized_name == "Array" then
+$         return (putArrayPackCase(declname, field, decl, prereqs))
+$       elseif decl.specialized_name == "vec2" then
+$         return (putVec2PackCase(declname, field, prereqs))
+$       else
+$         error("unhandled specialized template "..decl.specialized_name)
+$       end
+$     elseif decl:is(ast.Struct) then
+$       return (putStructPackCase(declname, field, prereqs))
+$     elseif decl:is(ast.Enum) then
+$       return (putEnumPackCase(declname, field, prereqs))
+$     end
+$   end
+$ end
+
+$ local putStructPacker = function(name, decl, prereqs)
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 packSourceDataIntoType<$(name)>(
+    const SourceData& data, 
+    $(name)* out)
+{
+  if (!data.isObject())
+    return ERROR("expected an object to pack into $(name)\n");
+
+  const SourceDataObject* obj = data.getAsObject();
+  
+  // TODO(sushi) handle defaulted stuff.
+  if (obj->children.isEmpty())
+    return true;
+
+  for (const SourceData* child : obj->children)
+  {
+    switch (child->name.hash())
+    {
+$ for field in decl:eachFieldWithIndex() do
+    case "$(field.name)"_hashed:
+      {
+$     putPackCase(decl.name, field, prereqs)
+      }
+      break;
+$ end
+    default:
+      return ERROR("no field named '", child->name, "' in $(name)\n");
+    }
+  }
+  
+  return true;
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local placed_packers = 
+$ {
+$   String = true
+$ }
+$ local function putPacker(name, decl, prereqs)
+$   if not decl or placed_packers[name] then return end
+$   placed_packers[name] = true
+$   if decl:is(ast.Struct) then
+$     for field in decl:eachFieldWithIndex() do
+$       putPacker(field.type.name, field.type:getDecl(), prereqs)
+$     end
+$     putStructPacker(name, decl, prereqs)
+$   elseif decl:is(ast.TemplateSpecialization) then
+$     if decl.specialized_name == "Array" then
+$       local elem_decl = decl.template_args[1]:getDecl()
+$       putPacker(elem_decl.name, elem_decl, prereqs)
+$     end
+$   elseif decl:is(ast.Enum) then
+$     putEnumPacker(name, decl)
+$   end
+$ end
+
+$ for decl in p.decls.list:each() do
+$   local name = decl.name
+$     :gsub("struct ", "")
+$     :gsub("union ", "")
+$     :gsub("enum ", "")
+$   local prereqs = List{}
+$   if decl.decl:is(ast.Record) then
+$     putPacker(name, decl.decl, prereqs)
+$     placed_packers[decl.name] = true
+$   end
+$ end
+
+
+
+
+
+
+

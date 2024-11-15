@@ -1,6 +1,7 @@
 
 $ local lpp = require "lpp"
 $ local reflect = require "reflect.Reflector"
+$ local SourceData = require "asset.SourceData"
 
 @@lpp.import "asset/AssetHandle.lh"
 
@@ -11,6 +12,11 @@ $ local reflect = require "reflect.Reflector"
 using namespace iro;
 
 struct AssetMgr;
+
+namespace iro::io
+{
+  struct IO;
+}
 
 enum class ImageFormat
 {
@@ -95,5 +101,4 @@ struct Texture
 
   // In this case 'asset_path' is unused.
   static b8 compileFromMemory(void* data, CompileParams& params);
-
 };

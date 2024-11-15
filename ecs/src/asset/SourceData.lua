@@ -1,9 +1,9 @@
 local cmn = require "common"
+local Processor = require "reflect.Processor"
+local ast = require "reflect.AST"
 
 local SourceData = {}
 
-local Schema = {}
+return SourceData
 
-Schema.new = function(name)
 
-end

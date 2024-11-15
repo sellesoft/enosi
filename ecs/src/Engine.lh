@@ -16,6 +16,7 @@ $ local reflect = require "reflect.Reflector"
 @@lpp.import "window/Window.lh"
 @@lpp.import "asset/AssetMgr.lh"
 @@lpp.import "asset/Font.lh"
+@@lpp.import "asset/SourceDataFileReg.lh"
 
 @@lpp.import "game/GameMgr.lh"
 
@@ -48,6 +49,8 @@ struct Engine
   hr::Reloader* reloader;
 
   ui::Inspector* inspector;
+
+  SourceDataFileReg source_data_file_reg;
 
   GameMgr gamemgr;
 

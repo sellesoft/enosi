@@ -8,6 +8,12 @@
 
 #include "iro/common.h"
 #include "iro/platform.h"
+#include "iro/io/io.h"
+
+struct Color;
+
+static Color operator*(const Color& lhs, f32 rhs);
+static Color operator*(f32 lhs, const Color& rhs);
 
 struct Color
 {
@@ -34,11 +40,40 @@ struct Color
 
   void operator*= (f32 rhs)
   {
-    r = u8(f32(r) * rhs);
-    g = u8(f32(g) * rhs);
-    b = u8(f32(b) * rhs);
-    a = u8(f32(a) * rhs);
+    *this = *this * rhs;
   }
 };
+
+// TODO(sushi) this is probably horrible 
+static Color operator*(const Color& lhs, f32 rhs)
+{
+  return 
+  {
+    u8(max(0.f, min(255.f, (f32(lhs.r) * rhs)))),
+    u8(max(0.f, min(255.f, (f32(lhs.g) * rhs)))),
+    u8(max(0.f, min(255.f, (f32(lhs.b) * rhs)))),
+    lhs.a,
+  };
+}
+
+// TODO(sushi) this is probably horrible 
+static Color operator*(f32 lhs, const Color& rhs)
+{
+  return 
+  {
+    u8(max(0.f, min(255.f, (f32(rhs.r) * lhs)))),
+    u8(max(0.f, min(255.f, (f32(rhs.g) * lhs)))),
+    u8(max(0.f, min(255.f, (f32(rhs.b) * lhs)))),
+    rhs.a,
+  };
+}
+
+namespace iro::io
+{
+static s64 format(IO* io, const Color& c)
+{
+  return formatv(io, "(",c.r,",",c.g,",",c.b,",",c.a,")");
+}
+}
 
 #endif

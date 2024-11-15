@@ -15,7 +15,7 @@ $ local glob = require "Glob"
 
 $ local buf = buffer.new()
 $ glob"**/*.lh":each(function(path)
-$   local result = lpp.import(path:sub(#"src/"+1))
+$   local result = lpp.import(path)
 $   if result then
 $     buf:put(result)
 $   end
@@ -25,8 +25,6 @@ $(tostring(buf))
 
 $ local p = Processor.new(buf:get())
 $ p:run()
-
-// ABCDEFG
 
 $$$
 

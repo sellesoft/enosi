@@ -188,7 +188,9 @@ Processor.resolveDecl = function(self, cdecl)
 
   local decl
 
-  if cdecl:isStruct() then
+  if cdecl:isTemplateSpecialization() then
+    decl = self:processTemplateSpecialization(cdecl, ctype)
+  elseif cdecl:isStruct() then
     decl = self:processStruct(cdecl, ctype) 
   elseif cdecl:isUnion() then
     decl = self:processUnion(cdecl, ctype)
@@ -306,6 +308,36 @@ Processor.processUnion = function(self, cdecl, ctype)
   self:processRecordMembers(cdecl, ctype, union)
 
   return union
+end
+
+-- * --------------------------------------------------------------------------
+
+Processor.processTemplateSpecialization = function(self, cdecl, ctype)
+  local specdecl = cdecl:getSpecializedDecl()
+  local spec = 
+    ast.TemplateSpecialization.new(
+      ctype:getCanonicalTypeName(),
+      specdecl:name())
+
+  self:recordProcessed(spec.name, spec)
+
+  local iter = cdecl:getTemplateArgIter()
+  while true do
+    local arg = iter:next()
+    if not arg then break end
+
+    if arg:isType() then
+      spec.template_args:push(self:resolveType(arg:getAsType()))
+    elseif arg:isIntegral() then
+      spec.template_args:push(arg:getAsIntegral())
+    else
+      log:warn("unhandled template arg kind in ", spec.name, "\n")
+    end
+  end
+
+  self:processRecordMembers(cdecl, ctype, spec)
+
+  return spec
 end
 
 -- * --------------------------------------------------------------------------

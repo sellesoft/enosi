@@ -1,0 +1,29 @@
+$ local cmn = require "common"
+$ local Schema = require "asset.Schema"
+
+#include "iro/common.h"
+#include "iro/unicode.h"
+#include "iro/containers/array.h"
+#include "iro/containers/slice.h"
+
+using namespace iro;
+
+/* ============================================================================
+ */
+struct CodepointRange
+{
+  s32 first_codepoint;
+  s32 num_codepoints;
+};
+
+typedef Slice<CodepointRange> CodepointRanges;
+
+/* ============================================================================
+ */
+@Schema.def(FontSchema,
+{
+  String name;
+  String asset_path;
+  Array<CodepointRange> ranges;
+})
+

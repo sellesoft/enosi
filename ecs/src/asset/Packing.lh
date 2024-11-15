@@ -1,0 +1,8 @@
+$ local cmn = require "common"
+$ local Schema = require "asset.Schema"
+
+@@lpp.import "asset/SourceData.lh"
+
+template<typename T>
+b8 packSourceDataIntoType(const SourceData& data, T* out);
+

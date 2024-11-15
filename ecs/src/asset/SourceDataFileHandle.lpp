@@ -1,0 +1,14 @@
+$ local cmn = require "common"
+
+@@lpp.import "asset/SourceDataFileHandle.lh"
+@@lpp.import "asset/SourceDataFileReg.lh"
+
+/* ----------------------------------------------------------------------------
+ */
+void SourceDataFileHandle::release()
+{
+  assert(header && "attempt to release a nil SourceDataFileHandle!");
+  if (header->rc.remRef())
+    header->reg->releaseSourceDataFile(header);
+  header = nullptr;
+}

@@ -41,9 +41,6 @@ b8 SourceDataParser::init(SourceDataFile* file, io::IO* in, String in_name)
   this->file = file;
   this->in_name = in_name;
 
-  if (!cache.open())
-    return ERROR("failed to open cache\n");
-
   if (!scanner.init(in))
     return ERROR("failed to init scanner\n");
 
@@ -54,7 +51,7 @@ b8 SourceDataParser::init(SourceDataFile* file, io::IO* in, String in_name)
  */
 void SourceDataParser::deinit()
 {
-  cache.close();
+  scanner.deinit();
 }
 
 /* ============================================================================
@@ -165,8 +162,6 @@ b8 SourceDataParser::parseReturn()
   auto tok = nextToken();
   if (tok.kind != TK::Eof)
     return errorAt(tok, "expected eof after return data\n");
-
-  data->dump();
 
   return true;
 }
@@ -364,7 +359,7 @@ Token SourceDataParser::nextToken()
   else if (scanner.atDigit())
   {
     out.kind = TK::Number;
-    out.raw = scanner.scanNumber();
+    out.raw = scanner.scanNumber().allocateCopy(&file->string_cache);
   }
   else if (scanner.at('"'))
   {

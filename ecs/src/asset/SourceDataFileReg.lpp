@@ -1,0 +1,108 @@
+$ local cmn = require "common"
+
+@@lpp.import "asset/SourceDataFileReg.lh"
+@@lpp.import "asset/SourceDataParser.lh"
+
+#include "iro/logger.h"
+using namespace iro;
+
+@cmn.defFileLogger(srcdata.reg, Info);
+
+#include "iro/fs/file.h"
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SourceDataFileReg::init()
+{
+  if (!pool.init())
+    return ERROR("failed to initialize source data file pool\n");
+  if (!map.init())
+    return ERROR("failed to initialize source data file map\n");
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SourceDataFileReg::deinit()
+{
+  // At this point there should be no source data files referenced anywhere.
+  // So, none should exist!
+  for (SourceDataFileSlot& slot : map)
+  {
+    assert(!slot.header.rc.isReferenced() &&
+      "attempt to deinit SourceDataFileReg while a SourceDataFile is still "
+      "referenced!");
+  }
+
+  pool.deinit();
+  map.deinit();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+SourceDataFileHandle SourceDataFileReg::loadFromDisk(String path)
+{
+  using namespace fs;
+
+  u64 path_hash = path.hash();
+
+  SourceDataFileSlot* slot = map.find(path_hash);
+  if (slot != nullptr)
+    return SourceDataFileHandle(&slot->header);
+
+  auto file = File::from(path, OpenFlag::Read);
+  if (isnil(file))
+  {
+    ERROR("failed to open source data file at ", path, "\n");
+    return nil;
+  }
+  defer { file.close(); };
+
+  slot = pool.add();
+
+  slot->path_hash = path_hash;
+  slot->header.reg = this;
+
+  if (!slot->file.init())
+  {
+    ERROR("failed to initialize source data file\n");
+    pool.remove(slot);
+    return nil;
+  }
+
+  SourceDataParser parser;
+  if (!parser.init(&slot->file, &file, path))
+  {
+    ERROR("failed to init source data file parser\n");
+    pool.remove(slot);
+    return nil;
+  }
+  defer { parser.deinit(); };
+
+  if (!parser.parse())
+  {
+    pool.remove(slot);
+    return nil;
+  }
+
+  map.insert(slot);
+
+  slot->header.rc.addRef();
+
+  return SourceDataFileHandle(&slot->header);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SourceDataFileReg::releaseSourceDataFile(SourceDataFileHeader* header)
+{
+  // At this point we should know that this source data file is no longer 
+  // referenced as we can only get into this function from a handle to it.
+
+  SourceDataFileSlot* slot = (SourceDataFileSlot*)header;
+
+  slot->file.deinit();
+
+  map.remove(slot);
+  pool.remove(slot);
+}

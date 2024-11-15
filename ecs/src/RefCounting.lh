@@ -1,0 +1,30 @@
+/*
+ *  Helpers for things that need to be ref counted. This is primarily to 
+ *  provide a consistent interface for this behavior, especially when 
+ *  we get to threading and need to handle ref counting across threads.
+ */
+
+#include "iro/common.h"
+
+struct RefCounter
+{
+  s32 value = 0;
+
+  void addRef()
+  {
+    value += 1;
+  }
+
+  // Returns true if no longer referenced.
+  b8 remRef()
+  {
+    assert(value != 0);
+    value -= 1;
+    return value == 0;
+  }
+
+  b8 isReferenced() const
+  {
+    return value != 0;
+  }
+};

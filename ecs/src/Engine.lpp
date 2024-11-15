@@ -25,7 +25,7 @@ using namespace iro;
 @@lpp.import "game/Transform.comp.lh"
 @@lpp.import "asset/SourceDataParser.lh"
 @@lpp.import "asset/SourceDataFile.lh"
-
+@@lpp.import "asset/Packing.lh"
 
 static Logger logger = 
   Logger::create("ecs.eng"_str, Logger::Verbosity::Info);
@@ -121,6 +121,7 @@ b8 Engine::init()
   @initSystem(input.init(*this),                        input);
   @initSystem(ui.init(*this),                           ui);
   @initSystem(gamemgr.init(this),                       gamemgr);
+  @initSystem(source_data_file_reg.init(),              source data file reg);
 
   reloader = hr::createReloader();
   if (reloader == nullptr)
@@ -155,15 +156,25 @@ b8 Engine::init()
 
   INFO("done!\n");
 
-  fs::File test = 
-    fs::File::from("assets/fonts/gohu.font"_str, 
-      fs::OpenFlag::Read);
+  auto h_sfile = 
+    ScopedSourceDataFileHandle(
+      source_data_file_reg.loadFromDisk("assets/fonts/gohu.font"_str));
 
-  SourceDataFile sfile;
-  sfile.init();
-  SourceDataParser sparse;
-  sparse.init(&sfile, &test, test.path.buffer.asStr());
-  sparse.parse();
+  SourceDataFile* sfile = h_sfile.getFile();
+
+  FontSchema fschema;
+  packSourceDataIntoType(*sfile->returned_data, &fschema);
+
+  INFO(
+      "schema: ",
+    "\n        name: ", fschema.name, 
+    "\n  asset_path: ", fschema.asset_path,
+    "\n      ranges: \n");
+
+  for (CodepointRange range : fschema.ranges)
+  {
+  INFO("          ", range.first_codepoint, ":", range.num_codepoints, "\n");
+  }
 
   return true;
 }

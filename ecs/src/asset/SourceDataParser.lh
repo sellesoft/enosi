@@ -23,10 +23,6 @@ struct SourceDataFile;
  */
 struct SourceDataParser
 {
-  // Text cached during lexing. Should be cleared when we know we no longer
-  // need whatever is in it as we parse.
-  io::Memory cache;
-
   // The file being parsed.
   SourceDataFile* file;
 

@@ -5,6 +5,6 @@ return Font
   ranges =
   {
     // ascii
-    { 32, 94 }
+    { first_codepoint = 32, num_codepoints = 94 },
   }
 }
