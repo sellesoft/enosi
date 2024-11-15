@@ -26,6 +26,8 @@ extern "C"
 int lua__processFile(lua_State* L);
 int lua__getFileFullPathIfExists(lua_State* L);
 int lua__debugBreak(lua_State* L);
+int lua__getCurrentInputSourceName(lua_State* L);
+int lua__getInputName(lua_State* L);
 }
 
 namespace lpp
@@ -74,6 +76,8 @@ b8 Lpp::init()
   addGlobalCFunc(lua__processFile);
   addGlobalCFunc(lua__getFileFullPathIfExists);
   addGlobalCFunc(lua__debugBreak);
+  addGlobalCFunc(lua__getCurrentInputSourceName);
+  addGlobalCFunc(lua__getInputName);
 
 #undef addGlobalCFunc
 
@@ -152,11 +156,30 @@ b8 Lpp::run()
   }
   defer { inf.close(); };
 
+  File outf;
+  if (isnil(output))
+  {
+    outf = fs::stdout;
+  }
+  else
+  {
+    outf = File::from(output, 
+          OpenFlag::Create
+        | OpenFlag::Write
+        | OpenFlag::Truncate);
+  }
+  if (isnil(outf))
+  {
+    FATAL("failed to open output file at path '", output, "'\n");
+    return false;
+  }
+  defer { outf.close(); };
+
+  if (!processStream(input, &inf, &outf))
+    return false;
+
   if (generate_depfile)
   {
-    if (!processStream(input, &inf, nullptr))
-      return false;
-
     if (!lua.require("lpp"_str))
       return false;
     const s32 I_lpp = lua.gettop();
@@ -166,7 +189,7 @@ b8 Lpp::run()
 
     if (!lua.pcall(0, 1))
       return false;
-    
+
     String result = lua.tostring();
 
     if (notnil(depfile_output))
@@ -183,30 +206,6 @@ b8 Lpp::run()
     {
       fs::stdout.write(result);
     }
-  }
-  else
-  {
-    File outf;
-    if (isnil(output))
-    {
-      outf = fs::stdout;
-    }
-    else
-    {
-      outf = File::from(output, 
-            OpenFlag::Create
-          | OpenFlag::Write
-          | OpenFlag::Truncate);
-    }
-    if (isnil(outf))
-    {
-      FATAL("failed to open output file at path '", output, "'\n");
-      return false;
-    }
-    defer { outf.close(); };
-    
-    if (!processStream(input, &inf, &outf))
-      return false;
   }
 
   return true;
@@ -424,7 +423,7 @@ b8 Lpp::processStream(String name, io::IO* instream, io::IO* outstream)
   Metaprogram* metaprog = metaprograms.pushTail()->data;
   if (!metaprog->init(this, instream, source, dest, prev))
     return false;
-  defer { metaprog->deinit(); };
+  defer { metaprog->deinit(); metaprograms.popTail(); };
 
   if (!metaprog->run())
     return false;
@@ -432,6 +431,34 @@ b8 Lpp::processStream(String name, io::IO* instream, io::IO* outstream)
   if (outstream)
     outstream->write(metaprog->output->cache.asStr());
   
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Lpp::writeAuxFile(String extension, String text)
+{
+  using namespace fs;
+
+  File out;
+  if (isnil(output))
+  {
+    out = fs::stdout;
+  }
+  else
+  {
+    auto path = Path::from(output);
+    path.append('.', extension);
+    out = 
+      File::from(path, 
+          OpenFlag::Write
+        | OpenFlag::Create
+        | OpenFlag::Truncate);
+  }
+
+  out.write(text);
+  out.close();
+
   return true;
 }
 
@@ -522,6 +549,36 @@ int lua__getFileFullPathIfExists(lua_State* L)
     return 1;
   }
   return 0;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+int lua__getCurrentInputSourceName(lua_State* L)
+{
+  auto lua = LuaState::fromExistingState(L);
+  auto lpp = (Lpp*)lua.tolightuserdata(1);
+
+  lua.pushstring(lpp->metaprograms.tail().input->name);
+  return 1;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+int lua__getInputName(lua_State* L)
+{
+  auto lua = LuaState::fromExistingState(L);
+  auto lpp = (Lpp*)lua.tolightuserdata(1);
+
+  lua.pushstring(lpp->input);
+  return 1;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+LPP_LUAJIT_FFI_FUNC
+void lua__writeAuxFile(Lpp* lpp, String extension, String text)
+{  
+  lpp->writeAuxFile(extension, text);
 }
 
 /* ----------------------------------------------------------------------------

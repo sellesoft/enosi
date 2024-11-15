@@ -142,7 +142,6 @@ private:
   b8 eof();
   b8 atFirstIdentifierChar();
   b8 atIdentifierChar();
-  b8 atDigit();
   b8 atWhitespace();
 
   // Don't forget that this could move!

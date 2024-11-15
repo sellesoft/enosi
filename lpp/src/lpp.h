@@ -61,6 +61,7 @@ struct Lpp
 
   b8 processArgv(int argc, const char** argv);
   b8 processStream(String name, io::IO* instream, io::IO* outstream);
+  b8 writeAuxFile(String extension, String text);
 }; 
 
 }

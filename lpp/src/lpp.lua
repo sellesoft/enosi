@@ -68,6 +68,8 @@ ffi.cdef
 
   u64 sectionGetStartOffset(SectionNode* section);
 
+  void lua__writeAuxFile(void* lpp, String extension, String text);
+
   typedef struct
   {
     u64 line;
@@ -198,6 +200,23 @@ end
 
 -- * --------------------------------------------------------------------------
 
+lpp.source_final_callbacks = List{}
+lpp.runSourceFinalCallbacks = function()
+  if lpp.source_final_callbacks:isEmpty() then return end
+
+  for cb in lpp.source_final_callbacks:each() do
+    cb()
+  end
+end
+
+-- * --------------------------------------------------------------------------
+
+lpp.registerSourceFinalCallback = function(f)
+  lpp.source_final_callbacks:push(f)
+end
+
+-- * --------------------------------------------------------------------------
+
 -- Patch lua's print with one that prefixes the message with the srcloc of the 
 -- print as print is only meant to be used for debug purposes and losing where 
 -- they are is quite easy.
@@ -250,6 +269,10 @@ lpp.processFile = function(path)
   return result
 end
 
+lpp.getFileFullPathIfExists = function(path)
+  return lua__getFileFullPathIfExists(path)
+end
+
 -- * --------------------------------------------------------------------------
 
 local lua_require = require
@@ -258,7 +281,8 @@ require = function(path)
   if lpp.generating_dep_file then
     for pattern in package.path:gmatch("[^;]+") do
       local fullpath = 
-        lua__getFileFullPathIfExists(pattern:gsub("?", normpath))
+        lpp.getFileFullPathIfExists(
+          pattern:gsub("?", normpath))
       if fullpath then
         lpp.dependencies:push(fullpath)
       end
@@ -339,6 +363,24 @@ end
 --- Get the offset into the input file that the macro arg at 'idx' starts.
 lpp.getMacroArgOffset = function(idx)
   return lpp.metaenv.current_macro_arg_offsets[idx]
+end
+
+-- * --------------------------------------------------------------------------
+
+lpp.writeAuxFile = function(extension, text)
+  C.lua__writeAuxFile(lpp.handle, luaToStr(extension), luaToStr(text))
+end
+
+-- * --------------------------------------------------------------------------
+
+lpp.getInputName = function()
+  return lua__getInputName(lpp.handle)
+end
+
+-- * --------------------------------------------------------------------------
+
+lpp.getCurrentInputSourceName = function()
+  return lua__getCurrentInputSourceName(lpp.handle)
 end
 
 -- * ==========================================================================

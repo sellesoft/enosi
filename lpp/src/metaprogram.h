@@ -11,6 +11,7 @@
 #include "iro/containers/pool.h"
 #include "iro/containers/linked_pool.h"
 #include "iro/containers/list.h"
+#include "iro/fs/path.h"
 
 #include "source.h"
 
@@ -193,11 +194,12 @@ struct Metaprogram
 
 
   b8 init(
-      Lpp* lpp, 
-      io::IO* instream, 
-      Source* input, 
-      Source* output,
-      Metaprogram* prev);
+    Lpp*         lpp, 
+    io::IO*      instream, 
+    Source*      input, 
+    Source*      output,
+    Metaprogram* prev);
+
   void deinit();
 
   b8 run();
