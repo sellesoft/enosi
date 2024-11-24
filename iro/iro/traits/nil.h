@@ -65,13 +65,16 @@ concept Nillable = requires(const T& x)
  */
 struct Nil
 {
+  constexpr Nil() {}
+  constexpr ~Nil() {}
+
   template<Nillable T>
-  consteval operator T() const { return NilValue<T>::Value; }
+  constexpr operator T() const { return NilValue<T>::Value; }
 
   // any pointer can be nil!
   // note this also handles the case of checking if a pointer is nil
   template<Nillable T>
-  consteval operator T*() const { return nullptr; }
+  constexpr operator T*() const { return nullptr; }
 };
 
 template<Nillable T>
