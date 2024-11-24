@@ -19,6 +19,7 @@
 #include "clang/AST/DeclGroup.h"
 #include "clang/AST/LocInfoType.h"
 #include "clang/Sema/Sema.h"
+#include "clang/Sema/Template.h"
 #include "clang/CodeGen/ObjectFilePCHContainerOperations.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Frontend/CompilerInvocation.h"
@@ -214,7 +215,6 @@ struct DeclIterator
   }
 };
 
-// dumb special case
 struct ParamIterator
 {
   clang::FunctionDecl::param_iterator current;
@@ -227,6 +227,22 @@ struct ParamIterator
     
     auto out = *current;
     current++;
+    return out;
+  }
+};
+
+struct TemplateArgIter
+{
+  const clang::TemplateArgument* current;
+  const clang::TemplateArgument* end;
+
+  const clang::TemplateArgument* next()
+  {
+    if (current == end)
+      return nullptr;
+
+    auto out = current;
+    current += 1;
     return out;
   }
 };
@@ -895,6 +911,7 @@ void destroyContext(Context* ctx)
  */
 inline static clang::Decl* getClangDecl(Decl* decl)
 {
+  assert(decl);
   return (clang::Decl*)decl;
 }
 
@@ -910,6 +927,14 @@ inline static clang::Stmt* getClangStmt(Stmt* stmt)
 inline static clang::QualType getClangType(Type* type)
 {
   return clang::QualType::getFromOpaquePtr(type);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+inline static const clang::TemplateArgument* getClangTemplateArgument(
+    TemplateArg* arg)
+{
+  return (const clang::TemplateArgument*)arg;
 }
 
 /* ----------------------------------------------------------------------------
@@ -1402,6 +1427,21 @@ u64 getDeclEnd(Context* ctx, Decl* decl)
 
 /* ----------------------------------------------------------------------------
  */
+b8 isRecord(Decl* decl)
+{
+  return clang::RecordDecl::classof(getClangDecl(decl));
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static clang::RecordDecl* getRecordDecl(Decl* decl)
+{
+  assert(decl && isRecord(decl));
+  return (clang::RecordDecl*)getClangDecl(decl);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 isStruct(Decl* decl)
 {
   assert(decl);
@@ -1438,6 +1478,191 @@ b8 isEnum(Decl* decl)
   if (clang::TagDecl::classof(cdecl))
     return clang::TagTypeKind::Enum == ((clang::TagDecl*)cdecl)->getTagKind();
   return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 isTagDecl(Decl* decl)
+{
+  assert(decl);
+  return clang::TagDecl::classof(getClangDecl(decl));
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 isTemplate(Decl* decl)
+{
+  assert(decl);
+  return clang::ClassTemplateDecl::classof(getClangDecl(decl));
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 isTemplateSpecialization(Decl* decl)
+{
+  assert(decl);
+  return clang::ClassTemplateSpecializationDecl::classof(getClangDecl(decl));
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Decl* getSpecializedDecl(Decl* decl)
+{
+  assert(isTemplateSpecialization(decl));
+  auto tspec = (clang::ClassTemplateSpecializationDecl*)decl;
+  return (Decl*)tspec->getSpecializedTemplate();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static clang::ClassTemplateSpecializationDecl* getTemplateSpecializationDecl(
+    Decl* decl)
+{
+  assert(isTemplateSpecialization(decl));
+  return (clang::ClassTemplateSpecializationDecl*)getClangDecl(decl);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+TemplateArgIter* getTemplateArgIter(Context* ctx, Decl* decl)
+{
+  assert(decl);
+
+  auto tdecl = getTemplateSpecializationDecl(decl);
+
+  auto tarr = tdecl->getTemplateArgs().asArray();
+
+  auto iter = ctx->allocate<TemplateArgIter>();
+  iter->current = tarr.begin();
+  iter->end = tarr.end();
+  return iter;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+TemplateArg* getNextTemplateArg(TemplateArgIter* iter)
+{
+  assert(iter);
+
+  return (TemplateArg*)iter->next();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 isTemplateArgType(TemplateArg* arg)
+{
+  assert(arg);
+  auto carg = getClangTemplateArgument(arg);
+  return carg->getKind() == clang::TemplateArgument::ArgKind::Type;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Type* getTemplateArgType(TemplateArg* arg)
+{
+  assert(isTemplateArgType(arg));
+  auto carg = getClangTemplateArgument(arg);
+  return (Type*)carg->getAsType().getAsOpaquePtr();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 isTemplateArgIntegral(TemplateArg* arg)
+{
+  assert(arg);
+  auto carg = getClangTemplateArgument(arg);
+  return carg->getKind() == clang::TemplateArgument::ArgKind::Integral;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+s64 getTemplateArgIntegral(TemplateArg* arg)
+{
+  assert(isTemplateArgIntegral(arg));
+  auto carg = getClangTemplateArgument(arg);
+  return carg->getAsIntegral().getExtValue();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 isAnonymous(Decl* decl)
+{
+  return getRecordDecl(decl)->isAnonymousStructOrUnion();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 isField(Decl* decl)
+{
+  return clang::FieldDecl::classof(getClangDecl(decl));
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static clang::FieldDecl* getFieldDecl(Decl* decl)
+{
+  assert(isField(decl));
+  return (clang::FieldDecl*)getClangDecl(decl);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 isAnonymousField(Decl* decl)
+{
+  return getFieldDecl(decl)->isAnonymousStructOrUnion();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+u64 getFieldOffset(Context* ctx, Decl* field)
+{
+  assert(ctx);
+  return ctx->getASTContext()->getFieldOffset(getFieldDecl(field));
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 isComplete(Decl* decl)
+{
+  assert(decl);
+  auto cdecl = getClangDecl(decl);
+  assert(clang::TagDecl::classof(cdecl));
+  return ((clang::TagDecl*)cdecl)->isCompleteDefinition();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Decl* getDefinition(Decl* decl)
+{
+  assert(decl);
+  auto cdecl = getClangDecl(decl);
+  if (!clang::TagDecl::classof(cdecl))
+    return nullptr;
+  return (Decl*)((clang::TagDecl*)cdecl)->getDefinition();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void makeComplete(Context* ctx, Type* type)
+{
+  assert(ctx && type);
+
+  using namespace clang;
+
+  CompilerInstance& clang = *ctx->clang;
+  Sema& sema = clang.getSema();
+
+  auto decl = getTypeDecl(type);
+  if (decl == nullptr)
+    return;
+
+  if (isComplete(decl))
+    return;
+
+  auto ctype = getClangType(type);
+  auto cdecl = getClangDecl(decl);
+
+  sema.isCompleteType(SourceLocation(), ctype);
 }
 
 /* ----------------------------------------------------------------------------
@@ -1587,6 +1812,29 @@ b8 isUnqualifiedAndCanonical(Type* type)
 
 /* ----------------------------------------------------------------------------
  */
+b8 isElaborated(Type* type)
+{
+  assert(type);
+  auto ctype = getClangType(type);
+  if (clang::ElaboratedType::classof(ctype.getTypePtr()))
+    return true;
+  return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Type* getDesugaredType(Context* ctx, Type* type)
+{
+  assert(ctx && type);
+
+  return (Type*)
+      getClangType(type).
+      getDesugaredType(*ctx->getASTContext()).
+      getAsOpaquePtr();
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 isPointer(Type* type)
 {
   assert(type);
@@ -1595,9 +1843,34 @@ b8 isPointer(Type* type)
 
 /* ----------------------------------------------------------------------------
  */
+b8 isReference(Type* type)
+{
+  assert(type);
+  return getClangType(type)->isReferenceType();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 isFunctionPointer(Type* type)
+{
+  assert(type);
+  return getClangType(type)->isFunctionPointerType();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 isTemplateSpecializationType(Type* type)
+{
+  assert(type);
+  return clang::TemplateSpecializationType::classof(
+      getClangType(type).getTypePtr());
+}
+
+/* ----------------------------------------------------------------------------
+ */
 Type* getPointeeType(Type* type)
 {
-  assert(type && isPointer(type));
+  assert(type && (isPointer(type) || isReference(type)));
   return (Type*)getClangType(type)->getPointeeType().getAsOpaquePtr();
 }
 
@@ -1665,7 +1938,6 @@ String getTypeName(Context* ctx, Type* type)
 {
   assert(ctx && type);
 
-  // Not sure why I have to get the canonical type here.
   auto ctype = getClangType(type);
 
   // yeah this kiiiinda sucks.
@@ -1745,6 +2017,14 @@ Decl* getTypeDecl(Type* type)
 
 /* ----------------------------------------------------------------------------
  */
+void dumpType(Type* type)
+{
+  assert(type);
+  getClangType(type)->dump();
+}
+
+/* ----------------------------------------------------------------------------
+ */
 FieldIter* createFieldIter(Context* ctx, Decl* decl)
 {
   assert(decl);
@@ -1768,21 +2048,6 @@ Decl* getNextField(FieldIter* iter)
 {
   assert(iter);
   return (Decl*)((FieldIterator*)iter)->next();
-}
-
-/* ----------------------------------------------------------------------------
- */
-u64 getFieldOffset(Context* ctx, Decl* field)
-{
-  assert(ctx && field);
-
-  auto cdecl = getClangDecl(field);
-  if (!clang::ValueDecl::classof(cdecl))
-    return -1;
-
-  auto vdecl = (clang::ValueDecl*)cdecl;
-
-  return ctx->getASTContext()->getFieldOffset(vdecl);
 }
 
 /* ----------------------------------------------------------------------------
@@ -1856,16 +2121,20 @@ void addIncludeDir(Context* ctx, String s)
 
 /* ----------------------------------------------------------------------------
  */
-String getDependencies(String file, String* args, u64 argc)
+String getDependencies(String filename, String file, String* args, u64 argc)
 {
   using namespace clang;
   using namespace clang::tooling::dependencies;
+
+  filename = filename.subFromLast('/').sub(1);
+  std::string filenamestr((char*)filename.ptr, filename.len);
+  filenamestr += ".cpp";
 
   std::vector<std::string> compilation = 
   { 
     ENOSI_CLANG_EXECUTABLE,
     "-c",
-    "__dependent_file.cpp",
+    filenamestr,
   };
 
   for (u64 i = 0; i < argc; ++i)
@@ -1884,7 +2153,7 @@ String getDependencies(String file, String* args, u64 argc)
   llvm::StringRef cwd((char*)cwd_path.buffer.ptr, cwd_path.buffer.len);
 
   vfs->addFile(
-      llvm::Twine(cwd) + "/__dependent_file.cpp", 
+      llvm::Twine(cwd) + "/" + filenamestr, 
       0,
       llvm::MemoryBuffer::getMemBuffer(
         llvm::StringRef((char*)file.ptr, file.len)));

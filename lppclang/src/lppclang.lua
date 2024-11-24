@@ -4,8 +4,6 @@
 --
 --
 
--- load the generated cdefs file and give them to ffi
-
 local ffi = require "ffi"
 
 ffi.cdef [[
@@ -45,6 +43,8 @@ typedef struct FieldIter FieldIter;
 typedef struct EnumIter EnumIter;
 typedef struct Stmt Stmt;
 typedef struct Expr Expr;
+typedef struct TemplateArg TemplateArg;
+typedef struct TemplateArgIter TemplateArgIter;
 typedef struct ParseStmtResult
 {
   Stmt* stmt;
@@ -92,7 +92,8 @@ typedef struct
  ParseIdentifierResult parseIdentifier(Context* ctx);
  Decl* lookupName(Context* ctx, String s);
  b8 loadString(Context* ctx, String s);
- String getDependencies(String file, String* args, u64 argc);
+ String getDependencies(
+    String filename, String file, String* args, u64 argc);
  void destroyDependencies(String deps);
  b8 beginNamespace(Context* ctx, String name);
  void endNamespace(Context* ctx);
@@ -115,9 +116,27 @@ typedef struct
  Type* getTypeDeclType(Context* ctx, Decl* decl);
  u64 getDeclBegin(Context* ctx, Decl* decl);
  u64 getDeclEnd(Context* ctx, Decl* decl);
+ b8 isRecord(Decl* decl);
  b8 isStruct(Decl* decl);
  b8 isUnion(Decl* decl);
  b8 isEnum(Decl* decl);
+ b8 isTagDecl(Decl* decl);
+ b8 isTemplate(Decl* decl);
+ b8 isTemplateSpecialization(Decl* decl);
+ Decl* getSpecializedDecl(Decl* decl);
+ TemplateArgIter* getTemplateArgIter(Context* ctx, Decl* decl);
+ TemplateArg* getNextTemplateArg(TemplateArgIter* iter);
+ b8 isTemplateArgType(TemplateArg* arg);
+ Type* getTemplateArgType(TemplateArg* arg);
+ b8 isTemplateArgIntegral(TemplateArg* arg);
+ s64 getTemplateArgIntegral(TemplateArg* arg);
+ b8 isAnonymous(Decl* decl);
+ b8 isField(Decl* decl);
+ b8 isAnonymousField(Decl* decl);
+ u64 getFieldOffset(Context* ctx, Decl* field);
+ b8 isComplete(Decl* decl);
+ Decl* getDefinition(Decl* decl);
+ void makeComplete(Context* ctx, Type* type);
  b8 isCanonicalDecl(Decl* decl);
  Type* getFunctionReturnType(Decl* decl);
  b8 functionHasBody(Decl* decl);
@@ -133,11 +152,16 @@ typedef struct
  b8 isUnqualified(Type* type);
  b8 isUnqualifiedAndCanonical(Type* type);
  b8 isConst(Type* type);
+ b8 isElaborated(Type* type);
+ Type* getDesugaredType(Context* ctx, Type* type);
  b8 isPointer(Type* type);
+ b8 isFunctionPointer(Type* type);
+ b8 isReference(Type* type);
  Type* getPointeeType(Type* type);
  b8 isArray(Type* type);
  Type* getArrayElementType(Context* ctx, Type* type);
  u64 getArrayLen(Context* ctx, Type* type);
+ b8 isTemplateSpecializationType(Type* type);
  Type* getCanonicalType(Type* type);
  Type* getUnqualifiedType(Type* type);
  Type* getUnqualifiedCanonicalType(Type* type);
@@ -147,9 +171,9 @@ typedef struct
  u64 getTypeSize(Context* ctx, Type* type);
  b8 typeIsBuiltin(Type* type);
  Decl* getTypeDecl(Type* type);
+ void dumpType(Type* type);
  FieldIter* createFieldIter(Context* ctx, Decl* decl);
  Decl* getNextField(FieldIter* iter);
- u64 getFieldOffset(Context* ctx, Decl* field);
  EnumIter* createEnumIter(Context* ctx, Decl* decl);
  Decl* getNextEnum(EnumIter* iter);
  void dumpAST(Context* ctx);
@@ -181,10 +205,12 @@ local Ctx,
       Decl,
       Type,
       Function,
+      TemplateArg,
       DeclIter,
       ParamIter,
       FieldIter,
       EnumIter,
+      TemplateArgIter,
       Lexer,
       Token,
       Expr,
@@ -433,12 +459,16 @@ end
 ---@field ctx Ctx The context this Decl was parsed in.
 ---@field handle userdata Handle to the internal representation of this Decl.
 Decl = makeStruct()
+Decl.type = "Decl"
 
 --- Construct a new Decl in ctx.
 ---
 ---@param ctx Ctx
 ---@param handle userdata
 Decl.new = function(ctx, handle)
+  if handle == nil then
+    return nil
+  end
   return setmetatable(
   {
     ctx = ctx,
@@ -513,6 +543,14 @@ Decl.isEnum = function(self)
   return 0 ~= lppclang.isEnum(self.handle)
 end
 
+Decl.isRecord = function(self)
+  return 0 ~= lppclang.isRecord(self.handle)
+end
+
+Decl.isAnonymous = function(self)
+  return 0 ~= lppclang.isAnonymous(self.handle)
+end
+
 --- Test if this Decl is a struct or class.
 ---
 ---@return boolean
@@ -527,18 +565,51 @@ Decl.isUnion = function(self)
   return 0 ~= lppclang.isUnion(self.handle)
 end
 
+Decl.isTagDecl = function(self)
+  return 0 ~= lppclang.isTagDecl(self.handle)
+end
+
+Decl.isTemplate = function(self)
+  return 0 ~= lppclang.isTemplate(self.handle)
+end
+
+Decl.isTemplateSpecialization = function(self)
+  return 0 ~= lppclang.isTemplateSpecialization(self.handle)
+end
+
+Decl.getSpecializedDecl = function(self)
+  return Decl.new(self.ctx, lppclang.getSpecializedDecl(self.handle))
+end
+
+Decl.getTemplateArgIter = function(self)
+  return TemplateArgIter.new(self.ctx, 
+    lppclang.getTemplateArgIter(self.ctx.handle, self.handle))
+end
+
+Decl.isField = function(self)
+  return 0 ~= lppclang.isField(self.handle)
+end
+
+Decl.isAnonymousField = function(self)
+  return 0 ~= lppclang.isAnonymousField(self.handle)
+end
+
+Decl.getFieldOffset = function(self)
+  return tonumber(lppclang.getFieldOffset(self.ctx.handle, self.handle))
+end
+
+--- Test if this struct/union is complete.
+---
+---@return boolean
+Decl.isComplete = function(self)
+  return 0 ~= lppclang.isComplete(self.handle)
+end
+
 --- Test if this Decl is a variable.
 ---
 ---@return boolean
 Decl.isVariable = function(self)
   return lppclang.getDeclKind(self.handle) == lppclang.DeclKind_Variable
-end
-
---- Test if this Decl is a field, a variable that is a part of a struct.
----
----@return boolean
-Decl.isField = function(self)
-  return lppclang.getDeclKind(self.handle) == lppclang.DeclKind_Field
 end
 
 --- Test if this Decl is the canonical declaration of whatever it is 
@@ -547,6 +618,10 @@ end
 ---@return boolean
 Decl.isCanonical = function(self)
   return 0 ~= lppclang.isCanonicalDecl(self.handle)
+end
+
+Decl.getDefinition = function(self)
+  return Decl.new(self.ctx, lppclang.getDefinition(self.handle))
 end
 
 --- Given that this Decl is an enum, creates and returns an iterator
@@ -631,6 +706,7 @@ end
 ---@field ctx Ctx
 ---@field handle userdata
 Type = makeStruct()
+Type.type = "Type"
 
 --- Construct a new Type
 ---
@@ -645,6 +721,11 @@ Type.new = function(ctx, handle)
     ctx = ctx,
     handle = handle
   }, Type)
+end
+
+--- Dumps clang's representation of this Type.
+Type.dump = function(self)
+  lppclang.dumpType(self.handle)
 end
 
 --- Check if this type is canonical.
@@ -719,6 +800,10 @@ Type.getFieldOffset = function(self, decl)
   return tonumber(lppclang.getFieldOffset(self.ctx.handle, decl.handle))
 end
 
+Type.isTemplateSpecialization = function(self)
+  return 0 ~= lppclang.isTemplateSpecializationType(self.handle)
+end
+
 Type.getDecl = function(self)
   local result = lppclang.getTypeDecl(self.handle)
   if nil == result then
@@ -743,6 +828,14 @@ Type.isPointer = function(self)
   return 0 ~= lppclang.isPointer(self.handle)
 end
 
+Type.isReference = function(self)
+  return 0 ~= lppclang.isReference(self.handle)
+end
+
+Type.isFunctionPointer = function(self)
+  return 0 ~= lppclang.isFunctionPointer(self.handle)
+end
+
 Type.getPointeeType = function(self)
   return Type.new(self.ctx, lppclang.getPointeeType(self.handle))
 end
@@ -755,6 +848,16 @@ Type.isArray = function(self)
   return 0 ~= lppclang.isArray(self.handle)
 end
 
+Type.isElaborated = function(self)
+  return 0 ~= lppclang.isElaborated(self.handle)
+end
+
+Type.getDesugaredType = function(self)
+  return Type.new(
+    self.ctx, 
+    lppclang.getDesugaredType(self.ctx.handle, self.handle))
+end
+
 Type.getArrayElementType = function(self)
   return Type.new(self.ctx, 
     lppclang.getArrayElementType(self.ctx.handle, self.handle))
@@ -762,6 +865,10 @@ end
 
 Type.getArrayLen = function(self)
   return tonumber(lppclang.getArrayLen(self.ctx.handle, self.handle))
+end
+
+Type.makeComplete = function(self)
+  return 0 ~= lppclang.makeComplete(self.ctx.handle, self.handle)
 end
 
 EnumIter = {}
@@ -804,6 +911,50 @@ FieldIter.next = function(self)
     return
   end
   return Decl.new(self.ctx, n)
+end
+
+TemplateArg = makeStruct()
+
+TemplateArg.new = function(ctx, handle)
+  if handle == nil then
+    return nil
+  end
+  local o = {}
+  o.ctx = ctx
+  o.handle = handle
+  return setmetatable(o, TemplateArg)
+end
+
+TemplateArg.isType = function(self)
+  return 0 ~= lppclang.isTemplateArgType(self.handle)
+end
+
+TemplateArg.getAsType = function(self)
+  return Type.new(self.ctx, lppclang.getTemplateArgType(self.handle))
+end
+
+TemplateArg.isIntegral = function(self)
+  return 0 ~= lppclang.isTemplateArgIntegral(self.handle)
+end
+
+TemplateArg.getAsIntegral = function(self)
+  return assert(tonumber(lppclang.getTemplateArgIntegral(self.handle)))
+end
+
+TemplateArgIter = makeStruct()
+
+TemplateArgIter.new = function(ctx, handle)
+  if handle == nil then
+    return
+  end
+  local o = {}
+  o.ctx = ctx
+  o.handle = handle
+  return setmetatable(o, TemplateArgIter)
+end
+
+TemplateArgIter.next = function(self)
+  return TemplateArg.new(self.ctx, lppclang.getNextTemplateArg(self.handle))
 end
 
 --- An instance of a clang Lexer over some string.
@@ -977,7 +1128,7 @@ clang.createContext = function(args)
   return Ctx.new(args)
 end
 
-clang.generateMakeDepFile = function(file, args)
+clang.generateMakeDepFile = function(filename, file, args)
   local carr = ffi.new("String["..args:len().."]")
 
   args:eachWithIndex(function(arg, i)
@@ -985,6 +1136,7 @@ clang.generateMakeDepFile = function(file, args)
   end)
 
   local result = lppclang.getDependencies(
+      make_str(filename),
       make_str(file), 
       carr,
       args:len())

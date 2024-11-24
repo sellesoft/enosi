@@ -427,14 +427,16 @@ int testDepedencies()
     "-Iiro"_str,
   };
 
-  getDependencies(R"cpp(
-    #include "iro/containers/array.h"
+  getDependencies(
+    "test.cpp"_str,
+    R"cpp(
+      #include "iro/containers/array.h"
 
-    int main()
-    {
-      Array<int> array;
-    }
-  )cpp"_str, args, 1);
+      int main()
+      {
+        Array<int> array;
+      }
+    )cpp"_str, args, 1);
 
   return 0;
 }

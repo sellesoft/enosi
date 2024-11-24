@@ -102,6 +102,8 @@ typedef struct FieldIter FieldIter;
 typedef struct EnumIter EnumIter;
 typedef struct Stmt Stmt;
 typedef struct Expr Expr;
+typedef struct TemplateArg TemplateArg;
+typedef struct TemplateArgIter TemplateArgIter;
 
 /* ============================================================================
  */
@@ -184,7 +186,8 @@ LPPCFUNC ParseExprResult parseExpr(Context* ctx);
 LPPCFUNC ParseIdentifierResult parseIdentifier(Context* ctx);
 LPPCFUNC Decl* lookupName(Context* ctx, String s);
 LPPCFUNC b8 loadString(Context* ctx, String s);
-LPPCFUNC String getDependencies(String file, String* args, u64 argc);
+LPPCFUNC String getDependencies(
+    String filename, String file, String* args, u64 argc);
 LPPCFUNC void destroyDependencies(String deps);
 LPPCFUNC b8 beginNamespace(Context* ctx, String name);
 LPPCFUNC void endNamespace(Context* ctx);
@@ -285,10 +288,70 @@ LPPCFUNC u64 getDeclBegin(Context* ctx, Decl* decl);
 LPPCFUNC u64 getDeclEnd(Context* ctx, Decl* decl);
 
 /* ----------------------------------------------------------------------------
+ *  Whether this decl represents a struct or union.
+ */
+LPPCFUNC b8 isRecord(Decl* decl);
+
+/* ----------------------------------------------------------------------------
+ *  Disambiguate between specific types.
  */
 LPPCFUNC b8 isStruct(Decl* decl);
 LPPCFUNC b8 isUnion(Decl* decl);
 LPPCFUNC b8 isEnum(Decl* decl);
+
+/* ---------------------------------------------------------------------------
+ *  Checks if this is a struct, union, or enum.
+ */
+LPPCFUNC b8 isTagDecl(Decl* decl);
+
+// NOTE these two only work on structs for now.
+LPPCFUNC b8 isTemplate(Decl* decl);
+LPPCFUNC b8 isTemplateSpecialization(Decl* decl);
+LPPCFUNC Decl* getSpecializedDecl(Decl* decl);
+
+/* ----------------------------------------------------------------------------
+ */
+LPPCFUNC TemplateArgIter* getTemplateArgIter(Context* ctx, Decl* decl);
+LPPCFUNC TemplateArg* getNextTemplateArg(TemplateArgIter* iter);
+
+/* ----------------------------------------------------------------------------
+ */
+LPPCFUNC b8 isTemplateArgType(TemplateArg* arg);
+LPPCFUNC Type* getTemplateArgType(TemplateArg* arg);
+LPPCFUNC b8 isTemplateArgIntegral(TemplateArg* arg);
+LPPCFUNC s64 getTemplateArgIntegral(TemplateArg* arg);
+
+
+// Only works on 'record' types; structs or unions.
+LPPCFUNC b8 isAnonymous(Decl* decl);
+
+// Checks if 'decl' is a FieldDecl, eg. a member of a struct or union.
+LPPCFUNC b8 isField(Decl* decl);
+
+// When 'decl' is a FieldDecl, check if its anonymous, eg. a nested anonymous 
+// struct or union with no field name. 
+// 'decl' must be a FieldDecl.
+LPPCFUNC b8 isAnonymousField(Decl* decl);
+
+// When 'field' is a FieldDecl, get its offset into whatever its in in bits.
+// Asserts that 'field' is a FieldDecl.
+LPPCFUNC u64 getFieldOffset(Context* ctx, Decl* field);
+
+/* ----------------------------------------------------------------------------
+ */
+LPPCFUNC b8 isComplete(Decl* decl);
+
+/* ----------------------------------------------------------------------------
+ *  Retrieves the declaration that actually defines whatever this is. Eg.
+ *  there are Decls for forward declarations that are actually defined later.
+ *
+ *  This only works on TagDecls, like structs, unions, enums, etc.
+ */
+LPPCFUNC Decl* getDefinition(Decl* decl);
+
+/* ----------------------------------------------------------------------------
+ */
+LPPCFUNC void makeComplete(Context* ctx, Type* type);
 
 /* ----------------------------------------------------------------------------
  |  If this is the 'canonical' decl.
@@ -342,14 +405,30 @@ LPPCFUNC b8 isUnqualifiedAndCanonical(Type* type);
 LPPCFUNC b8 isConst(Type* type);
 
 /* ----------------------------------------------------------------------------
+ *  Returns if the given type is 'elaborated' eg. the Clang type represents 
+ *  the type as it was written in source.
+ */
+LPPCFUNC b8 isElaborated(Type* type);
+
+/* ----------------------------------------------------------------------------
+ */
+LPPCFUNC Type* getDesugaredType(Context* ctx, Type* type);
+
+/* ----------------------------------------------------------------------------
  |  Helpers for dealing with pointers.
  */
 LPPCFUNC b8 isPointer(Type* type);
+LPPCFUNC b8 isFunctionPointer(Type* type);
+LPPCFUNC b8 isReference(Type* type);
 LPPCFUNC Type* getPointeeType(Type* type);
 
 LPPCFUNC b8 isArray(Type* type);
 LPPCFUNC Type* getArrayElementType(Context* ctx, Type* type);
 LPPCFUNC u64 getArrayLen(Context* ctx, Type* type);
+
+/* ----------------------------------------------------------------------------
+ */
+LPPCFUNC b8 isTemplateSpecializationType(Type* type);
 
 /* ----------------------------------------------------------------------------
  |  Retrieves the canonical type of the given type, eg. the underlying type 
@@ -416,10 +495,14 @@ LPPCFUNC b8 typeIsBuiltin(Type* type);
 // if this is a builtin type.
 LPPCFUNC Decl* getTypeDecl(Type* type);
 
+/* ----------------------------------------------------------------------------
+ *  Dumps the given type.
+ */
+LPPCFUNC void dumpType(Type* type);
+
 LPPCFUNC FieldIter* createFieldIter(Context* ctx, Decl* decl);
 LPPCFUNC Decl*      getNextField(FieldIter* iter);
 
-LPPCFUNC u64 getFieldOffset(Context* ctx, Decl* field);
 
 LPPCFUNC EnumIter* createEnumIter(Context* ctx, Decl* decl);
 LPPCFUNC Decl*     getNextEnum(EnumIter* iter);
