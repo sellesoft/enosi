@@ -1,6 +1,6 @@
 
 $ local cmn = require "common"
-$ local Schema = require "asset.Schema"
+$ local Schema = require "resource.Schema"
 
 #include "iro/common.h"
 #include "iro/unicode.h"

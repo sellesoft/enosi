@@ -12,7 +12,7 @@ $ local cmn = require "common"
 
 using namespace iro;
 
-@@lpp.import "asset/SourceData.lh"
+@@lpp.import "resource/SourceData.lh"
 
 using namespace iro;
 

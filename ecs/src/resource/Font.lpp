@@ -9,8 +9,9 @@ $ local List = require "list"
 #include "iro/fs/file.h"
 #include "iro/platform.h"
 
-@@lpp.import "asset/Font.lh"
-@@lpp.import "asset/AssetMgr.lh"
+@@lpp.import "resource/Font.lh"
+@@lpp.import "resource/ResourceMgr.lh"
+@@lpp.import "graphics/Renderer.lh"
 
 static Logger logger = 
   Logger::create("font"_str, Logger::Verbosity::Debug);
@@ -27,7 +28,7 @@ static b8 codepointInRange(PackRange* range, u32 codepoint)
 
 /* ----------------------------------------------------------------------------
  */
-PackRange* Font::getRangeOfCodepoint(u32 codepoint)
+PackRange* Font::getRangeOfCodepoint(u32 codepoint) const
 {
   if (data->num_ranges == 1)
   {
@@ -50,7 +51,7 @@ PackRange* Font::getRangeOfCodepoint(u32 codepoint)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Font::getPackedChar(PackedChar* out, u32 codepoint)
+b8 Font::getPackedChar(PackedChar* out, u32 codepoint) const
 {
   PackRange* range = getRangeOfCodepoint(codepoint);
   if (!range)
@@ -61,53 +62,87 @@ b8 Font::getPackedChar(PackedChar* out, u32 codepoint)
 
 /* ----------------------------------------------------------------------------
  */
-void Font::getPackedChar(PackedChar* out, PackRange* range, u32 codepoint)
+void Font::getPackedChar(
+    PackedChar* out, 
+    PackRange* range, 
+    u32 codepoint) const
 {
   *out = *(range->chardata + codepoint - range->first_codepoint);
 }
 
 /* ----------------------------------------------------------------------------
  */
-s64 Font::writeAssetPath(io::IO* io, String name, String ext, AssetMgr& assetmgr)
-{
-  return io::formatv(io, assetmgr.getAssetDir(), "/fonts/", name, '.', ext);
-}
-
-/* ----------------------------------------------------------------------------
- */
-s64 Font::writeDataPath(io::IO* io, String name, AssetMgr& assetmgr)
-{
-  return io::formatv(io, assetmgr.getDataDir(), "/fonts/", name, ".font");
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 Font::load(
-    Font* out,
+s64 Font::writeAssetPath(
+    io::IO* io, 
     String name, 
-    AssetMgr& assetmgr)
+    String ext, 
+    ResourceMgr& rsrcmgr)
+{
+  return io::formatv(
+    io, rsrcmgr.getResourceDir(), "/fonts/", name, '.', ext);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+s64 Font::writeDataPath(io::IO* io, String name, ResourceMgr& rsrcmgr)
+{
+  return io::formatv(
+    io, rsrcmgr.getDataDir(), "/fonts/", name, ".cmp_font");
+}
+
+/* ----------------------------------------------------------------------------
+ */
+MovedResourceRef Font::load(
+    String name, 
+    ResourceMgr& rsrcmgr,
+    gfx::Renderer& renderer)
 {
   INFO("loading font '", name, "'\n");
 
   using namespace fs;
 
-  PathBuffer data_path;
-  writeDataPath(&data_path, name, assetmgr);
+  PathBuffer data_path_buf;
+  writeDataPath(&data_path_buf, name, rsrcmgr);
 
-  if (!Path::exists(data_path.asStr()))
-    return ERROR("attempt to load font '", name, "' but there is no data at "
-                 "path '", data_path.asStr(), "'\n");
+  String data_path = data_path_buf.asStr();
 
-  out->handle = assetmgr.loadAsset(data_path.asStr());
-  if (isnil(out->handle))
-    return ERROR("failed to load asset for font '", name, "'\n");
+  MovedResourceRef existing = rsrcmgr.findResource(data_path);
+  if (notnil(existing))
+    return existing;
 
-  out->data = (FontData*)assetmgr.getAsset(out->handle)->data;
-  
-  FontData* data = out->data;
+  if (!Path::exists(data_path))
+  {
+    ERROR("attempt to load font '", name, "' but there is no data at "
+          "path '", data_path, "'\n");
+    return nil;
+  }
+
+  auto r_font = FontRef(rsrcmgr.allocateResource<Font>(data_path));
+  if (isnil(r_font))
+  {
+    ERROR("failed to load font '", name, "'\n");
+    return nil;
+  }
+
+  Font* font = r_font.getData();
+
+  // Open the compiled data from disk.
+  auto compiled_data_file = File::from(data_path, OpenFlag::Read);
+  if (isnil(compiled_data_file))
+  {
+    ERROR("failed to open compiled font data from '", data_path, "'\n");
+    return nil;
+  }
+
+  u64 file_size = compiled_data_file.getInfo().byte_size;
+  font->data = (FontData*)mem::stl_allocator.allocate(file_size);
+
+  compiled_data_file.read({(u8*)font->data, file_size});
+
+  FontData* data = font->data;
 
   // Adjust pointers to point at correct data.
-  data->ranges = (PackRange*)(out->data + 1);
+  data->ranges = (PackRange*)(data + 1);
 
   for (s32 range_idx = 0; range_idx < data->num_ranges; ++range_idx)
   {
@@ -119,13 +154,16 @@ b8 Font::load(
   INFO("loading font's texture\n");
 
   // Load the texture.
-  if (!Texture::load(
-        &out->texture,
-        name,
-        assetmgr))
-    return ERROR("failed to load font texture\n");
+  font->r_texture.track(Texture::load(name, rsrcmgr));
+  if (isnil(font->r_texture))
+  {
+    ERROR("failed to load font texture\n");
+    return nil;
+  }
 
-  return true;
+  renderer.loadTexture(font->r_texture.getData());
+
+  return r_font.move();
 }
 
 /* ----------------------------------------------------------------------------

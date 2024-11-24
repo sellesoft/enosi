@@ -1,0 +1,80 @@
+/* 
+ *  Manager for blobs of memory that need to be ref counted and garbage 
+ *  collected. 
+ *
+ *  Resources may be named, allowing us to reuse them as needed. But they can
+ *  also be anonymous. It is good practice, though, to try and consistently
+ *  name resources such that they may be reused!
+ */  
+
+#include "iro/common.h"
+#include "iro/unicode.h"
+#include "iro/containers/avl.h"
+#include "iro/containers/linked_pool.h"
+#include "iro/fs/path.h"
+#include "iro/memory/allocator.h"
+#include "iro/memory/bump.h"
+
+$ local lpp = require "lpp"
+$ local reflect = require "reflect.Reflector"
+$ local Ref = require "resource.Ref"
+
+@@lpp.import "resource/Resource.lh"
+
+using namespace iro;
+
+/* ============================================================================
+ */
+struct ResourceMgr
+{
+  typedef DLinkedPool<Resource> ResourcePool;
+  typedef AVL<Resource, Resource::getHash> ResourceMap;
+
+  typedef DList<Resource> ResourceList;
+
+  ResourceList list;
+  ResourceMap map;
+
+  mem::Allocator* allocator;
+
+  b8 init(mem::Allocator* allocator);
+  void deinit();
+
+  // Allocates a block of memory as a Resource, returns a reference to it 
+  // and registers it with 'name'.
+  // This will assert if a Resource with the given name already exists, as 
+  // these functions are expected to be called when we know that the 
+  // wanted Resource doesn't already exist!
+  MovedResourceRef allocateResource(u64 size, String name);
+
+  template<typename T>
+  MovedResourceRef allocateResource(String name)
+  {
+    TypedResourceRef<T> ref = allocateResource(sizeof(T), name);
+    new (ref.getData()) T;
+    
+    auto* resource = ref.getData();
+
+    resource->name = name.allocateCopy(&mem::stl_allocator);
+    resource->hash = name.hash();
+    resource->rc.addRef();
+    resource->rsrcmgr = this;
+
+    return ref.move();
+  }
+
+  // Attempts to find a resource from a given name and returns it.
+  MovedResourceRef findResource(String name) const;
+
+  static b8 checkNeedsCompiled(String asset_path, String data_path);
+
+  String getResourceDir() const { return "resources"_str; }
+  String getDataDir() const { return "data"_str; }
+
+private:
+
+  // Only resource refs may unload a resource.
+  friend ResourceRef;
+
+  void unloadResource(Resource* resource);
+};

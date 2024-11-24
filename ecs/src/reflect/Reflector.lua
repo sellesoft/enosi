@@ -1,6 +1,7 @@
 -- Reflection 'system'.
 local lpp = require "lpp"
 local List = require "list"
+local buffer = require "string.buffer"
 
 -- Load lppclang.
 -- TODO(sushi) the lib needs to be loaded in a better way.
@@ -100,6 +101,7 @@ end
 local imported = {}
 
 -- TODO(sushi) this needs to be a part of lpp itself.
+local import_list = List{}
 lpp.import = function(path)
   local full_path = path
   if full_path:sub(1,1) ~= "/" then
@@ -117,15 +119,38 @@ lpp.import = function(path)
     return 
   end
 
+  import_list:push(path)
+
   imported[full_path] = true
   local result = lpp.processFile(full_path)
+
+  import_list:pop()
+
+  local buf = buffer.new()
+
+  buf:put [[
+// - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * 
+// import chain:
+]]
+
+  for import in import_list:each() do
+    buf:put("// ", import, "\n")
+  end
+
+  buf:put [[
+// - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * - * 
+]]
+
+  buf:put("// ", path, ": \n\n")
+
+  buf:put(result)
 
   local expansion = lpp.MacroExpansion.new()
   expansion:pushBack(
     lpp.MacroPart.new(
-      full_path, 0, 0, result))
+      full_path, 0, 0, tostring(buf)))
 
-  return result
+  return buf:get()
 end
 
 if lpp.generating_dep_file then

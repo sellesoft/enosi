@@ -7,13 +7,12 @@ $ local reflect = require "reflect.Reflector"
 $ local ui = require "ui.UI"
 
 @@lpp.import "ui/Item.lh"
+@@lpp.import "resource/Font.lh"
 
 #include "iro/containers/SmallArray.h"
 #include "iro/Pair.h"
 
 using namespace iro;
-
-struct Font;
 
 namespace ui
 {
@@ -86,7 +85,7 @@ struct TextRenderer
 struct TextState
 {
   // The loaded font for this text.
-  Font* font;
+  FontRef font;
 
   // The name of the loaded font so we may reload it if the user changes
   // it.

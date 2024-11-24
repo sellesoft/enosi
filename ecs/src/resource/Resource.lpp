@@ -1,0 +1,14 @@
+$ local cmn = require "common"
+
+@@lpp.import "resource/Resource.lh"
+@@lpp.import "resource/ResourceMgr.lh"
+
+/* ----------------------------------------------------------------------------
+ */ 
+void ResourceRef::release()
+{
+  assert(ptr != nullptr);
+  if (ptr->rc.remRef())
+    ptr->rsrcmgr->unloadResource(ptr);
+  ptr = nullptr;
+}

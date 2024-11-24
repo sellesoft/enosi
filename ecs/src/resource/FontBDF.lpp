@@ -2,9 +2,9 @@
 $ local lpp = require "lpp"
 $ local reflect = require "reflect.Reflector"
 
-@@lpp.import "asset/Font.lh"
-@@lpp.import "asset/Texture.lh"
-@@lpp.import "asset/AssetMgr.lh"
+@@lpp.import "resource/Font.lh"
+@@lpp.import "resource/Texture.lh"
+@@lpp.import "resource/ResourceMgr.lh"
 
 #include "iro/logger.h"
 #include "iro/platform.h"
@@ -28,7 +28,7 @@ typedef io::StaticBuffer<512> PathBuffer;
 b8 Font::compileBDF(CompileParams& params)
 {
   // NOTE(sushi) this is a very poor BDF font compiler as it was implemented
-  //             which the intension of compiling gohufont specifically.
+  //             with the intention of compiling gohufont specifically.
   //             Currently this only supports monospaced fonts and doesn't 
   //             deal with a majority of font properties and some char
   //             properties as they were not needed for gohufont!
@@ -46,7 +46,7 @@ b8 Font::compileBDF(CompileParams& params)
     return error("attempt to load font '", params.name, "' but there is no "
                  "asset at path '", params.asset_path, "'\n");
 
-  if (!AssetMgr::checkNeedsCompiled(params.asset_path, params.data_path))
+  if (!ResourceMgr::checkNeedsCompiled(params.asset_path, params.data_path))
     return true;
 
   INFO("compiling '", params.data_path, "'\n");
@@ -470,7 +470,7 @@ $ end
     return error("failed to serialize font data\n");
 
   PathBuffer texture_data_path;
-  Texture::writeDataPath(&texture_data_path, params.name, *params.assetmgr);
+  Texture::writeDataPath(&texture_data_path, params.name, *params.rsrcmgr);
 
   Texture::CompileParams tparams =
   {
@@ -483,7 +483,7 @@ $ end
     .filter = ImageFilter::Nearest,
     .address_mode = ImageAddressMode::ClampToWhite,
     .allocator = params.allocator,
-    .assetmgr = params.assetmgr,
+    .rsrcmgr = params.rsrcmgr,
   };
 
   if (!Texture::compileFromMemory(pixels, tparams))

@@ -3,8 +3,8 @@ $ local reflect = require "reflect.Reflector"
 
 @@lpp.import "game/EntityMgr.lh"
 @@lpp.import "game/EntityLoader.lh"
-@@lpp.import "asset/SourceDataFile.lh"
-@@lpp.import "asset/SourceDataParser.lh"
+@@lpp.import "resource/SourceDataFile.lh"
+@@lpp.import "resource/SourceDataParser.lh"
 
 #include "iro/fs/file.h"
 

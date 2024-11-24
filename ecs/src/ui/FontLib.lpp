@@ -30,46 +30,6 @@ void FontLib::deinit()
   pool.deinit();
 }
 
-/* ----------------------------------------------------------------------------
- */
-Font* FontLib::findOrLoadFont(
-    String name, 
-    AssetMgr& assetmgr,
-    gfx::Renderer& gfx)
-{
-  TRACE("finding font ", name, "\n");
-  u64 hashed = name.hash();
-  Entry* entry = map.find(hashed);
-  if (!entry)
-  {
-    DEBUG("font '", name, "' not loaded yet\n");
-    entry = pool.add();
-    entry->hash = hashed;
-
-    if (!Font::load(
-          &entry->font,
-          name,
-          assetmgr))
-    {
-      ERROR("failed to load font '", name, "'\n");
-      pool.remove(entry);
-      return nullptr;
-    }
-
-    DEBUG("loaded font '", name, "' with data ", entry->font.data, " and "
-          "texture ", &entry->font.texture, "\n");
-
-    map.insert(entry);
-  }
-
-  // Load the font's texture into the graphics backend if not already.
-  if (entry->font.texture.gfx_handle == 0)
-    gfx.loadTexture(entry->font.texture);
-
-  return &entry->font;
-}
-
-
 }
 
 

@@ -74,6 +74,7 @@ struct SourceDataFileHandle
 
   void release();
 
+  // For use in NilValue.
   SourceDataFile* getFile() const 
     { return header? header->getFile() : nullptr; }
 

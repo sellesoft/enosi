@@ -11,7 +11,7 @@ using namespace iro;
 // Introduce events and the event bus definitions.
 @@lpp.import "event/BroadcastEventBus.lh"
 
-@@lpp.import "asset/Font.lh"
+@@lpp.import "resource/Font.lh"
 
 @@lpp.import "ui/widgets/Text.lh"
 @@lpp.import "ui/widgets/Button.lh"
@@ -23,9 +23,9 @@ using namespace iro;
 @@lpp.import "game/Component.lh"
 @@lpp.import "game/Entity.lh"
 @@lpp.import "game/Transform.comp.lh"
-@@lpp.import "asset/SourceDataParser.lh"
-@@lpp.import "asset/SourceDataFile.lh"
-@@lpp.import "asset/Packing.lh"
+@@lpp.import "resource/SourceDataParser.lh"
+@@lpp.import "resource/SourceDataFile.lh"
+@@lpp.import "resource/Packing.lh"
 
 static Logger logger = 
   Logger::create("ecs.eng"_str, Logger::Verbosity::Info);
@@ -117,7 +117,7 @@ b8 Engine::init()
   @initSystem(Window::initializeBackend(),              window backend);
   @initSystem(window.init("ecs"_str),                   window);
   @initSystem(renderer.init(*this),                     renderer);
-  @initSystem(assetmgr.init(4096, &mem::stl_allocator), assetmgr);
+  @initSystem(rsrcmgr.init(&mem::stl_allocator),        resource mgr);
   @initSystem(input.init(*this),                        input);
   @initSystem(ui.init(*this),                           ui);
   @initSystem(gamemgr.init(this),                       gamemgr);
@@ -140,10 +140,10 @@ b8 Engine::init()
   {
     .name = "gohu"_str,
     .asset_path = "assets/fonts/gohu.bdf"_str,
-    .data_path = "data/fonts/gohu.font"_str,
+    .data_path = "data/fonts/gohu.cmp_font"_str,
     .ranges = CodepointRanges::from(&ascii, 1),
     .allocator = &mem::stl_allocator,
-    .assetmgr = &assetmgr,
+    .rsrcmgr = &rsrcmgr,
   };
 
   Font::compileBDF(params);
@@ -164,17 +164,6 @@ b8 Engine::init()
 
   FontSchema fschema;
   packSourceDataIntoType(*sfile->returned_data, &fschema);
-
-  INFO(
-      "schema: ",
-    "\n        name: ", fschema.name, 
-    "\n  asset_path: ", fschema.asset_path,
-    "\n      ranges: \n");
-
-  for (CodepointRange range : fschema.ranges)
-  {
-  INFO("          ", range.first_codepoint, ":", range.num_codepoints, "\n");
-  }
 
   return true;
 }

@@ -147,7 +147,7 @@ void TextRenderer::draw(
   u32 nchars = text.countCharacters();
   vec2i nucounts = gfx::putFilledRectCounts() * nchars;
   auto [vp, ip] = dc->realloc(ui, nucounts);
-  dc->tex = &font->texture;
+  dc->tex = font->r_texture.getData();
   
   vec2f cursor = pos;
   FontData* font_data = font->data;
@@ -214,7 +214,7 @@ b8 TextState::init(UI* ui, String init)
 void TextState::deinit()
 {
   buffer.close();
-  font = nullptr;
+  font.release();
   font_name = nil;
 }
 
@@ -222,7 +222,7 @@ void TextState::deinit()
  */
 void TextState::checkFont(String name, UI* ui)
 {
-  if (font == nullptr)
+  if (isnil(font))
   {
     DEBUG("font not loaded yet\n");
 
@@ -234,19 +234,16 @@ void TextState::checkFont(String name, UI* ui)
 
     DEBUG("item specifies font ", name, "\n");
 
-    font = ui->fontlib.findOrLoadFont(
-      name,
-      ui->eng->assetmgr,
-      ui->eng->renderer);
+    font.track(Font::load(name, ui->eng->rsrcmgr, ui->eng->renderer));
 
-    DEBUG("loaded font at ", font, "\n");
-    
-    if (font ==nullptr)
+    if (isnil(font))
     {
       ERROR("evaluate called on a Text item with font '", name, "' ",
             "but the font failed to load\n");
       return;
     }
+
+    DEBUG("loaded font ", name, "\n");
   }
 }
 
@@ -278,7 +275,7 @@ void TextState::initRenderer(
 
   renderer->init(
     buffer.asStr(),
-    font,
+    font.getData(),
     font_height,
     tab_spaces,
     max_width,

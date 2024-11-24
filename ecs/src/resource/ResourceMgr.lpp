@@ -1,0 +1,92 @@
+$ local cmn = require "common"
+
+@@lpp.import "resource/ResourceMgr.lh"
+
+#include "iro/memory/memory.h"
+#include "iro/fs/file.h"
+#include "iro/platform.h"
+
+@cmn.defFileLogger(rsrcmgr, Debug)
+
+/* ----------------------------------------------------------------------------
+ */
+b8 ResourceMgr::init(mem::Allocator* allocator)
+{
+  INFO("initializing ResourceMgr\n");
+  
+  this->allocator = allocator;
+
+  if (!map.init(allocator))
+    return ERROR("failed to init resource map\n");
+
+  INFO("finished\n");
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void ResourceMgr::deinit()
+{
+  INFO("deinitializing ResourceMgr\n");
+
+  if (!map.isEmpty())
+  {
+    ERROR("ResourceMgr::deinit called but Resources still exist!\n",
+          "  Currently allocated resources are: \n");
+    for (Resource& resource : map)
+    {
+      ERROR("    ", resource.name, "\n");
+    }
+
+    assert(!"ResourceMgr::deinit called while Resources are still active!");
+  }
+  
+  map.deinit();
+
+  INFO("done\n");
+}
+
+/* ----------------------------------------------------------------------------
+ */
+MovedResourceRef ResourceMgr::allocateResource(u64 size, String name)
+{
+  u64 name_hash = name.hash();
+  assert(map.find(name_hash) == nullptr && 
+    "a Resource has already been allocated with the given name");
+
+  auto* resource = (Resource*)allocator->allocate(size);
+
+  map.insert(resource);
+
+  return MovedResourceRef(resource);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+MovedResourceRef ResourceMgr::findResource(String name) const
+{
+  return MovedResourceRef(map.find(name.hash()));
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void ResourceMgr::unloadResource(Resource* resource)
+{
+  assert(!resource->rc.isReferenced());
+
+  resource->onUnload();
+
+  map.remove(resource);
+
+  allocator->free(resource);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 ResourceMgr::checkNeedsCompiled(String asset_path, String data_path)
+{
+  using namespace fs;
+  return !Path::exists(data_path) ||
+         1 ==  Path::compareModTimes(asset_path, data_path);
+}

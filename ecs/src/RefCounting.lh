@@ -5,6 +5,7 @@
  */
 
 #include "iro/common.h"
+#include "assert.h"
 
 struct RefCounter
 {

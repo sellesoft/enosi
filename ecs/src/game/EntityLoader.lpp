@@ -7,8 +7,8 @@ $ local List = require "list"
 
 @@lpp.import "game/EntityMgr.lh"
 @@lpp.import "game/Component.lh"
-@@lpp.import "asset/SourceDataFile.lh"
-@@lpp.import "asset/Packing.lh"
+@@lpp.import "resource/SourceDataFile.lh"
+@@lpp.import "resource/Packing.lh"
 
 #include "iro/common.h"
 #include "iro/unicode.h"

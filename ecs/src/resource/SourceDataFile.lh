@@ -13,7 +13,7 @@ $ local reflect = require "reflect.Reflector"
 
 using namespace iro;
 
-@@lpp.import "asset/SourceData.lh"
+@@lpp.import "resource/SourceData.lh"
 
 /* ============================================================================
  */

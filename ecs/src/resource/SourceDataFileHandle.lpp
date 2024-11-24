@@ -1,7 +1,7 @@
 $ local cmn = require "common"
 
-@@lpp.import "asset/SourceDataFileHandle.lh"
-@@lpp.import "asset/SourceDataFileReg.lh"
+@@lpp.import "resource/SourceDataFileHandle.lh"
+@@lpp.import "resource/SourceDataFileReg.lh"
 
 /* ----------------------------------------------------------------------------
  */

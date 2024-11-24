@@ -4,7 +4,7 @@
 
 $ local lpp = require "lpp"
 $ local reflect = require "reflect.Reflector"
-$ local SourceData = require "asset.SourceData"
+$ local SourceData = require "resource.SourceData"
 
 #include "iro/common.h"
 #include "iro/unicode.h"
@@ -14,11 +14,13 @@ $ local SourceData = require "asset.SourceData"
 
 using namespace iro;
 
-@@lpp.import "asset/AssetHandle.lh"
-@@lpp.import "asset/Texture.lh"
-@@lpp.import "asset/Font.schema.lh"
+@@lpp.import "resource/Resource.lh"
+@@lpp.import "resource/Texture.lh"
+@@lpp.import "resource/Font.schema.lh"
 
-struct AssetMgr;
+struct ResourceMgr;
+
+namespace gfx { struct Renderer; }
 
 /* ==========================================================================
  *  This mirrors stbtt_aligned_quad
@@ -81,26 +83,32 @@ struct FontData
   static b8 deserialize(FontData* out, void* data);
 };
 
+struct Font;
+
+typedef TypedResourceRef<Font> FontRef;
+
 /* ============================================================================
  *  Runtime representation of a loaded font.
  */
-struct Font
+struct Font : public Resource
 {
-  AssetHandle handle;
-  // TODO(sushi) convert to an asset ref when that gets implemented.
-  Texture texture;
+  FontData* data = nullptr;
+  TextureRef r_texture = {};
 
-  FontData* data;
-  
+  const FontData* getFontData() const
+  {
+    return data;
+  }
+
   // It's recommended to use this to find the proper range for a given
   // codepoint and then passing it to getPackedChar() when you know what
   // ranges you'll be working with.
   // Returns nullptr if no range exists in this font for the given codepoint.
-  PackRange* getRangeOfCodepoint(u32 codepoint);
+  PackRange* getRangeOfCodepoint(u32 codepoint) const;
 
   // Returns false if the given codepoint doesn't exist in any range 
   // stored by this font.
-  b8 getPackedChar(PackedChar* out, u32 codepoint);
+  b8 getPackedChar(PackedChar* out, u32 codepoint) const;
 
   // This ASSUMES that the given codepoint exists in the given range,
   // BE CAREFUL!
@@ -108,23 +116,23 @@ struct Font
   //             in text boxes and such. Especially since ECS is meant to 
   //             be played online, this could potentially be used to send
   //             arbitrary data via, say, a chat system or something.
-  void getPackedChar(PackedChar* out, PackRange* range, u32 codepoint);
+  void getPackedChar(PackedChar* out, PackRange* range, u32 codepoint) const;
 
   static s64 writeAssetPath(
     io::IO* out, 
     String name, 
     String ext, 
-    AssetMgr& assetmgr);
+    ResourceMgr& rsrcmgr);
 
   static s64 writeDataPath(
     io::IO* out, 
     String name, 
-    AssetMgr& assetmgr);
+    ResourceMgr& rsrcmgr);
 
-  static b8 load(
-    Font* out,
+  static MovedResourceRef load(
     String name, 
-    AssetMgr& assetmgr);
+    ResourceMgr& rsrcmgr,
+    gfx::Renderer& renderer);
 
   struct CompileParams
   {
@@ -133,11 +141,10 @@ struct Font
     String data_path;
     CodepointRanges ranges;
     mem::Allocator* allocator;
-    AssetMgr* assetmgr;
+    ResourceMgr* rsrcmgr;
   };
 
   static b8 compileTTF(CompileParams& params);
   static b8 compileBDF(CompileParams& params);
 };
 
-DefineNilValue(Font, {nil}, { return notnil(x.handle); });

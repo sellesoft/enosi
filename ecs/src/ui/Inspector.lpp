@@ -148,7 +148,7 @@ struct MemberState
   {
     wdata->name_render.init(
       name,
-      tree->font,
+      tree->r_font.getData(),
       11.f,
       1.f,
       999.f,
@@ -177,7 +177,7 @@ struct MemberState
   {
     wdata->value_render.init(
       wdata->value_buffer.asStr(),
-      tree->font,
+      tree->r_font.getData(),
       11.f,
       1.f,
       999.f,
@@ -197,7 +197,7 @@ struct MemberState
   {
     wdata->value_render.init(
       wdata->value_buffer.asStr(),
-      tree->font,
+      tree->r_font.getData(),
       11.f,
       1.f,
       999.f,
@@ -711,10 +711,11 @@ InspectorEngineTree* InspectorEngineTree::create(UI& ui, Engine* engine)
     engine, 
     $(p.decls.map["struct Engine"].decl_idx));
 
-  tree->font = ui.fontlib.findOrLoadFont(
-    "gohu"_str,
-    ui.eng->assetmgr,
-    ui.eng->renderer);
+  tree->r_font.track(
+    Font::load("gohu"_str, ui.eng->rsrcmgr, ui.eng->renderer));  
+
+  auto test = tree->r_font.copy();
+  test.release();
 
   tree->bg = ui.drawcmds.add();
   tree->bg->alloc(&ui, gfx::putFilledRectCounts());

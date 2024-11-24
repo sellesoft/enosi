@@ -7,8 +7,8 @@ $ local reflect = require "reflect.Reflector"
 @@lpp.import "window/Window.lh"
 @@lpp.import "window/Window.events.lh"
 
-@@lpp.import "asset/AssetMgr.lh"
-@@lpp.import "asset/Texture.lh"
+@@lpp.import "resource/ResourceMgr.lh"
+@@lpp.import "resource/Texture.lh"
 
 #include "iro/logger.h"
 #include "iro/fs/file.h"
@@ -265,7 +265,7 @@ b8 Renderer::compileShaders()
 {
   INFO("compiling shaders\n");
 
-  // TODO(sushi) use the assetmgr here
+  // TODO(sushi) use the rsrcmgr here
   if (!compileShader(
         "assets/shaders/frag.glsl"_str, 
         GL_FRAGMENT_SHADER,
@@ -309,23 +309,22 @@ Buffer* Renderer::createBuffer()
 
 /* ----------------------------------------------------------------------------
  */
-b8 Renderer::loadTexture(Texture& texture)
+b8 Renderer::loadTexture(Texture* texture)
 {
-  if (texture.gfx_handle != 0)
+  if (texture->gfx_handle != 0)
     return ERROR("call to loadTexture with a texture that has already "
                  "been assigned a gfx_handle\n");
 
-  glGenTextures(1, &texture.gfx_handle);
+  glGenTextures(1, &texture->gfx_handle);
 
-  glBindTexture(GL_TEXTURE_2D, texture.gfx_handle);
+  glBindTexture(GL_TEXTURE_2D, texture->gfx_handle);
 
-  TextureData* data = texture.data;
+  const TextureData* data = texture->compiled;
 
   if (data->width % 4 != 0)
   {
     // TODO(sushi) handle alignments of 2 as well.
-    auto* asset = engine->assetmgr.getAsset(texture.handle);
-    WARN("provided texture '", asset->path, "' has a width that is not "
+    WARN("provided texture '", texture->name, "' has a width that is not "
          "aligned to 4 and will likely be loaded improperly\n");
   }
 
@@ -473,7 +472,7 @@ void Renderer::pushSetScissor(vec2i pos, vec2i size)
 
 /* ----------------------------------------------------------------------------
  */
-void Renderer::pushBindTexture(Texture* texture)
+void Renderer::pushBindTexture(const Texture* texture)
 {
   DrawCmd cmd;
   cmd.kind = DrawCmd::Kind::BindTexture;

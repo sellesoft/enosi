@@ -8,8 +8,8 @@ $ local cmn = require "common"
 #include "iro/containers/pool.h"
 #include "iro/containers/avl.h"
 
-@@lpp.import "asset/SourceDataFile.lh"
-@@lpp.import "asset/SourceDataFileHandle.lh"
+@@lpp.import "resource/SourceDataFile.lh"
+@@lpp.import "resource/SourceDataFileHandle.lh"
 
 /* ============================================================================
  */

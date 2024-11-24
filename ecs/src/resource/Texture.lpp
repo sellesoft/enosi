@@ -7,8 +7,8 @@ $ local reflect = require "reflect.Reflector"
 #include "iro/fs/path.h"
 #include "iro/platform.h"
 
-@@lpp.import "asset/Texture.lh"
-@@lpp.import "asset/AssetMgr.lh"
+@@lpp.import "resource/Texture.lh"
+@@lpp.import "resource/ResourceMgr.lh"
 
 #include "cassert"
 
@@ -20,10 +20,10 @@ typedef io::StaticBuffer<512> PathBuffer;
 
 /* ----------------------------------------------------------------------------
  */
-s64 Texture::writeDataPath(io::IO* io, String name, AssetMgr& assetmgr)
+s64 Texture::writeDataPath(io::IO* io, String name, ResourceMgr& rsrcmgr)
 {
   return io::formatv(io, 
-      assetmgr.getDataDir(), "/textures/", name, ".texture");
+      rsrcmgr.getDataDir(), "/textures/", name, ".texture");
 }
 
 /* ----------------------------------------------------------------------------
@@ -42,33 +42,51 @@ b8 TextureData::serialize(io::IO* out)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Texture::load(
-    Texture* out,
+MovedResourceRef Texture::load(
     String name,
-    AssetMgr& assetmgr)
+    ResourceMgr& rsrcmgr)
 {
   using namespace fs;
 
-  PathBuffer data_path;
-  writeDataPath(&data_path, name, assetmgr);
+  PathBuffer data_path_buf;
+  writeDataPath(&data_path_buf, name, rsrcmgr);
 
-  if (!Path::exists(data_path.asStr()))
-    return ERROR("attempt to load texture '", name, "' but there is no asset "
-                 "at path '", data_path.asStr(), "'\n");
+  String data_path = data_path_buf.asStr();
 
-  out->handle = assetmgr.loadAsset(data_path.asStr());
-  if (isnil(out->handle))
-    return ERROR("failed to load asset for texture '", name, "'\n");
+  if (!Path::exists(data_path))
+  {
+    ERROR("attempt to load texture '", name, "' but there is no asset "
+          "at path '", data_path, "'\n");
+    return nil;
+  }
 
-  TextureData* data = out->data = 
-    assetmgr.getAssetData<TextureData>(out->handle);
+  auto r_texture = TextureRef(rsrcmgr.allocateResource<Texture>(data_path));
+  if (isnil(r_texture))
+  {
+    ERROR("failed to load texture '", name, "'\n");
+    return nil;
+  }
+
+  Texture* texture = r_texture.getData();
+  
+  auto compiled_data_file = File::from(data_path, OpenFlag::Read);
+  if (isnil(compiled_data_file))
+  {
+    ERROR("failed to open compiled texture data from '", data_path, "'\n");
+    return nil;
+  }
+
+  u64 file_size = compiled_data_file.getInfo().byte_size;
+  texture->compiled = (TextureData*)mem::stl_allocator.allocate(file_size);
+
+  compiled_data_file.read({(u8*)texture->compiled, file_size});
+
+  TextureData* data = texture->compiled;
 
   // Repoint the data's pixels.
   data->pixels = (void*)(data + 1);
 
-  out->gfx_handle = 0;
-
-  return true;
+  return r_texture.move();
 }
 
 /* ----------------------------------------------------------------------------

@@ -1,0 +1,83 @@
+/*
+ *  A Resource is any information loaded from disk, with the exception of 
+ *  SourceDataFiles. These are organized by Assets using ResourceHandles.
+ */
+
+$ local cmn = require "common"
+$ local Ref = require "resource.Ref"
+
+@@lpp.import "RefCounting.lh"
+
+#include "iro/common.h"
+#include "iro/unicode.h"
+
+
+using namespace iro;
+
+struct ResourceMgr;
+
+/* ============================================================================
+ *  The base of all Resources, including an interface that allows a Resource
+ *  to define behavior on load, reload, and unload.
+ */
+struct Resource 
+{
+  u64 hash = 0;
+  RefCounter rc = {};
+
+  static u64 getHash(const Resource* resource) { return resource->hash; }
+
+  // Note that this String is owned by this Resource, so only point to it 
+  // if you know that pointer will be used only during the lifetime of the 
+  // Resource it was retrieved from.
+  String name;
+
+  virtual void onLoad() {}
+  virtual void onReload() {}
+  virtual void onUnload() {}
+
+  // A Resource's position in the linked pool. This kinda sucks really bad.
+  // TODO(sushi) manually implement a better linked list solution here.
+  void* node;
+
+  ResourceMgr* rsrcmgr;
+
+  friend ResourceMgr;
+};
+
+// Define the ResourceRef type.
+@Ref(Resource, ResourceMgr);
+
+/* ============================================================================
+ *  Helper for defining a typed resource handle.
+ */
+template<typename T>
+struct TypedResourceRef : public ResourceRef
+{
+  constexpr TypedResourceRef() : ResourceRef() {}
+  constexpr TypedResourceRef(Nil) {}
+
+  constexpr TypedResourceRef(MovedResourceRef&& ref)
+    : ResourceRef(ref) {}
+
+  constexpr TypedResourceRef(ResourceRef&& handle)
+    : ResourceRef(static_cast<decltype(handle)&&>(handle)) {}
+
+  constexpr TypedResourceRef(TypedResourceRef<T>&& handle)
+    : ResourceRef(static_cast<decltype(handle)&&>(handle)) {}
+
+  T* getData() const { return (T*)getResource(); }
+};
+
+template<typename T>
+struct NilValue<TypedResourceRef<T>>
+{
+  constexpr static const TypedResourceRef<T> Value = {nullptr};
+
+  inline static b8 isNil(const TypedResourceRef<T>& x)
+  {
+    return NilValue<ResourceRef>::isNil((const ResourceRef&)x);
+  }
+};
+
+
