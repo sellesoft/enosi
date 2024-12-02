@@ -3,6 +3,9 @@
 
 #include "assert.h"
 #include "stdio.h"
+#undef stdin
+#undef stdout
+#undef stderr
 #include "stdlib.h"
 #include "string.h"
 

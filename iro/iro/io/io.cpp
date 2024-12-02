@@ -5,15 +5,15 @@
 #include "../memory/memory.h"
 
 // TODO(sushi) platform layers
+#if IRO_LINUX
 #include "fcntl.h"
 #include "sys/stat.h"
 #include "unistd.h"
+#endif // #if IRO_LINUX
 
 #include "sys/stat.h"
 
 #include "assert.h"
-
-#undef stdout
 
 namespace iro::io
 {

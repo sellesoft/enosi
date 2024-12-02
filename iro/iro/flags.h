@@ -21,15 +21,15 @@ struct Flags
 
   FlagType flags = 0;
   
-  static Flags<T> none() { return {}; }
-  static Flags<T> all()  
+  static constexpr Flags<T> none() { return {}; }
+  static constexpr Flags<T> all()  
   { 
     Flags<T> out; 
     out.flags = (FlagType)-1; 
     return out; 
   }
 
-  void clear() { flags = 0; }
+  constexpr void clear() { flags = 0; }
 
   constexpr Flags<T>() {}
 
@@ -48,39 +48,39 @@ struct Flags
     return out;
   }
 
-  b8 testAll(Flags<T> x)
+  constexpr b8 testAll(Flags<T> x)
   {
     return (flags & x.flags) == x.flags;
   }
 
   template<T... args>
-  b8 testAll()
+  constexpr b8 testAll()
   {
     return testAll(Flags<T>::from(args...));
   }
 
-  b8 testAny(Flags<T> x)
+  constexpr b8 testAny(Flags<T> x)
   {
     return (flags & x.flags);
   }
 
   template<T... args>
-  b8 testAny()
+  constexpr b8 testAny()
   {
     return testAny(Flags<T>::from(args...));
   }
 
-  b8 test(T x)
+  constexpr b8 test(T x)
   {
     return flags & ((FlagType)1 << (FlagType)x);
   }
 
-  void set(T x)
+  constexpr void set(T x)
   {
     flags |= ((FlagType)1 << (FlagType)x);
   }
 
-  void unset(T x)
+  constexpr void unset(T x)
   {
     flags &= ~((FlagType)1 << (FlagType)x);
   }
@@ -90,18 +90,18 @@ struct Flags
 // define this on a flags typedef and the enum it uses to allow 
 // arbitrary use of the enum values like you would normally do in C
 #define DefineFlagsOrOp(FlagsT, EnumT) \
-  static FlagsT operator | (EnumT lhs, EnumT rhs) \
+  static constexpr FlagsT operator | (EnumT lhs, EnumT rhs) \
   { \
     return FlagsT::from(lhs, rhs); \
   } \
   \
-  static FlagsT& operator | (FlagsT&& lhs, EnumT rhs) \
+  static constexpr FlagsT& operator | (FlagsT&& lhs, EnumT rhs) \
   { \
     lhs.set(rhs); \
     return lhs; \
   } \
   \
-  static FlagsT operator | (FlagsT& lhs, EnumT rhs) \
+  static constexpr FlagsT operator | (FlagsT& lhs, EnumT rhs) \
   { \
     lhs.set(rhs); \
     return lhs; \

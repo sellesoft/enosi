@@ -12,6 +12,10 @@
 
 #include "path.h"
 
+#undef stdin
+#undef stdout
+#undef stderr
+
 namespace iro::fs
 {
 

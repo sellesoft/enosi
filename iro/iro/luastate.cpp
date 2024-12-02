@@ -5,14 +5,16 @@
 #include "fs/file.h"
 #include "containers/slice.h"
 
-#undef stdout
-
 extern "C"
 {
 #include "lua.h"
 #include "lualib.h"
 #include "lauxlib.h"
 };
+
+#undef stdin
+#undef stdout
+#undef stderr
 
 namespace iro
 {

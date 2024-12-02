@@ -113,7 +113,7 @@ inline b8 matchSeqRev(V* v, T... args)
 //             idea of having to include all of platform.h into anything that uses this,
 //             so if I eventually reorganize platform to be more modular, move this there
 //         and well, ideally this could be replaced by something in lpp anyways.
-#ifdef IRO_LINUX
+#if defined(IRO_CLANG) || defined(IRO_GCC)
 // NOTE(sushi) in order for this to work properly with executables (my use case of it) the obj
 //             files need to be compiled with the linker flag -fvisiblity=hidden and the executable
 //             then must be linked with the flag -E (aka --export-dynamic).

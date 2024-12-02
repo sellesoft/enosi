@@ -33,7 +33,7 @@ s64 format(IO* io, u32 x)
 s64 format(IO* io, u64 x)
 {
   u8  buffer[32];
-  u64 len = snprintf((char*)buffer, 32, "%lu", x);
+  u64 len = snprintf((char*)buffer, 32, "%llu", x);
   return io->write({buffer, len});
 }
 
@@ -61,7 +61,7 @@ s64 format(IO* io, s32 x)
 s64 format(IO* io, s64 x)
 {
   u8  buffer[32];
-  u64 len = snprintf((char*)buffer, 32, "%li", x);
+  u64 len = snprintf((char*)buffer, 32, "%lli", x);
   return io->write({buffer, len});
 }
 
@@ -201,7 +201,7 @@ s64 format(IO* io, Hex<u32> x)
 s64 format(IO* io, Hex<u64> x)
 {
   u8  buffer[32];
-  u64 len = snprintf((char*)buffer, 32, "0x%lx", x.x);
+  u64 len = snprintf((char*)buffer, 32, "0x%llx", x.x);
   return io->write({buffer, len});
 }
 
@@ -229,7 +229,7 @@ s64 format(IO* io, Hex<s32> x)
 s64 format(IO* io, Hex<s64> x)
 {
   u8  buffer[32];
-  u64 len = snprintf((char*)buffer, 32, "%lx", x.x);
+  u64 len = snprintf((char*)buffer, 32, "%llx", x.x);
   return io->write({buffer, len});
 }
 

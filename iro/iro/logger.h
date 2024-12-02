@@ -152,7 +152,7 @@ struct Colored
   Color color;
   b8 enabled;
   T& x;
-  Colored(Color color, T& x) : color(color), x(x), enabled(true) {}
+  Colored(Color color, T& x) : color(color), enabled(true), x(x) {}
 };
 
 template<typename T>
