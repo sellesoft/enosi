@@ -68,7 +68,6 @@ struct Lake
 };
 
 extern Lake lake;
-extern Logger log;
 
 // api used in the lua lake module 
 extern "C" 

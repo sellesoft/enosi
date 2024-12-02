@@ -2,12 +2,14 @@
 #include "stdlib.h"
 
 #include "iro/logger.h"
+#include "iro/platform.h"
 #include "iro/fs/fs.h"
 #include "iro/fs/glob.h"
 #include "iro/fs/path.h"
 
 using namespace iro;
 
+#if IRO_LINUX
 #define DEFINE_GDB_PY_SCRIPT(script_name) \
   asm("\
 .pushsection \".debug_gdb_scripts\", \"MS\",@progbits,1\n\
@@ -17,6 +19,7 @@ using namespace iro;
 ");
 
 DEFINE_GDB_PY_SCRIPT("lpp-gdb.py");
+#endif // #if IRO_LINUX
 
 int main(const int argc, const char* argv[]) 
 {
@@ -24,6 +27,7 @@ int main(const int argc, const char* argv[])
     return 1;
   defer { iro::log.deinit(); };
 
+  iro::platform::makeDir("temp"_str, false);
   auto f = fs::File::from("temp/log"_str, fs::OpenFlag::Create | fs::OpenFlag::Truncate | fs::OpenFlag::Write);
   defer { if (notnil(f)) f.close(); };
 

@@ -46,6 +46,7 @@ compiler_flags :=        \
 	-I../iro               \
 	-I../luajit/include/   \
 	-DIRO_LINUX            \
+	-DIRO_CLANG            \
 	-Wall                  \
 	-Wno-switch            \
 	-Wno-\#warnings        \

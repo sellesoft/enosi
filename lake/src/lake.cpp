@@ -20,10 +20,6 @@
 
 #include "iro/platform.h"
 
-#undef stdout
-#undef stderr
-#undef stdin
-
 using namespace iro;
 
 extern "C"
@@ -36,6 +32,10 @@ int lua__importFile(lua_State* L);
 int lua__cwd(lua_State* L);
 int lua__canonicalizePath(lua_State* L);
 }
+
+#undef stdout
+#undef stderr
+#undef stdin
 
 static Logger logger = Logger::create("lake"_str, 
 
