@@ -100,8 +100,8 @@ struct Array
   mem::Allocator* allocator();
 
   const Header* getHeader() const { return (Header*)arr - 1; }
-  s32 len() const { return getHeader()->len; }
-  s32 space() const { return getHeader()->space; }
+  s32 len() const { return arr? getHeader()->len : 0; }
+  s32 space() const { return arr? getHeader()->space : 0; }
 
   b8 isEmpty() const { return len() == 0; }
 
