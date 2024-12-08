@@ -22,6 +22,8 @@ struct EyeSys
 
   b8 update(GameMgr& gamemgr);
 
-  void getViewMat(mat3x2* view);
+  void getViewMat(mat3x2* view) const;
+
+  vec2f screenToWorld(vec2f screen_pos, vec2f screen_size) const;
 };
 

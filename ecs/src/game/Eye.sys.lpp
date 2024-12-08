@@ -6,6 +6,8 @@ $ local reflect = require "reflect.Reflector"
 @@lpp.import "game/GameMgr.lh"
 @@lpp.import "game/Transform.comp.lh"
 
+/* ----------------------------------------------------------------------------
+ */
 b8 EyeSys::update(GameMgr& gamemgr)
 {
   if (auto* transform = gamemgr.entmgr.tryComp<Transform>(attached))
@@ -16,10 +18,32 @@ b8 EyeSys::update(GameMgr& gamemgr)
   return true;
 }
 
-void EyeSys::getViewMat(mat3x2* view)
+/* ----------------------------------------------------------------------------
+ */
+void EyeSys::getViewMat(mat3x2* view) const
 {
   *view = 
     mat3x2::createInverseTransform(
       pos,
       rotation);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+vec2f EyeSys::screenToWorld(vec2f sp, vec2f ss) const
+{
+  f32 c = cos(rotation);
+  f32 s = sin(rotation);
+
+  vec2f world_pos = {};
+
+  f32 scale = pixels_per_meter;
+
+  sp.x -= ss.x / 2.f;
+  sp.y -= ss.y / 2.f;
+
+  world_pos.x = pos.x + (sp.x) / scale;
+  world_pos.y = pos.y - (sp.y) / scale;
+
+  return world_pos;
 }

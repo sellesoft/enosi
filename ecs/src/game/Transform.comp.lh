@@ -10,5 +10,7 @@ $ local comp = require "game.Component"
 {
   vec2f pos = {};
   f32   rotation = 0.f;
+
+  u32 placement_layer = 0;
 })
 

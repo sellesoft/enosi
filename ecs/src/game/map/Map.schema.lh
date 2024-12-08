@@ -11,6 +11,8 @@ $ local Schema = require "resource.Schema"
 
 using namespace iro;
 
+struct SourceData;
+
 /* ============================================================================
  */
 enum class BlockKind
@@ -25,6 +27,7 @@ struct MapBlockDef
 {
   BlockKind kind;
   vec2i pos;
+  Array<const SourceData*> entities;
 };
 
 /* ============================================================================

@@ -57,7 +57,21 @@ return Map
         { kind = "Floor", pos = { x = 1, y = 1 } },
         { kind = "Floor", pos = { x = 2, y = 1 } },
         { kind = "Floor", pos = { x = 1, y = 2 } },
-        { kind = "Floor", pos = { x = 2, y = 2 } },
+        { 
+          kind = "Floor", 
+          pos = { x = 2, y = 2 },
+          entities =
+          {
+            Entity
+            {
+              name = "Spawner",
+              components = 
+              {
+                PlayerSpawner {}
+              }
+            }
+          }
+        },
       }
     }
   }

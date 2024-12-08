@@ -21,6 +21,9 @@ b8 EntityMgr::init()
   if (!ent_pool.init())
     return ERROR("failed to init entity pool\n");
 
+  if (!cmpmgr.init())
+    return ERROR("failed to init component mgr\n");
+
   INFO("done!\n");
   return true;
 }
@@ -50,7 +53,7 @@ EntityId EntityMgr::createEntity(String name)
 
 /* ----------------------------------------------------------------------------
  */
-EntityId EntityMgr::createEntityFromAsset(String path, ComponentMgr& cmpmgr)
+EntityId EntityMgr::createEntityFromResource(String path)
 {
   using namespace fs;
 
@@ -81,7 +84,7 @@ EntityId EntityMgr::createEntityFromAsset(String path, ComponentMgr& cmpmgr)
   if (!parser.parse())
     return nil;
 
-  return loadEntity(sfile, *this, cmpmgr);
+  return loadEntity(sfile, *this);
 }
 
 /* ----------------------------------------------------------------------------
@@ -145,3 +148,6 @@ b8 EntityMgr::addComp(EntityId id, Component* cmp) const
 {
   return addComp(getEntity(id), id, cmp);
 }
+
+/* ----------------------------------------------------------------------------
+ */

@@ -22,11 +22,13 @@ struct EntityMgr
 
   EntityPool ent_pool;
 
+  ComponentMgr cmpmgr;
+
   b8 init();
   void deinit();
 
   EntityId createEntity(String name);
-  EntityId createEntityFromAsset(String path, ComponentMgr& cmpmgr);
+  EntityId createEntityFromResource(String path);
 
   void destroyEntity(EntityId id);
 

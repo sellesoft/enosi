@@ -20,13 +20,13 @@ b8 MindSys::update(GameMgr& gamemgr)
   if (movement == nullptr)
     return true;
 
-  if (input.isKeyDown(Key::W))
+  if (input.wasKeyPressed(Key::W))
     movement->input.y += 1.f;
-  if (input.isKeyDown(Key::S))
+  if (input.wasKeyPressed(Key::S))
     movement->input.y -= 1.f;
-  if (input.isKeyDown(Key::D))
+  if (input.wasKeyPressed(Key::D))
     movement->input.x += 1.f;
-  if (input.isKeyDown(Key::A))
+  if (input.wasKeyPressed(Key::A))
     movement->input.x -= 1.f;
 
   movement->input.normalize();

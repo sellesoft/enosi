@@ -35,8 +35,8 @@ b8 RenderSys::update(GameMgr& gamemgr)
 {
   Engine& engine = *gamemgr.engine;
   gfx::Renderer& renderer = engine.renderer;
-  ComponentMgr& cmpmgr = gamemgr.cmpmgr;
   EntityMgr& entmgr = gamemgr.entmgr;
+  ComponentMgr& cmpmgr = entmgr.cmpmgr;
   EyeSys& eye = gamemgr.eye;
   Map& map = gamemgr.map;
 
@@ -105,12 +105,14 @@ b8 RenderSys::update(GameMgr& gamemgr)
 
     if (auto* transform = owner->tryComp<Transform>())
     {
+      Layer& layer = map.layers[transform->placement_layer];
+
       sum +=
         gfx::putFilledRect(
           vp,
           ip,
           sum,
-          transform->pos,
+          layer.def->pos + transform->pos,
           vec2f(1,1),
           0xff0000ff);
     }

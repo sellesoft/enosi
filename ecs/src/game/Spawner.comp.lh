@@ -1,0 +1,14 @@
+/*
+ *  Component for Entities that spawn things.
+ */
+
+$ local cmn = require "common"
+$ local comp = require "game.Component"
+
+@@lpp.import "game/Component.lh"
+
+// A player spawner, which spawns an Entity that contains a Mind and 
+// attaches it to the MindSys and attached the Entity to the Eye.
+@comp.def(PlayerSpawner,
+{
+})

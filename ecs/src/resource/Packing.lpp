@@ -30,7 +30,6 @@ end
 importPattern "**/*.schema.lh"
 importPattern "**/*.comp.lh"
 
-
 local p = Processor.new(tostring(imported))
 p:run()
 $$$
@@ -51,6 +50,24 @@ b8 packArray(const SourceDataObject& data, Array<T>* out)
     
     T* elem = out->push();
     packSourceDataIntoType<T>(*child, elem);
+  }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 packArray<const SourceData*>(
+    const SourceDataObject& data, 
+    Array<const SourceData*>* out)
+{
+  for (const SourceData* child : data.children)
+  {
+    if (notnil(child->name))
+      return ERROR("arrays cannot contain named elements\n");
+
+    out->push(child);
   }
 
   return true;
@@ -276,8 +293,11 @@ $     end
 $     putStructPacker(name, decl, prereqs)
 $   elseif decl:is(ast.TemplateSpecialization) then
 $     if decl.specialized_name == "Array" then
-$       local elem_decl = decl.template_args[1]:getDecl()
-$       putPacker(elem_decl.name, elem_decl, prereqs)
+$       local elem_type = decl.template_args[1]
+$       if not elem_type:is(ast.PointerType) then
+$         local elem_decl = decl.template_args[1]:getDecl()
+$         putPacker(elem_decl.name, elem_decl, prereqs)
+$       end
 $     end
 $   elseif decl:is(ast.Enum) then
 $     putEnumPacker(name, decl)

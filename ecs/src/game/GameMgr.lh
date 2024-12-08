@@ -24,7 +24,6 @@ struct GameMgr
   Engine* engine;
 
   EntityMgr entmgr;
-  ComponentMgr cmpmgr;
   RenderSys rendersys;
   MindSys mindsys;
   MovementSys movesys;

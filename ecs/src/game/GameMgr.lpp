@@ -2,6 +2,8 @@ $ local lpp = require "lpp"
 $ local reflect = require "reflect.Reflector"
 
 @@lpp.import "game/GameMgr.lh"
+
+@@lpp.import "Engine.lh"
 @@lpp.import "game/Transform.comp.lh"
 @@lpp.import "game/Sprite.comp.lh"
 @@lpp.import "game/Movement.comp.lh"
@@ -26,21 +28,16 @@ b8 GameMgr::init(Engine* eng)
   if (!entmgr.init())
     return ERROR("failed to initialize entity mgr\n");
 
-  if (!cmpmgr.init())
-    return ERROR("failed to initialize component mgr\n");
-
   if (!rendersys.init(*this))
     return ERROR("failed to initialize render sys\n");
 
   using namespace fs;
 
-  auto testent = 
-    entmgr.createEntityFromAsset(
-      "assets/entities/Test.ent"_str,
-      cmpmgr);
+  // auto testent = 
+  //   entmgr.createEntityFromResource("assets/entities/Test.ent"_str);
 
-  mindsys.attach(testent);
-  eye.attach(testent);
+  // mindsys.attach(testent);
+  // eye.attach(testent);
 
   auto test_map = 
     File::from("assets/maps/Test.map"_str, OpenFlag::Read);
@@ -65,7 +62,7 @@ b8 GameMgr::init(Engine* eng)
   
   INFO(map_def->name, "\n");
 
-  map.init(*map_def);
+  map.init(*map_def, *this);
 
   return true;
 }
@@ -88,6 +85,12 @@ b8 GameMgr::update()
 
   if (!rendersys.update(*this))
     return false;
+
+  vec2f screen_pos = engine->input.mouse.window;
+  vec2f screen_size = engine->window.size;
+
+  vec2f mouse_world = eye.screenToWorld(screen_pos, screen_size);
+  INFO(floor(mouse_world), "\n");
 
   return true;
 }

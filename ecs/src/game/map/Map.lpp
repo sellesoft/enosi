@@ -1,6 +1,12 @@
 $ local cmn = require "common"
 
 @@lpp.import "game/map/Map.lh"
+@@lpp.import "game/GameMgr.lh"
+@@lpp.import "game/EntityLoader.lh"
+@@lpp.import "game/Spawner.comp.lh"
+@@lpp.import "game/Transform.comp.lh"
+
+@@lpp.import "resource/SourceData.lh"
 
 #include "iro/logger.h"
 
@@ -8,15 +14,27 @@ $ local cmn = require "common"
 
 /* ----------------------------------------------------------------------------
  */
-b8 Block::init(const MapBlockDef& def)
+b8 Block::init(const MapBlockDef& def, u32 layer_idx, GameMgr& gamemgr)
 {
+  EntityMgr& entmgr = gamemgr.entmgr;
+
   this->def = &def;
+  
+  for (const SourceData* ent_data : def.entities)
+  {
+    auto entid = loadEntity(*ent_data, entmgr);
+    auto* ent = entmgr.getEntity(entid);
+    auto* transform = ent->tryComp<Transform>();
+    transform->pos = def.pos;
+    transform->placement_layer = layer_idx;
+  }
+
   return true;
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 Layer::init(const MapLayerDef& def)
+b8 Layer::init(const MapLayerDef& def, u32 layer_idx, GameMgr& gamemgr)
 {
   this->def = &def;
 
@@ -27,9 +45,10 @@ b8 Layer::init(const MapLayerDef& def)
 
   for (const MapBlockDef& block_def : def.blocks)
   {
-    Block* block = blocks.arr + block_def.pos.x + block_def.pos.y * def.size.x;
+    Block* block = 
+      blocks.arr + block_def.pos.x + block_def.pos.y * def.size.x;
 
-    if (!block->init(block_def))
+    if (!block->init(block_def, layer_idx, gamemgr))
       return false;
   }
 
@@ -38,7 +57,7 @@ b8 Layer::init(const MapLayerDef& def)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Map::init(const MapDef& def)
+b8 Map::init(const MapDef& def, GameMgr& gamemgr)
 {
   this->def = &def;
 
@@ -52,8 +71,30 @@ b8 Map::init(const MapDef& def)
     MapLayerDef* layer_def = def.layers.arr + i;
     Layer* layer = layers.arr + i;
     
-    if (!layer->init(*layer_def))
+    if (!layer->init(*layer_def, i, gamemgr))
       return false;
+  }
+
+  EntityMgr& entmgr = gamemgr.entmgr;
+  ComponentMgr& cmpmgr = entmgr.cmpmgr;
+
+  // Iterate over PlayerSpawners 
+  for (PlayerSpawner& spawner : cmpmgr.iterate<PlayerSpawner>())
+  {
+    auto player_entid = 
+      entmgr.createEntityFromResource("assets/entities/Test.ent"_str);
+
+    gamemgr.mindsys.attach(player_entid);
+    gamemgr.eye.attach(player_entid);
+
+    auto player_ent = entmgr.getEntity(player_entid);
+    auto* player_transform = player_ent->tryComp<Transform>();
+  
+    auto spawner_ent = entmgr.getEntity(spawner.owner);
+    auto* spawner_transform = spawner_ent->tryComp<Transform>();
+
+    player_transform->pos = spawner_transform->pos;
+    player_transform->placement_layer = spawner_transform->placement_layer;
   }
 
   return true;

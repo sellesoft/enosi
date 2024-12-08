@@ -81,12 +81,9 @@ $ end
 
 /* ----------------------------------------------------------------------------
  */
-EntityId loadEntity(
-    const SourceDataFile& sfile, 
-    EntityMgr& entmgr,
-    ComponentMgr& cmpmgr)
+EntityId loadEntity(const SourceData& data, EntityMgr& entmgr)
 {
-  const SourceData* entdata = sfile.returned_data;
+  ComponentMgr& cmpmgr = entmgr.cmpmgr;
 
 $ local function failIf(cond, ...)
 $   local args = cmn.buffer.new()
@@ -106,9 +103,9 @@ $   end
   }
 $ end
 
-  @failIf(!entdata->isObject(), "expected object data to define entity\n");
+  @failIf(!data.isObject(), "expected object data to define entity\n");
 
-  const SourceDataObject* entobj = entdata->getAsObject();
+  const SourceDataObject* entobj = data.getAsObject();
 
   const SourceData* name = entobj->findChildByName("name"_str);
 
@@ -139,5 +136,24 @@ $ end
       "failed to load component\n");
   }
 
+  auto* ent = entmgr.getEntity(entid);
+
+  if (nullptr == ent->tryComp<Transform>())
+  {
+    // All entities must have a transform.
+    entmgr.addComp(ent, cmpmgr.allocateComponent<Transform>());
+  }
+
   return entid;
+
+}
+
+/* ----------------------------------------------------------------------------
+ */
+EntityId loadEntity(const SourceDataFile& sfile, EntityMgr& entmgr)
+{
+  ComponentMgr& cmpmgr = entmgr.cmpmgr;
+
+  return loadEntity(*sfile.returned_data, entmgr);
+
 }

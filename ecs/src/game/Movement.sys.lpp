@@ -1,5 +1,10 @@
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
+$ local cmn = require "common"
+
+#include "iro/logger.h"
+
+using namespace iro;
+
+@cmn.defFileLogger(movement, Info)
 
 @@lpp.import "game/GameMgr.lh"
 
@@ -10,13 +15,16 @@ $ local reflect = require "reflect.Reflector"
 b8 MovementSys::update(GameMgr& gamemgr)
 {
   EntityMgr& entmgr = gamemgr.entmgr;
-  ComponentMgr& cmpmgr = gamemgr.cmpmgr;
+  ComponentMgr& cmpmgr = entmgr.cmpmgr;
 
   for (Movement& movement : cmpmgr.iterate<Movement>())
   {
     if (auto* transform = entmgr.tryComp<Transform>(movement.owner))
     {
-      transform->pos += movement.input * movement.speed;
+      transform->pos += movement.input;
+      transform->pos.x = floor(transform->pos.x);
+      transform->pos.y = floor(transform->pos.y);
+      INFO(transform->pos, "\n");
     }
     movement.input = {};
   }

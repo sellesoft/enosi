@@ -6,12 +6,18 @@ $ local cmn = require "common"
 
 struct EntityId;
 struct SourceDataFile;
+struct SourceData;
 struct EntityMgr;
 struct ComponentMgr;
 
 /* ----------------------------------------------------------------------------
+ *  Load an Entity or Entities from a given SourceData file.
+ *
+ *  TODO(sushi) handle loading an array of entities.
  */
-EntityId loadEntity(
-  const SourceDataFile& sfile, 
-  EntityMgr& entmgr,
-  ComponentMgr& cmpmgr);
+EntityId loadEntity(const SourceDataFile& sfile, EntityMgr& entmgr);
+
+/* ----------------------------------------------------------------------------
+ *  Load an Entity from some SourceData.
+ */
+EntityId loadEntity(const SourceData& data, EntityMgr& entmgr);

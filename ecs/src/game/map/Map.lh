@@ -5,13 +5,15 @@ $ local cmn = require "common"
 
 @@lpp.import "game/map/Map.schema.lh"
 
+struct GameMgr;
+
 /* ============================================================================
  */
 struct Block
 {
   const MapBlockDef* def = nullptr;
 
-  b8 init(const MapBlockDef& def);
+  b8 init(const MapBlockDef& def, u32 layer_idx, GameMgr& gamemgr);
   void deinit();
 };
 
@@ -23,7 +25,7 @@ struct Layer
 
   Array<Block> blocks;
 
-  b8 init(const MapLayerDef& def);
+  b8 init(const MapLayerDef& def, u32 layer_idx, GameMgr& gamemgr);
   void deinit();
 };
 
@@ -35,6 +37,6 @@ struct Map
 
   Array<Layer> layers;
 
-  b8 init(const MapDef& def);
+  b8 init(const MapDef& def, GameMgr& gamemgr);
   void deinit();
 };
