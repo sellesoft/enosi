@@ -1138,7 +1138,7 @@ b8 lua__rm(String path, b8 recursive, b8 force)
 
       Path* full = pathpool.pushHead()->data;
       full->init(direntry->path->buffer.asStr());
-      full->makeDir().append(s);
+      full->ensureDir().append(s);
 
       if (full->isDirectory())
       {
@@ -1210,6 +1210,13 @@ EXPORT_DYNAMIC
 b8 lua__touch(String path)
 {
   return platform::touchFile(path);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void lake__lua_createLuaTask(Lake* lake)
+{
+
 }
 
 }

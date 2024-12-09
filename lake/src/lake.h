@@ -8,6 +8,7 @@
 #include "iro/luastate.h"
 
 #include "target.h"
+#include "Task.h"
 
 struct Lexer;
 struct Parser;
@@ -44,6 +45,8 @@ struct Lake
 
   Pool<String> action_pool;
   DList<String> action_queue;
+
+  TaskList tasks;
 
   s32          argc;
   const char** argv;
