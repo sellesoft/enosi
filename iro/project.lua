@@ -38,6 +38,7 @@ end
 
 if os == "Linux" then
   proj:reportDefine { "IRO_LINUX", "1" }
+  proj:reportDefine { "IRO_CLANG", "1" }
 elseif os == "Windows" then
   proj:reportDefine { "IRO_WIN32", "1" }
 else

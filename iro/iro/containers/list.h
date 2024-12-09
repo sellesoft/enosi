@@ -354,12 +354,12 @@ struct DList
   };
 
 
-  RangeIterator begin() 
+  RangeIterator begin() const
   {
     return RangeIterator{head};
   }
 
-  RangeIterator end() 
+  RangeIterator end() const
   {
     return RangeIterator{nullptr};
   }

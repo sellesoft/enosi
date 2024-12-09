@@ -185,7 +185,7 @@ void Globber::run(GlobberCallback auto callback)
           notnil(path)? 
           path.copy() : 
           Path::from(""_str, &bump);
-        full.makeDir().append(part->raw);
+        full.ensureDir().append(part->raw);
         
         INFO("full path is ", full, "\n");
 
@@ -222,7 +222,7 @@ void Globber::run(GlobberCallback auto callback)
           goto err;
         defer { dir.close(); };
         
-        Path full = path.copy().makeDir();
+        Path full = path.copy().ensureDir();
         auto rollback = full.makeRollback();
 
         for (;;)
@@ -272,7 +272,7 @@ void Globber::run(GlobberCallback auto callback)
           goto err;
         defer { dir.close(); };
 
-        Path full = path.copy().makeDir();
+        Path full = path.copy().ensureDir();
         auto rollback = full.makeRollback();
 
         for (;;)
@@ -399,7 +399,7 @@ void Globber::run(GlobberCallback auto callback)
           Path dir_path = dir_path_stack.head();
           Path full = 
             notnil(dir_path)? 
-              dir_path.copy().makeDir().append(s) : 
+              dir_path.copy().ensureDir().append(s) : 
               Path::from(s, &bump);
 
           INFO("fullpath is ", full, "\n");

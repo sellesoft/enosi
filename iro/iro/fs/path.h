@@ -49,12 +49,22 @@ struct Path
 
   // Change the current working directory into the one at 'path'.
   static b8 chdir(String path);
+
+  // Checks if the given name matches the given glob-style pattern.
   static b8 matches(String name, String pattern);
+
+  // Checks if something exists at the given path.
   static b8 exists(String path);
+
+  // Checks if the given path is a file or directory.
   static b8 isRegularFile(String path);
   static b8 isDirectory(String path);
 
+  // Retrieve the basename of the given path, eg. the last element in the 
+  // path.
   static String basename(String path);
+
+  // Retrieve a String with the basename of the given path removed.
   static String removeBasename(String path);
 
   // Compares the modification times of the given paths.
@@ -64,32 +74,37 @@ struct Path
   // This function asserts if either of the files do not exist.
   static s8 compareModTimes(String path0, String path1);
 
-  b8   init(mem::Allocator* allocator = &mem::stl_allocator) 
-    { return init({}, allocator); }
-  b8   init(String s, mem::Allocator* allocator = &mem::stl_allocator);
+  // Method api. Very messy..
+
+  b8 init(mem::Allocator* allocator = &mem::stl_allocator) 
+  { 
+    return init({}, allocator); 
+  }
+
+  b8 init(String s, mem::Allocator* allocator = &mem::stl_allocator);
+
   void destroy();
 
+  Path copy();
+  void clear();
+
+  // Equivalent to the static api, but applied to this Path.
   b8 unlink() { return unlink(buffer.asStr()); }
   b8 rmdir() { return rmdir(buffer.asStr()); }
 
-  Path copy();
-
-  void clear();
+  Path& append(io::Formattable auto... args) 
+    { io::formatv(&buffer, args...); return *this; }
 
   Path& appendDir(String dir) { append("/"_str, dir); return *this; }
   Path& appendDir(Slice<u8> dir) 
     { append("/"_str, String::from(dir)); return *this; }
-  Path& append(io::Formattable auto... args) 
-    { io::formatv(&buffer, args...); return *this; }
 
   Bytes reserve(s32 space) { return buffer.reserve(space); }
   void  commit(s32 space) { buffer.commit(space); }
 
   b8 makeAbsolute();
 
-  // TODO(sushi) rename cause this can be confused with actually creating the 
-  //             directory at this path
-  Path& makeDir() 
+  Path& ensureDir() 
   { 
     if (buffer.len != 0 && buffer.ptr[buffer.len-1] != '/') 
       append('/'); 

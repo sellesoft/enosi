@@ -97,7 +97,7 @@ b8 walkForReal(Path& path, DirWalkCallback auto f)
       break;
 
     case DirWalkResult::StepInto:
-      path.makeDir();
+      path.ensureDir();
       if (!walkForReal(path, f))
         return false;
       break;
