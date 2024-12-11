@@ -123,7 +123,6 @@ end
 local build_dir = lfs.currentdir().."/tmp/build"
 lfs.mkdir(build_dir)
 
-
 local function walkDir(path, f)
   for ent in lfs.dir(path) do
     if ent ~= ".." and ent ~= "." then

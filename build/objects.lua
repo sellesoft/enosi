@@ -1,0 +1,5 @@
+local object = {}
+
+
+object.CppObj = {}
+
