@@ -35,14 +35,16 @@ struct LuaState
 
   void pop(s32 count = 1);
   void insert(s32 idx);
+  void remove(s32 idx);
 
   s32  gettop();
   void settop(s32 idx);
 
   void newtable();
-  void settable(s32 idx);
   void gettable(s32 idx);
+  void settable(s32 idx);
   void getfield(s32 idx, const char* k);
+  void setfield(s32 idx, const char* k);
 
   void rawgeti(s32 tblidx, s32 idx);
 
@@ -61,6 +63,8 @@ struct LuaState
   b8 pcall(s32 nargs = 0, s32 nresults = 0, s32 errfunc = 0);
 
   b8 callmeta(const char* name, s32 idx = -1);
+  b8 getmetafield(const char* name, s32 idx = -1);
+  b8 getmetatable(s32 idx = -1);
 
   void getfenv(s32 idx);
   b8   setfenv(s32 idx);
@@ -77,6 +81,7 @@ struct LuaState
   }
 
   void pushstring(String s);
+  void pushstring(const char* s);
   void pushlightuserdata(void* data);
   void pushinteger(s32 i);
   void pushvalue(s32 idx);

@@ -38,8 +38,6 @@ void Task::deinit()
 
   prerequisites.deinit();
   dependents.deinit();
-
-  working_dir.destroy();
 }
 
 /* ----------------------------------------------------------------------------

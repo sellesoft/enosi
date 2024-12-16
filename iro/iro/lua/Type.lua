@@ -1,11 +1,15 @@
 local util = require "util"
 
+---@class iro.Type
 local Type = {}
 Type.__index = Type
 
+---@return iro.Type
 Type.make = function()
   local o = {}
   o.__index = o
+  o.__call = Type.__call
+  o.__type = o
   return setmetatable(o, Type)
 end
 
@@ -40,9 +44,16 @@ Type.__call = function(self, ...)
   return self.new(...)
 end
 
+---@return any
 Type.derive = function(self)
-  local o = setmetatable({}, { __index = self })
+  local o = setmetatable({}, 
+  { 
+    __index = self,
+    __call = self.__call
+  })
   o.__index = o
+  o.__tostring = self.__tostring
+  o.__type = o
   return o
 end
 

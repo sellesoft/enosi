@@ -1,86 +1,38 @@
-local enosi = require "enosi"
-local recipes = require "recipes"
-local proj = enosi.thisProject()
-local driver = require "driver"
+local sys = require "build.sys"
 
-local List = require "list"
+local iro = sys.getLoadingProject()
 
-local os = lake.os()
-local cwd = lake.cwd()
+iro:dependsOn "luajit"
 
-local mode = enosi.mode
-local builddir = cwd.."/build/"..mode.."/"
+iro.report.dir.include
+{
+  from = "iro",
+  glob = "**/*.h"
+}
 
-proj:setCleaner(function()
-  lake.rm(cwd.."/build", {recursive=true,force=true})
-end)
-
-local cpp_driver = driver.Cpp.new()
-
-if enosi.getProject "notcurses" then
-  proj:dependsOn "notcurses"
-  cpp_driver.defines:push { "IRO_NOTCURSES", "1" }
+if sys.cfg.mode == "debug" then
+  iro.report.pub.defines { IRO_DEBUG=1 }
 end
 
-proj:dependsOn "luajit"
-proj:reportSharedLib "explain"
-proj:reportIncludeDir(cwd)
-
-cpp_driver.include_dirs:push { "src", proj:collectIncludeDirs() }
-
-if mode == "debug" then
-  cpp_driver.opt = "none"
-  cpp_driver.debug_info = true
-  proj:reportDefine { "IRO_DEBUG", "1" }
+if sys.os == "linux" then
+  iro.report.pub.defines { IRO_LINUX=1 }
+  iro.report.pub.ExternalSharedLib "explain"
+elseif sys.os == "windows" then
+  iro.report.pub.defines { IRO_WIN32=1 }
 else
-  cpp_driver.opt = "speed"
+  error("unhandled OS")
 end
 
-if os == "Linux" then
-  proj:reportDefine { "IRO_LINUX", "1" }
-  proj:reportDefine { "IRO_CLANG", "1" }
-elseif os == "Windows" then
-  proj:reportDefine { "IRO_WIN32", "1" }
-else
-  error("unhandled OS for iro")
+if sys.cfg.cpp.compiler == "clang++" then
+  iro.report.pub.defines { IRO_CLANG=1 }
+elseif sys.cfg.cpp.compiler == "cl" then
+  iro.report.pub.defines { IRO_CL=1 }
 end
 
-cpp_driver.defines = proj:collectDefines()
+for cfile in lake.find("src/**/*.cpp"):each() do
+  iro.report.pub.CppObj(cfile)
+end
 
-lake.find("iro/**/*.cpp"):each(function(cfile)
-  local ofile = builddir..cfile..".o"
-  local dfile = builddir..cfile..".d"
-  cfile = cwd.."/"..cfile
-
-  cpp_driver.input = cfile
-  cpp_driver.output = ofile
-
-  proj:reportObjFile(ofile)
-
-  lake.target(ofile)
-      :dependsOn { cfile, proj.path }
-      :recipe(recipes.objFile(cpp_driver, proj))
-
-  lake.target(dfile)
-      :dependsOn(cfile)
-      :recipe(
-        recipes.depfile(
-          driver.Depfile.fromCpp(cpp_driver),
-          proj, ofile, dfile))
-end)
-
-local lua_driver = driver.LuaObj.new()
-
-lake.find("iro/lua/*.lua"):each(function(lfile)
-  local ofile = builddir..lfile..".o"
-  lfile = cwd.."/"..lfile
-
-  proj:reportObjFile(ofile)
-
-  lua_driver.input = lfile
-  lua_driver.output = ofile
-
-  lake.target(ofile)
-      :dependsOn { lfile, proj.path }
-      :recipe(recipes.luaObjFile(lua_driver, proj))
-end)
+for lfile in lake.find("iro/lua/*.lua"):each() do
+  iro.report.pub.LuaObj(lfile)
+end

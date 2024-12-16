@@ -67,6 +67,13 @@ void LuaState::insert(s32 idx)
 
 /* ----------------------------------------------------------------------------
  */
+void LuaState::remove(s32 idx)
+{
+  lua_remove(L, idx);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 s32 LuaState::gettop()
 {
   return lua_gettop(L);
@@ -105,6 +112,13 @@ void LuaState::gettable(s32 idx)
 void LuaState::getfield(s32 idx, const char* k)
 {
   lua_getfield(L, idx, k);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void LuaState::setfield(s32 idx, const char* k)
+{
+  lua_setfield(L, idx, k);
 }
 
 /* ----------------------------------------------------------------------------
@@ -230,6 +244,24 @@ b8 LuaState::callmeta(const char* name, s32 idx)
 
 /* ----------------------------------------------------------------------------
  */
+b8 LuaState::getmetafield(const char* name, s32 idx)
+{
+  if (!luaL_getmetafield(L, idx, name))
+    return false;
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 LuaState::getmetatable(s32 idx)
+{
+  if (!lua_getmetatable(L, idx))
+    return false;
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 void LuaState::getfenv(s32 idx)
 {
   lua_getfenv(L, idx);
@@ -280,6 +312,14 @@ void LuaState::pushstring(String s)
 {
   // TODO(sushi) handle non-temrinated input
   lua_pushlstring(L, (char*)s.ptr, s.len);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void LuaState::pushstring(const char* s)
+{
+  // TODO(sushi) handle non-temrinated input
+  lua_pushstring(L, s);
 }
 
 /* ----------------------------------------------------------------------------
@@ -425,6 +465,23 @@ b8 LuaState::require(String modname, u32* out_ret)
   return true;
 }
 
+/* ------------------------------------------------------------------------------------------------
+ */
+static void tryWriteTableMetaTypename(LuaState* L, io::IO* dest, int idx)
+{
+  if (L->getmetatable(idx))
+  {
+    if (L->getmetafield("__tostring"))
+    {
+      L->pushvalue(idx);
+      L->pcall(1,1);
+      io::formatv(dest, '[', L->tostring(), ']');
+      L->pop();
+    }
+    L->pop();
+  }
+}
+
 /* ----------------------------------------------------------------------------
  */
 static void writeLuaValue(LuaState* L, io::IO* dest, int idx)
@@ -489,17 +546,26 @@ static void writeLuaTable(
   io::format(dest, "{\n");
   defer { indent(-1); io::format(dest, "}\n"); };
 
-
   L->pushvalue(idx);
   L->pushnil();
 
   while (L->next(-2))
   {
+    int kt = L->type(-2);
     int vt = L->type(-1);
 
     indent(0);
 
-    writeLuaValue(L, dest, -2);
+    if (kt == LUA_TTABLE)
+    {
+      L->getglobal("tostring");
+      L->pushvalue(-3);
+      L->pcall(1, 1);
+      io::formatv(dest, '[', L->tostring(), ']');
+      L->pop();
+    }
+    else
+      writeLuaValue(L, dest, -2);
 
     io::format(dest, " = ");
 
@@ -509,6 +575,7 @@ static void writeLuaTable(
         io::format(dest, "...\n");
       else
       {
+        tryWriteTableMetaTypename(L, dest, -1);
         writeLuaTable(L, dest, -1, layers + 1, max_depth);
         io::format(dest, '\n');
       }
@@ -534,7 +601,10 @@ void LuaState::stackDump(io::IO* dest, u32 max_depth)
     int t = type(i);
     io::formatv(dest, "i ", i, ": ");
     if (t == LUA_TTABLE)
+    {
+      tryWriteTableMetaTypename(this, dest, i);
       writeLuaTable(this, dest, i, 1, max_depth);
+    }
     else
       writeLuaValue(this, dest, i);
     io::format(dest, '\n');
@@ -635,6 +705,7 @@ int iro__lua_inspect(lua_State* L)
 
   if (lua.istable(1))
   {
+    tryWriteTableMetaTypename(&lua, &fs::stdout, 1);
     writeLuaTable(&lua, &fs::stdout, 1, 1, max_depth);
   }
   else

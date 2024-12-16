@@ -1,17 +1,20 @@
 local sys = require "build.sys"
-local Project = require "build.project"
-local driver = require "build.driver"
 local helpers = require "build.helpers"
+local bobj = require "build.object"
 
-local lpp = Project.new("lpp", lake.cwd())
+local lpp = sys.getLoadingProject()
 
 lpp:dependsOn "iro"
 
 for cfile in lake.find("src/**/*.cpp"):each() do
-  local ofile = cfile..".o"
+  lpp.report.CppObj(cfile)
 end
 
-helpers.createCppToObj(lpp, "src")
+for lfile in lake.find("src/**/*.lpp"):each() do
+  lpp.report.LuaObj(lfile)
+end
+
+lpp.report.Exe("lpp", lpp.bobjs)
 
 
 

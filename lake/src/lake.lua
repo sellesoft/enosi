@@ -14,6 +14,7 @@ package.path = package.path..";./lake/src/?.lua"
 local co = require "coroutine"
 local List = require "list"
 local Twine = require "twine"
+local Type = require "Type"
 
 local errhandler = function(message)
   print(debug.traceback())
@@ -26,36 +27,17 @@ end
 ---@class lake
 lake = {}
 
--- internal target map
-local targets = {}
-local recipe_table = { next = 1 }
-local actions = {}
+lake.tasks = 
+{
+  by_name = {},
+  by_handle = {},
+}
 
-local Target,
-      TargetGroup
-
---- Table containing variables specified on command line. 
---- For example if lake is invoked:
----
---- ```shell
----   lake mode=release
---- ```
----
---- then this table will contain a key 'mode' equal to "release".
---- This is useful for a quick way to change a lakefile's behavior from
---- command line, an example of its use:
----
---- ```lua
----     local mode = lake.clivars.mode or "debug"
---- ```
-lake.clivars = {}
-
-
--- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
+-- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
 --      
 --      C interface
 --
--- * >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> -
+-- * >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> -
 
 
 local ffi = require "ffi"
@@ -138,7 +120,7 @@ local strtype = ffi.typeof("str")
 
 ---@param s string
 ---@return str
-local make_str = function(s)
+local makeStr = function(s)
   if not s then
     print(debug.traceback())
     os.exit(1)
@@ -158,18 +140,7 @@ end
 --- processed by the user.
 lake.cliargs = List{}
 
-while true do
-  local arg = C.lua__nextCliarg()
-
-  if arg == nil then
-    break
-  end
-
-  arg = ffi.string(arg)
-
-  lake.cliargs:push(arg)
-end
-
+local tasks = require "lake.tasks"
 
 
 -- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
@@ -179,27 +150,28 @@ end
 -- * >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> -
 
 
-
 -- * --------------------------------------------------------------------------
 
 --- Get a string specifying the current operating system.
 ---
---- Currently this just returns whatever luajit reports from its os() function.
+--- Currently this just returns whatever luajit reports from its os() function
+--- (but in lowercase).
 --- This could be one of: 
----     Windows
----     Linux
----     OSX
----     BSD
----     POSIX
----     Other
+---     windows
+---     linux
+---     osx
+---     bsd
+---     posix
+---     other
 ---
 -- TODO(sushi) make this return the target operating system if I ever get 
 --             around to supporting
 --             cross-compilation.
 ---
 ---@return string
+local os_str = string.lower(jit.os)
 lake.os = function()
-  return jit.os
+  return os_str
 end
 
 -- * --------------------------------------------------------------------------
@@ -248,7 +220,7 @@ end
 ---
 ---@param path string
 lake.touch = function(path)
-  C.lua__touch(make_str(path))
+  C.lua__touch(makeStr(path))
 end
 
 -- * --------------------------------------------------------------------------
@@ -302,40 +274,6 @@ end
 
 -- * --------------------------------------------------------------------------
 
-local options_stack = List()
-
---- Imports the lake module at 'path' and passes the table 'options'
---- to it. 'options' may be retrieved in the module by calling 
---- lake.getOptions().
---- 
---- This changes the cwd to the directory containing the given module
---- and any target that has its recipe set inside the module is assumed
---- to execute its recipe from that directory.
---- 
---- Returns anything the module file returns.
----
----@param path string
----@param options table?
----@return ...
-lake.import = function(path, options)
-  options_stack:push(options)
-  local results = {lua__importFile(path)}
-  options_stack:pop()
-  return unpack(results)
-end
-
--- * --------------------------------------------------------------------------
-
---- Gets the options set for the current module, or nil if not in a 
---- a module or if no options were passed.
----
----@return table?
-lake.getOptions = function()
-  return options_stack[options_stack:len()]
-end
-
--- * --------------------------------------------------------------------------
-
 --- Returns the current working directory as a string
 ---
 ---@return string
@@ -351,7 +289,7 @@ end
 ---@param path string
 ---@return boolean
 lake.chdir = function(path)
-  return 0 ~= C.lua__chdir(make_str(path))
+  return 0 ~= C.lua__chdir(makeStr(path))
 end
 
 -- * --------------------------------------------------------------------------
@@ -381,7 +319,7 @@ end
 ---@param path string
 ---@return boolean
 lake.pathExists = function(path)
-  return C.lua__pathExists(make_str(path))
+  return 0 ~= C.lua__pathExists(makeStr(path))
 end
 
 -- * --------------------------------------------------------------------------
@@ -403,7 +341,7 @@ lake.rm = function(path, options)
   options = options or {recursive = false, force = false}
   return 0 ~=
     C.lua__rm(
-      make_str(path),
+      makeStr(path),
       options.recursive or false,
       options.force or false)
 end
@@ -445,7 +383,7 @@ end
 ---@param dst string
 ---@return boolean
 lake.copy = function(dst, src)
-  return C.lua__copyFile(make_str(dst), make_str(src))
+  return C.lua__copyFile(makeStr(dst), makeStr(src))
 end
 
 -- * --------------------------------------------------------------------------
@@ -466,7 +404,7 @@ lake.find = function(pattern)
     error("pattern given to lake.find must be a string!", 2)
   end
 
-  local glob = C.lua__globCreate(make_str(pattern))
+  local glob = C.lua__globCreate(makeStr(pattern))
 
   if not glob.paths then
     return List{}
@@ -531,7 +469,7 @@ lake.cmd = function(args, options)
     end
 
     if #args[i] ~= 0 then
-      argsarr[i-1] = make_str(args[i])
+      argsarr[i-1] = makeStr(args[i])
     end
   end
 
@@ -601,43 +539,6 @@ end
 
 -- * --------------------------------------------------------------------------
 
---- Performs a string replacement on 'subject', which may be a string
---- or a table of strings, a List of strings, or a Twine. When a container is
---- is given a new List of the resulting strings is returned.
---- 
---- This is really just a wrapper over lua's gsub so that we can support
---- containers. See [this page](https://www.lua.org/manual/5.1/manual.html#pdf-string.gsub) 
---- for information on how to use lua's patterns.
----
----@param subject string | string[] | Twine | List
----@param search string
----@param repl string
----@return List | string
-lake.replace = function(subject, search, repl)
-  if type(subject) == "table" then
-    local out = List()
-    for _,v in ipairs(subject) do
-      if type(v) ~= "string" then
-        error("element of table given to lake.replace is not a string!", 2)
-      end
-
-      local res = v:gsub(search, repl)
-
-      out:insert(res)
-    end
-    return out
-  elseif type(subject) == "string" then
-    local res = subject:gsub(search, repl)
-    return res
-  else
-    error(
-      "unsupported type given as subject of lake.replace: '"..
-      type(subject).."'", 2)
-  end
-end
-
--- * --------------------------------------------------------------------------
-
 --- Returns a timestamp in microseconds from the system's monotonic clock.
 ---
 ---@return number
@@ -653,6 +554,45 @@ end
 lake.getRealtimeClock = function()
   assert(false, "implement realtime clock at some point :)")
   return 0
+end
+
+-- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
+--      
+--      Task api
+--
+-- * >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> - >> -
+
+--- A helper for notifying lake about a Task.
+--- The given task must be unique, otherwise an error will occur.
+---
+---@param task Task
+lake.trackTask = function(task)
+  if lake.tasks.by_name[task.name] then
+    error("a task with name '"..task.name.."' is already tracked")
+  end
+
+  if lake.tasks.by_handle[task.handle] then
+    error("a task with handle <"..tostring(task.handle)..
+          "> is already tracked")
+  end
+
+  lake.tasks.by_name[task.name] = task
+  lake.tasks.by_handle[task.handle] = task
+end
+
+--- Declares a task that may need to be completed. If a task with the given 
+--- name already exists, it will be returned (even if it is some other built
+--- in task kind).
+---
+--- A unique name for this task.
+---@param name string
+---@return Task
+lake.task = function(name)
+  local task = lake.tasks.by_name[name]
+  if task then
+    return task
+  end
+  return tasks.Task.new(lake, name)
 end
 
 
@@ -689,7 +629,7 @@ Target.new = function(path)
   local o = {}
   setmetatable(o, Target)
   o.path = path
-  o.handle = C.lua__createSingleTarget(make_str(path))
+  o.handle = C.lua__createSingleTarget(makeStr(path))
   return o
 end
 
@@ -883,11 +823,5 @@ lake.targets = function(...)
 
   return group
 end
-
-lake.__internal = {}
-lake.__internal.targets = targets
-lake.__internal.recipe_table = recipe_table
-lake.__internal.coresume = co.resume
-lake.__internal.errhandler = errhandler
 
 return lake

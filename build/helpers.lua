@@ -1,4 +1,11 @@
-local sys = require "build.sys"
+--- 
+--- Various helpers to be used in the build system.
+---
+--- The build system should NOT be used here. Any info needed from it should
+--- be passed to the function.
+---
+
+local Type = require "Type"
 local List = require "list"
 
 local helpers = {}
@@ -25,8 +32,8 @@ helpers.listBuilder = function(...)
   return out
 end
 
-helpers.makeRootRelativePath = function(x)
-  local b, e = x:find("^"..sys.root)
+helpers.makeRootRelativePath = function(root, x)
+  local b, e = x:find("^"..root)
   if b then
     return x:sub(e)
   end
@@ -39,6 +46,34 @@ helpers.getPathBasename = function(x)
     return x:sub(e)
   end
   return x
+end
+
+helpers.indexer = function(f)
+  return setmetatable({}, { __index = f })
+end
+
+helpers.caller = function(f)
+  return setmetatable({}, { __call = f })
+end
+
+helpers.callindexer = function(fc, fi)
+  return setmetatable({}, { __index=fi, __call=fc })
+end
+
+local EnumElem = Type.make()
+
+EnumElem.__tostring = function(self)
+  return self.name
+end
+
+helpers.enum = function(...)
+  local o = Type.make()
+
+  for elem in List{...}:each() do
+    o[elem] = setmetatable({name=elem}, EnumElem)
+  end
+
+  return o
 end
 
 return helpers

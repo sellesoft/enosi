@@ -152,7 +152,8 @@ void iro_initLogger(Logger* logger, String name, u32 verbosity)
 EXPORT_DYNAMIC
 void iro_loggerSetName(Logger* logger, String name)
 {
-  logger->name = name;
+  // TODO(sushi) properly clean this up, prob using finalizers
+  logger->name = name.allocateCopy();
 }
 
 /* ----------------------------------------------------------------------------

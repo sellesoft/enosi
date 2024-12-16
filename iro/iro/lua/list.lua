@@ -1,45 +1,30 @@
 --
---
 -- List type. Primarily cause I don't like using lua's raw tables for arrays.
 -- 
 -- Any function that modifies the list and doesnt already return a value will
 -- return self to facilitate function chaining.
 --
--- TODO(sushi) this could be optimized by making it so that its backend is secretly C.
---             or maybe it wouldn't make much of a difference, but it should be 
---             attempted eventually.
---
--- TODO(sushi) this FUCKING SUCKS especially with how im trying to have Twine just be a 
---             wrapper over it PLEASE fix it soon
---
--- 
 
 local Type = require "Type"
 
---- A wrapper around Lua's table mostly just cause I don't like using 
---- Lua's table as an array.
----
----@class List
----@field arr any[]?
+---@class iro.List : iro.Type
 local List = Type.make()
-
-local isList = function(x) return getmetatable(x) == List end
 
 --- Construct a new List, optionally passing an initial value.
 --- If 'init' is another List, the new list will be a shallow copy of it.
 --- If 'init' is a Lua table, this List will simply take it.
 --- Otherwise the list will be returned empty.
 ---
----@generic T
----@param init table | List
+---@param init table | iro.List
+---@return iro.List
 List.new = function(init)
   if init then
-    assert(type(init) == "table" or isList(init))
+    assert(type(init) == "table" or List:isTypeOf(init))
   else
     init = {}
   end
 
-  if isList(init) then
+  if List:isTypeOf(init) then
     local o = setmetatable({}, List)
     for elem in init:each() do
       o:push(elem)
@@ -84,7 +69,7 @@ List.pushFront = function(self, elem)
 end
 
 List.pushList = function(self, l)
-  l:each(function(elem) self:push(elem) end)
+  for elem in l:each() do self:push(elem) end
   return self
 end
 
@@ -230,13 +215,17 @@ end
 --- TODO(sushi) implement lazy iterators and replace this 
 ---
 ---@param f function
----@return List
+---@return iro.List
 List.map = function(self, f)
   local new = List{}
   for e in self:each() do
     new:push(f(e))
   end
   return new
+end
+
+List.sub = function(self, i, j)
+  return List{unpack(self, i, j)}
 end
 
 return List

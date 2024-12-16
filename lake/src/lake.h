@@ -6,6 +6,7 @@
 #include "iro/containers/avl.h"
 #include "iro/logger.h"
 #include "iro/luastate.h"
+#include "iro/process.h"
 
 #include "target.h"
 #include "Task.h"
@@ -18,11 +19,23 @@ static const char* lake_recipe_table = "__lake__recipe_table";
 static const char* lake_coroutine_resume = "__lake__coroutine_resume";
 static const char* lake_err_handler = "__lake__err_handler";
 
-typedef DList<const char*> LuaCLIArgList;
+/* ============================================================================
+ */
+struct ActiveProcess
+{
+  Process process;
+  fs::File stream;
+};
 
+/* ============================================================================
+ */
 struct Lake
 {
   LuaState lua;
+
+  TaskList tasks;
+
+  TaskList explicit_requests;
 
   // queue of targets that are ready to be built
   // if necessary, which are those that either
@@ -33,23 +46,7 @@ struct Lake
   TargetList active_recipes;
   u32 active_recipe_count;
 
-  TargetList explicit_requests;
-
-  TargetList targets;
-
-  Pool<Target> target_pool;
-
-  // cli args that are handled within lake.lua
-  LuaCLIArgList lua_cli_args; 
-  LuaCLIArgList::Node* lua_cli_arg_iterator;
-
-  Pool<String> action_pool;
-  DList<String> action_queue;
-
-  TaskList tasks;
-
-  s32          argc;
-  const char** argv;
+  Pool<ActiveProcess> active_process_pool;
 
   String initpath = nil;
 
@@ -60,31 +57,37 @@ struct Lake
 
   b8 in_recipe = false;
 
-  Array<fs::Path> cwd_stack;
-
   b8   init(const char** argv, int argc, mem::Allocator* allocator = &mem::stl_allocator);
   void deinit();
 
-  b8 processArgv(String* initfile);
+  b8 processArgv(const char** argv, int argc, String* initfile);
   b8 run();
 
-};
-
-extern Lake lake;
-
-// api used in the lua lake module 
-extern "C" 
-{
-  Target* lua__create_target(String path);
-  void    lua__make_dep(Target* target, Target* dependent);
-
-  typedef struct CLIargs
+  // Central allocation function in case we ever want to change how tasks 
+  // are stored.
+  template<typename T>
+  Task* allocateTask()
   {
-    s32 argc;
-    const char** argv;
-  } CLIargs; 
+    auto* task = (Task*)mem::stl_allocator.allocateType<T>();
+    new (task) T;
+    return task;
+  }
 
-  CLIargs lua__get_cliargs();
-}
+private:
+
+  // Indexes on lua's stack where important things have been loaded.
+  // This doesn't have to be tracked at runtime, but makes it easier 
+  // to deal with while developing. Ideally once lake is more stable 
+  // we can move these to macros with stack indexes we know at compile
+  // time.
+  struct 
+  {
+    u16 lake;
+    u16 cliargs;
+    u16 tasks_by_handle;
+    u16 coresume;
+    u16 errh;
+  } I;
+};
 
 #endif

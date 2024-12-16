@@ -10,11 +10,11 @@
 #include "iro/unicode.h"
 #include "iro/containers/list.h"
 #include "iro/containers/avl.h"
-#include "iro/containers/SmallArray.h"
 #include "iro/fs/path.h"
 
 using namespace iro;
 
+struct Lake;
 struct Task;
 
 u64 hashTask(const Task* t);
@@ -38,15 +38,12 @@ struct Task
   TaskSet prerequisites = {};
   TaskSet dependents = {};
 
-  // The cwd at the time this Task's recipe was set.
-  fs::Path working_dir = {};
-
   b8   init(String name);
   void deinit();
 
   // Returns if this Task's recipe should run after all of its prerequisites 
   // have been built.
-  virtual b8 needRunRecipe() = 0;
+  b8 needRunRecipe();
 
   // Starts or resumes this task's recipe.
   enum class RecipeResult
@@ -56,7 +53,7 @@ struct Task
     Finished,
   };
 
-  virtual RecipeResult resumeRecipe();
+  RecipeResult resumeRecipe();
 
   enum class Flag
   {

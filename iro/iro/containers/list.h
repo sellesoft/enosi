@@ -353,7 +353,6 @@ struct DList
     }
   };
 
-
   RangeIterator begin() const
   {
     return RangeIterator{head};
@@ -363,6 +362,43 @@ struct DList
   {
     return RangeIterator{nullptr};
   }
+
+  // disgusting, sorry, idk if there's a nicer way to do this yet.
+  struct RangeIteratorPtr
+  {
+    Node* start;
+
+    struct ActualIterator
+    {
+      Node* n;
+
+      Node* operator++()
+      {
+        n = n->next;
+        return n;
+      }
+
+      b8 operator !=(const ActualIterator& rhs)
+      {
+        return n != rhs.n;
+      }
+
+      T* operator->()
+      {
+        return n->data;
+      }
+
+      T* operator*()
+      {
+        return n->data;
+      }
+    };
+
+    ActualIterator begin() const { return ActualIterator{start}; }
+    ActualIterator end() const { return ActualIterator{nullptr}; }
+  };
+
+  RangeIteratorPtr eachPtr() const { return RangeIteratorPtr{head}; }
 };
 
 
