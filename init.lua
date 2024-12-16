@@ -141,7 +141,7 @@ local function getSourceToObj(path, bdir, c_to_o, l_to_o)
   walkDir(path, function(path)
     if path:match("%.cpp$") then
       table.insert(c_to_o, {path, bdir.."/"..path..".o"})
-    elseif path:match("%.lua$") then
+    elseif l_to_o and path:match("%.lua$") then
       table.insert(l_to_o, {path, bdir.."/"..path..".o"})
     end
     lfs.mkdir(bdir.."/"..path:match("(.*)/"))
@@ -237,4 +237,32 @@ cd ".."
 
 if 0 ~= exec("cp ",lake_build,"/lake bin/lake") then
   error "failed to copy lake to bin/!"
+end
+
+io.write "Building elua...\n"
+
+cd "elua"
+
+local elua_c_to_o = {}
+
+local elua_build = build_dir.."/elua"
+lfs.mkdir(elua_build)
+
+getSourceToObj("src", elua_build, elua_c_to_o)
+
+compileCppObj(elua_c_to_o)
+
+objs = ""
+
+collectObjs(elua_c_to_o, iro_c_to_o, iro_l_to_o)
+
+if 0 ~= exec("clang++ ",objs," ",linker_flags," -o ",elua_build,"/","elua")
+then
+  error "failed to link elua!"
+end
+
+cd ".."
+
+if 0 ~= exec("cp ",elua_build,"/elua bin/elua") then
+  error "failed to copy elua to bin/!"
 end

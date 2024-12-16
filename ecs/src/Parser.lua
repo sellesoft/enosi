@@ -58,7 +58,6 @@ Parser.errorHere = function(self, ...)
   end
 
   local start,stop = self.text:find("[^\n]+", scan)
-  print(start, stop)
 
   error("\nat "..line..":"..column..": "..makeStr(...).."\n"..
         self.text:sub(start, stop).."\n"..
@@ -157,12 +156,6 @@ Parser.checkPattern = function(self, pattern)
   if start then
     self.offset = stop + 1
     return self.text:sub(start, stop)
-  end
-end
-
--- * --------------------------------------------------------------------------
-
-Parser.checkIdentifier = function(self)
   self:skipWhitespace()
   local start, stop = self.text:find("^[%w_]+", self.offset)
   if start then

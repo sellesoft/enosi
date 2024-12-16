@@ -14,7 +14,7 @@ $ local glob = require "Glob"
 #include "math/util.h"
 
 $ local buf = buffer.new()
-$ glob"**/*.lh":each(function(path)
+$ glob"**/*.lh":each(function(path) -- */
 $   local result = lpp.import(path)
 $   if result then
 $     buf:put(result)

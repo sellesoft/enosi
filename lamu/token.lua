@@ -4,9 +4,9 @@ local buffer = require "string.buffer"
 
 --- A collection of characters of some kind as well as their location
 --- in the input file.
----@class Token
+---@class lamu.Token
 --- The kind of this token.
----@field kind Token.Kind
+---@field kind lamu.Token.Kind
 --- Offset into the file where this Token starts.
 ---@field loc number
 --- The length of this token.
@@ -32,9 +32,9 @@ Token.newVirtual = function(kind, raw)
   return setmetatable(o, Token)
 end
 
----@alias Token.Kind table<string, number>
+---@alias lamu.Token.Kind table<string, number>
 
----@type Token.Kind
+---@type lamu.Token.Kind
 Token.Kind = {}
 
 Token.__tostring = function(self)
