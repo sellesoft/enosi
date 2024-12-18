@@ -860,6 +860,18 @@ b8 chdir(String path)
 
 /* ----------------------------------------------------------------------------
  */
+b8 chdir(fs::Dir::Handle dir)
+{
+  if (-1 == fchdir((int)dirfd((DIR*)dir)))
+    return reportErrno(
+        "failed to chdir into directory with handle ", 
+        (void*)dir);
+  return true;
+
+}
+
+/* ----------------------------------------------------------------------------
+ */
 TermSettings termSetNonCanonical(mem::Allocator* allocator)
 {
   struct termios* mode = 

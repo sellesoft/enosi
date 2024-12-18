@@ -5,8 +5,7 @@
 #include "ctype.h"
 
 #include "target.h"
-#include "LuaTask.h"
-#include "FileTask.h"
+#include "Task.h"
 
 #include "iro/logger.h"
 
@@ -32,9 +31,9 @@ extern "C"
 #include "lualib.h"
 #include "lauxlib.h"
 
-int lua__importFile(lua_State* L);
 int lua__cwd(lua_State* L);
 int lua__canonicalizePath(lua_State* L);
+int lua__glob(lua_State* L);
 }
 
 #undef stdout
@@ -42,12 +41,7 @@ int lua__canonicalizePath(lua_State* L);
 #undef stdin
 
 static Logger logger = Logger::create("lake"_str, 
-
-#if LAKE_DEBUG
-    Logger::Verbosity::Debug);
-#else
     Logger::Verbosity::Notice);
-#endif
 
 /* ----------------------------------------------------------------------------
  */
@@ -58,42 +52,7 @@ b8 Lake::init(const char** argv, int argc, mem::Allocator* allocator)
   INFO("initializing Lake.\n");
   SCOPED_INDENT;
 
-  max_jobs = 1;
-
-  if (!active_process_pool.init(allocator))
-    return ERROR("failed to init active process pool\n");
-
-  active_process_pool = Pool<ActiveProcess>::create(allocator);
-
-  // TODO(sushi) also search for lakefile with no extension
-  initpath = nil;
-  if (!processArgv(argv, argc, &initpath))
-    return false;
-  b8 resolved = resolve(initpath, "lakefile.lua"_str);
-
-  if (resolved)
-    DEBUG("no file specified on cli, searching for 'lakefile.lua'\n");
-  else
-    DEBUG("file '", initpath, "' was specified as file on cli\n");
-
-  using namespace fs;
-
-  if (!fs::Path::exists(initpath))
-  {
-    if (resolved)
-      FATAL("no file was specified (-f) and no file with the default name "
-            "'lakefile.lua' could be found\n");
-    else
-      FATAL("failed to find specified file (-f) '", initpath, "'\n");
-    return false;
-  }
-
-  DEBUG("Creating target pool and target lists.\n");
-
-  if (!build_queue.init(allocator)) return false;
-  if (!active_recipes.init(allocator)) return false;
-
-  DEBUG("Loading lua state.\n");
+  DEBUG("loading lua state.\n");
 
   if (!lua.init())
   {
@@ -101,13 +60,14 @@ b8 Lake::init(const char** argv, int argc, mem::Allocator* allocator)
     return false;
   }
 
+  // TODO(sushi) put these in a table in the lake module or something.
 #define addGlobalCFunc(name) \
   lua.pushcfunction(name); \
   lua.setglobal(STRINGIZE(name));
 
-  addGlobalCFunc(lua__importFile);
   addGlobalCFunc(lua__cwd);
   addGlobalCFunc(lua__canonicalizePath);
+  addGlobalCFunc(lua__glob);
 
 #undef addGlobalCFunc
 
@@ -141,13 +101,59 @@ b8 Lake::init(const char** argv, int argc, mem::Allocator* allocator)
     return ERROR("failed to import error handler\n");
   I.errh = lua.gettop();
 
+  if (!lua.require("list"_str))
+    return ERROR("failed to import list\n");
+  I.list = lua.gettop();
+
   lua.getfield(I.lake, "tasks");
-  lua.getfield(I.lake, "by_handle");
+  lua.getfield(-1, "by_name");
   lua.remove(-2);
-  I.tasks_by_handle = lua.gettop();
+  I.tasks_by_name = lua.gettop();
 
   lua.pushlightuserdata(this);
   lua.setfield(I.lake, "handle");
+
+  max_jobs = 1;
+
+  // TODO(sushi) also search for lakefile with no extension
+  initpath = nil;
+  if (!processArgv(argv, argc, &initpath))
+    return false;
+  b8 resolved = resolve(initpath, "lakefile.lua"_str);
+
+  if (resolved)
+    DEBUG("no file specified on cli, searching for 'lakefile.lua'\n");
+  else
+    DEBUG("file '", initpath, "' was specified as file on cli\n");
+
+  using namespace fs;
+
+  if (!fs::Path::exists(initpath))
+  {
+    if (resolved)
+      FATAL("no file was specified (-f) and no file with the default name "
+            "'lakefile.lua' could be found\n");
+    else
+      FATAL("failed to find specified file (-f) '", initpath, "'\n");
+    return false;
+  }
+
+  DEBUG("Creating target pool and target lists.\n");
+
+  if (!active_process_pool.init(allocator))
+    return ERROR("failed to init active process pool\n");
+
+  active_process_pool = Pool<ActiveProcess>::create(allocator);
+
+  if (!active_recipes.init(allocator)) 
+    return false;
+  active_recipe_count = 0;
+
+  if (!tasks.init(allocator))
+    return ERROR("failed to initialize tasks list\n");
+
+  if (!leaves.init(allocator))
+    return ERROR("failed to initialize leaves list\n");
 
   return true;
 }
@@ -158,13 +164,11 @@ void Lake::deinit()
 {
   lua.deinit();
   active_recipes.deinit();
-  build_queue.deinit();
 
   for (auto* task : tasks.eachPtr())
     task->deinit();
 
   tasks.deinit();
-  
 
   active_process_pool.deinit();
 }
@@ -323,7 +327,7 @@ b8 Lake::run()
 {
   lua.getglobal(lake_err_handler);
   if (!lua.loadfile((char*)initpath.ptr) || 
-      !lua.pcall(0,1,2))
+      !lua.pcall(0,1))
   {
     ERROR("failed to run ", initpath, ": ", lua.tostring(), "\n");
     lua.pop();
@@ -345,6 +349,85 @@ b8 Lake::run()
 
   INFO("beginning build loop.\n");
 
+  TaskList build_queue;
+  if (!build_queue.init())
+    return ERROR("failed to initialize build queue\n");
+  defer { build_queue.deinit(); };
+
+  if (Task::TopSortResult::Cycle == Task::topSortTasks(tasks, &build_queue))
+    return ERROR("cycle detected\n");
+
+  for (Task& task : build_queue)
+  {
+    if (task.isLeaf())
+      addLeaf(&task);
+
+  }
+    
+  for (u64 build_pass = 0, recipe_pass = 0;;)
+  {
+    if (leaves.isEmpty())
+    {
+      DEBUG("no leaves, we must be done\n");
+      break;
+    }
+
+    if (!leaves.isEmpty() && max_jobs > active_recipe_count)
+    {
+      Task* task = leaves.front();
+
+      DEBUG("checking ", task->name, "\n");
+
+      if (task->needRunRecipe(*this))
+      {
+        DEBUG("task ", task->name, " needs to run its recipe\n");
+        active_recipes.pushHead(task);
+        active_recipe_count += 1;
+        leaves.remove(leaves.head);
+      }
+      else
+      {
+        DEBUG("task ", task->name, " is complete\n");
+        task->onComplete(*this, false);
+        leaves.remove(leaves.head);
+      }
+    }
+
+    while (max_jobs <= active_recipe_count)
+    {
+      TaskList::Node* task_node = active_recipes.head;
+      for (;task_node;)
+      {
+        Task* task = task_node->data;
+        TaskList::Node* next = task_node->next;
+        switch (task->resumeRecipe(*this))
+        {
+        case Task::RecipeResult::Finished:
+          {
+            DEBUG("task ", task->name, " completed\n");
+            active_recipes.remove(task_node);
+            active_recipe_count -= 1;
+            task->onComplete(*this, true);;
+          }
+          break;
+
+        case Task::RecipeResult::Error:
+          {
+            task->flags.set(Task::Flag::Errored);
+            active_recipes.remove(task_node);
+            active_recipe_count -= 1;
+          }
+          break;
+
+        case Task::RecipeResult::InProgress:
+          ;
+        }
+        task_node = next;
+      }
+    }
+  }
+
+#if 0
   for (u64 build_pass = 0, recipe_pass = 0;;)
   {
     if (!build_queue.isEmpty() && max_jobs - active_recipe_count)
@@ -450,8 +533,17 @@ b8 Lake::run()
       platform::sleep(TimeSpan::fromMicroseconds(3));
     }
   }
+#endif
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Lake::addLeaf(Task* task)
+{
+  DEBUG("new leaf: ", task->name, "\n");
+  leaves.pushTail(task);
 }
 
 #if LAKE_DEBUG
@@ -488,28 +580,12 @@ extern "C"
 /* ----------------------------------------------------------------------------
  */
 EXPORT_DYNAMIC
-Task* lua__createLuaTask(Lake* lake, String name)
+Task* lua__createTask(Lake* lake, String name)
 {
-  auto* task = lake->allocateTask<LuaTask>();
+  auto* task = lake->allocateTask<Task>();
   if (!task->init(name))
   {
     ERROR("failed to initialize lua task ", name, "\n");
-    mem::stl_allocator.free(task);
-    return nullptr;
-  }
-  lake->tasks.pushTail(task);
-  return task;
-}
-
-/* ----------------------------------------------------------------------------
- */
-EXPORT_DYNAMIC
-Task* lua__createFileTask(Lake* lake, String name)
-{
-  auto* task = lake->allocateTask<FileTask>();
-  if (!task->init(name))
-  {
-    ERROR("failed to init initialize file task ", name, "\n");
     mem::stl_allocator.free(task);
     return nullptr;
   }
@@ -529,10 +605,17 @@ void lua__makeDep(Task* task, Task* prereq)
 }
 
 /* ----------------------------------------------------------------------------
- *  Marks the table as having a recipe. 
  */
 EXPORT_DYNAMIC
-void lua__setTaskHasRecipe(Lake* lake, Task* task)
+void lua__setTaskHasCond(Task* task)
+{
+  task->flags.set(Task::Flag::HasCond);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+EXPORT_DYNAMIC
+void lua__setTaskHasRecipe(Task* task)
 {
   task->flags.set(Task::Flag::HasRecipe);
 }
@@ -540,9 +623,17 @@ void lua__setTaskHasRecipe(Lake* lake, Task* task)
 /* ----------------------------------------------------------------------------
  */
 EXPORT_DYNAMIC
-String lua__getTaskName(Task* task)
+void lua__setTaskRecipeWorkingDir(Task* task, String wdir)
 {
-  return task->name;
+  if (notnil(task->recipe_wdir))
+    task->recipe_wdir.close();
+  task->recipe_wdir = fs::Dir::open(wdir);
+  if (isnil(task->recipe_wdir))
+  {
+    ERROR(
+      "failed to set working directory of Task '",task->name,"' to ", wdir, 
+      "\n");
+  }
 }
 
 /* ----------------------------------------------------------------------------
@@ -565,15 +656,7 @@ b8 lua__makeDir(String path, b8 make_parents)
 /* ----------------------------------------------------------------------------
  */
 EXPORT_DYNAMIC
-void lua__dirDestroy(fs::Dir* dir)
-{
-  mem::stl_allocator.deconstruct(dir);
-}
-
-/* ----------------------------------------------------------------------------
- */
-EXPORT_DYNAMIC
-ActiveProcess* lua__processSpawn(String* args, u32 args_count)
+ActiveProcess* lua__processSpawn(Lake* lake, String* args, u32 args_count)
 {
   assert(args && args_count);
 
@@ -588,9 +671,14 @@ ActiveProcess* lua__processSpawn(String* args, u32 args_count)
     {
       DEBUG(args[i], "\n");
     }
+    auto cwd = fs::Path::cwd();
+    DEBUG("in dir ", cwd);
+    cwd.destroy();
   } 
 
-  ActiveProcess* proc = active_process_pool.add();
+  // TODO(sushi) only use pty when outputting to a terminal or when explicitly
+  //             requested via cli args.
+  ActiveProcess* proc = lake->active_process_pool.add();
   proc->process = 
     Process::spawnpty(args[0], {args+1, args_count-1}, &proc->stream);
   if (isnil(proc->process))
@@ -656,127 +744,63 @@ b8 lua__processCheck(ActiveProcess* proc, s32* out_exit_code)
 /* ----------------------------------------------------------------------------
  */
 EXPORT_DYNAMIC
-void lua__processClose(ActiveProcess* proc)
+void lua__processClose(Lake* lake, ActiveProcess* proc)
 {
   assert(proc);
   TRACE("closing proc ", (void*)proc, "\n");
 
   proc->stream.close();
   proc->process.stop(0);
-  active_process_pool.remove(proc);
+  lake->active_process_pool.remove(proc);
 }
 
 /* ----------------------------------------------------------------------------
- *  This could PROBABLY be implemented better but whaaatever.
  */
-struct LuaGlobResult
+int lua__glob(lua_State* L)
 {
-  String* paths;
-  s32 paths_count;
-};
+  auto lua = LuaState::fromExistingState(L);
 
-EXPORT_DYNAMIC
-LuaGlobResult lua__globCreate(String pattern)
-{
-  auto matches = Array<String>::create();
+  String pattern = lua.tostring(1);
+
+  lua.newtable();
+  const s32 I_result = lua.gettop();
+
   auto glob = fs::Globber::create(pattern);
+  u64 count = 0;
   glob.run(
-    [&matches](fs::Path& p)
+    [&lua, &count, I_result](fs::Path& p)
     {
-      String match = p.buffer.asStr();
-      *matches.push() = match.allocateCopy();
+      count += 1;
+      lua.pushinteger(count);
+      lua.pushstring(p.buffer.asStr());
+      lua.settable(I_result);
       return true;
     });
   glob.destroy();
-  return {matches.arr, matches.len()};
+  return 1;
 }
 
 /* ----------------------------------------------------------------------------
  */
 EXPORT_DYNAMIC
-void lua__globDestroy(LuaGlobResult x)
+void lua__setMaxJobs(Lake* lake, s32 n)
 {
-  auto arr = Array<String>::fromOpaquePointer(x.paths);
-
-  for (String& s : arr)
-    mem::stl_allocator.free(s.ptr);
-
-  arr.destroy();
-}
-
-/* ----------------------------------------------------------------------------
- */
-EXPORT_DYNAMIC
-void lua__setMaxJobs(s32 n)
-{
-  if (!lake.max_jobs_set_on_cli)
+  if (!lake->max_jobs_set_on_cli)
   {
     NOTICE("max_jobs set to ", n, " from lakefile call to lake.maxjobs\n");
 
     // TODO(sushi) make a thing to get number of logical processors and also 
     //             warn here if max jobs is set too high
-    lake.max_jobs = n;
+    lake->max_jobs = n;
   }
 }
 
 /* ----------------------------------------------------------------------------
  */
 EXPORT_DYNAMIC
-s32 lua__getMaxJobs()
+s32 lua__getMaxJobs(Lake* lake)
 {
-  return lake.max_jobs;
-}
-
-/* ----------------------------------------------------------------------------
- */
-EXPORT_DYNAMIC
-int lua__importFile(lua_State* L)
-{
-  // TODO(sushi) update to LuaState maybe eventually.
-  //             its possible now since LuaState doesnt store anything but the 
-  //             lua_State* but im not sure if it will ever store anything else
-  //             and I also don't feel like rewriting this atm.
-  using Path = fs::Path;
-
-  size_t len;
-  const char* s = lua_tolstring(L, -1, &len);
-  String path = {(u8*)s, len};
-
-  auto cwd = Path::cwd();
-  defer { cwd.chdir(); cwd.destroy(); };
-
-  lua_getglobal(L, lake_err_handler);
-  defer { lua_pop(L, 1); };
-
-  if (luaL_loadfile(L, s)) 
-  {
-    ERROR(lua_tostring(L, -1), "\n");
-    lua_pop(L, 1);
-    return 0;
-  }
-
-  // so dumb 
-  auto null_terminated = Path::from(Path::removeBasename(path));
-  defer { null_terminated.destroy(); };
-
-  if (!Path::chdir(null_terminated.buffer.asStr()))
-    return 0;
-
-  // call the imported file
-  int top = lua_gettop(L) - 1;
-
-  if (lua_pcall(L, 0, LUA_MULTRET, 2))
-  {
-    ERROR(lua_tostring(L, -1), "\n");
-    lua_pop(L, 1);
-    return 0;
-  }
-
-  // check how many thing the file returned
-  int nresults = lua_gettop(L) - top;
-
-  // return all the stuff the file returned
-  return nresults;
+  return lake->max_jobs;
 }
 
 /* ----------------------------------------------------------------------------
@@ -974,9 +998,9 @@ b8 lua__pathExists(String path)
 /* ----------------------------------------------------------------------------
  */
 EXPORT_DYNAMIC
-b8 lua__inRecipe()
+b8 lua__inRecipe(Lake* lake)
 {
-  return lake.in_recipe;
+  return lake->in_recipe;
 }
 
 /* ----------------------------------------------------------------------------
@@ -989,9 +1013,31 @@ b8 lua__touch(String path)
 
 /* ----------------------------------------------------------------------------
  */
-void lake__lua_createLuaTask(Lake* lake)
+int lua__basicFileTaskCondition(lua_State* L)
 {
+  auto lua = LuaState::fromExistingState(L);
 
+  String src = lua.tostring(1);
+  String dst = lua.tostring(2);
+  Task* task = lua.tolightuserdata<Task>(3);
+
+  b8 result = false;
+
+  if (!fs::Path::exists(dst))
+  {
+    result = true;
+  }
+  else
+  {
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+u64 lua__modtime(String path)
+{
+  TimePoint modtime = fs::Path::modtime(path);
+  return ((modtime - TimePoint{}).toMilliseconds());
 }
 
 }

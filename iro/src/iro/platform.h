@@ -254,6 +254,18 @@ fs::Path cwd(mem::Allocator* allocator = &mem::stl_allocator);
 b8 chdir(String path);
 
 /* ----------------------------------------------------------------------------
+ *  Changes the working directory of the program using a handle to a directory.
+ *  This is primarily useful as a more efficient way to store directories that
+ *  we want to return to as it avoids needing to store strings, and especially
+ *  because it avoids using the awful cwd().
+ *
+ *  However, note that on Win32 we still have to extract the path to the given
+ *  dir in order to chdir into it as Win32 does not provide an equivalent to 
+ *  Linux's fchdir().
+ */
+b8 chdir(fs::Dir::Handle dir);
+
+/* ----------------------------------------------------------------------------
  *  Sets the terminal to be non-canonical, eg. disable buffering stdin until 
  *  newlines. Returns an opaque pointer to saved terminal settings that must be 
  *  restored when the program closes. If you don't do this it will leave the 

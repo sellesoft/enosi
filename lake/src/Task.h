@@ -11,6 +11,7 @@
 #include "iro/containers/list.h"
 #include "iro/containers/avl.h"
 #include "iro/fs/path.h"
+#include "iro/fs/dir.h"
 
 using namespace iro;
 
@@ -38,12 +39,22 @@ struct Task
   TaskSet prerequisites = {};
   TaskSet dependents = {};
 
+  // The working directory of this Task's recipe. This can be changed as the 
+  // recipe is executed!
+  fs::Dir recipe_wdir;
+
   b8   init(String name);
   void deinit();
 
+  // Returns true if all of this Task's prerequisites are marked as completed
+  // and none of its prerequisites are marked as Errored.
+  b8 isLeaf();
+
   // Returns if this Task's recipe should run after all of its prerequisites 
   // have been built.
-  b8 needRunRecipe();
+  b8 needRunRecipe(Lake& lake);
+
+  void onComplete(Lake& lake, b8 just_built);
 
   // Starts or resumes this task's recipe.
   enum class RecipeResult
@@ -53,12 +64,18 @@ struct Task
     Finished,
   };
 
-  RecipeResult resumeRecipe();
+  RecipeResult resumeRecipe(Lake& lake);
 
   enum class Flag
   {
     PrereqJustBuilt,
     HasRecipe,
+    HasCond,
+
+    Errored,
+
+    RunningRecipe,
+    Complete,
 
     VisitedPerm,
     VisitedTemp,

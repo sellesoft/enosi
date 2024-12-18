@@ -55,64 +55,34 @@ ffi.cdef
   typedef double   f64;
   typedef u8       b8; // booean type
 
-  typedef struct str
-  {
-    const char* s;
-    s32 len;
-  } str;
-
-  void* lua__createSingleTarget(str path);
-  void  lua__makeDep(void* target, void* dependent);
-  s32   lua__targetSetRecipe(void* target);
-  void* lua__createGroupTarget();
-  void  lua__addTargetToGroup(void* group, void* target);
-  b8    lua__targetAlreadyInGroup(void* group);
-  void  lua__stackDump();
+  void* lua__createTask(void* lake, String name);
+  void  lua__makeDep(void* task, void* prereq);
+  void  lua__setTaskHasRecipe(void* task);
+  void  lua__setTaskRecipeWorkingDir(void* task, String wdir);
   u64   lua__getMonotonicClock();
-  b8    lua__makeDir(str path, b8 make_parents);
-  b8    lua__pathExists(str path);
+  b8    lua__makeDir(String path, b8 make_parents);
+  b8    lua__pathExists(String path);
+  b8    lua__inRecipe(void* lake);
 
-  const char* lua__nextCliarg();
-
-  void* lua__processSpawn(str* args, u32 args_count);
+  void* lua__processSpawn(void* lake, String* args, u32 args_count);
   void lua__processRead(
     void* proc, 
     void* ptr, u64 len, u64* out_bytes_read);
-  b8 lua__processCheck(void* proc, s32* out_exit_code);
-  void lua__processClose(void* proc);
   b8 lua__processCanRead(void* proc);
+  b8 lua__processCheck(void* proc, s32* out_exit_code);
+  void lua__processClose(void* lake, void* proc);
 
-  typedef struct
-  {
-    str* paths;
-    s32 paths_count;
-  } LuaGlobResult;
+  void lua__setMaxJobs(void* lake, s32 n);
+  s32  lua__getMaxJobs(void* lake);
 
-  LuaGlobResult lua__globCreate(str pattern);
-  void lua__globDestroy(LuaGlobResult x);
-
-  void lua__setMaxJobs(s32 n);
-
-  str lua__getTargetPath(void* handle);
-
-  b8 lua__copyFile(str dst, str src);
-
-  b8 lua__chdir(str path);
-
-  b8 lua__unlinkFile(str path);
-
-  void lua__queueAction(str name);
-
-  b8 lua__rm(str path, b8, b8);
-
-  b8 lua__inRecipe();
-
-  s32 lua__getMaxJobs();
-
-  b8 lua__touch(str path);
+  b8 lua__copyFile(String dst, String src);
+  b8 lua__chdir(String path);
+  b8 lua__rm(String path, b8, b8);
+  b8 lua__touch(String path);
+  u64 lua__modtime(String path);
 ]]
 local C = ffi.C
-local strtype = ffi.typeof("str")
+local strtype = ffi.typeof("String")
 
 ---@class str
 ---@field s cdata
@@ -140,7 +110,7 @@ end
 --- processed by the user.
 lake.cliargs = List{}
 
-local tasks = require "lake.tasks"
+local Task = require "Task"
 
 
 -- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
@@ -300,7 +270,7 @@ end
 ---
 ---@param n number
 lake.setMaxJobs = function(n)
-  C.lua__setMaxJobs(n)
+  C.lua__setMaxJobs(lake.handle, n)
 end
 
 -- * --------------------------------------------------------------------------
@@ -309,7 +279,7 @@ end
 ---
 ---@return number
 lake.getMaxJobs = function()
-  return C.lua__getMaxJobs()
+  return C.lua__getMaxJobs(lake.handle)
 end
 
 -- * --------------------------------------------------------------------------
@@ -320,6 +290,17 @@ end
 ---@return boolean
 lake.pathExists = function(path)
   return 0 ~= C.lua__pathExists(makeStr(path))
+end
+
+-- * --------------------------------------------------------------------------
+
+--- Get the modified time of the file at the given path, or nil if the path 
+--- does not exist.
+---
+---@param path string 
+---@return number
+lake.modtime = function(path)
+  return C.lua__modtime(makeStr(path))
 end
 
 -- * --------------------------------------------------------------------------
@@ -404,22 +385,7 @@ lake.find = function(pattern)
     error("pattern given to lake.find must be a string!", 2)
   end
 
-  local glob = C.lua__globCreate(makeStr(pattern))
-
-  if not glob.paths then
-    return List{}
-  end
-
-  local out = List()
-
-  for i=0,tonumber(glob.paths_count-1) do
-    local s = glob.paths[i]
-    out:push(ffi.string(s.s, s.len))
-  end
-
-  C.lua__globDestroy(glob)
-
-  return out
+  return (List(lua__glob(pattern)))
 end
 
 -- * --------------------------------------------------------------------------
@@ -437,7 +403,7 @@ end
 lake.cmd = function(args, options)
   -- check if were in a recipe and yield the coroutine 
   -- if so.
-  local in_recipe = 0 ~= C.lua__inRecipe()
+  local in_recipe = 0 ~= C.lua__inRecipe(lake.handle)
 
   args = lake.flatten(args, function(x, mt)
     if mt == Target then
@@ -453,7 +419,7 @@ lake.cmd = function(args, options)
 
   local onRead = options.onRead
 
-  local argsarr = ffi.new("str["..(args:len()+1).."]")
+  local argsarr = ffi.new("String["..(args:len()+1).."]")
 
   for arg,i in args:eachWithIndex() do
     if "string" ~= type(arg) then
@@ -473,7 +439,7 @@ lake.cmd = function(args, options)
     end
   end
 
-  local handle = C.lua__processSpawn(argsarr, args:len()+1)
+  local handle = C.lua__processSpawn(lake.handle, argsarr, args:len()+1)
 
   if not handle then
     local argsstr = ""
@@ -505,7 +471,7 @@ lake.cmd = function(args, options)
 
     out_buf:commit(out_read[0])
 
-    if onRead and out_read[0] ~= 0 then
+    if out_read[0] ~= 0 then
       onRead(ffi.string(ptr, out_read[0]))
     end
     return out_read[0]
@@ -522,7 +488,7 @@ lake.cmd = function(args, options)
       -- consumed
       while tryRead() ~= 0 do end
 
-      C.lua__processClose(handle)
+      C.lua__processClose(lake.handle, handle)
 
       return assert(tonumber(exit_code[0]))
     else
@@ -571,13 +537,7 @@ lake.trackTask = function(task)
     error("a task with name '"..task.name.."' is already tracked")
   end
 
-  if lake.tasks.by_handle[task.handle] then
-    error("a task with handle <"..tostring(task.handle)..
-          "> is already tracked")
-  end
-
   lake.tasks.by_name[task.name] = task
-  lake.tasks.by_handle[task.handle] = task
 end
 
 --- Declares a task that may need to be completed. If a task with the given 
@@ -592,7 +552,7 @@ lake.task = function(name)
   if task then
     return task
   end
-  return tasks.Task.new(lake, name)
+  return Task.new(lake, name)
 end
 
 

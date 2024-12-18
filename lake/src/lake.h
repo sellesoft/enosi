@@ -8,7 +8,6 @@
 #include "iro/luastate.h"
 #include "iro/process.h"
 
-#include "target.h"
 #include "Task.h"
 
 struct Lexer;
@@ -37,13 +36,9 @@ struct Lake
 
   TaskList explicit_requests;
 
-  // queue of targets that are ready to be built
-  // if necessary, which are those that either
-  // dont have prerequisites or have had all of 
-  // their prerequisites satified.
-  TargetList build_queue;
+  TaskList leaves;
 
-  TargetList active_recipes;
+  TaskList active_recipes;
   u32 active_recipe_count;
 
   Pool<ActiveProcess> active_process_pool;
@@ -63,6 +58,8 @@ struct Lake
   b8 processArgv(const char** argv, int argc, String* initfile);
   b8 run();
 
+  void addLeaf(Task* task);
+
   // Central allocation function in case we ever want to change how tasks 
   // are stored.
   template<typename T>
@@ -73,8 +70,6 @@ struct Lake
     return task;
   }
 
-private:
-
   // Indexes on lua's stack where important things have been loaded.
   // This doesn't have to be tracked at runtime, but makes it easier 
   // to deal with while developing. Ideally once lake is more stable 
@@ -84,9 +79,10 @@ private:
   {
     u16 lake;
     u16 cliargs;
-    u16 tasks_by_handle;
+    u16 tasks_by_name;
     u16 coresume;
     u16 errh;
+    u16 list;
   } I;
 };
 

@@ -28,6 +28,8 @@ return
     "lpp",
   },
 
+  mode = "debug",
+
   -- OS specific config.
   os = 
   {
@@ -50,7 +52,6 @@ return
       }
     },
   },
-
 
   -- Configuration intended to be applied to all projects.
   -- Note that any configuration specified in project specific 

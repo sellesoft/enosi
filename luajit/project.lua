@@ -7,6 +7,7 @@ local luajit = sys.getLoadingProject()
 luajit.report.dir.include
 {
   from = "src/src",
+  to = "luajit",
 
   filters = 
   {
@@ -22,12 +23,9 @@ luajit.report.dir.lib
 
   filters = 
   {
-    "static:luajit"
+    bobj.StaticLib "luajit"
   }
 }
 
-luajit.report.Makefile("src", 
-{
-  bobj.StaticLib "src/src/luajit"
-})
+luajit.report.Makefile("src")
 

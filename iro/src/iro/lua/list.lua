@@ -19,7 +19,8 @@ local List = Type.make()
 ---@return iro.List
 List.new = function(init)
   if init then
-    assert(type(init) == "table" or List:isTypeOf(init))
+    assert(type(init) == "table", 
+      "List.new got "..type(init).."\n"..debug.traceback())
   else
     init = {}
   end

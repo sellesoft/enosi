@@ -25,6 +25,10 @@ Type.isTypeOf = function(self, x)
   return false
 end
 
+Type.getTypeOf = function(x)
+  return getmetatable(x)
+end
+
 Type.is = function(self, T)
   if rawequal(self,T) then
     return true

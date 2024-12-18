@@ -39,6 +39,9 @@ struct Dir
   // Closes this directory stream.
   void close();
 
+  // Changes the current working directory to this directory.
+  b8 chdir();
+
   // Writes into 'buffer' the name of the next file in the opened directory 
   // and returns the number of bytes written on success. Returns -1 if 
   // we fail for some reason and 0 when we are done.

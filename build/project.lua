@@ -19,6 +19,10 @@ local getBObj = function(k)
     error("no build object named "..k)
 end
 
+local tryQualifiers = function()
+  
+end
+
 Project.new = function(name, wdir)
   local o = {}
   o.name = name
@@ -27,6 +31,11 @@ Project.new = function(name, wdir)
   {
     private = {},
     public = {},
+    external = 
+    {
+      private = {},
+      public = {},
+    }
   }
   o.dependencies = {}
   o.defines =
@@ -35,12 +44,6 @@ Project.new = function(name, wdir)
     public = List{},
   }
   o.dirs = {}
-
-  local reportDefines = function(arr, defines)
-    for d,v in pairs(defines) do
-      arr:push { d, v }
-    end
-  end
 
   o.report = Project.constructReporter(o)
 
@@ -66,14 +69,14 @@ Project.constructReporter = function(proj)
     end
   end
 
-  local obj = function(pub, obj)
+  local obj = function(pub, ext, obj)
     if obj == "defines" then
       return function(defines)
         proj:reportDefines(pub, defines)
       end
     else
       return function(...)
-        proj:reportBuildObject(pub, getBObj(obj), ...)
+        proj:reportBuildObject(pub, ext, getBObj(obj), ...)
       end
     end
   end
@@ -92,12 +95,22 @@ Project.constructReporter = function(proj)
   local top = helpers.indexer(function(_,k)
     if k == "pub" then
       return helpers.indexer(function(_,k)
-        return (obj(true, k))
+        return (obj(true, false, k))
+      end)
+    elseif k == "ext" then
+      return helpers.indexer(function(_,k)
+        if k == "pub" then
+          return helpers.indexer(function(_,k)
+            return (obj(true, true, k))
+          end)
+        else
+          return (obj(false, true, k))
+        end
       end)
     elseif k == "dir" then
       return dir  
     else
-      return (obj(false, k))
+      return (obj(false, false, k))
     end
   end)
 
@@ -115,39 +128,63 @@ Project.dependsOn = function(self, name)
   self.dependencies[name] = sys.getOrLoadProject(name)
 end
 
-local getBObjList = function(bobjs, public, BObj)
-  local map = public and bobjs.public or bobjs.private
-  local list = map[BObj]
+local getBObjList = function(bobjs, BObj)
+  local list = bobjs[BObj]
   if not list then
     list = List{}
-    map[BObj] = list
+    bobjs[BObj] = list
   end
   return list
 end
 
-Project.reportBuildObject = function(self, public, BObj, ...)
+Project.reportBuildObject = function(self, pub, ext, BObj, ...)
   local bo = BObj.new(...)
-  getBObjList(self.bobjs, public, BObj)
-    :push(bo)
+  bo:assignMount(self.wdir.."/build/"..sys.cfg.mode)
+  local map
+  if pub then
+    if ext then
+      map = self.bobjs.external.public
+    else
+      map = self.bobjs.public
+    end
+  else
+    if ext then
+      map = self.bobjs.external.private
+    else
+      map = self.bobjs.private
+    end
+  end
+  getBObjList(map, BObj):push(bo)
 end
 
-Project.reportDefines = function(self, public, defines)
-  local arr = public and self.defines.public or self.defines.private
+--- Track an already existing build object.
+Project.trackBuildObject = function(self, public, bobj)
+  local map = public and self.bobjs.public or self.bobjs.private
+  getBObjList(map, Type.getTypeOf(bobj)):push(bobj)
+end
+
+Project.reportDefines = function(self, pub, defines)
+  local arr = pub and self.defines.public or self.defines.private
   for k,v in pairs(defines) do
-    arr:push { k, v }
+    arr:push { k, tostring(v) }
   end
 end
 
 local function getBuildObjects(bobjs, BObj, list)
-  util.dumpValue(BObj, 3)
   if bobj.BuildObject:isTypeOf(BObj) then
-    list:pushList(getBObjList(bobjs, BObj))
+    if type(list) == "function" then
+      for bobj in getBObjList(bobjs, BObj):each() do
+        list(bobj)
+      end
+    else
+      list:pushList(getBObjList(bobjs, BObj))
+    end
   elseif List:isTypeOf(BObj) then
     for bo in BObj:each() do
       getBuildObjects(bobjs, bo, list)
     end
   else
-    for _,bo in ipairs(bobjs) do
+    for _,bo in ipairs(BObj) do
       getBuildObjects(bobjs, bo, list)
     end
   end
@@ -159,15 +196,7 @@ end
 
 Project.getPublicBuildObjects = function(self, BObj, list)
   getBuildObjects(self.bobjs.public, BObj, list)
-
-  local makefiles = self.bobjs.private[bobj.Makefile]
-  if makefiles then
-    for makefile in makefiles:each() do
-      local bobjs = makefile.bobjs[BObj]
-      if bobjs then
-      end
-    end
-  end
+  getBuildObjects(self.bobjs.external.public, BObj, list)
 end
 
 Project.getAllBuildObjects = function(self, BObj, list)
@@ -176,8 +205,11 @@ Project.getAllBuildObjects = function(self, BObj, list)
 end
 
 Project.gatherPublicBuildObjects = function(self, BObj, list)
-  
+  for _,proj in pairs(self.dependencies) do
+    proj:gatherPublicBuildObjects(BObj, list)
+  end
 
+  self:getPublicBuildObjects(BObj, list)
 end
 
 --- Gathers all public and private build objects of the given type 'BObj'
@@ -186,10 +218,51 @@ end
 ---
 --- As a special case, any dependency that specifies a makefile build object 
 --- also provides any objects specified in it.
-Project.gatherBuildObjects = function(self, BObj)
-  local o = List{}
-  
-  
+Project.gatherBuildObjects = function(self, BObj, list)
+  for _,proj in pairs(self.dependencies) do
+    proj:gatherPublicBuildObjects(BObj, list)
+  end
+
+  self:getAllBuildObjects(BObj, list)
 end
+
+Project.getPublicDefines = function(self, list)
+  for define in self.defines.public:each() do
+    list:push(define)
+  end
+end 
+
+Project.getDefines = function(self, list)
+  for define in self.defines.private:each() do
+    list:push(define)
+  end
+end
+
+Project.gatherPublicDefines = function(self, list)
+  for _,proj in pairs(self.dependencies) do
+    proj:gatherPublicDefines(list)
+  end
+  self:getPublicDefines(list)
+end
+
+Project.gatherDefines = function(self, list)
+  self:gatherPublicDefines(list)
+  self:getDefines(list)
+end
+
+Project.formOutputPath = function(self, obj)
+  return self.wdir.."/build/"..sys.cfg.mode.."/"..obj
+end
+
+Project.gatherDirs = function(self, dirname, list)
+  for _,proj in pairs(self.dependencies) do
+    proj:gatherDirs(dirname, list)
+  end
+  
+  local dir = self.dirs[dirname]
+  if dir then
+    list:push(self.wdir.."/"..dirname)
+  end
+end 
 
 return Project

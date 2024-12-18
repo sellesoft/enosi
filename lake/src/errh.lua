@@ -3,6 +3,6 @@
 ---
 
 return function(obj)
-  debug.traceback()
+  print(debug.traceback())
   return obj
 end

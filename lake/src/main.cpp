@@ -34,8 +34,8 @@ int main(const int argc, const char* argv[])
   {
     using enum Log::Dest::Flag;
     iro::log.newDestination("stdout"_str, &fs::stdout, 
-        //  AllowColor 
-         ShowCategoryName 
+          AllowColor 
+        | ShowCategoryName 
         | ShowVerbosity 
         | PadVerbosity 
         | TrackLongestName
@@ -44,6 +44,8 @@ int main(const int argc, const char* argv[])
     if (notnil(f))
       iro::log.newDestination("templog"_str, &f, {});
   }
+
+  Lake lake;
 
   if (!lake.init(argv, argc))
     return 1;

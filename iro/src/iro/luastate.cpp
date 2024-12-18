@@ -514,10 +514,14 @@ static void writeLuaValue(LuaState* L, io::IO* dest, int idx)
     io::format(dest, "<lua function>");
     break;
   case LUA_TUSERDATA:
-    io::format(dest, "<lua userdata>");
+    io::formatv(dest, "<lua userdata ", L->tostring(idx), ">");
     break;
   case LUA_TLIGHTUSERDATA:
-    io::format(dest, "<lua lightuserdata>");
+    L->getglobal("tostring");
+    L->pushvalue(idx);
+    L->pcall(1, 1);
+    io::formatv(dest, "<", L->tostring(), ">");
+    L->pop();
     break;
   default:
     io::formatv(dest, 

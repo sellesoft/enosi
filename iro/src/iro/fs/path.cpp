@@ -135,6 +135,13 @@ String Path::removeBasename(String path)
 
 /* ------------------------------------------------------------------------------------------------
  */
+TimePoint Path::modtime(String path)
+{
+  return FileInfo::of(path).last_modified_time;
+}
+
+/* ------------------------------------------------------------------------------------------------
+ */
 b8 Path::exists(String path)
 {
   return platform::fileExists(path);

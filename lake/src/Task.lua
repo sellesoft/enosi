@@ -2,15 +2,16 @@
 --- Definition of Tasks in lake.
 ---
 
-local List = require "iro.List"
-local Type = require "iro.Type"
+local List = require "list"
+local Type = require "Type"
 local ffi = require "ffi"
+local co = require "coroutine"
 local C = ffi.C
 
 ffi.cdef
 [[
 typedef struct Task Task;
-typedefstruct Lake Lake;
+typedef struct Lake Lake;
 
 Task* lua__createLuaTask(Lake* lake, String name);
 
@@ -18,7 +19,7 @@ void lua__setTaskHasCond(Task* task);
 void lua__setTaskHasRecipe(Task* task);
 ]]
 
-local strtype = ffi.typeof("str")
+local strtype = ffi.typeof("String")
 local makeStr = function(s)
   if not s then
     print(debug.traceback())
@@ -51,25 +52,28 @@ local Task = Type.make()
 Task.new = function(lake, name)
   local o = {}
   o.name = name
-  o.handle = C.lua__createLuaTask(lake.handle, makeStr(name))
+  o.handle = C.lua__createTask(lake.handle, makeStr(name))
+  o.cb = {}
   lake.trackTask(o)
   return setmetatable(o, Task)
 end
 
 --- Declares the given Task(s) as prerequisites of this Task.
----@param ... Task
+---@param ... Task | iro.List
 ---@return self
 Task.dependsOn = function(self, ...)
   for task in List{...}:each() do
     if "table" == type(task) then
       if Task:isTypeOf(task) then
-        C.lua__makeDep(task.handle, self.handle)
-      elseif List:isTypeOf(task) then
+        C.lua__makeDep(self.handle, task.handle)
+      else 
+        -- Treat the table as if its an array of tasks.
+        if not List:isTypeOf(task) then
+          task = List(task)
+        end
         for elem in task:each() do
           self:dependsOn(elem)
         end
-      else
-        error("unhandled table type passed to dependsOn")
       end
     else
       error("Task.dependsOn expects a typed value")
@@ -89,7 +93,7 @@ Task.cond = function(self, f)
 
   C.lua__setTaskHasCond(self.handle)
 
-  self.cond = f
+  self.cb.cond = f
 
   return self
 end
@@ -104,8 +108,16 @@ Task.recipe = function(self, f)
   
   C.lua__setTaskHasRecipe(self.handle)
 
-  self.recipe = f
+  self.cb.recipe = co.create(f)
 
+  return self
+end
+
+--- Sets the working directory this task's recipe should start in.
+---@param path string
+---@return self
+Task.workingDirectory = function(self, path)
+  C.lua__setTaskRecipeWorkingDir(self.handle, makeStr(path))
   return self
 end
 

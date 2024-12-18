@@ -1,6 +1,7 @@
 local sys = require "build.sys"
 local helpers = require "build.helpers"
 local bobj = require "build.object"
+local List = require "list"
 
 local lpp = sys.getLoadingProject()
 
@@ -10,11 +11,13 @@ for cfile in lake.find("src/**/*.cpp"):each() do
   lpp.report.CppObj(cfile)
 end
 
-for lfile in lake.find("src/**/*.lpp"):each() do
+for lfile in lake.find("src/*.lua"):each() do
   lpp.report.LuaObj(lfile)
 end
 
-lpp.report.Exe("lpp", lpp.bobjs)
+local objs = List{}
+lpp:gatherBuildObjects({bobj.CppObj, bobj.LuaObj}, objs)
+lpp.report.Exe("lpp", objs)
 
 
 

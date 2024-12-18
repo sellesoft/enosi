@@ -15,7 +15,11 @@ local sys = {}
 
 sys.log = log
 
-sys.projects = {}
+sys.projects = 
+{
+  map = {},
+  list = List{},
+}
 
 sys.root = lake.cwd()
 package.path = package.path..";"..sys.root.."/?.lua"
@@ -41,7 +45,7 @@ sys.getLoadingProject = function()
 end
 
 sys.getOrLoadProject = function(name)
-  local existing = sys.projects[name]
+  local existing = sys.projects.map[name]
   if existing then
     return existing
   end
@@ -61,6 +65,13 @@ sys.getOrLoadProject = function(name)
     cycle = cycle.."  "..name.."\n"
     log:fatal("project dependency cycle detected!\n", cycle, "\n")
     error(sys.Error.ProjDepCycle)
+  end
+
+  local return_dir = sys.root
+
+  local loading_proj = load_stack:last()
+  if loading_proj then
+    return_dir = loading_proj.wdir
   end
 
   lake.chdir(sys.root)
@@ -103,23 +114,24 @@ sys.getOrLoadProject = function(name)
 
   load_stack:pop()
 
-  sys.projects[name] = proj
+  sys.projects.map[name] = proj
+  sys.projects.list:push(proj)
 
   log:info("loaded project ", name, "\n")
 
-  if name == "luajit" then
-    util.dumpValue(proj, 8)
+  if name == "iro" then
+    util.dumpValue(proj, 9)
   end
 
+  lake.chdir(return_dir)
 
-  return result
+  return proj
 end
 
 sys.run = function()
   Project = require "build.project"
 
   require "build.driver" .run()
-
 end
 
 return sys

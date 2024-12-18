@@ -20,6 +20,11 @@
 #include "../traits/move.h"
 #include "../traits/scoped.h"
 
+namespace iro
+{
+  struct TimePoint;
+}
+
 namespace iro::fs
 {
 
@@ -66,6 +71,9 @@ struct Path
 
   // Retrieve a String with the basename of the given path removed.
   static String removeBasename(String path);
+
+  // Gets the last modified time of the file at the given path.
+  static TimePoint modtime(String path);
 
   // Compares the modification times of the given paths.
   //  0 is returned if they are equal, 
