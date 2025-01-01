@@ -9,6 +9,7 @@
 		let
 			pkgs = nixpkgs.legacyPackages.x86_64-linux;
       impure-clang = (pkgs.callPackage ./impure-clang.nix {});
+      llvmlib = pkgs.llvmPackages_17.libcxxClang;
 
       shell = pkgs.mkShell
       {
@@ -19,7 +20,9 @@
           nodejs
 					impure-clang
 					clang-tools
-					llvmPackages_17.libcxxClang
+          llvmlib
+          llvmlib.libc.libgcc
+					llvmPackages_17.libllvm
 					gnumake
 					gdb
 					bear
@@ -47,7 +50,7 @@
 					# stuff needed to build llvm
 					cmake
 					ninja
-					# gcc
+					gcc
 					lld
 					stdenv.cc.cc.lib
 
@@ -74,15 +77,26 @@
             xorg.libX11
             xorg.libXrandr
             xorg.libXcursor
-            
           ];
-          # includes = pkgs.lib.concatStrings
-          #   (map (x: x.dev + "/include ") packages);
+          target = llvmlib.libc.libgcc.libgcc;
+          attrs = pkgs.lib.concatMapStrings 
+            (x: "echo "+x.fst+": \""+ (
+              if builtins.typeOf(x.snd) == "set" then
+                "<set>"
+              else if builtins.typeOf(x.snd) == "lambda" then
+               "<lambda>"
+              else
+                toString(x.snd)) + "\"\n")
+            (pkgs.lib.zipLists 
+              (pkgs.lib.attrNames(target)) 
+              (pkgs.lib.attrValues(target)));
         in 
         '' 
           export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${libpath} 
           unset LUA_PATH
           unset LUA_CPATH
+          export NIX_LDFLAGS="$NIX_LDFLAGS -L${llvmlib.libc}/lib"
+          ${attrs}
         '';
 			};
 		in

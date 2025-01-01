@@ -58,9 +58,7 @@ Lexer.skipWhitespaceAndComments = function(self)
       end
     end
 
-    print(scanner.text:sub(scanner.offset))
-
-    local start, stop = scanner:pattern "^--[^\n]*"
+    local start, stop = scanner:pattern "^%-%-[^\n]*"
     if start then
       scanner.offset = stop + 1
     else
@@ -109,6 +107,8 @@ Lexer.nextToken = function(self)
 
   while true do
     self:skipWhitespaceAndComments()
+
+    print(scanner.offset)
 
     local tok = checkToken()
     if tok.kind == Token.Kind.Eof then

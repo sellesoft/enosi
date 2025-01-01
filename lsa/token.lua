@@ -21,10 +21,15 @@ Token.new = function(kind, start, stop)
   return setmetatable(o, Token)
 end
 
+---@class lsa.Token.Kind
 Token.Kind = {}
 
 Token.Kind.__tostring = function(self)
   return self.name
+end
+
+Token.__tostring = function(self)
+  return "Token("..tostring(self.kind)..")"
 end
 
 Token.str_to_kind = {}
@@ -127,6 +132,7 @@ kinds
     .Else "else"
     .End "end"
     .For "for"
+    .While "while"
     .Do "do"
     .Function "function"
     .Local "local"
