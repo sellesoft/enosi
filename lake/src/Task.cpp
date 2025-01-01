@@ -60,8 +60,8 @@ b8 Task::needRunRecipe(Lake& lake)
 {
   if (!flags.test(Flag::HasCond))
     return false;
-  if (flags.test(Flag::PrereqJustBuilt))
-    return true;
+  // if (flags.test(Flag::PrereqJustBuilt))
+  //   return true;
 
   LuaState& lua = lake.lua;
 
@@ -210,6 +210,8 @@ Task::RecipeResult Task::resumeRecipe(Lake& lake)
     return RecipeResult::Error;
   }
 
+  defer { lua.pop(2); };
+
   if (!lua.toboolean(-2))
   {
     ERROR(lua.tostring(), "\n");
@@ -220,8 +222,6 @@ Task::RecipeResult Task::resumeRecipe(Lake& lake)
   // yields so we can restore it next time we resume.
   recipe_wdir.close();
   recipe_wdir = fs::Dir::open("."_str);
-
-  defer { lua.pop(2); };
 
   if (lua.isnil())
     return RecipeResult::Finished;

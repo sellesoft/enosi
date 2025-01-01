@@ -71,7 +71,7 @@ sys.getOrLoadProject = function(name)
 
   local loading_proj = load_stack:last()
   if loading_proj then
-    return_dir = loading_proj.wdir
+    return_dir = loading_proj.root
   end
 
   lake.chdir(sys.root)
@@ -120,7 +120,7 @@ sys.getOrLoadProject = function(name)
   log:info("loaded project ", name, "\n")
 
   if name == "iro" then
-    util.dumpValue(proj, 9)
+    -- util.dumpValue(proj, 9)
   end
 
   lake.chdir(return_dir)

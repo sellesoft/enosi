@@ -27,9 +27,9 @@ using namespace iro;
 
 extern "C"
 {
-#include "lua.h"
-#include "lualib.h"
-#include "lauxlib.h"
+#include "luajit/lua.h"
+#include "luajit/lualib.h"
+#include "luajit/lauxlib.h"
 
 int lua__cwd(lua_State* L);
 int lua__canonicalizePath(lua_State* L);
@@ -117,6 +117,7 @@ b8 Lake::init(const char** argv, int argc, mem::Allocator* allocator)
 
   // TODO(sushi) also search for lakefile with no extension
   initpath = nil;
+  max_jobs_set_on_cli = false;
   if (!processArgv(argv, argc, &initpath))
     return false;
   b8 resolved = resolve(initpath, "lakefile.lua"_str);
@@ -213,7 +214,11 @@ b8 processMaxJobsArg(Lake* lake, ArgIter* iter)
 
 /* ----------------------------------------------------------------------------
  */
-b8 processArgDoubleDash(Lake* lake, String arg, String* initfile, ArgIter* iter)
+b8 processArgDoubleDash(
+    Lake* lake, 
+    String arg, 
+    String* initfile, 
+    ArgIter* iter)
 {
   switch (arg.hash())
   {
@@ -263,7 +268,11 @@ b8 processArgDoubleDash(Lake* lake, String arg, String* initfile, ArgIter* iter)
 
 /* ----------------------------------------------------------------------------
  */
-b8 processArgSingleDash(Lake* lake, String arg, String* initfile, ArgIter* iter)
+b8 processArgSingleDash(
+    Lake* lake, 
+    String arg, 
+    String* initfile, 
+    ArgIter* iter)
 {
   switch (arg.hash())
   {
@@ -349,6 +358,17 @@ b8 Lake::run()
 
   INFO("beginning build loop.\n");
 
+  for (Task& task : tasks)
+  {
+    INFO("task ", task.name, ":\n");
+    
+    INFO("  prereqs:\n");
+    for (Task& prereq : task.prerequisites)
+    {
+      INFO("    ", prereq.name, "\n");
+    }
+  }
+
   TaskList build_queue;
   if (!build_queue.init())
     return ERROR("failed to initialize build queue\n");
@@ -361,18 +381,17 @@ b8 Lake::run()
   {
     if (task.isLeaf())
       addLeaf(&task);
-
   }
     
   for (u64 build_pass = 0, recipe_pass = 0;;)
   {
-    if (leaves.isEmpty())
+    if (leaves.isEmpty() && active_recipes.isEmpty())
     {
       DEBUG("no leaves, we must be done\n");
       break;
     }
 
-    if (!leaves.isEmpty() && max_jobs > active_recipe_count)
+    while (!leaves.isEmpty() && max_jobs > active_recipe_count)
     {
       Task* task = leaves.front();
 
@@ -393,7 +412,8 @@ b8 Lake::run()
       }
     }
 
-    while (max_jobs <= active_recipe_count)
+    while (max_jobs <= active_recipe_count || 
+          (active_recipe_count && leaves.isEmpty()))
     {
       TaskList::Node* task_node = active_recipes.head;
       for (;task_node;)
@@ -427,114 +447,6 @@ b8 Lake::run()
     }
   }
 
-#if 0
-  for (u64 build_pass = 0, recipe_pass = 0;;)
-  {
-    if (!build_queue.isEmpty() && max_jobs - active_recipe_count)
-    {
-      build_pass += 1;
-
-      if (build_pass % 1000 == 0)
-        TRACE("Entering build pass ", build_pass, "\n");
-      SCOPED_INDENT;
-
-      while (!build_queue.isEmpty() && max_jobs - active_recipe_count)
-      {
-        Target* target = build_queue.front();
-
-        INFO("Checking target '", target->name(), "' from build queue.\n"); 
-        SCOPED_INDENT;
-
-        if (target->needsBuilt())
-        {
-          INFO("Target needs built, adding to active recipes list\n");
-          target->active_recipe_node = active_recipes.pushHead(target);
-          active_recipe_count += 1;
-          build_queue.remove(target->build_node);
-        }
-        else
-        {
-          INFO("Target does not need built, removing from build queue and "
-              "decrementing all dependents unsatified prereq counts.\n");
-          SCOPED_INDENT;
-          build_queue.remove(target->build_node);
-          target->updateDependents(build_queue, false);
-        }
-      }
-    }
-    
-    if (active_recipes.isEmpty() && build_queue.isEmpty())
-    {
-      INFO("Active recipe list and build queue are empty, we must be "
-           "finished.\n");
-      break;
-    }
-
-    recipe_pass += 1;
-
-    if (logger.verbosity == Logger::Verbosity::Trace 
-        && recipe_pass % 10000 == 0)
-    {
-      TRACE("Entering recipe pass ", recipe_pass, "\n",
-            "Active recipes are: \n");
-      SCOPED_INDENT; 
-
-      for (auto& t :active_recipes)
-      {
-        TRACE(t.name(), "\n");
-      }
-
-      TRACE("active count: ", active_recipe_count, "\n"
-            "build queue empty? ", build_queue.isEmpty()? "yes" : "no", "\n");
-    }
-
-    for (auto& t : active_recipes)
-    {
-      switch (t.resumeRecipe(lua))
-      {
-        case Target::RecipeResult::Finished: 
-          {
-            TRACE("Target '", t.name(), "'s recipe has finished.\n");
-            SCOPED_INDENT;
-
-            active_recipes.remove(t.active_recipe_node);
-            t.updateDependents(build_queue, true);
-            active_recipe_count -= 1;
-          } 
-          break;
-
-        case Target::RecipeResult::Error:
-          ERROR("recipe error\n");
-          return false;
-
-        case Target::RecipeResult::InProgress:
-          ;
-      }
-
-      // Very naive way to try and prevent lake from constantly contesting for 
-      // a thread when running a recipe that spawns several processes itself. 
-      // Eg. when building llvm the recipe leaves it up to the generated build 
-      // system stuff to run multiple jobs. During this lake will be constantly 
-      // polling the process for output/termination which wastes an entire 
-      // thread of execution that whatever is building llvm could be using.
-      //
-      // This is a really silly way to handle it and ideally later on should be 
-      // adjusted based on how long something is taking. Like, we can time how 
-      // long the current recipes have been running for and scale how often we 
-      // poll based on that. This would work well to avoid my primary concern 
-      // with rate limiting the polling: accurately (sorta) tracking how long 
-      // it takes for a recipe to complete. As long as we scale this number to 
-      // be negligible compared to the total time the recipe has been running 
-      // for, it shouldn't matter. 
-      //
-      // So,
-      // TODO(sushi) setup internal target recipe timers and then fix this 
-      //             issue
-      platform::sleep(TimeSpan::fromMicroseconds(3));
-    }
-  }
-#endif
-
   return true;
 }
 
@@ -545,31 +457,6 @@ void Lake::addLeaf(Task* task)
   DEBUG("new leaf: ", task->name, "\n");
   leaves.pushTail(task);
 }
-
-#if LAKE_DEBUG
-
-void assertGroup(Target* target)
-{
-  if (target->kind != Target::Kind::Group)
-  {
-    FATAL("Target '", (void*)target, "' failed group assertion\n");
-    exit(1);
-  }
-}
-
-void assertSingle(Target* target)
-{
-  if (target->kind != Target::Kind::Single)
-  {
-    FATAL("Target '", (void*)target, "' failed single assertion\n");
-    exit(1);
-  }
-}
-
-#else
-void assertGroup(Target*){}
-void assertSingle(Target*){}
-#endif
 
 /* ============================================================================
  *  Implementation of the api used in the lua lake module.
@@ -738,6 +625,7 @@ b8 lua__processCheck(ActiveProcess* proc, s32* out_exit_code)
     *out_exit_code = 1;
     return true;
   }
+
   return false;
 }
 

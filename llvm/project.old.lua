@@ -1,41 +1,16 @@
-local sys = require "build.sys"
-local bobj = require "build.object"
-local List = require "list"
+local enosi = require "enosi"
+local proj = enosi.thisProject()
+
 local Twine = require "twine"
-
-local llvm = sys.getLoadingProject()
-
-llvm.is_external = true
-
-local mode = sys.cfg.llvm and sys.cfg.llvm.mode or "Release"
-
-local llvm_builddir = llvm.root.."/llvm_build/"..mode
-
-lake.mkdir(llvm_builddir, {make_parents = true})
-
-llvm.report.dir.include 
-{
-  -- Include these folders directly as opposed to trying to reorganize them
-  -- elsewhere as llvm *probably* does some crazy stuff that breaks simply 
-  -- hard linking to .h files. Maybe soft linking would work? Idk I dont even
-  -- have linking setup yet so come back to this when I do.
-  direct = 
-  {
-    llvm.root.."/src/clang/include",
-    llvm.root.."/src/llvm/include",
-    llvm_builddir.."/include",
-    llvm_builddir.."/tools/clang/include",
-  }
-}
+local List = require "list"
 
 -- NOTE(sushi) these are NOT in a proper order for linking! 
 --             Currently I am just cheating and using --start/end-group to
 --             avoid having to figure out the proper ordering for all of these
---             libs. From the 10-15 seconds I took to look at MSVC's link 
---             options it doesnt seem like they have an equivalent, so I will 
---             need to take time to figure this out.. probably just involves 
---             looking at the makefiles that CMake generates for clang or 
---             maybe clang-check or whatever.
+--             libs. From the 10-15 seconds I took to look at MSVC's link options
+--             it doesnt seem like they have an equivalent, so I will need to take
+--             time to figure this out.. probably just involves looking at the makefiles
+--             that CMake generates for clang or maybe clang-check or whatever.
 -- This list can be generated from llvm/getlibs.sh
 local libs = Twine.new
   "LLVMBPFCodeGen"
@@ -287,16 +262,92 @@ local libs = Twine.new
   "LLVMInterpreter"
   "LLVMMSP430Info"
 
-local libbobjs = List{}
+local cwd = lake.cwd()
 
-for lib in libs:each() do
-  libbobjs:push(bobj.StaticLib(lib))
-end
+local user = enosi.getUser()
+user.llvm = user.llvm or {}
 
-llvm.report.dir.lib
-{
-  from = llvm_builddir.."/lib",
-  filters = libbobjs
-}
+local mode = user.llvm.mode or "Release"
 
-llvm.report.CMake(llvm.root.."/src/llvm", llvm_builddir)
+local builddir = cwd.."/build/"..mode.."/"
+lake.mkdir(builddir, {make_parents = true})
+
+local libdir = builddir.."lib"
+proj:reportLibDir(libdir)
+
+local libsfull = libs:map(function(l)
+  return libdir.."/"..enosi.getStaticLibName(l)
+end)
+
+proj:reportIncludeDir(
+  cwd.."/src/clang/include",
+  cwd.."/src/llvm/include",
+  builddir.."/include",
+  builddir.."/tools/clang/include")
+
+libs:each(function(l) proj:reportStaticLib(l) end)
+
+local exedir = builddir.."bin"
+proj:reportExecutable(exedir.."/clang++")
+
+local reset = "\027[0m"
+local green = "\027[0;32m"
+local blue  = "\027[0;34m"
+local red   = "\027[0;31m"
+
+local CMakeCache = lake.target(builddir.."/CMakeCache.txt")
+
+lake.targets(libsfull)
+  :dependsOn(CMakeCache)
+  :recipe(function()
+    lake.chdir(builddir)
+
+    local result = lake.cmd(
+      { "make", "-j6" }, { onRead = io.write })
+
+    if result ~= 0 then
+      io.write(red, "building llvm failed\n", reset)
+    end
+  end)
+
+CMakeCache
+  :dependsOn(proj.path)
+  :recipe(function()
+    lake.chdir(builddir)
+
+    local args = List
+    {
+			"-DLLVM_CCACHE_BUILD=ON",
+			"-DLLVM_OPTIMIZED_TABLEGEN=ON",
+			"-DLLVM_ENABLE_PROJECTS=clang;lld",
+			"-DCMAKE_BUILD_TYPE="..mode,
+			"-DLLVM_USE_LINKER="..(user.llvm.linker or "lld"),
+      -- TODO(sushi) job pooling is apparently only supported when using 
+      --             Ninja, but Ninja was giving me problems with rebuilding
+      --             everything everytime I changed something so try using it
+      --             again later so this works.
+			"-DLLVM_PARALLEL_COMPILE_JOBS="..
+        (user.llvm.max_compile_jobs or lake.getMaxJobs()),
+			"-DLLVM_PARALLEL_LINK_JOBS="..
+        (user.llvm.max_link_jobs or lake.getMaxJobs()),
+			"-DLLVM_PARALLEL_TABLEGEN_JOBS="..
+        (user.llvm.max_tablegen_jobs or lake.getMaxJobs())
+    }
+
+    if user.llvm.shared then
+      args:push "-DBUILD_SHARED_LIBS=OFF"
+    end
+
+    local result = lake.cmd(
+      { "cmake", "-G", "Unix Makefiles", cwd.."/src/llvm", args },
+      { onRead = io.write })
+
+    if result ~= 0 then
+      io.write(red, "configuring cmake for llvm failed\n", reset)
+      return
+    end
+
+    lake.touch(CMakeCache.path)
+  end)
+
+

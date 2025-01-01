@@ -7,9 +7,9 @@
 
 extern "C"
 {
-#include "lua.h"
-#include "lualib.h"
-#include "lauxlib.h"
+#include "luajit/lua.h"
+#include "luajit/lualib.h"
+#include "luajit/lauxlib.h"
 };
 
 #undef stdin

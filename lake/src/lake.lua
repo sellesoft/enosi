@@ -260,6 +260,7 @@ end
 ---@return boolean
 lake.chdir = function(path)
   return 0 ~= C.lua__chdir(makeStr(path))
+   or error()
 end
 
 -- * --------------------------------------------------------------------------
@@ -403,7 +404,7 @@ end
 lake.cmd = function(args, options)
   -- check if were in a recipe and yield the coroutine 
   -- if so.
-  local in_recipe = 0 ~= C.lua__inRecipe(lake.handle)
+  local in_recipe = true
 
   args = lake.flatten(args, function(x, mt)
     if mt == Target then
@@ -496,9 +497,7 @@ lake.cmd = function(args, options)
       -- just keep blocking 
       -- TODO(sushi) make the stdout/stderr pipes blocking 
       --             if this is called outside of a coroutine/recipe
-      if in_recipe then
-        co.yield(false)
-      end
+      co.yield(false)
     end
   end
 end

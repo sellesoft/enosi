@@ -21,9 +21,10 @@ local object = {}
 
 --- The base of all build objects.
 ---@class object.BuildObject : iro.Type
---- The directory which this build object comes from, eg. the project's 
---- root.
----@field mount string
+--- The project this build object comes from.
+---@field proj build.Project
+--- The lake Task that will build this object, if any.
+---@field task Task?
 --- Set when this build object is not intended to be built as its expected 
 --- to come from elsewhere. This is mostly useful when dealing with things 
 --- that are built via a makefile or cmake. This just prevents the driver
@@ -32,25 +33,12 @@ local object = {}
 local BuildObject = Type.make()
 object.BuildObject = BuildObject
 
---- Indicates if this build object can be built using some command. We assume
---- most will be, but some objects, such as External objects, do not need 
---- to be built.
-BuildObject.hasCmd = function()
-  return true
-end
-
 BuildObject.__tostring = function(self)
   return "BuildObject("..self.bobj_name..")"
 end
 
-BuildObject.assignMount = function(self, mount)
-  if not self.mount then
-    self.mount = mount
-  end
-end
-
-BuildObject.formAbsolutePath = function(self)
-  return self.mount.."/"..self:getTargetName()
+BuildObject.getOutputPath = function(self)
+  return self.proj:getBuildDir().."/"..self:getTargetName()
 end
 
 object.BuildObject.list = List{}
@@ -67,19 +55,6 @@ setmetatable(object,
     v.bobj_name = k
 
     object.BuildObject.list:push(v)
-
-    -- Automatically set the Cmd subtype on objects based on name, if they 
-    -- can be built.
-
-    -- if v.hasCmd() then
-    --   v.Cmd = cmd[k]
-    --   if not v.Cmd then
-    --     error(
-    --       "no corresponding Cmd could be found for build object "..k.."\n"..
-    --       "  an associated Cmd must exist for all build objects defined in\n"..
-    --       "  build/objects.lua (eg. one defined in build/commands.lua)\n")
-    --   end
-    -- end
   end
 })
 
@@ -88,7 +63,7 @@ setmetatable(object,
 --- the obj file comes from (so we know how to build it). This class should
 --- be used to generically determine if a build object is an obj file, eg.
 ---
----  if bobj.is(object.Obj) then
+---  if bobj:is(object.Obj) then
 ---    ...
 ---  end
 ---
@@ -117,11 +92,17 @@ CppObj.new = function(src)
   return setmetatable(o, CppObj)
 end
 
+CppObj.declareTask = function(self)
+  self.task = 
+    lake.task(self:getOutputPath())
+      :workingDirectory(self.proj.root)
+end
+
 ---@param cmd cmd.CppObj
-CppObj.makeTask = function(self, cmd, proj)
-  local cfile = proj.wdir.."/"..self.src
-  local ofile = proj:formOutputPath(self.src..".o")
-  local dfile = proj:formOutputPath(self.src..".d")
+CppObj.defineTask = function(self, cmd)
+  local cfile = self.proj.root.."/"..self.src
+  local ofile = self.proj:getBuildDir().."/"..self.src..".o"
+  local dfile = self.proj:getBuildDir().."/"..self.src..".d"
   local cpp_cmd = cmd:complete(cfile, ofile)
 
   lake.mkdir(ofile:match("(.*)/.*"), { make_parents=true })
@@ -135,14 +116,15 @@ CppObj.makeTask = function(self, cmd, proj)
 
   local dep_cmd = build.cmd.CppDeps.new(dep_params):complete(self.src)
 
-  -- TODO(sushi) there doesn't need to be a cpp task, we can just check it 
-  --             manually in the obj/dep conds
   local cpp_task = lake.task(cfile)
-  local obj_task = lake.task(ofile)
+  local obj_task = self.task or error("nil CppObj.task")
   local dep_task = lake.task(dfile)
 
-  obj_task:dependsOn(cpp_task):workingDirectory(proj.wdir)
-  dep_task:dependsOn(cpp_task):workingDirectory(proj.wdir)
+  obj_task:dependsOn(cpp_task)
+  dep_task:dependsOn(cpp_task)
+
+  obj_task:workingDirectory(self.proj.root)
+  dep_task:workingDirectory(self.proj.root)
 
   local depfile = io.open(dfile, "r")
   if depfile then
@@ -163,7 +145,9 @@ CppObj.makeTask = function(self, cmd, proj)
         local target_modtime = lake.modtime(task.name)
         for prereq in prereqs:each() do
           if lake.modtime(prereq) > target_modtime then
-            io.write(prereq, " is newer than ", task.name, "\n")
+            local rr = helpers.makeRootRelativePath(sys.root, prereq)
+            local tr = helpers.makeRootRelativePath(sys.root, task.name)
+            io.write(rr, " is newer than ", tr, "\n")
             return true
           end
         end
@@ -179,6 +163,7 @@ CppObj.makeTask = function(self, cmd, proj)
       })
       if result ~= 0 then
         io.write("failed to compile ", ofile, ":\n", output:get(), "\n")
+        error()
       else
         io.write(
           "compiled ", helpers.makeRootRelativePath(sys.root, ofile), "\n")
@@ -206,7 +191,7 @@ CppObj.makeTask = function(self, cmd, proj)
         then
           local fullpath = f
           if f:sub(1,1) ~= "/" then
-            fullpath = sys.root.."/"..f
+            fullpath = self.proj.root.."/"..f
           end
           fullpath = fullpath:gsub("/[^/]-/%.%.", "")
           depfile:write(fullpath, "\n")
@@ -230,12 +215,18 @@ LuaObj.new = function(src)
   return setmetatable(o, LuaObj)
 end
 
-LuaObj.makeTask = function(self, cmd, proj)
-  local out = proj:formOutputPath(self.src..".o")
+LuaObj.declareTask = function(self)
+  self.task = 
+    lake.task(self:getOutputPath())
+      :workingDirectory(self.proj.root)
+end
+
+LuaObj.defineTask = function(self, cmd)
+  local out = self.task.name
   lake.mkdir(helpers.getPathDirname(out), { make_parents = true })
   local comp = cmd:complete(self.src, out)
 
-  lake.task(out)
+  self.task
     :cond(function()
       if not lake.pathExists(out) then
         return true
@@ -258,11 +249,10 @@ LuaObj.makeTask = function(self, cmd, proj)
           "compiled ", helpers.makeRootRelativePath(sys.root, out), "\n")
       end
     end)
-    :workingDirectory(proj.wdir)
 end
 
 --- An executable built from some collection of object files.
----@class object.Exe
+---@class object.Exe : object.BuildObject
 --- The name of the executable.
 ---@field name string
 --- The object files used to build the executable.
@@ -281,26 +271,52 @@ Exe.getTargetName = function(self)
   return self.name
 end
 
----@param cmd cmd.Exe
-Exe.makeTask = function(self, cmd, proj)
-  local out = proj:formOutputPath(self.name)
+Exe.declareTask = function(self)
+  self.task = 
+    lake.task(self:getOutputPath())
+      :workingDirectory(self.proj.root)
+end
 
+Exe.defineTask = function(self)
+  local out = self:getOutputPath()
+
+  ---@type cmd.Exe.Params | {}
+  local params = {}
+
+  params.linker = sys.cfg.cpp.linker
+
+  params.libdirs = List{}
+  self.proj:gatherDirs("lib",params.libdirs)
+
+  params.static_libs = List{}
+  self.proj:gatherBuildObjects(object.StaticLib, function(bobj)
+    self.task:dependsOn(bobj.task)
+    params.static_libs:push(bobj.name)
+  end)
+
+  params.shared_libs = List{}
+  self.proj:gatherBuildObjects(object.SharedLib, function(bobj)
+    self.task:dependsOn(bobj.task)
+    params.shared_libs:push(bobj.name)
+  end)
+
+  local cmd = build.cmd.Exe.new(params)
+
+  local obj_tasks = List{}
   local objs = List{}
   for obj in self.objs:each() do
-    objs:push(obj:formAbsolutePath())
+    objs:push(obj:getOutputPath())
+    if obj.task then
+      obj_tasks:push(obj.task)
+    else
+      sys.log:warn("exe obj '",tostring(obj),"' does not have a task set!\n")
+    end
   end
 
   local exe_cmd = cmd:complete(objs, out)
 
-  local fin = ""
-  for part in lake.flatten(exe_cmd):each() do
-    fin = fin.."\n"..part
-  end 
-  print(fin)
-
-  lake.task(out)
-    :dependsOn(self.objs)
-    :workingDirectory(proj.wdir)
+self.task
+    :dependsOn(obj_tasks)
     :cond(function(prereqs)
       if not lake.pathExists(out) then
         return true
@@ -386,28 +402,6 @@ SharedLib.getTargetName = function(self)
   end
 end
 
---- A build object that is expected to exist on the system.
----@class object.External : object.BuildObject
-local External = BuildObject:derive()
-
-External.hasCmd = function()
-  return false
-end
-
-object.External = External
-
----@class object.ExternalSharedLib : object.External
-local ExternalSharedLib = External:derive()
-object.ExternalSharedLib = ExternalSharedLib
-
----@param name string
----@return object.ExternalSharedLib
-ExternalSharedLib.new = function(name)
-  local o = {}
-  o.name = name
-  return setmetatable(o, ExternalSharedLib)
-end
-
 --- A special build object that specifies a makefile that needs to be run.
 --- This should only be used for compiling external libraries that use 
 --- make for compilation. 
@@ -416,11 +410,104 @@ local Makefile = BuildObject:derive()
 object.Makefile = Makefile
 
 --- The directory make should run in.
----@param wdir string
-Makefile.new = function(wdir)
+---@param root string
+Makefile.new = function(root, cond)
   local o = {}
-  o.wdir = wdir
+  o.root = root
+  o.cond = cond or function()
+    return 0 ~= os.execute "make -q"
+  end
   return setmetatable(o, Makefile)
+end
+
+Makefile.getOutputPath = function()
+  error("getOutputPath should never be called on a Makefile")
+end
+
+Makefile.declareTask = function(self)
+  self.task = 
+    lake.task("make "..self.proj.name)
+      :cond(self.cond)
+      :workingDirectory(self.proj.root.."/"..self.root)
+end
+
+Makefile.defineTask = function(self)
+  self.task
+    :recipe(function()
+      local result = lake.cmd({"make", "-j"}, 
+      {
+        onRead = io.write
+      })
+    end)
+end
+
+--- A special build object that specifies a CMake project thing that needs
+--- to be configured and run.
+---@class object.CMake : object.BuildObject
+--- Path to the configuration file.
+---@field config string
+--- Path where build artifacts should be placed.
+---@field output string
+--- The build mode to be used.
+---@field mode string
+local CMake = BuildObject:derive()
+object.CMake = CMake
+
+--- Path to the configuration file.
+---@param config string
+--- Path where build artifacts should be placed.
+---@param output string
+--- The build mode to be used.
+---@param mode string
+CMake.new = function(config, output, mode)
+  local o = {}
+  o.config = config
+  o.output = output
+  o.mode = mode
+  return setmetatable(o, CMake)
+end
+
+CMake.getOutputPath = function()
+  error("getOutputPath should never be called on a CMake")
+end
+
+CMake.declareTask = function(self)
+  self.task = 
+    lake.task("cmake "..self.output)
+      :workingDirectory(self.output)
+      :cond(function()
+        return lake.pathExists(self.output.."/CMakeCache.txt")
+      end)
+end
+
+
+CMake.defineTask = function(self)
+  self.task:recipe(function()
+    local args = List
+    {
+			"-DLLVM_CCACHE_BUILD=ON",
+			"-DLLVM_OPTIMIZED_TABLEGEN=ON",
+			"-DLLVM_ENABLE_PROJECTS=clang;lld",
+			"-DCMAKE_BUILD_TYPE="..self.mode,
+			"-DLLVM_USE_LINKER=lld", -- TODO(sushi) support for other linkers
+    }
+
+    local result = lake.cmd(
+      { "cmake", "-G", "Unix Makefiles", self.config, args },
+      { onRead = io.write })
+
+    if result ~= 0 then
+      sys.log:error("failed to configure cmake")
+    end
+
+    local result = lake.cmd(
+      { "make", "-j" },
+      { onRead = io.write })
+
+    if result ~= 0 then
+      sys.log:error("failed to run make for cmake project")
+    end
+  end)
 end
 
 return object

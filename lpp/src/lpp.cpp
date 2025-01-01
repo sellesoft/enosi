@@ -21,7 +21,7 @@
 
 extern "C"
 {
-#include "lua.h"
+#include "luajit/lua.h"
 
 int lua__processFile(lua_State* L);
 int lua__getFileFullPathIfExists(lua_State* L);

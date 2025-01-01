@@ -12,6 +12,20 @@ local sys = require "build.sys"
 local bobj = require "build.object"
 local helpers = require "build.helpers"
 
+---@class build.Project
+---@field name string
+--- The root directory of this project.
+---@field root string
+--- Other projects that this one depends on.
+---@field dependencies table
+--- Table of public and private build objects belonging to this project, as 
+--- well as public and private external build objects this project depends on.
+---@field bobjs table
+--- Public and private defines for use when compiling C objects.
+---@field defines table
+--- Auxillary directories this project wants to make, eg. 'include' or 'lib'
+--- dirs.
+---@field dirs table
 local Project = Type.make()
 
 local getBObj = function(k)
@@ -19,14 +33,10 @@ local getBObj = function(k)
     error("no build object named "..k)
 end
 
-local tryQualifiers = function()
-  
-end
-
-Project.new = function(name, wdir)
+Project.new = function(name, root)
   local o = {}
   o.name = name
-  o.wdir = wdir
+  o.root = root
   o.bobjs = 
   {
     private = {},
@@ -44,6 +54,29 @@ Project.new = function(name, wdir)
     public = List{},
   }
   o.dirs = {}
+
+  -- Tasks intended to group the various phases of building a project. 
+  o.tasks = 
+  {
+    -- The 'root' task that all internal build objects created from this 
+    -- project depend on. This task depends on the 'final' task of all of 
+    -- this project's dependencies. 
+    wait_for_deps = lake.task("wait for "..name.." deps"),
+
+    -- Task that depends on all this project's internally build objects.
+    build_internal = lake.task("build "..name.." internal objects"),
+
+    -- Task that depends on the creation of any directory that this project
+    -- specfies. This depends on 'build_internal'.
+    resolve_dirs = lake.task("resolve "..name.." dirs"),
+
+    -- The final task of this project, which its dependents will depend on.
+    final = lake.task("finalize "..name),
+  }
+
+  o.tasks.build_internal:dependsOn(o.tasks.wait_for_deps)
+  o.tasks.resolve_dirs:dependsOn(o.tasks.build_internal)
+  o.tasks.final:dependsOn(o.tasks.resolve_dirs)
 
   o.report = Project.constructReporter(o)
 
@@ -63,12 +96,6 @@ Project.__tostring = function(self)
 end
 
 Project.constructReporter = function(proj)
-  local defines = function(pub, defines)
-    return function()
-      proj:reportDefines(pub, defines)
-    end
-  end
-
   local obj = function(pub, ext, obj)
     if obj == "defines" then
       return function(defines)
@@ -76,7 +103,7 @@ Project.constructReporter = function(proj)
       end
     else
       return function(...)
-        proj:reportBuildObject(pub, ext, getBObj(obj), ...)
+        return (proj:reportBuildObject(pub, ext, getBObj(obj), ...))
       end
     end
   end
@@ -125,7 +152,9 @@ Project.dependsOn = function(self, name)
     return
   end
 
-  self.dependencies[name] = sys.getOrLoadProject(name)
+  local dep = sys.getOrLoadProject(name)
+  self.dependencies[name] = dep
+  self.tasks.wait_for_deps:dependsOn(dep.tasks.final)
 end
 
 local getBObjList = function(bobjs, BObj)
@@ -139,7 +168,14 @@ end
 
 Project.reportBuildObject = function(self, pub, ext, BObj, ...)
   local bo = BObj.new(...)
-  bo:assignMount(self.wdir.."/build/"..sys.cfg.mode)
+  bo.proj = self
+  if bo.declareTask then
+    bo:declareTask()
+    if not ext then
+      self.tasks.build_internal:dependsOn(bo.task)
+      bo.task:dependsOn(self.tasks.wait_for_deps)
+    end
+  end
   local map
   if pub then
     if ext then
@@ -155,6 +191,7 @@ Project.reportBuildObject = function(self, pub, ext, BObj, ...)
     end
   end
   getBObjList(map, BObj):push(bo)
+  return bo
 end
 
 --- Track an already existing build object.
@@ -191,25 +228,33 @@ local function getBuildObjects(bobjs, BObj, list)
 end
 
 Project.getBuildObjects = function(self, BObj, list)
+  list = list or List{}
   getBuildObjects(self.bobjs.private, BObj, list)
+  return list
 end
 
 Project.getPublicBuildObjects = function(self, BObj, list)
+  list = list or List{}
   getBuildObjects(self.bobjs.public, BObj, list)
   getBuildObjects(self.bobjs.external.public, BObj, list)
+  return list
 end
 
 Project.getAllBuildObjects = function(self, BObj, list)
+  list = list or List{}
   self:getBuildObjects(BObj, list)
   self:getPublicBuildObjects(BObj, list)
+  return list
 end
 
 Project.gatherPublicBuildObjects = function(self, BObj, list)
+  list = list or List{}
   for _,proj in pairs(self.dependencies) do
     proj:gatherPublicBuildObjects(BObj, list)
   end
 
   self:getPublicBuildObjects(BObj, list)
+  return list
 end
 
 --- Gathers all public and private build objects of the given type 'BObj'
@@ -219,50 +264,104 @@ end
 --- As a special case, any dependency that specifies a makefile build object 
 --- also provides any objects specified in it.
 Project.gatherBuildObjects = function(self, BObj, list)
+  list = list or List{}
   for _,proj in pairs(self.dependencies) do
     proj:gatherPublicBuildObjects(BObj, list)
   end
 
   self:getAllBuildObjects(BObj, list)
+  return list
 end
 
 Project.getPublicDefines = function(self, list)
+  list = list or List{}
   for define in self.defines.public:each() do
     list:push(define)
   end
+  return list
 end 
 
 Project.getDefines = function(self, list)
+  list = list or List{}
   for define in self.defines.private:each() do
     list:push(define)
   end
+  return list
 end
 
 Project.gatherPublicDefines = function(self, list)
+  list = list or List{}
   for _,proj in pairs(self.dependencies) do
     proj:gatherPublicDefines(list)
   end
   self:getPublicDefines(list)
+  return list
 end
 
 Project.gatherDefines = function(self, list)
+  list = list or List{}
   self:gatherPublicDefines(list)
   self:getDefines(list)
+  return list
 end
 
 Project.formOutputPath = function(self, obj)
-  return self.wdir.."/build/"..sys.cfg.mode.."/"..obj
+  return self.root.."/build/"..sys.cfg.mode.."/"..obj
+end
+
+--- Attempts to get an absolute path to an auxillary dir for this project.
+--- If the project did not specify the given dir, then nil is returned.
+Project.getAuxDirPath = function(self, name)
+  if self.dirs[name] then
+    return self:getBuildRootDir().."/"..name
+  end
 end
 
 Project.gatherDirs = function(self, dirname, list)
+  list = list or List{}
   for _,proj in pairs(self.dependencies) do
     proj:gatherDirs(dirname, list)
   end
-  
-  local dir = self.dirs[dirname]
+
+  local dir = self:getAuxDirPath(dirname)
   if dir then
-    list:push(self.wdir.."/"..dirname)
+    if dir.direct then
+      for direct in dir.direct:each() do
+        list:push(direct)
+      end
+    else
+      list:push(dir)
+    end
   end
+  return list
 end 
+
+--- Forms a path to this project's build root.
+---@return string
+Project.getBuildRootDir = function(self)
+  return self.root.."/build"
+end
+
+--- Forms a path to the build directory used for this project in the currently
+--- selected build mode.
+Project.getBuildDir = function(self)
+  return self:getBuildRootDir().."/"..sys.cfg.mode
+end
+
+--- Cleans all build artifacts generated by this project.
+---
+--- For all projects this will recursively delete the generated build dir 
+--- if one exists. Some projects, probably only external ones, may specify 
+--- a 'cleaner' that implements some special behavior for cleaning up build
+--- artifacts, eg. external projects that use make may run 'make clean'.
+Project.clean = function(self)
+  local bdir = self:getBuildRootDir()
+  if lake.pathExists(bdir) then
+    lake.rm(bdir, {recursive = true, force = true})
+  end
+  if self.cleaner then
+    self:cleaner()
+  end
+end
 
 return Project

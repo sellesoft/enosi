@@ -16,6 +16,11 @@ local driver = {}
 
 driver.subcmds = {}
 
+-- * --------------------------------------------------------------------------
+
+--- Entry point for dealing with command line arguments and implementing the
+--- behavior of 'subcommands' that we accept. The subcommand 'build' is the 
+--- default, which will build all projects specified in user.lua.
 driver.run = function()
   local args = lake.cliargs
 
@@ -34,7 +39,7 @@ end
 local createBuildCmds = function(proj)
   local cmds = {}
 
-  ---@type cmd.CppObj.Params
+  ---@type cmd.CppObj.Params | {}
   do local params = {}
     params.compiler = sys.cfg.cpp.compiler
 
@@ -56,32 +61,11 @@ local createBuildCmds = function(proj)
     cmds[build.obj.CppObj] = build.cmds.CppObj.new(params)
   end
 
-  ---@type cmd.LuaObj.Params
+  ---@type cmd.LuaObj.Params | {}
   do local params = {}
     params.debug_info = true
 
     cmds[build.obj.LuaObj] = build.cmds.LuaObj.new(params)
-  end
-
-  ---@type cmd.Exe.Params
-  do local params = {}
-    params.linker = sys.cfg.cpp.linker
-    params.libdirs = List{}
-    proj:gatherDirs("lib", params.libdirs)
-    
-    params.static_libs = List{}
-    proj:gatherBuildObjects(build.obj.StaticLib, function(bobj)
-      params.static_libs:push(bobj.name)
-    end)
-
-    params.shared_libs = List{}
-    proj:gatherBuildObjects(build.obj.SharedLib, function(bobj)
-      params.shared_libs:push(bobj.name)
-    end)
-
-    util.dumpValue(params.static_libs, 3)
-
-    cmds[build.obj.Exe] = build.cmds.Exe.new(params)
   end
 
   return cmds
@@ -89,14 +73,16 @@ end
 
 local resolveDirs = function(proj)
   local makeTask = function(dst, src)
-    lake.task(dst)
-      :dependsOn(lake.task(src))
+    local task = lake.task(dst)
+      :dependsOn(lake.task(src), proj.tasks.build_internal)
       :cond(function()
         if not lake.pathExists(dst) then
+          io.write(dst, " does not exist\n")
           return true
         end
 
         if lake.modtime(src) > lake.modtime(dst) then
+          io.write(src, " is newer than ", dst, "\n")
           return true
         end
       end)
@@ -104,12 +90,13 @@ local resolveDirs = function(proj)
         lake.mkdir(helpers.getPathDirname(dst), { make_parents = true})
         lake.copy(dst, src)
       end)
+    proj.tasks.resolve_dirs:dependsOn(task)
   end
 
   local globDir = function(dir, spec)
     for file in lake.find(spec.glob):each() do
       local dst = dir.."/"..file
-      local src = proj.wdir.."/"..spec.from.."/"..file
+      local src = proj.root.."/"..spec.from.."/"..file
       makeTask(dst, src)
     end
   end
@@ -118,17 +105,17 @@ local resolveDirs = function(proj)
     for filter in List(spec.filters):each() do
       if type(filter) == "string" then
         local dst = dir.."/"..filter
-        local src = proj.wdir.."/"..spec.from.."/"..filter
+        local src = proj.root.."/"..spec.from.."/"..filter
         makeTask(dst, src)
       elseif type(filter) == "table" then
         if not build.obj.BuildObject:isTypeOf(filter) then
           error("dir filter expects a BuildObject or string")
         end
 
-        filter:assignMount(dir)
-        local src = proj.wdir.."/"..spec.from.."/"..filter:getTargetName()
-        local dst = filter:formAbsolutePath()
-        makeTask(dst, src)
+        filter.proj = proj
+        local src = proj.root.."/"..spec.from.."/"..filter:getTargetName()
+        local dst = dir.."/"..filter:getTargetName()
+        filter.task = makeTask(dst, src)
 
         -- Introduce the build object as public for this project.
         proj:trackBuildObject(true, filter)
@@ -137,40 +124,54 @@ local resolveDirs = function(proj)
   end
 
   for dirname,spec in pairs(proj.dirs) do
-    local dir = proj.wdir.."/"..dirname
-    if spec.to then
-      dir = dir.."/"..spec.to
-    end
-    lake.mkdir(dir)
-    lake.chdir(proj.wdir.."/"..spec.from)
-    if spec.glob then
-      globDir(dir, spec)
-    elseif spec.filters then
-      filterDir(dir, spec)
+    local dir = proj:getAuxDirPath(dirname)
+    util.dumpValue(dir)
+    if not dir.direct then
+      if spec.to then
+        dir = dir.."/"..spec.to
+      end
+      lake.mkdir(dir, {make_parents=true})
+      lake.chdir(proj.root.."/"..spec.from)
+      if spec.glob then
+        globDir(dir, spec)
+      elseif spec.filters then
+        filterDir(dir, spec)
+      end
     end
   end
 end
 
-driver.subcmds.build = function(args)
+local loadEnabledProjects = function()
   for proj in List(sys.cfg.enabled_projects):each() do
     sys.getOrLoadProject(proj)
-    -- Create the tasks.
-    -- proj.task = lake.task(proj.name)
   end
+end
+
+--- Builds projects. This is the default subcommand. 
+---
+--- Usage:
+---   lake build [projname]
+---
+--- If 'projname' is not specified then the 'enabled_projects' cfg from 
+--- user.lua is used to decide what projects we want to build. Otherwise
+--- 'projname' is the name of a directory containing a 'project.lua' file
+--- that we will use to build the project. This project does not have to be
+--- specified in the 'enabled_projects' cfg to be built.
+driver.subcmds.build = function(args)
+  loadEnabledProjects()
 
   for proj in sys.projects.list:each() do
-    local name = proj.name
-
     local cmds = createBuildCmds(proj)
 
     local makeTasks = function(bobjs)
       for BObj,list in pairs(bobjs) do
         for bobj in list:each() do
-          if not bobj.is_link
-             and cmds[BObj]
-             and bobj.makeTask 
-          then
-            bobj:makeTask(cmds[BObj], proj)
+          if bobj.defineTask then
+            if cmds[BObj] then
+              bobj:defineTask(cmds[BObj])
+            else
+              bobj:defineTask()
+            end
           end
         end
       end
@@ -180,6 +181,51 @@ driver.subcmds.build = function(args)
     makeTasks(proj.bobjs.public)
 
     resolveDirs(proj)
+  end
+end
+
+--- Cleans projects. 
+---
+--- Usage:
+---   lake clean [<projname> | all | external]
+---
+--- If none of the options are specified we use the 'enabled_projects' cfg
+--- from user.lua to decide what projects to clean. This will only clean 
+--- 'internal' projects. To clean all projects use 'all' or to only clean 
+--- external projects use 'external'. Note that these two options still only
+--- apply to those specified in 'enabled_projects'.
+---
+--- If <projname> is specified then only that project will be cleaned. This 
+--- can be any kind of project.
+---
+driver.subcmds.clean = function(args)
+  if #args == 0 then
+    loadEnabledProjects()
+
+    for proj in sys.projects.list:each() do
+      proj:clean()
+    end
+  else
+    local opt = args[1]
+    if opt == "all" then
+      loadEnabledProjects()
+
+      for proj in sys.projects.list:each() do
+        proj:clean()
+      end
+    elseif opt == "external" then
+      loadEnabledProjects()
+
+      for proj in sys.projects.list:each() do
+        if proj.is_external then
+          proj:clean()
+        end
+      end
+    else
+      local proj = sys.getOrLoadProject(opt)
+        or error("failed to find project '"..opt.."' for cleaning")
+      proj:clean()
+    end
   end
 end
 

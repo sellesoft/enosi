@@ -310,7 +310,10 @@ end
 cmd.Makefile = Type.make()
 
 ---@class cmd.Makefile.Params
---- The directory make should be called in.
----@field wdir
+
+---@param params cmd.Makefile.Params
+cmd.Makefile.new = function(params)
+  return helpers.listBuilder("make", "-j") 
+end
 
 return cmd

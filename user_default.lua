@@ -24,8 +24,10 @@ return
   -- containing a 'project.lua' file.
   enabled_projects = 
   {
+    "llvm",
     "iro",
     "lpp",
+    "elua",
   },
 
   mode = "debug",

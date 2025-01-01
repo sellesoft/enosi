@@ -8,4 +8,5 @@
     shallow = true
 [submodule "llvm/src"]
 	path = llvm/src
-	url = https://github.com/agudbrand/llvm-project
+  url = https://github.com/agudbrand/llvm-project
+  branch = main

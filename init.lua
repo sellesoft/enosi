@@ -107,7 +107,7 @@ io.write("Compiling lfs...\n")
 if 0 ~= exec("cd tmp/luafilesystem-1_8_0 && ",
    "gcc -shared src/lfs.c ",
    "-o ../lfs.so ",
-   "-I../../luajit/include") then
+   "-I../../luajit/src/src") then
   error "failed to compile lua filesystem!"
 end
 
@@ -120,8 +120,21 @@ local cd = function(path)
   lfs.chdir(path)
 end
 
-local build_dir = lfs.currentdir().."/tmp/build"
+local root = lfs.currentdir()
+
+local build_dir = root.."/tmp/build"
 lfs.mkdir(build_dir)
+
+local iro_build = build_dir.."/iro"
+lfs.mkdir(iro_build)
+lfs.mkdir(iro_build.."/src")
+
+local iro_include = iro_build.."/include"
+lfs.mkdir(iro_include)
+lfs.mkdir(iro_include.."/iro")
+
+local lake_build = build_dir.."/lake"
+lfs.mkdir(lake_build)
 
 local function walkDir(path, f)
   for ent in lfs.dir(path) do
@@ -144,7 +157,8 @@ local function getSourceToObj(path, bdir, c_to_o, l_to_o)
     elseif l_to_o and path:match("%.lua$") then
       table.insert(l_to_o, {path, bdir.."/"..path..".o"})
     end
-    lfs.mkdir(bdir.."/"..path:match("(.*)/"))
+    local odir = bdir.."/"..path:match("(.*)/")
+    lfs.mkdir(odir)
   end)
 end
 
@@ -153,11 +167,12 @@ local function compileCppObj(c_to_o)
   --             equivalent to Driver is to generate this
   local compiler_flags = 
     "-std=c++20 "..
-    "-I../iro "..
-    "-I../luajit/include "..
+    "-I"..iro_include.." "..
+    "-I../luajit/build/include "..
     "-DIRO_LINUX "..
     "-DIRO_GCC "..
-    "-O2 "
+    "-O0 "..
+    "-ggdb3 "
 
   for _,v in ipairs(c_to_o) do
     if 0 ~= exec("clang++ -c ",v[1]," -o ",v[2]," ",compiler_flags) then
@@ -178,23 +193,26 @@ writeSeparator()
 
 io.write("Building iro...\n")
 
-local iro_build = build_dir.."/iro"
-lfs.mkdir(iro_build)
-
 cd "iro"
 
 local iro_c_to_o = {}
 local iro_l_to_o = {}
 
-getSourceToObj("iro", iro_build, iro_c_to_o, iro_l_to_o)
+getSourceToObj("src", iro_build, iro_c_to_o, iro_l_to_o)
+
+walkDir("src", function(path)
+  path = path:sub(#"src/iro/" + 1)
+  local dirname = path:match("(.*)/")
+  if dirname then
+    lfs.mkdir(iro_include.."/iro/"..dirname)
+  end
+  lfs.link(root.."/iro/src/iro/"..path, iro_include.."/iro/"..path, true)
+end)
 
 compileCppObj(iro_c_to_o)
 compileLuaObj(iro_l_to_o)
 
 writeSeparator()
-
-local lake_build = build_dir.."/lake"
-lfs.mkdir(lake_build)
 
 io.write("Building lake...\n")
 
@@ -222,7 +240,7 @@ end
 collectObjs(lake_c_to_o, lake_l_to_o, iro_c_to_o, iro_l_to_o)
 
 local linker_flags = 
-  "-L../luajit/lib "..
+  "-L../luajit/build/lib "..
   "-l:libluajit.a "..
   "-lexplain "..
   "-lm "..

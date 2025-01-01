@@ -26,3 +26,7 @@ luajit/obj/
 lamu/build/
 
 iro/include/
+
+tmp/
+
+luajit/build/
