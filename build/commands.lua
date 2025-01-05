@@ -69,6 +69,7 @@ cmd.CppObj.new = function(params)
       "-c",
       cmd.CppObj.getIOIndependentFlags(params))
   else
+    print(debug.traceback())
     error("unhandled compiler: "..o.compiler)
   end
 
@@ -111,6 +112,8 @@ cmd.CppObj.getIOIndependentFlags = function(params)
       not params.export_all and "-fvisibility=hidden",
       "-fpatchable-function-entry=16",
       "-Wno-#warnings",
+      "-Wno-switch",
+      "-Wno-return-type-c-linkage",
       "-fmessage-length=80",
       "-fdiagnostics-absolute-paths")
 
@@ -172,6 +175,85 @@ cmd.LuaObj.complete = function(self, lfile, ofile)
     ofile)
 end
 
+--- Generate an obj file from an lpp file.
+--- Note that this goes through two compilations, the first turning the lpp
+--- file into a cpp file and the second turning that into an obj file, so make
+--- sure both commands are run. This command's 'complete' function returns 
+--- both the lpp and cpp commands.
+---@class cmd.LppObj
+---@field partial List
+--- The cpp cmd that will be used to build the object file.
+---@field cpp cmd.CppObj
+cmd.LppObj = Type.make()
+
+---@class cmd.LppObj.Params
+--- The path to the lpp executable.
+-- TODO(sushi) eventually this should be removed in favor of expecting lpp
+--             to be on path just like everything else. This is blocked atm
+--             by nix not making it easy to add a local folder to path in a
+--             flake. Really need to get rid of that.
+---
+---@field lpp string
+--- Require dirs.
+---@field requires List
+--- CppObj.Params that will be used to build an obj from the resulting cpp 
+--- file.
+---@field cpp cmd.CppObj.Params
+
+---@param params cmd.LppObj.Params
+---@return cmd.LppObj
+cmd.LppObj.new = function(params)
+  local o = {}
+
+  local cargs = "--cargs="
+  local flags = lake.flatten(cmd.CppObj.getIOIndependentFlags(params.cpp))
+  for carg in flags:each() do
+    cargs = cargs..carg..","
+  end
+
+  local requires = List{}
+  for require in List(params.requires):each() do
+    requires:push "-R"
+    requires:push(require)
+  end
+    
+  o.partial = helpers.listBuilder(
+    params.lpp,
+    cargs,
+    requires,
+    -- little bit of cheating, really need to fix this somehow
+    "-R", "src")
+
+  o.cpp = cmd.CppObj.new(params.cpp)
+
+  return setmetatable(o, cmd.LppObj)
+end
+
+--- Generates commands for both lpp->cpp and cpp->obj.
+---
+--- Path to input lpp file.
+---@param input string
+--- Path to output cpp file.
+---@param cppout string
+--- Path to output obj file.
+---@param objout string
+--- Optional path to a depfile to generate.
+---@param depfile string?
+--- Optional path to a metafile to generate.
+---@param metafile string?
+---@return List, List
+cmd.LppObj.complete = function(self, input, cppout, objout, depfile, metafile)
+  return 
+    helpers.listBuilder(
+      self.partial,
+      input,
+      "-o",
+      cppout,
+      metafile and { "-om", metafile },
+      depfile and { "-D", depfile }),
+    self.cpp:complete(cppout, objout)
+end
+
 --- Generate a depfile from a cpp file.
 ---@class cmd.CppDeps
 ---@field partial List
@@ -217,6 +299,14 @@ end
 ---@field partial List
 cmd.Exe = Type:make()
 
+--- NOTE that this command applies to both executable files and shared library
+--- files since the command is practically the same. I probably should have 
+--- called this command Linker, but since this was written during a time where
+--- I wanted there to be a command for every type of build object, it got named
+--- something less clear instead.
+--- 
+-- TODO(sushi) rename this to Linker.
+---
 ---@class cmd.Exe.Params
 --- The linker to use.
 ---@field linker string
@@ -231,6 +321,8 @@ cmd.Exe = Type:make()
 ---@field static_libs List
 --- List of directories to search for libs in.
 ---@field libdirs List
+--- If true, a shared library will be built.
+---@field is_shared boolean
 
 ---@param params cmd.Exe.Params
 ---@return cmd.Exe
@@ -238,7 +330,9 @@ cmd.Exe.new = function(params)
   local o = {}
   o.linker = params.linker
 
-  if "ld" == params.linker then
+  if "ld" == params.linker 
+     or "mold" == params.linker 
+  then
     -- TODO(sushi) it sucks that we operate the linker through clang here, but 
     --             since I'm using nix to manage my build environment on Linux
     --             right now I've found it very difficult figuring out how to 
@@ -251,7 +345,8 @@ cmd.Exe.new = function(params)
     --             seems like it could be a nightmare.
     o.partial = helpers.listBuilder(
       "clang++",
-      "-fuse-ld=ld")
+      "-fuse-ld="..params.linker,
+      params.is_shared and "-shared")
 
     o.links = helpers.listBuilder(
       lake.flatten(params.libdirs):map(function(dir)

@@ -41,9 +41,9 @@ helpers.makeRootRelativePath = function(root, x)
 end
 
 helpers.getPathBasename = function(x)
-  local b, e = x:find("/(.*)$")
+  local b, e, basename = x:find(".*/(.-)$")
   if b then 
-    return x:sub(e)
+    return basename
   end
   return x
 end

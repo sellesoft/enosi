@@ -30,3 +30,9 @@ iro/include/
 tmp/
 
 luajit/build/
+
+llvm/llvm_build/
+
+lpp/build/
+
+user.lua

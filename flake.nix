@@ -21,8 +21,6 @@
 					impure-clang
 					clang-tools
           llvmlib
-          llvmlib.libc.libgcc
-					llvmPackages_17.libllvm
 					gnumake
 					gdb
 					bear
@@ -50,9 +48,10 @@
 					# stuff needed to build llvm
 					cmake
 					ninja
-					gcc
+					# gcc
 					lld
 					stdenv.cc.cc.lib
+          libz
 
           xorg.libX11
           xorg.libXrandr
@@ -77,6 +76,7 @@
             xorg.libX11
             xorg.libXrandr
             xorg.libXcursor
+            libz
           ];
           target = llvmlib.libc.libgcc.libgcc;
           attrs = pkgs.lib.concatMapStrings 
@@ -95,8 +95,6 @@
           export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:${libpath} 
           unset LUA_PATH
           unset LUA_CPATH
-          export NIX_LDFLAGS="$NIX_LDFLAGS -L${llvmlib.libc}/lib"
-          ${attrs}
         '';
 			};
 		in

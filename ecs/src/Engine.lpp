@@ -123,9 +123,11 @@ b8 Engine::init()
   @initSystem(gamemgr.init(this),                       gamemgr);
   @initSystem(source_data_file_reg.init(),              source data file reg);
 
+#if ECS_HOT_RELOAD
   reloader = hr::createReloader();
   if (reloader == nullptr)
     return ERROR("failed to create hot reloader\n");
+#endif
 
   INFO("done initializing in ", 
     WithUnits(TimePoint::now() - start_time), "\n");
@@ -172,6 +174,7 @@ b8 Engine::init()
  */ 
 b8 Engine::checkReload()
 {
+#if ECS_HOT_RELOAD
   if (!input.wasKeyPressed(Key::R))
     return true;
 
@@ -217,7 +220,7 @@ b8 Engine::checkReload()
     return ERROR("failed to reload symbols\n");
 
   eventbus.broadcast.raise<PostReload>({});
-
+#endif
   return true;
 }
 

@@ -10,6 +10,7 @@ local build =
 {
   obj = require "build.object",
   cmds = require "build.commands",
+  flair = require "build.flair",
 }
 
 local driver = {}
@@ -39,6 +40,7 @@ end
 local createBuildCmds = function(proj)
   local cmds = {}
 
+  local cpp_params = {} -- Shared with lpp's params.
   ---@type cmd.CppObj.Params | {}
   do local params = {}
     params.compiler = sys.cfg.cpp.compiler
@@ -59,6 +61,8 @@ local createBuildCmds = function(proj)
     end
 
     cmds[build.obj.CppObj] = build.cmds.CppObj.new(params)
+
+    cpp_params = params
   end
 
   ---@type cmd.LuaObj.Params | {}
@@ -66,6 +70,21 @@ local createBuildCmds = function(proj)
     params.debug_info = true
 
     cmds[build.obj.LuaObj] = build.cmds.LuaObj.new(params)
+  end
+
+  ---@type cmd.LppObj.Params | {}
+  do local params = {}
+    -- TODO(sushi) handle projects specifying 'requires' if there is ever 
+    --             a usecase.
+
+    -- TODO(sushi) this should not be hardcoded like this but since I can't
+    --             nicely add bin/ to my path via the nix flake I'm just 
+    --             going to do this for now. Really really need to get rid of 
+    --             nix.
+    params.lpp = sys.root.."/bin/lpp"
+    params.cpp = cpp_params
+
+    cmds[build.obj.LppObj] = build.cmds.LppObj.new(params)
   end
 
   return cmds
@@ -77,12 +96,10 @@ local resolveDirs = function(proj)
       :dependsOn(lake.task(src), proj.tasks.build_internal)
       :cond(function()
         if not lake.pathExists(dst) then
-          io.write(dst, " does not exist\n")
           return true
         end
 
         if lake.modtime(src) > lake.modtime(dst) then
-          io.write(src, " is newer than ", dst, "\n")
           return true
         end
       end)
@@ -125,8 +142,7 @@ local resolveDirs = function(proj)
 
   for dirname,spec in pairs(proj.dirs) do
     local dir = proj:getAuxDirPath(dirname)
-    util.dumpValue(dir)
-    if not dir.direct then
+    if not spec.direct then
       if spec.to then
         dir = dir.."/"..spec.to
       end
@@ -225,6 +241,67 @@ driver.subcmds.clean = function(args)
       local proj = sys.getOrLoadProject(opt)
         or error("failed to find project '"..opt.."' for cleaning")
       proj:clean()
+    end
+  end
+end
+
+--- Publishes build objects specified by projects into the bin/ folder. 
+--- Any build objects specified as published by a project will be copied 
+--- there. Currently this SHOULD only be used for executables. Later on
+--- we should expand this to support publishing other useful binaries but 
+--- for exes are all we need.
+---
+--- Usage:
+---   lake publish
+--- 
+--- Support for specifying projects will maybe be added later.
+---
+driver.subcmds.publish = function(args)
+  if #args > 0 then
+    error("'publish' does not take any arguments for the time being")
+  end
+
+  -- Set the build mode to release and start a build.
+  sys.cfg.mode = "release"
+  driver.subcmds.build()
+  
+  -- Iterate over all projects and copy their executables to bin.
+  for name,proj in pairs(sys.projects.map) do
+    for BObj, list in pairs(proj.bobjs.published) do
+      for bobj in list:each() do
+        local bobjpath = bobj:getOutputPath()
+        local basename = helpers.getPathBasename(bobjpath)
+        local target = sys.root.."/bin/"..basename
+        
+        lake.task(target)
+          :workingDirectory(sys.root)
+          :dependsOn(bobj.task)
+          :cond(function(prereqs)
+            if not lake.pathExists(target) then
+              return true
+            end
+            
+            local target_modtime = lake.modtime(target)
+            for prereq in prereqs:each() do
+              if lake.modtime(prereq) > target_modtime then
+                return true
+              end
+            end
+          end)
+          :recipe(function()
+            -- Remove any file that might already be there. This is done to 
+            -- handle publishing lake, which is (at the time of writing) the
+            -- program that will be running this script.
+            --
+            -- TODO(sushi) this probably wont work on Windows.
+            lake.rm(target)
+
+            -- Copy the new file.
+            lake.copy(target, bobjpath)
+
+            build.flair.writeSuccessOnlyOutput(target)
+          end)
+      end
     end
   end
 end

@@ -25,7 +25,7 @@ Type.isTypeOf = function(self, x)
   return false
 end
 
-Type.getTypeOf = function(x)
+Type.of = function(x)
   return getmetatable(x)
 end
 

@@ -2,8 +2,7 @@
 --- The build system underlying enosi.
 ---
 
-local log = require "logger" ("build.sys", Verbosity.Info)
-local util = require "util"
+local log = require "logger" ("build.sys", Verbosity.Notice)
 
 local helpers = require "build.helpers"
 local List = require "list"

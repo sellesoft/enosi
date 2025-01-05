@@ -45,7 +45,8 @@ Project.new = function(name, root)
     {
       private = {},
       public = {},
-    }
+    },
+    published = {},
   }
   o.dependencies = {}
   o.defines =
@@ -95,6 +96,35 @@ Project.__tostring = function(self)
   return "Project("..self.name..")"
 end
 
+local getBObjList = function(bobjs, BObj)
+  local list = bobjs[BObj]
+  if not list then
+    list = List{}
+    bobjs[BObj] = list
+  end
+  return list
+end
+
+local function getBuildObjects(bobjs, BObj, list)
+  if bobj.BuildObject:isTypeOf(BObj) then
+    if type(list) == "function" then
+      for bobj in getBObjList(bobjs, BObj):each() do
+        list(bobj)
+      end
+    else
+      list:pushList(getBObjList(bobjs, BObj))
+    end
+  elseif List:isTypeOf(BObj) then
+    for bo in BObj:each() do
+      getBuildObjects(bobjs, bo, list)
+    end
+  else
+    for _,bo in ipairs(BObj) do
+      getBuildObjects(bobjs, bo, list)
+    end
+  end
+end
+
 Project.constructReporter = function(proj)
   local obj = function(pub, ext, obj)
     if obj == "defines" then
@@ -119,6 +149,13 @@ Project.constructReporter = function(proj)
     end
   end)
 
+  local published = function(...)
+    for bobj in List{...}:each() do
+      local list = getBObjList(proj.bobjs.published, Type.of(bobj))
+      list:push(bobj)
+    end
+  end
+
   local top = helpers.indexer(function(_,k)
     if k == "pub" then
       return helpers.indexer(function(_,k)
@@ -136,6 +173,8 @@ Project.constructReporter = function(proj)
       end)
     elseif k == "dir" then
       return dir  
+    elseif k == "published" then
+      return published
     else
       return (obj(false, false, k))
     end
@@ -144,26 +183,42 @@ Project.constructReporter = function(proj)
   return top 
 end
 
-Project.dependsOn = function(self, name)
-  if self.dependencies[name] then
-    sys.log:warn(
-      "project ", self.name, " has already declared a dependency on", name, 
-      "\n")
-    return
-  end
+Project.dependsOn = function(self, ...)
+  for name in List{...}:each() do
+    if self.dependencies[name] then
+      sys.log:warn(
+        "project ", self.name, " has already declared a dependency on", name, 
+        "\n")
+      return
+    end
 
-  local dep = sys.getOrLoadProject(name)
-  self.dependencies[name] = dep
-  self.tasks.wait_for_deps:dependsOn(dep.tasks.final)
+    local dep = sys.getOrLoadProject(name)
+    self.dependencies[name] = dep
+    self.tasks.wait_for_deps:dependsOn(dep.tasks.final)
+  end
 end
 
-local getBObjList = function(bobjs, BObj)
-  local list = bobjs[BObj]
-  if not list then
-    list = List{}
-    bobjs[BObj] = list
+--- Declares that this project uses some build objects that are from other 
+--- projects without assuming that it uses those objects to build stuff.
+---
+--- This is a bit scuffed in that this is not tracked anywhere like normal 
+--- dependencies are, but its probably ok for now. This is being added for a 
+--- case like ecs using lppclang's shared library during compilation of lpp 
+--- files. If we were to say ecs:dependsOn("lppclang") then the shared library 
+--- would be linked into ecs, where it would never be used.
+--- 
+--- All this does is make this project's 'wait_for_deps' task dependent on 
+--- whatever build objects are provided here, as long as they have a task.
+---
+--- This is a very weak part of the build system that I really don't like. It
+--- makes me wonder if it would be better to instead have it so that a 
+--- project's dependencies on other projects can specify what parts of that 
+--- project it actually needs, or how it uses that project. Very odd cases.
+Project.uses = function(self, ...)
+  for bobj in List{...}:each() do
+    print(self.name, "uses", bobj.task.name)
+    self.tasks.wait_for_deps:dependsOn(bobj.task)
   end
-  return list
 end
 
 Project.reportBuildObject = function(self, pub, ext, BObj, ...)
@@ -197,7 +252,7 @@ end
 --- Track an already existing build object.
 Project.trackBuildObject = function(self, public, bobj)
   local map = public and self.bobjs.public or self.bobjs.private
-  getBObjList(map, Type.getTypeOf(bobj)):push(bobj)
+  getBObjList(map, Type.of(bobj)):push(bobj)
 end
 
 Project.reportDefines = function(self, pub, defines)
@@ -207,29 +262,10 @@ Project.reportDefines = function(self, pub, defines)
   end
 end
 
-local function getBuildObjects(bobjs, BObj, list)
-  if bobj.BuildObject:isTypeOf(BObj) then
-    if type(list) == "function" then
-      for bobj in getBObjList(bobjs, BObj):each() do
-        list(bobj)
-      end
-    else
-      list:pushList(getBObjList(bobjs, BObj))
-    end
-  elseif List:isTypeOf(BObj) then
-    for bo in BObj:each() do
-      getBuildObjects(bobjs, bo, list)
-    end
-  else
-    for _,bo in ipairs(BObj) do
-      getBuildObjects(bobjs, bo, list)
-    end
-  end
-end
-
 Project.getBuildObjects = function(self, BObj, list)
   list = list or List{}
   getBuildObjects(self.bobjs.private, BObj, list)
+  getBuildObjects(self.bobjs.external.private, BObj, list)
   return list
 end
 
@@ -323,14 +359,14 @@ Project.gatherDirs = function(self, dirname, list)
     proj:gatherDirs(dirname, list)
   end
 
-  local dir = self:getAuxDirPath(dirname)
+  local dir = self.dirs[dirname]
   if dir then
     if dir.direct then
-      for direct in dir.direct:each() do
+      for direct in List(dir.direct):each() do
         list:push(direct)
       end
     else
-      list:push(dir)
+      list:push(self:getAuxDirPath(dirname))
     end
   end
   return list
@@ -362,6 +398,10 @@ Project.clean = function(self)
   if self.cleaner then
     self:cleaner()
   end
+end
+
+Project.publish = function(self)
+
 end
 
 return Project

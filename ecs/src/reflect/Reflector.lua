@@ -5,7 +5,9 @@ local buffer = require "string.buffer"
 
 -- Load lppclang.
 -- TODO(sushi) the lib needs to be loaded in a better way.
-require "lppclang" .init "../lppclang/build/debug/liblppclang.so"
+require "ffi" .load "lppclang"
+require "lppclang" .init "lppclang"
+
 
 -- Get the cargs so we can pass them to lppclang when we create the context.
 local args = List{}

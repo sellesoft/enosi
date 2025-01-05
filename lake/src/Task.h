@@ -41,7 +41,11 @@ struct Task
 
   // The working directory of this Task's recipe. This can be changed as the 
   // recipe is executed!
-  fs::Dir recipe_wdir;
+  fs::Dir recipe_wdir = nil;
+
+  // The times at which the recipe started and ended.
+  TimePoint start_time = nil;
+  TimePoint end_time = nil;
 
   b8   init(String name);
   void deinit();
@@ -74,7 +78,7 @@ struct Task
 
     Errored,
 
-    RunningRecipe,
+    StartedRecipe,
     Complete,
 
     VisitedPerm,

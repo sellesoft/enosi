@@ -138,15 +138,25 @@ static Task::TopSortResult topSortVisit(Task* task, TaskList* sorted)
     return Task::TopSortResult::Ok;
 
   if (task->flags.test(Task::Flag::VisitedTemp))
+  {
+    ERROR(task->name, " <- \n");
     return Task::TopSortResult::Cycle;
+  }
 
   task->flags.set(Task::Flag::VisitedTemp);
 
   for (Task& prereq : task->prerequisites)
   {
     Task::TopSortResult result = topSortVisit(&prereq, sorted);
-    if (result != Task::TopSortResult::Ok)
+    if (result == Task::TopSortResult::Cycle)
+    {
+      ERROR(task->name, " <- \n");
       return result;
+    }
+    else if (result != Task::TopSortResult::Ok)
+    {
+      return result;
+    }
   }
 
   task->flags.set(Task::Flag::VisitedPerm);
@@ -180,6 +190,9 @@ Task::RecipeResult Task::resumeRecipe(Lake& lake)
     ERROR("task '",name,"' has no recipe set!\n");
     return RecipeResult::Error;
   }
+
+  if (isnil(start_time))
+    start_time = TimePoint::monotonic();
 
   auto cwd = fs::Dir::open("."_str);
   defer { cwd.chdir(); cwd.close(); };
@@ -224,7 +237,10 @@ Task::RecipeResult Task::resumeRecipe(Lake& lake)
   recipe_wdir = fs::Dir::open("."_str);
 
   if (lua.isnil())
+  {
+    end_time = TimePoint::monotonic();
     return RecipeResult::Finished;
+  }
   else
     return RecipeResult::InProgress;
 }

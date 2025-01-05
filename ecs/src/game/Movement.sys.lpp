@@ -24,7 +24,7 @@ b8 MovementSys::update(GameMgr& gamemgr)
       transform->pos += movement.input;
       transform->pos.x = floor(transform->pos.x);
       transform->pos.y = floor(transform->pos.y);
-      INFO(transform->pos, "\n");
+      // INFO(transform->pos, "\n");
     }
     movement.input = {};
   }

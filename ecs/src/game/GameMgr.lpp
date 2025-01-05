@@ -60,8 +60,6 @@ b8 GameMgr::init(Engine* eng)
     *test_map_source_data_file.returned_data,
     map_def);
   
-  INFO(map_def->name, "\n");
-
   map.init(*map_def, *this);
 
   return true;
@@ -89,8 +87,8 @@ b8 GameMgr::update()
   vec2f screen_pos = engine->input.mouse.window;
   vec2f screen_size = engine->window.size;
 
-  vec2f mouse_world = eye.screenToWorld(screen_pos, screen_size);
-  INFO(floor(mouse_world), "\n");
+  // vec2f mouse_world = eye.screenToWorld(screen_pos, screen_size);
+  // INFO(floor(mouse_world), "\n");
 
   return true;
 }

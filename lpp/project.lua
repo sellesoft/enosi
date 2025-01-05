@@ -7,16 +7,18 @@ local lpp = sys.getLoadingProject()
 
 lpp:dependsOn "iro"
 
-local objs = List{}
-
 for cfile in lake.find("src/**/*.cpp"):each() do
-  objs:push(lpp.report.CppObj(cfile))
+  lpp.report.CppObj(cfile)
 end
 
 for lfile in lake.find("src/*.lua"):each() do
-  objs:push(lpp.report.LuaObj(lfile))
+  lpp.report.LuaObj(lfile)
 end
 
-lpp.report.Exe("lpp", 
-  lpp:gatherBuildObjects{bobj.CppObj, bobj.LuaObj})
+local exe = 
+  lpp.report.Exe("lpp", 
+    lpp:gatherBuildObjects{bobj.CppObj, bobj.LuaObj})
+
+lpp.report.published(exe)
+
 

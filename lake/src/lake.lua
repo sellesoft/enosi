@@ -259,8 +259,9 @@ end
 ---@param path string
 ---@return boolean
 lake.chdir = function(path)
-  return 0 ~= C.lua__chdir(makeStr(path))
-   or error()
+  if 0 == C.lua__chdir(makeStr(path)) then
+    print(debug.traceback())
+  end
 end
 
 -- * --------------------------------------------------------------------------

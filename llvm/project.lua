@@ -9,7 +9,7 @@ llvm.is_external = true
 
 local mode = sys.cfg.llvm and sys.cfg.llvm.mode or "Release"
 
-local llvm_builddir = llvm.root.."/llvm_build/"..mode
+local llvm_builddir = "llvm_build/"..mode
 
 lake.mkdir(llvm_builddir, {make_parents = true})
 
@@ -23,8 +23,8 @@ llvm.report.dir.include
   {
     llvm.root.."/src/clang/include",
     llvm.root.."/src/llvm/include",
-    llvm_builddir.."/include",
-    llvm_builddir.."/tools/clang/include",
+    llvm.root.."/"..llvm_builddir.."/include",
+    llvm.root.."/"..llvm_builddir.."/tools/clang/include",
   }
 }
 
@@ -287,16 +287,19 @@ local libs = Twine.new
   "LLVMInterpreter"
   "LLVMMSP430Info"
 
-local libbobjs = List{}
+llvm.report.ext.pub.SharedLib "z"
 
 for lib in libs:each() do
-  libbobjs:push(bobj.StaticLib(lib))
+  llvm.report.ext.pub.StaticLib(lib)
 end
 
 llvm.report.dir.lib
 {
-  from = llvm_builddir.."/lib",
-  filters = libbobjs
+  direct = 
+  {
+    llvm.root.."/"..llvm_builddir.."/lib"
+  }
 }
 
-llvm.report.CMake(llvm.root.."/src/llvm", llvm_builddir)
+llvm.report.ext.pub.Exe(llvm_builddir.."/bin/clang++")
+llvm.report.CMake(llvm.root.."/src/llvm", llvm_builddir, mode)

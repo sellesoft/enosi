@@ -22,6 +22,7 @@ struct Process
 {
   typedef void* Handle;
 
+#undef Status
   enum class Status
   {
     Running,

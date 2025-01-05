@@ -10,6 +10,7 @@ local List = require "list"
 local helpers = require "build.helpers"
 local cmd = require "build.commands"
 local buffer = require "string.buffer"
+local flair = require "build.flair"
 
 local build = 
 {
@@ -17,7 +18,70 @@ local build =
   cmd = require "build.commands",
 }
 
+--- * =========================================================================
+---
+---   Helpers
+---
+--- * =========================================================================
+
+local tryLoadDepFile = function(dfile, obj_task)
+  local depfile = io.open(dfile, "r")
+  if depfile then
+    for file in depfile:lines() do
+      obj_task:dependsOn(lake.task(file))
+    end
+  end
+end
+
+-- * --------------------------------------------------------------------------
+
+local setFileExistanceAndModTimeCondition = function(task)
+  task:cond(function(prereqs)
+    if not lake.pathExists(task.name) then
+      return true
+    end
+
+    local target_modtime = lake.modtime(task.name)
+    for prereq in prereqs:each() do
+      if lake.modtime(prereq) > target_modtime then
+        return true
+      end
+    end
+  end)
+end
+
+-- * --------------------------------------------------------------------------
+
+local ensureDirExists = function(path)
+  local dir = helpers.getPathDirname(path)
+  if dir then
+    lake.mkdir(dir, {make_parents = true})
+  end
+end
+
+-- * --------------------------------------------------------------------------
+
+--- Wrapper around lake's cmd that gets extra information we care about.
+local run = function(args)
+  local start = lake.getMonotonicClock()
+  local capture = buffer.new()
+  local result = lake.cmd(args, { onRead = function(s) capture:put(s) end })
+  return result, capture:get(), (lake.getMonotonicClock() - start) / 1000000
+end
+
+--- * =========================================================================
+---
+---   Module
+---
+--- * =========================================================================
+
 local object = {}
+
+--- * =========================================================================
+---
+---   Build Objects
+---
+--- * =========================================================================
 
 --- The base of all build objects.
 ---@class object.BuildObject : iro.Type
@@ -25,11 +89,6 @@ local object = {}
 ---@field proj build.Project
 --- The lake Task that will build this object, if any.
 ---@field task Task?
---- Set when this build object is not intended to be built as its expected 
---- to come from elsewhere. This is mostly useful when dealing with things 
---- that are built via a makefile or cmake. This just prevents the driver
---- from creating a lake command to build this object.
----@field no_build boolean
 local BuildObject = Type.make()
 object.BuildObject = BuildObject
 
@@ -58,6 +117,8 @@ setmetatable(object,
   end
 })
 
+-- * --------------------------------------------------------------------------
+
 --- An object file of some kind. This class is not meant to be used directly,
 --- instead a derived type, such as CppObj, should be used to indicate where
 --- the obj file comes from (so we know how to build it). This class should
@@ -72,10 +133,14 @@ setmetatable(object,
 ---@field src string
 local Obj = BuildObject:derive()
 
+-- * --------------------------------------------------------------------------
+
 --- Gets the full target name of this obj file.
 Obj.getTargetName = function(self)
   return self.src..".o"
 end
+
+-- * --------------------------------------------------------------------------
 
 --- An obj file built from a cpp file.
 ---@class object.CppObj : object.Obj
@@ -83,6 +148,8 @@ end
 ---@field src string
 local CppObj = Obj:derive()
 object.CppObj = CppObj
+
+-- * --------------------------------------------------------------------------
 
 ---@param src string 
 ---@return object.CppObj
@@ -92,11 +159,15 @@ CppObj.new = function(src)
   return setmetatable(o, CppObj)
 end
 
+-- * --------------------------------------------------------------------------
+
 CppObj.declareTask = function(self)
   self.task = 
     lake.task(self:getOutputPath())
       :workingDirectory(self.proj.root)
 end
+
+-- * --------------------------------------------------------------------------
 
 ---@param cmd cmd.CppObj
 CppObj.defineTask = function(self, cmd)
@@ -105,7 +176,7 @@ CppObj.defineTask = function(self, cmd)
   local dfile = self.proj:getBuildDir().."/"..self.src..".d"
   local cpp_cmd = cmd:complete(cfile, ofile)
 
-  lake.mkdir(ofile:match("(.*)/.*"), { make_parents=true })
+  ensureDirExists(ofile)
 
   ---@type cmd.CppDeps.Params
   local dep_params = {}
@@ -126,66 +197,34 @@ CppObj.defineTask = function(self, cmd)
   obj_task:workingDirectory(self.proj.root)
   dep_task:workingDirectory(self.proj.root)
 
-  local depfile = io.open(dfile, "r")
-  if depfile then
-    for file in depfile:lines() do
-      obj_task:dependsOn(lake.task(file))
-    end
-  end
+  tryLoadDepFile(dfile, obj_task)
 
-  local docond = 
-    function(task)
-      lake.mkdir(task.name:match("(.*)/"))
-      return function(prereqs)
-        if not lake.pathExists(task.name) then
-          io.write(task.name, " does not exist\n")
-          return true
-        end
+  setFileExistanceAndModTimeCondition(obj_task)
+  setFileExistanceAndModTimeCondition(dep_task)
 
-        local target_modtime = lake.modtime(task.name)
-        for prereq in prereqs:each() do
-          if lake.modtime(prereq) > target_modtime then
-            local rr = helpers.makeRootRelativePath(sys.root, prereq)
-            local tr = helpers.makeRootRelativePath(sys.root, task.name)
-            io.write(rr, " is newer than ", tr, "\n")
-            return true
-          end
-        end
-      end
-    end
-
-  obj_task:cond(docond(obj_task))
+  obj_task
     :recipe(function()
-      local output = buffer.new()
-      local result = lake.cmd(cpp_cmd,
-      {
-        onRead = function(x) output:put(x) end
-      })
+      local result, output, time = run(cpp_cmd)
       if result ~= 0 then
-        io.write("failed to compile ", ofile, ":\n", output:get(), "\n")
+        flair.writeFailure(ofile)
         error()
       else
-        io.write(
-          "compiled ", helpers.makeRootRelativePath(sys.root, ofile), "\n")
+        flair.writeSuccessInputToOutput(cfile, ofile, time)
       end
+
+      io.write(output)
     end)
 
-  dep_task:cond(docond(dep_task))
+  dep_task
     :recipe(function()
-      local output = buffer.new()
-      local result = lake.cmd(dep_cmd, 
-        { 
-          onRead = function(s)
-            output:put(s)
-          end
-        })
+      local result, output = run(dep_cmd)
       
       local depfile = io.open(dfile, "w")
       if not depfile then
         error("failed to open depfile at "..dfile)
       end
     
-      for f in output:get():gmatch("%S+") do
+      for f in output:gmatch("%S+") do
         if f:sub(-1) ~= ":" and 
            f ~= "\\" 
         then
@@ -202,10 +241,14 @@ CppObj.defineTask = function(self, cmd)
     end)
 end
 
+-- * --------------------------------------------------------------------------
+
 --- An obj file built from a lua file.
 ---@class object.LuaObj : object.Obj
 local LuaObj = Obj:derive()
 object.LuaObj = LuaObj
+
+-- * --------------------------------------------------------------------------
 
 ---@param src string
 ---@return object.LuaObj
@@ -215,41 +258,130 @@ LuaObj.new = function(src)
   return setmetatable(o, LuaObj)
 end
 
+-- * --------------------------------------------------------------------------
+
 LuaObj.declareTask = function(self)
   self.task = 
     lake.task(self:getOutputPath())
       :workingDirectory(self.proj.root)
 end
 
+-- * --------------------------------------------------------------------------
+
 LuaObj.defineTask = function(self, cmd)
-  local out = self.task.name
-  lake.mkdir(helpers.getPathDirname(out), { make_parents = true })
-  local comp = cmd:complete(self.src, out)
+  local lfile = self.proj.root.."/"..self.src
+  local ofile = self.task.name
+  ensureDirExists(ofile)
+
+  local comp = cmd:complete(self.src, ofile)
+
+  setFileExistanceAndModTimeCondition(self.task)
 
   self.task
-    :cond(function()
-      if not lake.pathExists(out) then
-        return true
+    :recipe(function()
+      local result, output, time = run(comp)
+      if result ~= 0 then
+        flair.writeFailure(ofile)
+      else
+        flair.writeSuccessInputToOutput(lfile, ofile, time)
       end
 
-      if lake.modtime(self.src) > lake.modtime(out) then
-        return true
-      end
-    end)
-    :recipe(function()
-      local output = buffer.new()
-      local result = lake.cmd(comp,
-      {
-        onRead = function(x) output:put(x) end
-      })
-      if result ~= 0 then
-        io.write("failed to compile ", out, ":\n", output:get(), "\n")
-      else
-        io.write(
-          "compiled ", helpers.makeRootRelativePath(sys.root, out), "\n")
-      end
+      io.write(output)
     end)
 end
+
+-- * --------------------------------------------------------------------------
+
+--- An obj file built from an lpp file.
+---@class object.LppObj : object.Obj
+local LppObj = Obj:derive()
+object.LppObj = LppObj
+
+-- * --------------------------------------------------------------------------
+
+---@param src string
+---@return object.LppObj
+LppObj.new = function(src)
+  local o = {}
+  o.src = src
+  return setmetatable(o, LppObj)
+end
+
+-- * --------------------------------------------------------------------------
+
+LppObj.declareTask = function(self)
+  self.task = 
+    lake.task(self:getOutputPath())
+      :workingDirectory(self.proj.root)
+
+  lake.task(self.proj:getBuildDir().."/"..self.src..".cpp")
+    :workingDirectory(self.proj.root)
+    :dependsOn(self.proj.tasks.wait_for_deps)
+end
+
+-- * --------------------------------------------------------------------------
+
+LppObj.getTargetName = function(self)
+  return self.src..".cpp.o"
+end   
+
+-- * --------------------------------------------------------------------------
+
+---@param cmd cmd.LppObj
+LppObj.defineTask = function(self, cmd)
+  local out = self.task.name
+  lake.mkdir(helpers.getPathDirname(out), { make_parents = true })
+  
+  local lfile = self.proj.root.."/"..self.src
+  local cfile = self.proj:getBuildDir().."/"..self.src..".cpp"
+  local ofile = cfile..".o"
+  local mfile = self.proj:getBuildDir().."/"..self.src..".meta"
+  local dfile = self.proj:getBuildDir().."/"..self.src..".d"
+
+  ensureDirExists(ofile)
+
+  local lpp_cmd, cpp_cmd = cmd:complete(lfile, cfile, ofile, dfile, mfile)
+
+  local lpp_task = lake.task(lfile)
+  local cpp_task = lake.task(cfile)
+  local obj_task = lake.task(ofile)
+
+  cpp_task
+    :dependsOn(lpp_task)
+    :workingDirectory(self.proj.root)
+  obj_task
+    :dependsOn(cpp_task)
+    :workingDirectory(self.proj.root)
+
+  tryLoadDepFile(dfile, obj_task)
+  
+  setFileExistanceAndModTimeCondition(cpp_task)
+  setFileExistanceAndModTimeCondition(obj_task)
+  
+  cpp_task:recipe(function()
+    local result, output, time = run(lpp_cmd)
+    if result ~= 0 then
+      flair.writeFailure(cfile)
+    else
+      flair.writeSuccessInputToOutput(lfile, cfile, time)
+    end
+
+    io.write(output)
+  end)
+
+  obj_task:recipe(function()
+    local result, output, time = run(cpp_cmd)
+    if result ~= 0 then
+      flair.writeFailure(ofile)
+    else
+      flair.writeSuccessInputToOutput(cfile, ofile, time)
+    end
+
+    io.write(output)
+  end)
+end
+
+-- * --------------------------------------------------------------------------
 
 --- An executable built from some collection of object files.
 ---@class object.Exe : object.BuildObject
@@ -260,6 +392,8 @@ end
 local Exe = BuildObject:derive()
 object.Exe = Exe
 
+-- * --------------------------------------------------------------------------
+
 Exe.new = function(name, objs)
   local o = {}
   o.name = name
@@ -267,9 +401,13 @@ Exe.new = function(name, objs)
   return setmetatable(o, Exe)
 end
 
+-- * --------------------------------------------------------------------------
+
 Exe.getTargetName = function(self)
   return self.name
 end
+
+-- * --------------------------------------------------------------------------
 
 Exe.declareTask = function(self)
   self.task = 
@@ -277,7 +415,9 @@ Exe.declareTask = function(self)
       :workingDirectory(self.proj.root)
 end
 
-Exe.defineTask = function(self)
+-- * --------------------------------------------------------------------------
+
+local defineLinkerTask = function(self, is_shared)
   local out = self:getOutputPath()
 
   ---@type cmd.Exe.Params | {}
@@ -296,18 +436,21 @@ Exe.defineTask = function(self)
 
   params.shared_libs = List{}
   self.proj:gatherBuildObjects(object.SharedLib, function(bobj)
-    self.task:dependsOn(bobj.task)
-    params.shared_libs:push(bobj.name)
+    if bobj ~= self then
+      self.task:dependsOn(bobj.task)
+      params.shared_libs:push(bobj.name)
+    end
   end)
+
+  params.is_shared = is_shared
 
   local cmd = build.cmd.Exe.new(params)
 
-  local obj_tasks = List{}
   local objs = List{}
   for obj in self.objs:each() do
     objs:push(obj:getOutputPath())
     if obj.task then
-      obj_tasks:push(obj.task)
+      self.task:dependsOn(obj.task)
     else
       sys.log:warn("exe obj '",tostring(obj),"' does not have a task set!\n")
     end
@@ -315,39 +458,35 @@ Exe.defineTask = function(self)
 
   local exe_cmd = cmd:complete(objs, out)
 
-self.task
-    :dependsOn(obj_tasks)
-    :cond(function(prereqs)
-      if not lake.pathExists(out) then
-        return true
+  setFileExistanceAndModTimeCondition(self.task)
+
+  self.task
+    :recipe(function()
+      local result, output, time = run(exe_cmd)
+      if result ~= 0 then
+        flair.writeFailure(self.task.name)
+      else
+        flair.writeSuccessOnlyOutput(self.task.name, time)
       end
 
-      local exe_modtime = lake.modtime(out)
-      for prereq in prereqs:each() do
-        if lake.modtime(prereq) > exe_modtime then
-          return true
-        end
-      end
-    end)
-    :recipe(function()
-      local output = buffer.new()
-      local result = lake.cmd(exe_cmd,
-      {
-        onRead = function(x) output:put(x) end
-      })
-      if result ~= 0 then
-        io.write("failed to compile ", out, ":\n", output:get(), "\n")
-      else
-        io.write(
-          "compiled ", helpers.makeRootRelativePath(sys.root, out), "\n")
-      end
+      io.write(output)
     end)
 end
+
+-- * --------------------------------------------------------------------------
+
+Exe.defineTask = function(self)
+  defineLinkerTask(self, false)
+end
+
+-- * --------------------------------------------------------------------------
 
 --- A static library.
 --- @class object.StaticLib : object.BuildObject
 local StaticLib = BuildObject:derive()
 object.StaticLib = StaticLib
+
+-- * --------------------------------------------------------------------------
 
 StaticLib.new = function(name, objs)
   local o = {}
@@ -355,6 +494,8 @@ StaticLib.new = function(name, objs)
   o.objs = objs
   return setmetatable(o, StaticLib)
 end
+
+-- * --------------------------------------------------------------------------
 
 StaticLib.getTargetName = function(self)
   local name = self.name 
@@ -375,8 +516,12 @@ StaticLib.getTargetName = function(self)
   end
 end
 
+-- * --------------------------------------------------------------------------
+
 local SharedLib = BuildObject:derive()
 object.SharedLib = SharedLib
+
+-- * --------------------------------------------------------------------------
 
 SharedLib.new = function(name, objs)
   local o = {}
@@ -384,6 +529,8 @@ SharedLib.new = function(name, objs)
   o.objs = objs
   return setmetatable(o, SharedLib)
 end
+
+-- * --------------------------------------------------------------------------
 
 SharedLib.getTargetName = function(self)
   local dir,base = self.name:match "(.*)/(.*)"
@@ -402,12 +549,30 @@ SharedLib.getTargetName = function(self)
   end
 end
 
+-- * --------------------------------------------------------------------------
+
+SharedLib.declareTask = function(self)
+  self.task = 
+    lake.task(self:getOutputPath())
+      :workingDirectory(self.proj.root)
+end
+
+-- * --------------------------------------------------------------------------
+
+SharedLib.defineTask = function(self)
+  defineLinkerTask(self, true)
+end
+
+-- * --------------------------------------------------------------------------
+
 --- A special build object that specifies a makefile that needs to be run.
 --- This should only be used for compiling external libraries that use 
 --- make for compilation. 
 ---@class object.Makefile : object.BuildObject
 local Makefile = BuildObject:derive()
 object.Makefile = Makefile
+
+-- * --------------------------------------------------------------------------
 
 --- The directory make should run in.
 ---@param root string
@@ -420,9 +585,13 @@ Makefile.new = function(root, cond)
   return setmetatable(o, Makefile)
 end
 
+-- * --------------------------------------------------------------------------
+
 Makefile.getOutputPath = function()
   error("getOutputPath should never be called on a Makefile")
 end
+
+-- * --------------------------------------------------------------------------
 
 Makefile.declareTask = function(self)
   self.task = 
@@ -430,6 +599,8 @@ Makefile.declareTask = function(self)
       :cond(self.cond)
       :workingDirectory(self.proj.root.."/"..self.root)
 end
+
+-- * --------------------------------------------------------------------------
 
 Makefile.defineTask = function(self)
   self.task
@@ -440,6 +611,8 @@ Makefile.defineTask = function(self)
       })
     end)
 end
+
+-- * --------------------------------------------------------------------------
 
 --- A special build object that specifies a CMake project thing that needs
 --- to be configured and run.
@@ -452,6 +625,8 @@ end
 ---@field mode string
 local CMake = BuildObject:derive()
 object.CMake = CMake
+
+-- * --------------------------------------------------------------------------
 
 --- Path to the configuration file.
 ---@param config string
@@ -467,19 +642,24 @@ CMake.new = function(config, output, mode)
   return setmetatable(o, CMake)
 end
 
+-- * --------------------------------------------------------------------------
+
 CMake.getOutputPath = function()
   error("getOutputPath should never be called on a CMake")
 end
+
+-- * --------------------------------------------------------------------------
 
 CMake.declareTask = function(self)
   self.task = 
     lake.task("cmake "..self.output)
       :workingDirectory(self.output)
       :cond(function()
-        return lake.pathExists(self.output.."/CMakeCache.txt")
+        return not lake.pathExists("CMakeCache.txt")
       end)
 end
 
+-- * --------------------------------------------------------------------------
 
 CMake.defineTask = function(self)
   self.task:recipe(function()
@@ -501,7 +681,7 @@ CMake.defineTask = function(self)
     end
 
     local result = lake.cmd(
-      { "make", "-j" },
+      { "make", "-j6" },
       { onRead = io.write })
 
     if result ~= 0 then

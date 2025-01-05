@@ -50,6 +50,8 @@ struct Lake
 
   b8 print_transformed; // --print-transformed
 
+  b8 print_timers = false; // --print-timers
+
   b8 in_recipe = false;
 
   b8   init(const char** argv, int argc, mem::Allocator* allocator = &mem::stl_allocator);

@@ -3,8 +3,6 @@ $ local reflect = require "reflect.Reflector"
 
 #include "iro/time/time.h"
 
-// TODO(sushi) put behind appropriate defines
-#include "Reloader.h"
 #include "dlfcn.h"
 
 @@lpp.import "window/Window.lh"
@@ -25,6 +23,11 @@ $ local reflect = require "reflect.Reflector"
 namespace ui
 {
 struct Inspector;
+}
+
+namespace hr
+{
+struct Reloader;
 }
 
 struct Engine

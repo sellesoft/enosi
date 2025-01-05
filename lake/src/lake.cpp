@@ -261,6 +261,10 @@ b8 processArgDoubleDash(
     if (!processMaxJobsArg(lake, iter))
       return false;
     break;
+
+  case "print-timers"_hashed:
+    lake->print_timers = true;
+    break;
   }
 
   return true;
@@ -334,6 +338,8 @@ b8 Lake::processArgv(const char** argv, int argc, String* initfile)
  */
 b8 Lake::run()
 {
+  auto lakefile_start = TimePoint::monotonic();
+
   lua.getglobal(lake_err_handler);
   if (!lua.loadfile((char*)initpath.ptr) || 
       !lua.pcall(0,1))
@@ -342,6 +348,10 @@ b8 Lake::run()
     lua.pop();
     return false;
   }
+
+  if (print_timers)
+    NOTICE("lakefile took ", 
+           WithUnits(TimePoint::monotonic() - lakefile_start), "\n");
 
   if (lua.isboolean())
   {
@@ -358,24 +368,30 @@ b8 Lake::run()
 
   INFO("beginning build loop.\n");
 
-  for (Task& task : tasks)
-  {
-    INFO("task ", task.name, ":\n");
-    
-    INFO("  prereqs:\n");
-    for (Task& prereq : task.prerequisites)
-    {
-      INFO("    ", prereq.name, "\n");
-    }
-  }
+  // for (Task& task : tasks)
+  // {
+  //   INFO("task ", task.name, ":\n");
+  //   
+  //   INFO("  prereqs:\n");
+  //   for (Task& prereq : task.prerequisites)
+  //   {
+  //     INFO("    ", prereq.name, "\n");
+  //   }
+  // }
 
   TaskList build_queue;
   if (!build_queue.init())
     return ERROR("failed to initialize build queue\n");
   defer { build_queue.deinit(); };
 
+  auto sort_start = TimePoint::monotonic();
+
   if (Task::TopSortResult::Cycle == Task::topSortTasks(tasks, &build_queue))
     return ERROR("cycle detected\n");
+
+  if (print_timers)
+    NOTICE("top sort took ", WithUnits(TimePoint::monotonic() - sort_start), 
+         "\n");
 
   for (Task& task : build_queue)
   {
@@ -395,18 +411,18 @@ b8 Lake::run()
     {
       Task* task = leaves.front();
 
-      DEBUG("checking ", task->name, "\n");
+      DEBUG("checking '", task->name, "'\n");
 
       if (task->needRunRecipe(*this))
       {
-        DEBUG("task ", task->name, " needs to run its recipe\n");
+        DEBUG("task '", task->name, "' needs to run its recipe\n");
         active_recipes.pushHead(task);
         active_recipe_count += 1;
         leaves.remove(leaves.head);
       }
       else
       {
-        DEBUG("task ", task->name, " is complete\n");
+        DEBUG("task '", task->name, "' is complete\n");
         task->onComplete(*this, false);
         leaves.remove(leaves.head);
       }
@@ -424,7 +440,7 @@ b8 Lake::run()
         {
         case Task::RecipeResult::Finished:
           {
-            DEBUG("task ", task->name, " completed\n");
+            DEBUG("task '", task->name, "' completed\n");
             active_recipes.remove(task_node);
             active_recipe_count -= 1;
             task->onComplete(*this, true);;
@@ -559,7 +575,7 @@ ActiveProcess* lua__processSpawn(Lake* lake, String* args, u32 args_count)
       DEBUG(args[i], "\n");
     }
     auto cwd = fs::Path::cwd();
-    DEBUG("in dir ", cwd);
+    DEBUG("in dir ", cwd, "\n");
     cwd.destroy();
   } 
 
@@ -675,7 +691,7 @@ void lua__setMaxJobs(Lake* lake, s32 n)
 {
   if (!lake->max_jobs_set_on_cli)
   {
-    NOTICE("max_jobs set to ", n, " from lakefile call to lake.maxjobs\n");
+    // NOTICE("max_jobs set to ", n, " from lakefile call to lake.maxjobs\n");
 
     // TODO(sushi) make a thing to get number of logical processors and also 
     //             warn here if max jobs is set too high
@@ -897,27 +913,6 @@ EXPORT_DYNAMIC
 b8 lua__touch(String path)
 {
   return platform::touchFile(path);
-}
-
-/* ----------------------------------------------------------------------------
- */
-int lua__basicFileTaskCondition(lua_State* L)
-{
-  auto lua = LuaState::fromExistingState(L);
-
-  String src = lua.tostring(1);
-  String dst = lua.tostring(2);
-  Task* task = lua.tolightuserdata<Task>(3);
-
-  b8 result = false;
-
-  if (!fs::Path::exists(dst))
-  {
-    result = true;
-  }
-  else
-  {
-  }
 }
 
 /* ----------------------------------------------------------------------------
