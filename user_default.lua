@@ -7,11 +7,6 @@
 --- table value does not clear all of its children, you only overwrite the 
 --- children you specify.
 ---
---- This does not apply to List options, though. If you want to append to
---- a List write something like: 
----
-
-local List = require "list"
 
 return 
 {

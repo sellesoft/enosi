@@ -2,11 +2,8 @@
 --- A library of code that results in some build objects.
 ---
 
-local lake = require "lake"
-
 local Type = require "Type"
-local List = require "list"
-local util = require "util"
+local List = require "List"
 
 local sys = require "build.sys"
 local bobj = require "build.object"

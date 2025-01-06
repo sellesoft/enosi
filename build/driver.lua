@@ -3,9 +3,8 @@
 ---
 
 local helpers = require "build.helpers"
-local util = require "util"
 local sys = require "build.sys"
-local List = require "list"
+local List = require "List"
 local build = 
 {
   obj = require "build.object",
@@ -36,6 +35,8 @@ driver.run = function()
     return (subcmd(args:sub(2)))
   end
 end
+
+-- * --------------------------------------------------------------------------
 
 local createBuildCmds = function(proj)
   local cmds = {}
@@ -89,6 +90,8 @@ local createBuildCmds = function(proj)
 
   return cmds
 end
+
+-- * --------------------------------------------------------------------------
 
 local resolveDirs = function(proj)
   local makeTask = function(dst, src)
@@ -157,11 +160,15 @@ local resolveDirs = function(proj)
   end
 end
 
+-- * --------------------------------------------------------------------------
+
 local loadEnabledProjects = function()
   for proj in List(sys.cfg.enabled_projects):each() do
     sys.getOrLoadProject(proj)
   end
 end
+
+-- * --------------------------------------------------------------------------
 
 --- Builds projects. This is the default subcommand. 
 ---
@@ -200,6 +207,8 @@ driver.subcmds.build = function(args)
   end
 end
 
+-- * --------------------------------------------------------------------------
+
 --- Cleans projects. 
 ---
 --- Usage:
@@ -219,7 +228,9 @@ driver.subcmds.clean = function(args)
     loadEnabledProjects()
 
     for proj in sys.projects.list:each() do
-      proj:clean()
+      if not proj.is_external then
+        proj:clean()
+      end
     end
   else
     local opt = args[1]
@@ -244,6 +255,8 @@ driver.subcmds.clean = function(args)
     end
   end
 end
+
+-- * --------------------------------------------------------------------------
 
 --- Publishes build objects specified by projects into the bin/ folder. 
 --- Any build objects specified as published by a project will be copied 

@@ -1,11 +1,10 @@
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
+$ local cmn = require "common"
 $ local ui = require "ui.UI"
 
 @@lpp.import "game/Entity.lh"
 
-#include "iro/logger.h"
-#include "iro/memory/allocator.h"
+#include "iro/Logger.h"
+#include "iro/memory/Allocator.h"
 
 static Logger logger = 
   Logger::create("entity"_str, Logger::Verbosity::Info);

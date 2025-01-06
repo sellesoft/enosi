@@ -4,9 +4,9 @@
 
 $ local cmn = require "common"
 
-#include "iro/common.h"
-#include "iro/containers/pool.h"
-#include "iro/containers/avl.h"
+#include "iro/Common.h"
+#include "iro/containers/Pool.h"
+#include "iro/containers/AVL.h"
 
 @@lpp.import "resource/SourceDataFile.lh"
 @@lpp.import "resource/SourceDataFileHandle.lh"

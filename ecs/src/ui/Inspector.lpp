@@ -1,12 +1,6 @@
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
+$ local cmn = require "common"
 $ local ui = require "ui.UI"
 $ local buffer = require "string.buffer"
-$ local Placeable = require "ui.Placeable"
-$ local List = require "list"
-$ local CGen = require "cgen"
-$ local util = require "util"
-$ local log = require "logger" ("inspector", Verbosity.Info)
 $ local ast = require "reflect.AST"
 $ local Processor = require "reflect.Processor"
 $ local glob = require "Glob"

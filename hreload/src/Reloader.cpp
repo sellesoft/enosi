@@ -28,13 +28,13 @@
 #include "elf.h"
 #include "link.h"
 
-#include "iro/logger.h"
-#include "iro/fs/file.h"
-#include "iro/memory/allocator.h"
+#include "iro/Logger.h"
+#include "iro/fs/File.h"
+#include "iro/memory/Allocator.h"
 #include "iro/containers/SmallArray.h"
-#include "iro/containers/avl.h"
-#include "iro/platform.h"
-#include "iro/memory/bump.h"
+#include "iro/containers/AVL.h"
+#include "iro/Platform.h"
+#include "iro/memory/Bump.h"
 
 #include "gnu/lib-names.h"
 

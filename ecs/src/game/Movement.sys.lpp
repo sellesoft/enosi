@@ -1,6 +1,6 @@
 $ local cmn = require "common"
 
-#include "iro/logger.h"
+#include "iro/Logger.h"
 
 using namespace iro;
 

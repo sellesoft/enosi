@@ -3,13 +3,12 @@
  *  SourceDataParser.
  */
 
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
+$ require "common"
 
-#include "iro/common.h"
-#include "iro/memory/bump.h"
-#include "iro/containers/pool.h"
-#include "iro/containers/list.h"
+#include "iro/Common.h"
+#include "iro/memory/Bump.h"
+#include "iro/containers/Pool.h"
+#include "iro/containers/List.h"
 
 using namespace iro;
 

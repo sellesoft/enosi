@@ -1,8 +1,8 @@
-$ local lpp = require "lpp"
+$ local cmn = require "common"
 $ local reflect = require "reflect.Reflector"
 
-#include "iro/common.h"
-#include "iro/memory/allocator.h"
+#include "iro/Common.h"
+#include "iro/memory/Allocator.h"
 #include "iro/Pair.h"
 #include "math/vec.h"
 

@@ -4,10 +4,8 @@
 
 local Type = require "Type"
 local Parser = require "Parser"
-local List = require "list"
-local util = require "util"
-local buffer = require "string.buffer"
-local CGen = require "cgen"
+local List = require "List"
+local CGen = require "CGen"
 local Style = require "ui.Style"
 
 local WidgetNode,

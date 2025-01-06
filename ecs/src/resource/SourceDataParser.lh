@@ -4,10 +4,10 @@
 
 $ local cmn = require "common"
 
-#include "iro/common.h"
-#include "iro/unicode.h"
-#include "iro/memory/allocator.h"
-#include "iro/io/io.h"
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+#include "iro/memory/Allocator.h"
+#include "iro/io/IO.h"
 #include "iro/Scanner.h"
 
 using namespace iro;

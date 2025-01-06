@@ -4,10 +4,10 @@
  *  This can be thought of as the CSS of the ui system.
  */
 
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
-$ local ctx = reflect.ctx
-$ local List = require "list"
+$ local cmn = require "common"
+
+$ local ctx = cmn.reflect.ctx
+$ local List = require "List"
 $ local buffer = require "string.buffer"
 $ local ui = require "ui.UI"
 $ local Style = require "ui.Style"
@@ -15,10 +15,10 @@ $ local Style = require "ui.Style"
 #include "math/vec.h"
 #include "Color.h"
 
-#include "iro/flags.h"
-#include "iro/memory/memory.h"
-#include "iro/containers/pool.h"
-#include "iro/containers/avl.h"
+#include "iro/Flags.h"
+#include "iro/memory/Memory.h"
+#include "iro/containers/Pool.h"
+#include "iro/containers/AVL.h"
 
 using namespace iro;
 

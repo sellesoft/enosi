@@ -1,7 +1,7 @@
 $ local cmn = require "common"
 
-#include "iro/common.h"
-#include "iro/unicode.h"
+#include "iro/Common.h"
+#include "iro/Unicode.h"
 
 @@lpp.import "game/map/Map.schema.lh"
 

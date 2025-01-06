@@ -2,11 +2,11 @@
  *  Enumeration of keys.
  */
 
-#ifndef _ecs_input_keys_h
-#define _ecs_input_keys_h
+#ifndef _ecs_input_Keys_h
+#define _ecs_input_Keys_h
 
-#include "iro/common.h"
-#include "iro/unicode.h"
+#include "iro/Common.h"
+#include "iro/Unicode.h"
 
 using namespace iro;
 
@@ -62,6 +62,6 @@ enum class MouseButton
   COUNT,
 };
 
-String getouseButtonStr(MouseButton button);
+String getMouseButtonStr(MouseButton button);
 
 #endif

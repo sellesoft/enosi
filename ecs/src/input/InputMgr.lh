@@ -2,8 +2,7 @@
  *  Tracker of input state.
  */
 
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
+$ require "common"
 
 #include "input/Keys.h"
 #include "math/vec.h"

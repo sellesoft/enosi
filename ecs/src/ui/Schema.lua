@@ -4,10 +4,7 @@
 ---
 ---
 
-local List = require "list"
-local util = require "util"
-local CGen = require "cgen"
-local lpp = require "lpp"
+local List = require "List"
 local buffer = require "string.buffer"
 
 local string_buffer = buffer.new()

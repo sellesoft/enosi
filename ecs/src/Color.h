@@ -3,12 +3,12 @@
  */
 
 
-#ifndef _ecs_color_h
-#define _ecs_color_h
+#ifndef _ecs_Color_h
+#define _ecs_Color_h
 
-#include "iro/common.h"
-#include "iro/platform.h"
-#include "iro/io/io.h"
+#include "iro/Common.h"
+#include "iro/Platform.h"
+#include "iro/io/IO.h"
 
 struct Color;
 

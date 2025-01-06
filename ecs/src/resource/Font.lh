@@ -2,14 +2,13 @@
  *  A font loaded from disk.
  */
 
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
+$ local cmn = require "common"
 $ local SourceData = require "resource.SourceData"
 
-#include "iro/common.h"
-#include "iro/unicode.h"
-#include "iro/traits/nil.h"
-#include "iro/containers/slice.h"
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+#include "iro/traits/Nil.h"
+#include "iro/containers/Slice.h"
 #include "math/vec.h"
 
 using namespace iro;

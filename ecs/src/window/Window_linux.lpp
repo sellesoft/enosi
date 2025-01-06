@@ -1,13 +1,12 @@
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
-$ local CGen = require "cgen"
-$ local List = require "list"
+$ local cmn = require "common"
+$ local CGen = require "CGen"
+$ local List = require "List"
 
 @@lpp.import "input/Input.events.lh"
 @@lpp.import "window/Window.events.lh"
 @@lpp.import "Engine.lh"
 
-#include "iro/logger.h"
+#include "iro/Logger.h"
 #include "math/util.h"
 #include "input/Keys.h"
 

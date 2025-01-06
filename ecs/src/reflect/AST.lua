@@ -3,9 +3,8 @@
 ---
 
 local LuaType = require "Type"
-local List = require "list"
+local List = require "List"
 local buffer = require "string.buffer"
-local util = require "util"
 
 local PrettyPrinter = LuaType.make()
 

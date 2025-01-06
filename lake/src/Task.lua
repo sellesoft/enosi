@@ -2,7 +2,7 @@
 --- Definition of Tasks in lake.
 ---
 
-local List = require "list"
+local List = require "List"
 local Type = require "Type"
 local ffi = require "ffi"
 local co = require "coroutine"

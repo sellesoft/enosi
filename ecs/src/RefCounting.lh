@@ -4,7 +4,7 @@
  *  we get to threading and need to handle ref counting across threads.
  */
 
-#include "iro/common.h"
+#include "iro/Common.h"
 #include "assert.h"
 
 struct RefCounter

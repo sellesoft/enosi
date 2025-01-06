@@ -1,11 +1,18 @@
 /*
  *  Types for dealing with matrices.
+ *
+ *  Currently this just defines a 3x2 matrix type used to deal with proj/view
+ *  matrix stuff. If we ever need other kinds of matrices they should be put
+ *  here.
+ *
+ *  TODO(sushi) it would be nice to convert this to an lpp file that generates
+ *              matrices of whatever dimensions and element type we want.
  */
 
 #ifndef _ecs_math_mat_h
 #define _ecs_math_mat_h
 
-#include "iro/common.h"
+#include "iro/Common.h"
 #include "math/vec.h"
 
 struct mat3x2

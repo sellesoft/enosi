@@ -1,7 +1,7 @@
 $ local event = require "event.Event"
 $ local reflect = require "reflect.Reflector"
 
-#include "iro/common.h"
+#include "iro/Common.h"
 #include "event/BroadcastEventBus.h"
 @reflect.include "input/Keys.h"
 @reflect.include "math/vec.h"

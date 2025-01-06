@@ -3,8 +3,7 @@
  *
  */
 
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
+$ local cmn = require "common"
 $ local ui = require "ui.UI"
 
 
@@ -12,11 +11,11 @@ $ local ui = require "ui.UI"
 @@lpp.import "ui/DrawCmd.lh"
 @@lpp.import "ui/FontLib.lh"
 
-#include "iro/containers/list.h"
-#include "iro/containers/pool.h"
-#include "iro/containers/linked_pool.h"
+#include "iro/containers/List.h"
+#include "iro/containers/Pool.h"
+#include "iro/containers/LinkedPool.h"
 #include "iro/containers/Tree.h"
-#include "iro/memory/bump.h"
+#include "iro/memory/Bump.h"
 
 namespace gfx
 {

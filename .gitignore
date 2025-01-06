@@ -36,3 +36,5 @@ llvm/llvm_build/
 lpp/build/
 
 user.lua
+
+bin/liblppclang.so

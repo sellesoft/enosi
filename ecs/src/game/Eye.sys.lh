@@ -1,7 +1,6 @@
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
+$ require "common"
 
-#include "iro/common.h"
+#include "iro/Common.h"
 #include "math/vec.h"
 #include "math/mat.h"
 

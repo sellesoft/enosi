@@ -3,12 +3,10 @@
 --- built and/or used to build other build objects.
 ---
 
-local util = require "util"
 local sys = require "build.sys"
 local Type = require "Type"
-local List = require "list"
+local List = require "List"
 local helpers = require "build.helpers"
-local cmd = require "build.commands"
 local buffer = require "string.buffer"
 local flair = require "build.flair"
 
@@ -30,6 +28,7 @@ local tryLoadDepFile = function(dfile, obj_task)
     for file in depfile:lines() do
       obj_task:dependsOn(lake.task(file))
     end
+    depfile:close()
   end
 end
 
@@ -67,6 +66,30 @@ local run = function(args)
   local capture = buffer.new()
   local result = lake.cmd(args, { onRead = function(s) capture:put(s) end })
   return result, capture:get(), (lake.getMonotonicClock() - start) / 1000000
+end
+
+-- * --------------------------------------------------------------------------
+
+--- Another wrapper around 'run' which handles reporting the result as well
+--- as calling 'error' on failure.
+local runAndReportResult = function(args, infile, outfile)
+  local result, output, time = run(args)
+
+  if result ~= 0 then
+    flair.writeFailure(outfile)
+  else
+    if infile then
+      flair.writeSuccessInputToOutput(infile, outfile, time)
+    else
+      flair.writeSuccessOnlyOutput(outfile, time)
+    end
+  end
+
+  io.write(output)
+
+  if result ~= 0 then
+    lake.throwRecipeErr()
+  end
 end
 
 --- * =========================================================================
@@ -191,11 +214,12 @@ CppObj.defineTask = function(self, cmd)
   local obj_task = self.task or error("nil CppObj.task")
   local dep_task = lake.task(dfile)
 
-  obj_task:dependsOn(cpp_task)
-  dep_task:dependsOn(cpp_task)
-
-  obj_task:workingDirectory(self.proj.root)
-  dep_task:workingDirectory(self.proj.root)
+  obj_task
+    :dependsOn(cpp_task)
+    :workingDirectory(self.proj.root)
+  dep_task
+    :dependsOn(cpp_task)
+    :workingDirectory(self.proj.root)
 
   tryLoadDepFile(dfile, obj_task)
 
@@ -204,15 +228,7 @@ CppObj.defineTask = function(self, cmd)
 
   obj_task
     :recipe(function()
-      local result, output, time = run(cpp_cmd)
-      if result ~= 0 then
-        flair.writeFailure(ofile)
-        error()
-      else
-        flair.writeSuccessInputToOutput(cfile, ofile, time)
-      end
-
-      io.write(output)
+      runAndReportResult(cpp_cmd, cfile, ofile)
     end)
 
   dep_task
@@ -279,14 +295,7 @@ LuaObj.defineTask = function(self, cmd)
 
   self.task
     :recipe(function()
-      local result, output, time = run(comp)
-      if result ~= 0 then
-        flair.writeFailure(ofile)
-      else
-        flair.writeSuccessInputToOutput(lfile, ofile, time)
-      end
-
-      io.write(output)
+      runAndReportResult(comp, lfile, ofile)
     end)
 end
 
@@ -359,25 +368,11 @@ LppObj.defineTask = function(self, cmd)
   setFileExistanceAndModTimeCondition(obj_task)
   
   cpp_task:recipe(function()
-    local result, output, time = run(lpp_cmd)
-    if result ~= 0 then
-      flair.writeFailure(cfile)
-    else
-      flair.writeSuccessInputToOutput(lfile, cfile, time)
-    end
-
-    io.write(output)
+    runAndReportResult(lpp_cmd, lfile, cfile)
   end)
 
   obj_task:recipe(function()
-    local result, output, time = run(cpp_cmd)
-    if result ~= 0 then
-      flair.writeFailure(ofile)
-    else
-      flair.writeSuccessInputToOutput(cfile, ofile, time)
-    end
-
-    io.write(output)
+    runAndReportResult(cpp_cmd, cfile, ofile)
   end)
 end
 
@@ -462,14 +457,7 @@ local defineLinkerTask = function(self, is_shared)
 
   self.task
     :recipe(function()
-      local result, output, time = run(exe_cmd)
-      if result ~= 0 then
-        flair.writeFailure(self.task.name)
-      else
-        flair.writeSuccessOnlyOutput(self.task.name, time)
-      end
-
-      io.write(output)
+      runAndReportResult(exe_cmd, nil, self.task.name)
     end)
 end
 

@@ -1,14 +1,11 @@
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
+$ local cmn = require "common"
 $ local ui = require "ui.UI"
 $ local Comp = require "game.Component"
 $ local glob = require "Glob"
 $ local buffer = require "string.buffer"
-$ local List = require "list"
-$ local util = require "util"
 
-#include "iro/common.h"
-#include "iro/containers/linked_pool.h"
+#include "iro/Common.h"
+#include "iro/containers/LinkedPool.h"
 
 @@lpp.import "game/Entity.lh"
 @@lpp.import "game/IndexedPool.lh"

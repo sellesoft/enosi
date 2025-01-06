@@ -4,11 +4,11 @@
  *
  */ 
 
-#include "iro/common.h"
-#include "iro/unicode.h"
-#include "iro/luastate.h"
-#include "iro/logger.h"
-#include "iro/fs/fs.h"
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+#include "iro/LuaState.h"
+#include "iro/Logger.h"
+#include "iro/fs/File.h"
 
 using namespace iro;
 

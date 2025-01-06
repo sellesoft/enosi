@@ -1,10 +1,10 @@
-local lpp = require "lpp"
+local cmn = require "common"
 local Widget = require "ui.Widget"
 local Schema = require "ui.Schema"
 local StyleContext = require "ui.StyleContext"
 local ItemContext = require "ui.ItemContext"
 local Placeable = require "ui.Placeable"
-local List = require "list"
+local List = require "List"
 local buffer = require "string.buffer"
 
 local ui = {}

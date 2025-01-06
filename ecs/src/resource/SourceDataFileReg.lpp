@@ -3,12 +3,12 @@ $ local cmn = require "common"
 @@lpp.import "resource/SourceDataFileReg.lh"
 @@lpp.import "resource/SourceDataParser.lh"
 
-#include "iro/logger.h"
+#include "iro/Logger.h"
 using namespace iro;
 
 @cmn.defFileLogger(srcdata.reg, Info);
 
-#include "iro/fs/file.h"
+#include "iro/fs/File.h"
 
 /* ----------------------------------------------------------------------------
  */

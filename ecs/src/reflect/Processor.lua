@@ -13,11 +13,9 @@
 --- when we don't already have recently cached data
 ---
 
-local lpp = require "lpp"
 local ast = require "reflect.AST"
-local util = require "util"
-local List = require "list"
-local log = require "logger" ("reflect.processor", Verbosity.Info)
+local List = require "List"
+local log = require "Logger" ("reflect.processor", Verbosity.Info)
 
 require "lppclang" .init "../lppclang/build/debug/liblppclang.so"
 

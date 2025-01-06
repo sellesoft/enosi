@@ -1,13 +1,11 @@
-
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
+$ local cmn = require "common"
 $ local SourceData = require "resource.SourceData"
 
 @@lpp.import "resource/Resource.lh"
 
-#include "iro/common.h"
-#include "iro/unicode.h"
-#include "iro/memory/allocator.h"
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+#include "iro/memory/Allocator.h"
 
 using namespace iro;
 

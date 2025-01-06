@@ -1,7 +1,6 @@
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
+$ local cmn = require "common"
 
-#include "iro/common.h"
+#include "iro/Common.h"
 
 @@lpp.import "game/EntityId.lh"
 

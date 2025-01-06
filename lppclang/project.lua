@@ -1,6 +1,6 @@
 local sys = require "build.sys"
 local bobj = require "build.object"
-local List = require "list"
+local List = require "List"
 
 local lppclang = sys.getLoadingProject()
 
@@ -11,7 +11,7 @@ for cfile in lake.find("src/**/*.cpp"):each() do
 end
 
 for lfile in lake.find("src/**/*.lua"):each() do
-  lppclang.report.pub.LuaObj(lfile)
+  lppclang.report.LuaObj(lfile)
 end
 
 -- Get the clang executable as reported by the llvm project and define 

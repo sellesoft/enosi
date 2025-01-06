@@ -1,14 +1,13 @@
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
+$ local cmn = require "common"
 $ local event = require "event.Event"
 
-#include "iro/logger.h"
-#include "iro/fs/fs.h"
-#include "iro/time/time.h"
+#include "iro/Logger.h"
+#include "iro/fs/FileSystem.h"
+#include "iro/time/Time.h"
 
 @lpp.import "Engine.lh"
 
-#include "iro/gdbscriptdef.h"
+#include "iro/GDBScriptDef.h"
 
 static Logger logger = 
   Logger::create("ecs"_str, Logger::Verbosity::Trace);

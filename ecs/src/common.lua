@@ -3,13 +3,13 @@
 ---
 
 -- Introduce lpp as a global.
-lpp = require "lpp"
+lpp = require "Lpp"
 
 local common = {}
 
 common.reflect = require "reflect.Reflector"
 common.buffer = require "string.buffer"
-common.List = require "list"
+common.List = require "List"
 
 common.defFileLogger = function(name, verbosity)
   local buf = common.buffer.new()

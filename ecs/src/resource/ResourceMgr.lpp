@@ -2,9 +2,9 @@ $ local cmn = require "common"
 
 @@lpp.import "resource/ResourceMgr.lh"
 
-#include "iro/memory/memory.h"
-#include "iro/fs/file.h"
-#include "iro/platform.h"
+#include "iro/memory/Memory.h"
+#include "iro/fs/File.h"
+#include "iro/Platform.h"
 
 @cmn.defFileLogger(rsrcmgr, Debug)
 

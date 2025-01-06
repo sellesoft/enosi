@@ -6,7 +6,7 @@ iro:dependsOn "luajit"
 
 iro.report.dir.include
 {
-  from = "src/iro",
+  from = "src",
   to = "iro",
   glob = "**/*.h"
 }
@@ -30,10 +30,10 @@ elseif sys.cfg.cpp.compiler == "cl" then
   iro.report.pub.defines { IRO_CL=1 }
 end
 
-for cfile in lake.find("src/iro/**/*.cpp"):each() do
+for cfile in lake.find("src/**/*.cpp"):each() do
   iro.report.pub.CppObj(cfile)
 end
 
-for lfile in lake.find("src/iro/lua/*.lua"):each() do
+for lfile in lake.find("src/lua/*.lua"):each() do
   iro.report.pub.LuaObj(lfile)
 end

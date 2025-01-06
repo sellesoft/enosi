@@ -6,8 +6,8 @@
 
 $ local cmn = require "common"
 
-#include "iro/common.h"
-#include "iro/traits/nil.h"
+#include "iro/Common.h"
+#include "iro/traits/Nil.h"
 #include "assert.h"
 
 @@lpp.import "RefCounting.lh"

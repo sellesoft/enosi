@@ -2,11 +2,11 @@
  *  Internal representation of our source data format.
  */
 
-#include "iro/common.h"
-#include "iro/unicode.h"
-#include "iro/containers/array.h"
-#include "iro/containers/avl.h"
-#include "iro/io/io.h"
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+#include "iro/containers/Array.h"
+#include "iro/containers/AVL.h"
+#include "iro/io/IO.h"
 
 using namespace iro;
 

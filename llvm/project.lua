@@ -1,7 +1,5 @@
 local sys = require "build.sys"
-local bobj = require "build.object"
-local List = require "list"
-local Twine = require "twine"
+local Twine = require "Twine"
 
 local llvm = sys.getLoadingProject()
 

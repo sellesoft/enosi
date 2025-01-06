@@ -182,7 +182,7 @@ typedef struct
 ]]
 
 -- set to the lpp object when loaded
-local lpp = require "lpp"
+local lpp = require "Lpp"
 
 -- contains the shared library when loaded 
 local lppclang

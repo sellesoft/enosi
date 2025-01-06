@@ -1,5 +1,4 @@
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
+$ require "common"
 $ local comp = require "game.Component"
 
 @@lpp.import "game/Component.lh"

@@ -2,7 +2,7 @@ $ local cmn = require "common"
 
 @@lpp.import "resource/SourceDataFile.lh"
 
-#include "iro/logger.h"
+#include "iro/Logger.h"
 
 @cmn.defFileLogger(srcdata.file, Info)
 

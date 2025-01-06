@@ -7,12 +7,12 @@
  *              so that the interface is loaded dynamically.
  */
 
-#ifndef _hreload_reloader_h
-#define _hreload_reloader_h
+#ifndef _hreload_Reloader_h
+#define _hreload_Reloader_h
 
-#include "iro/common.h"
-#include "iro/unicode.h"
-#include "iro/containers/slice.h"
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+#include "iro/containers/Slice.h"
 
 using namespace iro;
 

@@ -3,8 +3,7 @@
  *  some kind of component.
  */
 
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
+$ require "common"
 
 @@lpp.import "game/EntityId.lh"
 @@lpp.import "game/Entity.lh"

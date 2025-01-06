@@ -2,7 +2,7 @@ $ local cmn = require "common"
 
 @@lpp.import "resource/SourceData.lh"
 
-#include "iro/fs/file.h"
+#include "iro/fs/File.h"
 
 /* ----------------------------------------------------------------------------
  */

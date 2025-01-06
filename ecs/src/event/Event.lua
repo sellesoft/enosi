@@ -1,10 +1,8 @@
-local lpp = require "lpp"
-local reflect = require "reflect.Reflector"
-local List = require "list"
-local CGen = require "cgen"
+local cmn = require "common"
+local List = require "List"
 local buffer = require "string.buffer"
 
-local log = require "logger" ("event", Verbosity.Info)
+local log = require "Logger" ("event", Verbosity.Info)
 
 local Event = {}
 Event.list = List{}

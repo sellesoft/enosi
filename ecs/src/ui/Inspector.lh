@@ -1,14 +1,13 @@
 /*
  *  Debug tool for inspecting the state of the Engine.
  */
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
+$ require "common"
 $ local ui = require "ui.UI"
 
-#include "iro/common.h"
-#include "iro/unicode.h"
-#include "iro/containers/avl.h"
-#include "iro/memory/bump.h"
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+#include "iro/containers/AVL.h"
+#include "iro/memory/Bump.h"
 
 @@lpp.import "ui/UI.lh"
 @@lpp.import "ui/widgets/Text.lh"

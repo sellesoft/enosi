@@ -2,8 +2,7 @@
  *  Component used for displaying an entity as a sprite.
  */
 
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
+$ require "common"
 $ local Comp = require "game.Component"
 
 @@lpp.import "game/Component.lh"

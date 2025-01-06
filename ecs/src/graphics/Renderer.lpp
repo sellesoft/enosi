@@ -1,5 +1,4 @@
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
+$ local cmn = require "common"
 
 @@lpp.import "graphics/Renderer.lh"
 
@@ -10,8 +9,8 @@ $ local reflect = require "reflect.Reflector"
 @@lpp.import "resource/ResourceMgr.lh"
 @@lpp.import "resource/Texture.lh"
 
-#include "iro/logger.h"
-#include "iro/fs/file.h"
+#include "iro/Logger.h"
+#include "iro/fs/File.h"
 
 #include "graphics/glad/gl.h"
 

@@ -2,9 +2,8 @@
 --- Config loading.
 ---
 
-local util = require "util"
 local helpers = require "build.helpers"
-local List = require "list"
+local List = require "List"
 
 local loadUserCfg = function(sys)
   local user_chunk, err = loadfile "user.lua"

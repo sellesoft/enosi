@@ -1,11 +1,11 @@
 -- Reflection 'system'.
-local lpp = require "lpp"
-local List = require "list"
+local lpp = require "Lpp"
+local List = require "List"
 local buffer = require "string.buffer"
 
 -- Load lppclang.
 -- TODO(sushi) the lib needs to be loaded in a better way.
-require "ffi" .load "lppclang"
+-- require "ffi" .load "lppclang"
 require "lppclang" .init "lppclang"
 
 

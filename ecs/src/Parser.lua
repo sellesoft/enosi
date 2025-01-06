@@ -5,10 +5,7 @@
 ---
 
 local Type = require "Type"
-local List = require "list"
-local util = require "util"
-local CGen = require "cgen"
-local lpp = require "lpp"
+local lpp = require "Lpp"
 local buffer = require "string.buffer"
 
 local string_buffer = buffer.new()

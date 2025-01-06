@@ -4,7 +4,7 @@
 ---
 ---
 
-local List = require "list"
+local List = require "List"
 local buffer = require "string.buffer"
 
 local Style = {}

@@ -17,7 +17,7 @@
 
 ---@alias List iro.List
 
-local List = require "list"
+local List = require "List"
 local Type = require "Type"
 local helpers = require "build.helpers"
 

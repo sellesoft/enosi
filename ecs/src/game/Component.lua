@@ -1,9 +1,9 @@
-local lpp = require "lpp"
-local List = require "list"
+local lpp = require "Lpp"
+local List = require "List"
 local buffer = require "string.buffer"
 local Type = require "Type"
 
-local log = require "logger" ("comp", Verbosity.Info)
+local log = require "Logger" ("comp", Verbosity.Info)
 
 local comp = {}
 

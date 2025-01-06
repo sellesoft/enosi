@@ -1,8 +1,8 @@
 #include "Task.h"
 
-#include "lake.h"
+#include "Lake.h"
 
-#include "iro/logger.h"
+#include "iro/Logger.h"
 
 static Logger logger = 
   Logger::create("lake.task"_str, Logger::Verbosity::Notice);
@@ -225,10 +225,17 @@ Task::RecipeResult Task::resumeRecipe(Lake& lake)
 
   defer { lua.pop(2); };
 
+  // Check for a lua error having occured during the coroutine.
   if (!lua.toboolean(-2))
   {
     ERROR(lua.tostring(), "\n");
     return RecipeResult::Error;
+  }
+
+  // Check if the coroutine threw lake.RecipeErr
+  if (lua.equal(lake.I.recipe_err_val, -1))
+  {
+    return RecipeResult::Failed;
   }
 
   // In order to support a recipe chdir'ing we set its cwd everytime it 

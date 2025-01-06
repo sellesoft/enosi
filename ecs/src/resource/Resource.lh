@@ -8,9 +8,8 @@ $ local Ref = require "resource.Ref"
 
 @@lpp.import "RefCounting.lh"
 
-#include "iro/common.h"
-#include "iro/unicode.h"
-
+#include "iro/Common.h"
+#include "iro/Unicode.h"
 
 using namespace iro;
 

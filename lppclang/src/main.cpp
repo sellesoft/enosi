@@ -1,10 +1,10 @@
-#include "iro/common.h"
-#include "iro/io/io.h"
-#include "iro/fs/fs.h"
-#include "iro/time/time.h"
-#include "iro/logger.h"
+#include "iro/Common.h"
+#include "iro/io/IO.h"
+#include "iro/fs/FileSystem.h"
+#include "iro/time/Time.h"
+#include "iro/Logger.h"
 
-#include "lppclang.h"
+#include "LppClang.h"
 
 #include "stdio.h"
 

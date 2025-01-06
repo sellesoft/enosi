@@ -1,11 +1,9 @@
+$ local cmn = require "common"
 
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
-
-#include "iro/io/io.h"
-#include "iro/fs/file.h"
-#include "iro/fs/path.h"
-#include "iro/platform.h"
+#include "iro/io/IO.h"
+#include "iro/fs/File.h"
+#include "iro/fs/Path.h"
+#include "iro/Platform.h"
 
 @@lpp.import "resource/Texture.lh"
 @@lpp.import "resource/ResourceMgr.lh"

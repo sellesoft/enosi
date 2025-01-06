@@ -1,5 +1,4 @@
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
+$ require "common"
 
 @@lpp.import "game/Render.sys.lh"
 @@lpp.import "game/GameMgr.lh"
@@ -9,7 +8,7 @@ $ local reflect = require "reflect.Reflector"
 @@lpp.import "game/Sprite.comp.lh"
 @@lpp.import "game/Transform.comp.lh"
 
-#include "iro/logger.h"
+#include "iro/Logger.h"
 
 static Logger logger = 
   Logger::create("rendersys"_str, Logger::Verbosity::Info);

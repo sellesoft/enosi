@@ -8,7 +8,7 @@ $ local cmn = require "common"
 
 @@lpp.import "resource/SourceData.lh"
 
-#include "iro/logger.h"
+#include "iro/Logger.h"
 
 @cmn.defFileLogger(game.map, Info)
 

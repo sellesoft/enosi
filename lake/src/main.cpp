@@ -1,11 +1,10 @@
-#include "lake.h"
+#include "Lake.h"
 #include "stdlib.h"
 
-#include "iro/logger.h"
-#include "iro/platform.h"
-#include "iro/fs/fs.h"
-#include "iro/fs/glob.h"
-#include "iro/fs/path.h"
+#include "iro/Logger.h"
+#include "iro/Platform.h"
+#include "iro/fs/Glob.h"
+#include "iro/fs/Path.h"
 
 using namespace iro;
 
@@ -28,7 +27,11 @@ int main(const int argc, const char* argv[])
   defer { iro::log.deinit(); };
 
   iro::platform::makeDir("temp"_str, false);
-  auto f = fs::File::from("temp/log"_str, fs::OpenFlag::Create | fs::OpenFlag::Truncate | fs::OpenFlag::Write);
+  auto f = 
+    fs::File::from("temp/log"_str, 
+          fs::OpenFlag::Create 
+        | fs::OpenFlag::Truncate 
+        | fs::OpenFlag::Write);
   defer { if (notnil(f)) f.close(); };
 
   {

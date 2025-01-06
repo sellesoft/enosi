@@ -1,10 +1,9 @@
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
+$ local cmn = require "common"
 
 @lpp.import "graphics/Renderer.lh"
 @lpp.import "window/Window.lh"
 
-#include "iro/logger.h"
+#include "iro/Logger.h"
 @lpp.import "window/Window_linux.lh"
 
 #define Window X11Window

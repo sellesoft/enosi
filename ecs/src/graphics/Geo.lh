@@ -3,9 +3,8 @@
  *  for drawing primitives.
  */
 
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
-$ local List = require "list"
+$ local cmn = require "common"
+$ local List = require "List"
 
 #include "math/vec.h"
 #include "Color.h"

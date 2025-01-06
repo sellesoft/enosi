@@ -7,10 +7,8 @@
 --  
 --
 
-local lpp = require "lpp"
 local buffer = require "string.buffer"
-local log = require "logger" ("ui.StyleContext", Verbosity.Notice)
-local List = require "list"
+local List = require "List"
 local Schema = require "ui.Schema"
 local Style = require "ui.Style"
 

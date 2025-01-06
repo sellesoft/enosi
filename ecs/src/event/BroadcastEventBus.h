@@ -1,9 +1,9 @@
-#ifndef _ecs_event_broadcasteventbus_h
-#define _ecs_event_broadcasteventbus_h
+#ifndef _ecs_event_BroadcastEventBus_h
+#define _ecs_event_BroadcastEventBus_h
 
-#include "iro/common.h"
-#include "iro/containers/list.h"
-#include "iro/containers/pool.h"
+#include "iro/Common.h"
+#include "iro/containers/List.h"
+#include "iro/containers/Pool.h"
 
 struct BroadcastEventBus
 {

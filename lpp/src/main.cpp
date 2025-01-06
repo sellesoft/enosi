@@ -1,9 +1,9 @@
-#include "lpp.h"
+#include "Lpp.h"
 
-#include "iro/fs/fs.h"
-#include "iro/common.h"
-#include "iro/logger.h"
-#include "iro/platform.h"
+#include "iro/Common.h"
+#include "iro/fs/FileSystem.h"
+#include "iro/Logger.h"
+#include "iro/Platform.h"
 
 #define DEFINE_GDB_PY_SCRIPT(script_name) \
   asm("\

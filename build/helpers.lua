@@ -6,7 +6,7 @@
 ---
 
 local Type = require "Type"
-local List = require "list"
+local List = require "List"
 
 local helpers = {}
 

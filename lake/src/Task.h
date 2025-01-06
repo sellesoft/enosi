@@ -3,15 +3,15 @@
  *  after other tasks. 
  */
 
-#ifndef _lake_task_h
-#define _lake_task_h
+#ifndef _lake_Task_h
+#define _lake_Task_h
 
-#include "iro/common.h"
-#include "iro/unicode.h"
-#include "iro/containers/list.h"
-#include "iro/containers/avl.h"
-#include "iro/fs/path.h"
-#include "iro/fs/dir.h"
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+#include "iro/containers/List.h"
+#include "iro/containers/AVL.h"
+#include "iro/fs/Path.h"
+#include "iro/fs/Dir.h"
 
 using namespace iro;
 
@@ -63,8 +63,17 @@ struct Task
   // Starts or resumes this task's recipe.
   enum class RecipeResult
   {
+    // A lua error occured, such as trying to index a nil value.
     Error,
+    // The recipe is currently running.
     InProgress,
+    // The recipe yielded with lake.RecipeErr, which indicates the task can not
+    // be completed and so we must'nt try to build any dependent tasks.
+    // This is distinguished from Error so that we can prevent printing the 
+    // lua error like we normally would. 
+    // Note that Error also marks this Task has having Errored.
+    Failed,
+    // The recipe has completed.
     Finished,
   };
 

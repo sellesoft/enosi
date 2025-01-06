@@ -1,7 +1,7 @@
 $ local cmn = require "common"
 $ local Comp = require "game.Component"
 $ local glob = require "Glob"
-$ local List = require "list"
+$ local List = require "List"
 
 @@lpp.import "game/EntityLoader.lh"
 
@@ -10,9 +10,9 @@ $ local List = require "list"
 @@lpp.import "resource/SourceDataFile.lh"
 @@lpp.import "resource/Packing.lh"
 
-#include "iro/common.h"
-#include "iro/unicode.h"
-#include "iro/logger.h"
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+#include "iro/Logger.h"
 
 @cmn.defFileLogger(ent.loader, Info);
 

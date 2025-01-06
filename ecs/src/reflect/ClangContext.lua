@@ -3,8 +3,8 @@
 --- this translation units cli args to the created context, so use it!
 ---
 
-local lpp = require "lpp"
-local List = require "list"
+local lpp = require "Lpp"
+local List = require "List"
 
 -- Get the cargs so we can pass them to lppclang when we create the context.
 local args = List{}

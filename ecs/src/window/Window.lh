@@ -2,11 +2,11 @@
  *  A representation of an OS window.
  */
 
-#ifndef _ecs_window_h
-#define _ecs_window_h
+#ifndef _ecs_Window_h
+#define _ecs_Window_h
 
-#include "iro/common.h"
-#include "iro/unicode.h"
+#include "iro/Common.h"
+#include "iro/Unicode.h"
 
 #include "input/Keys.h"
 

@@ -2,10 +2,10 @@
 --- The build system underlying enosi.
 ---
 
-local log = require "logger" ("build.sys", Verbosity.Notice)
+local log = require "Logger" ("build.sys", Verbosity.Notice)
 
 local helpers = require "build.helpers"
-local List = require "list"
+local List = require "List"
 
 -- Loaded in run(), so can only be used inside of functions here.
 local Project

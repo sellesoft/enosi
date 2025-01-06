@@ -1,6 +1,5 @@
 
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
+$ require "common"
 $ local glob = require "Glob"
 $ local buffer = require "string.buffer"
 $ local Comp = require "game.Component"

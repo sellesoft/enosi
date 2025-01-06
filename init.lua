@@ -201,12 +201,12 @@ local iro_l_to_o = {}
 getSourceToObj("src", iro_build, iro_c_to_o, iro_l_to_o)
 
 walkDir("src", function(path)
-  path = path:sub(#"src/iro/" + 1)
+  path = path:sub(#"src/" + 1)
   local dirname = path:match("(.*)/")
   if dirname then
     lfs.mkdir(iro_include.."/iro/"..dirname)
   end
-  lfs.link(root.."/iro/src/iro/"..path, iro_include.."/iro/"..path, true)
+  lfs.link(root.."/iro/src/"..path, iro_include.."/iro/"..path, true)
 end)
 
 compileCppObj(iro_c_to_o)

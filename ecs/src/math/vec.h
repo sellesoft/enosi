@@ -1,12 +1,15 @@
 /*
  *  Types for dealing with vectors.
+ *
+ *  TODO(sushi) it would be nice to convert this to an lpp file that generates
+ *              vectors of whatever dimention and type we want.
  */
 
 #ifndef _ecs_vec_h
 #define _ecs_vec_h
 
-#include "iro/common.h"
-#include "iro/io/format.h"
+#include "iro/Common.h"
+#include "iro/io/Format.h"
 
 // Not a fan of doing this, but whatever.
 #include "cmath"

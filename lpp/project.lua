@@ -1,7 +1,5 @@
 local sys = require "build.sys"
-local helpers = require "build.helpers"
 local bobj = require "build.object"
-local List = require "list"
 
 local lpp = sys.getLoadingProject()
 

@@ -5,8 +5,7 @@
  *  a line separating the contents.
  */
 
-$ local lpp = require "lpp"
-$ local reflect = require "reflect.Reflector"
+$ local cmn = require "common"
 $ local ui = require "ui.UI"
 
 @@lpp.import "ui/Item.lh"
