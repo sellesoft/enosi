@@ -24,7 +24,7 @@ return
     "lpp",
     "elua",
     "lake",
-    "hreload",
+    --"hreload",
     --"experimental/eog",
     "ecs",
   },

@@ -1,5 +1,7 @@
 #/bin/bash
 
+root=$(pwd)
+
 echo making sure submodules are initialized...
 
 git submodule update --init --recursive ||
@@ -26,14 +28,20 @@ cp -v \
    luajit/src/src/luaconf.h \
    luajit/build/include/luajit
 
-cp luajit/src/src/luajit bin
-
+cp luajit/src/src/luajit bin/luajit
 
 # maybe just use actual tmp on linux
 mkdir tmp
 echo -e "\n\n"
 
-bin/luajit init.lua linux
+# For requiring iro lua modules
+export LUA_PATH="$LUA_PATH;$(pwd)/iro/src/lua/?.lua"
+# For requiring modules relative to enosi's root (eg. the build stuff)
+export LUA_PATH="$LUA_PATH;$(pwd)/?.lua"
+# So luajit can require its lua modules
+export LUA_PATH="$LUA_PATH;$(pwd)/luajit/src/src/?.lua"
+
+luajit/src/src/luajit init.lua linux
 
 rm -rfd tmp
 

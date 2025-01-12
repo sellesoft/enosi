@@ -1,5 +1,9 @@
 --- Here, we build lake based on what platform we are running on.
 
+local build_cmds = require "build.commands"
+local List = require "List"
+local Type = require "Type"
+
 local writeSeparator = function()
   io.write
 [[
@@ -19,7 +23,36 @@ local exec = function(...)
     cmd = cmd..arg
   end
 
-  io.write("\n$ ", cmd, "\n\n")
+  io.write("\n$ ", cmd, "\n")
+
+  return os.execute(cmd)
+end
+
+local function flattenList(l)
+  local o = List{}
+
+  local function recur(l)
+    for elem in l:each() do
+      if List == Type.of(elem) then
+        recur(elem)     
+      else
+        o:push(elem)
+      end
+    end
+  end
+
+  recur(l)
+
+  return o
+end
+
+local execBuildCmd = function(args)
+  local cmd = ""
+  for arg in flattenList(args):each() do
+    cmd = cmd..arg.." "
+  end
+
+  io.write("\n$ ", cmd, "\n")
 
   return os.execute(cmd)
 end
@@ -153,134 +186,223 @@ end
 local function getSourceToObj(path, bdir, c_to_o, l_to_o)
   walkDir(path, function(path)
     if path:match("%.cpp$") then
-      table.insert(c_to_o, {path, bdir.."/"..path..".o"})
+      c_to_o:push{path, bdir.."/"..path..".o"}
     elseif l_to_o and path:match("%.lua$") then
-      table.insert(l_to_o, {path, bdir.."/"..path..".o"})
+      l_to_o:push{path, bdir.."/"..path..".o"}
     end
     local odir = bdir.."/"..path:match("(.*)/")
     lfs.mkdir(odir)
   end)
 end
 
-local function compileCppObj(c_to_o)
-  -- TODO(sushi) once the new build system is implemented use whatever its 
-  --             equivalent to Driver is to generate this
-  local compiler_flags = 
-    "-std=c++20 "..
-    "-I"..iro_include.." "..
-    "-I../luajit/build/include "..
-    "-DIRO_LINUX "..
-    "-DIRO_GCC "..
-    "-O0 "..
-    "-ggdb3 "
-
-  for _,v in ipairs(c_to_o) do
-    if 0 ~= exec("clang++ -c ",v[1]," -o ",v[2]," ",compiler_flags) then
+local function compileObj(src_to_obj, cmd)
+  for v in src_to_obj:each() do
+    if 0 ~= execBuildCmd(cmd:complete(v[1], v[2]))  then
       error("failed to compile "..v[1].."!")
     end
   end
 end
 
-local function compileLuaObj(l_to_o)
-  for _,v in ipairs(l_to_o) do
-    if 0 ~= exec("luajit -b -g ",v[1]," ",v[2]) then
-      error("failed to compile "..v[1].."!")
-    end
-  end
-end
+-- * --------------------------------------------------------------------------
 
 writeSeparator()
 
-io.write("Building iro...\n")
+local iro_objs = List{}
 
-cd "iro"
+do
+  io.write("Building iro...\n")
 
-local iro_c_to_o = {}
-local iro_l_to_o = {}
+  cd "iro"
 
-getSourceToObj("src", iro_build, iro_c_to_o, iro_l_to_o)
+  ---@type cmd.CppObj.Params | {}
+  local cpp_params = {}
 
-walkDir("src", function(path)
-  path = path:sub(#"src/" + 1)
-  local dirname = path:match("(.*)/")
-  if dirname then
-    lfs.mkdir(iro_include.."/iro/"..dirname)
-  end
-  lfs.link(root.."/iro/src/"..path, iro_include.."/iro/"..path, true)
-end)
+  cpp_params.compiler = "clang++"
+  cpp_params.defines = List
+  {
+    {"IRO_LINUX", "1"},
+    {"IRO_CLANG", "1"},
+  }
+  cpp_params.include_dirs = List
+  {
+    "../luajit/build/include",
+  }
+  cpp_params.opt = "speed"
 
-compileCppObj(iro_c_to_o)
-compileLuaObj(iro_l_to_o)
+  local cpp_cmd = build_cmds.CppObj.new(cpp_params)
+
+  ---@type cmd.LuaObj.Params | {}
+  local lua_params = {}
+
+  lua_params.debug_info = true
+
+  local lua_cmd = build_cmds.LuaObj.new(lua_params)
+
+  local c_to_o = List{}
+  local l_to_o = List{}
+
+  getSourceToObj("src", iro_build, c_to_o, l_to_o)
+
+  walkDir("src", function(path)
+    path = path:sub(#"src/" + 1)
+    local dirname = path:match("(.*)/")
+    if dirname then
+      lfs.mkdir(iro_include.."/iro/"..dirname)
+    end
+    lfs.link(root.."/iro/src/"..path, iro_include.."/iro/"..path, true)
+  end)
+
+  compileObj(c_to_o, cpp_cmd)
+  compileObj(l_to_o, lua_cmd)
+
+  c_to_o:each(function(v) iro_objs:push(v[2]) end)
+  l_to_o:each(function(v) iro_objs:push(v[2]) end)
+end
+
+-- * --------------------------------------------------------------------------
 
 writeSeparator()
 
-io.write("Building lake...\n")
+do 
+  io.write("Building lake...\n")
 
-cd "../lake"
+  cd "../lake"
 
-local lake_c_to_o = {}
-local lake_l_to_o = {}
+  ---@type cmd.CppObj.Params | {}
+  local cpp_params = {}
 
-getSourceToObj("src", lake_build, lake_c_to_o, lake_l_to_o)
+  cpp_params.compiler = "clang++"
+  cpp_params.defines = List
+  {
+    {"IRO_LINUX", "1"},
+    {"IRO_CLANG", "1"},
+  }
+  cpp_params.include_dirs = List
+  {
+    iro_include,
+    "../luajit/build/include",
+  }
+  cpp_params.opt = "speed"
 
-compileCppObj(lake_c_to_o)
-compileLuaObj(lake_l_to_o)
+  local cpp_cmd = build_cmds.CppObj.new(cpp_params)
 
--- TODO(sushi) get these earlier
-local objs = ""
+  ---@type cmd.LuaObj.Params | {}
+  local lua_params = {}
 
-local function collectObjs(...)
-  for _,x in ipairs{...} do
-    for _,v in ipairs(x) do
-      objs = objs..v[2].." "
-    end
+  lua_params.debug_info = true
+
+  local lua_cmd = build_cmds.LuaObj.new(lua_params)
+
+  ---@type cmd.Exe.Params | {}
+  local exe_params = {}
+
+  exe_params.linker = "ld"
+  exe_params.libdirs = List
+  {
+    "../luajit/build/lib",
+  }
+  exe_params.static_libs = List
+  {
+    "luajit",
+  }
+  exe_params.shared_libs = List
+  {
+    "explain",
+  }
+
+  local exe_cmd = build_cmds.Exe.new(exe_params)
+
+  local c_to_o = List{}
+  local l_to_o = List{}
+
+  getSourceToObj("src", lake_build, c_to_o, l_to_o)
+
+  compileObj(c_to_o, cpp_cmd)
+  compileObj(l_to_o, lua_cmd)
+
+  local objs = List{}
+
+  iro_objs:each(function(o) objs:push(o) end)
+  l_to_o:each(function(v) objs:push(v[2]) end)
+  c_to_o:each(function(v) objs:push(v[2]) end)
+
+  if 0 ~= execBuildCmd(exe_cmd:complete(objs, lake_build.."/lake"))
+  then
+    error "failed to link lake!"
+  end
+
+  cd ".."
+
+  if 0 ~= exec("cp ",lake_build,"/lake bin/lake") then
+    error "failed to copy lake to bin/!"
   end
 end
 
-collectObjs(lake_c_to_o, lake_l_to_o, iro_c_to_o, iro_l_to_o)
+-- * --------------------------------------------------------------------------
+do 
+  io.write "Building elua...\n"
 
-local linker_flags = 
-  "-L../luajit/build/lib "..
-  "-l:libluajit.a "..
-  "-lexplain "..
-  "-lm "..
-  "-Wl,-E "
+  cd "elua"
 
-if 0 ~= exec("clang++ ",objs," ",linker_flags," -o ",lake_build.."/".."lake") 
-then
-  error "failed to link lake!"
-end
+  ---@type cmd.CppObj.Params | {}
+  local cpp_params = {}
 
-cd ".."
+  cpp_params.compiler = "clang++"
+  cpp_params.defines = List
+  {
+    {"IRO_LINUX", "1"},
+    {"IRO_CLANG", "1"},
+  }
+  cpp_params.include_dirs = List
+  {
+    iro_include,
+    "../luajit/build/include",
+  }
+  cpp_params.opt = "speed"
 
-if 0 ~= exec("cp ",lake_build,"/lake bin/lake") then
-  error "failed to copy lake to bin/!"
-end
+  local cpp_cmd = build_cmds.CppObj.new(cpp_params)
 
-io.write "Building elua...\n"
+  ---@type cmd.Exe.Params | {}
+  local exe_params = {}
 
-cd "elua"
+  exe_params.linker = "ld"
+  exe_params.libdirs = List
+  {
+    "../luajit/build/lib",
+  }
+  exe_params.static_libs = List
+  {
+    "luajit",
+  }
+  exe_params.shared_libs = List
+  {
+    "explain",
+  }
 
-local elua_c_to_o = {}
+  local exe_cmd = build_cmds.Exe.new(exe_params)
 
-local elua_build = build_dir.."/elua"
-lfs.mkdir(elua_build)
+  local c_to_o = List{}
 
-getSourceToObj("src", elua_build, elua_c_to_o)
+  local elua_build = build_dir.."/elua"
+  lfs.mkdir(elua_build)
 
-compileCppObj(elua_c_to_o)
+  getSourceToObj("src", elua_build, c_to_o)
 
-objs = ""
+  compileObj(c_to_o, cpp_cmd)
 
-collectObjs(elua_c_to_o, iro_c_to_o, iro_l_to_o)
+  local objs = List{}
 
-if 0 ~= exec("clang++ ",objs," ",linker_flags," -o ",elua_build,"/","elua")
-then
-  error "failed to link elua!"
-end
+  objs:pushList(iro_objs)
+  c_to_o:each(function(v) objs:push(v[2]) end)
 
-cd ".."
+  if 0 ~= execBuildCmd(exe_cmd:complete(objs, elua_build.."/elua"))
+  then
+    error "failed to link elua!"
+  end
 
-if 0 ~= exec("cp ",elua_build,"/elua bin/elua") then
-  error "failed to copy elua to bin/!"
+  cd ".."
+
+  if 0 ~= exec("cp ",elua_build,"/elua bin/elua") then
+    error "failed to copy elua to bin/!"
+  end
 end
