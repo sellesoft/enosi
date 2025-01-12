@@ -184,6 +184,7 @@ driver.subcmds.build = function(args)
   loadEnabledProjects()
 
   for proj in sys.projects.list:each() do
+    lake.chdir(proj.root)
     local cmds = createBuildCmds(proj)
 
     local makeTasks = function(bobjs)
@@ -205,6 +206,8 @@ driver.subcmds.build = function(args)
 
     resolveDirs(proj)
   end
+
+  lake.chdir(sys.root)
 end
 
 -- * --------------------------------------------------------------------------
@@ -307,7 +310,9 @@ driver.subcmds.publish = function(args)
             -- program that will be running this script.
             --
             -- TODO(sushi) this probably wont work on Windows.
-            lake.rm(target)
+            if lake.pathExists(target) then
+              lake.rm(target)
+            end
 
             -- Copy the new file.
             lake.copy(target, bobjpath)

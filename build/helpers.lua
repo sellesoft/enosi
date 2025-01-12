@@ -22,7 +22,10 @@ end
 
 helpers.listBuilder = function(...)
   local out = List{}
-  for arg in List{...}:each() do
+  -- 'Pack' args so that nil values do not halt iteration.
+  local pack = {n=select("#",...),...}
+  for i=1,pack.n do
+    local arg = pack[i]
     if arg then
       if type(arg) ~= "string" or #arg ~= 0 then
         out:push(arg)

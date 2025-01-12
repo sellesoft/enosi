@@ -641,7 +641,7 @@ end
 CMake.declareTask = function(self)
   self.task = 
     lake.task("cmake "..self.output)
-      :workingDirectory(self.output)
+      :workingDirectory(self.proj.root.."/"..self.output)
       :cond(function()
         return not lake.pathExists("CMakeCache.txt")
       end)
@@ -650,6 +650,7 @@ end
 -- * --------------------------------------------------------------------------
 
 CMake.defineTask = function(self)
+  ensureDirExists(self.output)
   self.task:recipe(function()
     local args = List
     {

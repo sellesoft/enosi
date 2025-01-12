@@ -108,7 +108,7 @@ cmd.CppObj.getIOIndependentFlags = function(params)
     o = helpers.listBuilder(
       "-std="..(params.std or "c++20"),
       params.nortti and "-fno-rtti",
-      params.debug_info and "-ggdb3",
+      params.debug_info and "-ggdb3" ,
       not params.export_all and "-fvisibility=hidden",
       "-fpatchable-function-entry=16",
       "-Wno-#warnings",
@@ -206,7 +206,7 @@ cmd.LppObj.new = function(params)
   local o = {}
 
   local cargs = "--cargs="
-  local flags = lake.flatten(cmd.CppObj.getIOIndependentFlags(params.cpp))
+  local flags = cmd.CppObj.getIOIndependentFlags(params.cpp):flatten()
   for carg in flags:each() do
     cargs = cargs..carg..","
   end
@@ -349,21 +349,30 @@ cmd.Exe.new = function(params)
       params.is_shared and "-shared")
 
     o.links = helpers.listBuilder(
-      lake.flatten(params.libdirs):map(function(dir)
+      params.libdirs and params.libdirs:flatten():map(function(dir)
         return "-L"..dir
       end),
       "-Wl,--start-group",
-      lake.flatten(params.shared_libs):map(function(lib)
+      params.shared_libs and params.shared_libs:flatten():map(function(lib)
         return "-l"..lib
       end),
-      lake.flatten(params.static_libs):map(function(lib)
+      params.static_libs and params.static_libs:flatten():map(function(lib)
         return "-l:lib"..lib..".a"
       end),
       "-Wl,--end-group",
-      "-Wl,-E",
+      "-Wl,-E")
       -- Tell the exe's dynamic linker to check the directory its in 
       -- for shared libraries.
-      "-Wl,-rpath,$ORIGIN")
+      -- NOTE(sushi) this is disabled for now as I'm not actually using it 
+      --             yet and it causes an issue in enosi's init script 
+      --             since I'm using lua's os.execute which runs a command
+      --             through the shell. This causes $ORIGIN to be expanded
+      --             to whatever it is set to. When we come back to this we
+      --             should probably just pull out iro's platform process
+      --             stuff into some C code we can compile and dynamically
+      --             load into the init script as its probably safer and 
+      --             more portable.
+      --"-Wl,-rpath,$ORIGIN")
   else
     error("unhandled linker "..params.linker)
   end
