@@ -149,6 +149,10 @@ b8 Lake::init(const char** argv, int argc, mem::Allocator* allocator)
   if (!leaves.init(allocator))
     return ERROR("failed to initialize leaves list\n");
 
+  root_dir = fs::Dir::open("."_str);
+  if (isnil(root_dir))
+    return ERROR("failed to get handle to root directory\n");
+
   return true;
 }
 
@@ -333,7 +337,7 @@ b8 Lake::run()
 {
   auto lakefile_start = TimePoint::monotonic();
 
-  lua.getglobal(lake_err_handler);
+  lua.require("Errh"_str);
   if (!lua.loadfile((char*)initpath.ptr) || 
       !lua.pcall(0,1))
   {
@@ -522,15 +526,9 @@ void lua__setTaskHasRecipe(Task* task)
 EXPORT_DYNAMIC
 void lua__setTaskRecipeWorkingDir(Task* task, String wdir)
 {
-  if (notnil(task->recipe_wdir))
-    task->recipe_wdir.close();
-  task->recipe_wdir = fs::Dir::open(wdir);
-  if (isnil(task->recipe_wdir))
-  {
-    ERROR(
-      "failed to set working directory of Task '",task->name,"' to ", wdir, 
-      "\n");
-  }
+  if (notnil(task->wdir))
+    task->wdir.destroy();
+  task->wdir = fs::Path::from(wdir);
 }
 
 /* ----------------------------------------------------------------------------
@@ -911,6 +909,7 @@ b8 lua__touch(String path)
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 u64 lua__modtime(String path)
 {
   TimePoint modtime = fs::Path::modtime(path);

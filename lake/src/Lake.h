@@ -13,11 +13,6 @@
 struct Lexer;
 struct Parser;
 
-static const char* lake_targets_table = "__lake__targets";
-static const char* lake_recipe_table = "__lake__recipe_table";
-static const char* lake_coroutine_resume = "__lake__coroutine_resume";
-static const char* lake_err_handler = "__lake__err_handler";
-
 /* ============================================================================
  */
 struct ActiveProcess
@@ -38,6 +33,12 @@ struct Lake
 
   TaskList leaves;
 
+  // If we are currently giving control to some callback of a task, eg. 
+  // its condition or recipe function, this will point to it. Important 
+  // for cases like a recipe changing its current directory as we need to
+  // track this only when they actually change directories. 
+  Task* active_task;
+
   TaskList active_recipes;
   u32 active_recipe_count;
 
@@ -53,6 +54,10 @@ struct Lake
   b8 print_timers = false; // --print-timers
 
   b8 in_recipe = false;
+
+  // Handle to the root directory for quickly swapping back when a recipe 
+  // needs to chdir into its own dir.
+  fs::Dir root_dir;
 
   b8   init(const char** argv, int argc, mem::Allocator* allocator = &mem::stl_allocator);
   void deinit();

@@ -39,9 +39,10 @@ struct Task
   TaskSet prerequisites = {};
   TaskSet dependents = {};
 
-  // The working directory of this Task's recipe. This can be changed as the 
-  // recipe is executed!
-  fs::Dir recipe_wdir = nil;
+  // The working directory of this Task, eg. the directory we will chdir into
+  // anytime we hand over control to one of its callbacks, currently only 
+  // the cond and recipe callbacks.
+  fs::Path wdir;
 
   // The times at which the recipe started and ended.
   TimePoint start_time = nil;

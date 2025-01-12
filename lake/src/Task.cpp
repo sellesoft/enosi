@@ -25,7 +25,7 @@ b8 Task::init(String name)
   if (!dependents.init())
     return ERROR("failed to initialize dependents list for task", name, "\n");
 
-  recipe_wdir = fs::Dir::open("."_str);
+  wdir = fs::Path::cwd();
 
   return true;
 }
@@ -60,15 +60,31 @@ b8 Task::needRunRecipe(Lake& lake)
 {
   if (!flags.test(Flag::HasCond))
     return false;
-  // if (flags.test(Flag::PrereqJustBuilt))
-  //   return true;
+  if (flags.test(Flag::PrereqJustBuilt))
+    return true;
 
   LuaState& lua = lake.lua;
 
-  auto cwd = fs::Dir::open("."_str);
-  defer { cwd.chdir(); cwd.close(); };
-
-  recipe_wdir.chdir();
+  wdir.chdir();
+  defer 
+  { 
+    // Always save whatever the current directory is as the user may have 
+    // chdir'd during this callback.
+    // TODO(sushi) I have a bunch of problems with this, especially in 
+    //             the recipe resuming case, as it means we are constantly
+    //             reallocating a path string and changing directories
+    //             even in cases where we will just be chdir'ing right
+    //             back into the same dir. This might not be a huge deal
+    //             but idk it bothers me :P.
+    //             Originally I tried just storing a handle to the dir on 
+    //             Linux, but due to the amount of Tasks we may have this 
+    //             caused us to hit the file handle limit. There are prob ways
+    //             to get around this, but using file handles like this likely
+    //             isn't easy to get working on Windows, so whatever.
+    wdir.destroy();
+    wdir = fs::Path::cwd();
+    lake.root_dir.chdir(); 
+  };
 
   s32 top = lua.gettop();
   defer { lua.settop(top); };
@@ -100,9 +116,6 @@ b8 Task::needRunRecipe(Lake& lake)
       "failed to run cond for Task ",name,":\n",lua.tostring(),"\n");
 
   defer { lua.pop(); };
-
-  recipe_wdir.close();
-  recipe_wdir = fs::Dir::open("."_str);
 
   if (lua.toboolean())
     return true;
@@ -194,10 +207,18 @@ Task::RecipeResult Task::resumeRecipe(Lake& lake)
   if (isnil(start_time))
     start_time = TimePoint::monotonic();
 
-  auto cwd = fs::Dir::open("."_str);
-  defer { cwd.chdir(); cwd.close(); };
+  if (!wdir.chdir())
+  {
+    ERROR("failed to chdir into Task's working directory: '",wdir,"'\n");
+    return Task::RecipeResult::Error;
+  }
 
-  recipe_wdir.chdir();
+  defer
+  {
+    wdir.destroy();
+    wdir = fs::Path::cwd();
+    lake.root_dir.chdir();
+  };
 
   LuaState& lua = lake.lua;
     
@@ -237,11 +258,6 @@ Task::RecipeResult Task::resumeRecipe(Lake& lake)
   {
     return RecipeResult::Failed;
   }
-
-  // In order to support a recipe chdir'ing we set its cwd everytime it 
-  // yields so we can restore it next time we resume.
-  recipe_wdir.close();
-  recipe_wdir = fs::Dir::open("."_str);
 
   if (lua.isnil())
   {
