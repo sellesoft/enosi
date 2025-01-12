@@ -229,4 +229,26 @@ List.sub = function(self, i, j)
   return List{unpack(self, i, j)}
 end
 
+--- Returns a new List with all elements from nested Lists flattened into
+--- it.
+-- TODO(sushi) it would be nice to implement a lazy iterator type eventually.
+---@return List
+List.flatten = function(self)
+  local o = List{}
+
+  local function recur(l)
+    for elem in l:each() do
+      if List == Type.of(elem) then
+        recur(elem)
+      else
+        o:push(elem)
+      end
+    end
+  end
+
+  recur(self)
+
+  return o
+end
+
 return List
