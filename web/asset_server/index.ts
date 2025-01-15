@@ -92,8 +92,10 @@ const server = Bun.serve(
   // Prevent showing source code when an error occurs.
   development: false,
   port: 3000,
-  async fetch(req)
+  async fetch(req, server)
   {
+    console.log(`incoming request from ${server.requestIP(req)?.address}`)
+
     const url = new URL(req.url);
     const params = url.searchParams;
 
