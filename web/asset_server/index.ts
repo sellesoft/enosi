@@ -75,7 +75,21 @@ async function handleUpload(req: Request, params: URLSearchParams)
 
   console.log(`upload ${dest_path}`);
 
-  await Bun.write(dest_path, new Response(req.body));
+  // Ensure file exists.
+  // (await fs.open(dest_path, "a")).close();
+
+  const dest_file = Bun.file(dest_path);
+
+  const writer = dest_file.writer();
+
+  req.blob().then(async (blob) =>
+  {
+    for await (const chunk of blob.stream())
+    {
+      const bytes_written = writer.write(chunk);
+      console.log("wrote ", bytes_written, " bytes");
+    }
+  })
 
   return new Response(`uploaded ${dest_path}`);
 }
