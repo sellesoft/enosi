@@ -52,11 +52,6 @@ async function handleUpload(req: Request, params: URLSearchParams)
 {
   console.log("upload request");
 
-  if (processing_upload)
-    return errResponse("an upload is already in progress");
-
-  processing_upload = true;
-
   const pw = params.get("pw");
   if (pw == null)
     return errResponse("password not provided");
@@ -78,9 +73,9 @@ async function handleUpload(req: Request, params: URLSearchParams)
 
   const dest_path = `${dest_dir}/${name}`;
 
-  await Bun.write(dest_path, new Response(req.body));
+  console.log(`upload ${dest_path}`);
 
-  processing_upload = false;
+  await Bun.write(dest_path, new Response(req.body));
 
   return new Response(`uploaded ${dest_path}`);
 }
@@ -100,11 +95,23 @@ const server = Bun.serve(
     const params = url.searchParams;
 
     if (url.pathname == "/download")
+    {
       return await handleDownload(req, params);
+    }
     else if (url.pathname == "/upload")
-      return await handleUpload(req, params);
+    {
+      if (processing_upload)
+        return new Response("an upload is already in progress");
+
+      processing_upload = true;
+      const response = await handleUpload(req, params); 
+      processing_upload = false;
+      return response;
+    }
     else
+    {
       return new Response("invalid url");
+    }
   }
 });
 
