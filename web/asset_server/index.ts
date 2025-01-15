@@ -87,6 +87,8 @@ const server = Bun.serve(
   // Prevent showing source code when an error occurs.
   development: false,
   port: 3000,
+  // Max request body size of 2 gb.
+  maxRequestBodySize: 2147483648,
   async fetch(req, server)
   {
     console.log(`incoming request from ${server.requestIP(req)?.address}`)
