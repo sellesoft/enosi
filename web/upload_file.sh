@@ -1,10 +1,10 @@
-#/bin/bash
+#!/bin/bash
 
-./client \
-  --pw-file ../upload_pw.txt \
-  --server-addr localhost \
+bin/client \
+  upload \
+  --pw-file upload_pw.txt \
+  --server-addr 15.204.247.107 \
   --platform linux \
   --upload-file $1 \
-  --upload-name $2
+  --upload-name $2 
 
-# 15.204.247.107 \

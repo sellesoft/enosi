@@ -2,101 +2,34 @@ const fs = await import('node:fs/promises');
 
 import * as bun from 'bun';
 
+/* ----------------------------------------------------------------------------
+ */
 async function pathExists(path: Bun.PathLike)
 {
   return await fs.stat(path.toString()).catch(() => false);
 }
 
-const pw_file = Bun.file("upload_pw.txt");
-
-if (!await pw_file.exists())
+/* ----------------------------------------------------------------------------
+ */
+if (!await pathExists("upload_pw.txt"))
   throw new Error("failed to find upload_pw.txt!");
 
+const pw_file = Bun.file("upload_pw.txt");
 const pw_hash = await Bun.password.hash((await pw_file.text()).trim());
 
 /* ----------------------------------------------------------------------------
  */
-function errResponse(message: string)
+function writeProgress(current: number, total: number)
 {
-  console.log("error: ", message);
-  return new Response(message);
+  process.stdout.clearLine(0);
+  process.stdout.cursorTo(0);
+  process.stdout.write(
+    `${current} / ${total} ` +
+    `(${Math.floor(current / total * 100)}%)`);
 }
 
 /* ----------------------------------------------------------------------------
  */
-// async function handleDownload(req: Request, params: URLSearchParams)
-// {
-//   console.log("download request");
-// 
-//   const platform = params.get("platform");
-//   if (platform == null)
-//     return errResponse("no platform specified");
-// 
-//   const src_dir = `assets/${platform}`;
-//   if (!await pathExists(src_dir))
-//     return errResponse("unknown platform");
-// 
-//   const name = params.get("name");
-//   if (name == null)
-//     return errResponse("no file specified");
-// 
-//   const src_path = `${src_dir}/${name}`;
-//   if (!await pathExists(src_path))
-//     return errResponse(`no file ${name} on server under ${platform}`);
-// 
-//   return new Response(Bun.file(src_path));
-// }
-
-/* ----------------------------------------------------------------------------
- */
-//let processing_upload = false;
-//async function handleUpload(req: Request, params: URLSearchParams)
-//{
-//  console.log("upload request");
-//
-//  const pw = params.get("pw");
-//  if (pw == null)
-//    return errResponse("password not provided");
-//
-//  if (!await Bun.password.verify(pw, pw_hash))
-//    return errResponse("incorrect password");
-//
-//  const platform = params.get("platform");
-//  if (platform == null)
-//    return errResponse("no platform specified");
-//
-//  const dest_dir = `assets/${platform}`;
-//  if (!await pathExists(dest_dir))
-//    return errResponse("unknown platform");
-//
-//  const name = params.get("name");
-//  if (name == null)
-//    return errResponse("no name provided");
-//
-//  const dest_path = `${dest_dir}/${name}`;
-//
-//  console.log(`upload ${dest_path}`);
-//
-//  // Ensure file exists.
-//  // (await fs.open(dest_path, "a")).close();
-//
-//  const dest_file = Bun.file(dest_path);
-//
-//  const writer = dest_file.writer();
-//
-//  req.blob().then(async (blob) =>
-//  {
-//    console.log("incrementally writing file");
-//    for await (const chunk of blob.stream())
-//    {
-//      const bytes_written = writer.write(chunk);
-//      console.log("wrote ", bytes_written, " bytes");
-//    }
-//  })
-//
-//  return new Response(`uploaded ${dest_path}`);
-//}
-
 type WebSocketData = 
 {
   pathname: string,
@@ -106,17 +39,70 @@ type WebSocketData =
 
 /* ----------------------------------------------------------------------------
  */
-function handleDownload(ws: bun.ServerWebSocket<WebSocketData>)
+async function handleDownload(ws: bun.ServerWebSocket<WebSocketData>)
 {
+  console.log("== download ==");
+
+  const err = (message: string) => ws.close(1011, message);
+
+  const params = ws.data.params;
+
+  const platform = params.get("platform");
+  if (platform == null)
+    return err("no platform specified");
+
+  const src_dir = `assets/${platform}`;
+  if (!await pathExists(src_dir))
+    return err("unknown platform");
+
+  const name = params.get("name");
+  if (name == null)
+    return err("no file specified");
+
+  const src_path = `${src_dir}/${name}`;
+  if (!await pathExists(src_path))
+    return err(`no file ${name} under ${platform}`);
+
+  const file = Bun.file(src_path);
+
+  const stat = await fs.stat(src_path);
+
+  const reader = file.stream().getReader();
+
+  const sendSize = () =>
+  {
+    ws.send(stat.size.toString());
+    ws.data.handler = sendChunks;
+  }
+
+  let bytes_sent = 0;
+  const sendChunks = async () =>
+  {
+    const chunk = await reader.read();
+
+    if (chunk.value == undefined)
+    {
+      ws.send("done");
+    }
+    else
+    {
+      ws.send(chunk.value);
+      bytes_sent += chunk.value.length;
+      writeProgress(bytes_sent, stat.size);
+    }
+  }
+
+  ws.data.handler = sendSize;
+  ws.send("ready");
 }
 
 /* ----------------------------------------------------------------------------
  */
 async function handleUpload(ws: bun.ServerWebSocket<WebSocketData>)
 {
-  console.log("upload request");
+  console.log("== upload ==");
 
-  let size: Number | undefined = undefined;
+  let size: number | undefined = undefined;
   let bytes_recieved = 0;
 
   const err = (message: string) => ws.close(1011, message);
@@ -144,7 +130,7 @@ async function handleUpload(ws: bun.ServerWebSocket<WebSocketData>)
 
   const dest_path = `${dest_dir}/${name}`;
 
-  console.log("upload", dest_path);
+  console.log(dest_path);
 
   const dest_file = Bun.file(dest_path);
 
@@ -170,13 +156,9 @@ async function handleUpload(ws: bun.ServerWebSocket<WebSocketData>)
     }
     else
     {
-      bytes_recieved += (message as Buffer).length;
       writer.write(message);
-      process.stdout.clearLine(0);
-      process.stdout.cursorTo(0);
-      process.stdout.write(
-        `${bytes_recieved} / ${size} ` +
-        `(${Math.floor(bytes_recieved / size * 100)}%)`);
+      bytes_recieved += (message as Buffer).length;
+      writeProgress(bytes_recieved, size);
     }
 
     ws.send("poll");
@@ -198,6 +180,8 @@ const server = Bun.serve<WebSocketData>(
   {
     const url = new URL(req.url);
 
+    console.log(req)
+
     // Upgrade to a websocket.
     const success = server.upgrade(req, 
       { 
@@ -216,8 +200,6 @@ const server = Bun.serve<WebSocketData>(
     {
       console.log("connection opened from ", ws.remoteAddress);
 
-      console.log(ws.data.pathname)
-
       switch (ws.data.pathname)
       {
       case "/download":
@@ -232,7 +214,6 @@ const server = Bun.serve<WebSocketData>(
         ws.close(1011, "unknown request");
         break;
       }
-
     },
 
     message(ws, message)
@@ -243,31 +224,3 @@ const server = Bun.serve<WebSocketData>(
 });
 
 console.log("Asset server started");
-
-
-  // async fetch(req, server)
-  // {
-  //   console.log(`incoming request from ${server.requestIP(req)?.address}`)
-
-  //   const url = new URL(req.url);
-  //   const params = url.searchParams;
-
-  //   if (url.pathname == "/download")
-  //   {
-  //     return await handleDownload(req, params);
-  //   }
-  //   else if (url.pathname == "/upload")
-  //   {
-  //     if (processing_upload)
-  //       return new Response("an upload is already in progress");
-
-  //     processing_upload = true;
-  //     const response = await handleUpload(req, params); 
-  //     processing_upload = false;
-  //     return response;
-  //   }
-  //   else
-  //   {
-  //     return new Response("invalid url");
-  //   }
-  // }
