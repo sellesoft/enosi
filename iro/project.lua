@@ -17,7 +17,6 @@ end
 
 if sys.os == "linux" then
   iro.report.pub.defines { IRO_LINUX=1 }
-  iro.report.ext.pub.SharedLib "explain"
 elseif sys.os == "windows" then
   iro.report.pub.defines { IRO_WIN32=1 }
 else
