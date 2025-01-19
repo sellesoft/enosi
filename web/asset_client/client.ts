@@ -1,15 +1,24 @@
 const util = await import("util");
 const fs = await import("node:fs/promises");
 
-function writeProgress(current: number, total: number)
+/* ----------------------------------------------------------------------------
+ */
+function writeProgress(current: number, total: number, time_spent: number)
 {
   process.stdout.clearLine(0);
   process.stdout.cursorTo(0);
   process.stdout.write(
     `${current} / ${total} ` +
-    `(${Math.floor(current / total * 100)}%)`);
+    `(${Math.floor(current / total * 100)}%) `);
+
+  const mb_sent = current / 1e6;
+  const mbps = mb_sent / (time_spent / 1000);
+
+  process.stdout.write(`${mbps.toFixed(2)} mb/s`);
 }
 
+/* ----------------------------------------------------------------------------
+ */
 function openSocket(url: URL)
 {
   console.log(`connecting to ${url.host}`);
@@ -21,6 +30,8 @@ function openSocket(url: URL)
   return socket;
 }
 
+/* ----------------------------------------------------------------------------
+ */
 const args = util.parseArgs(
 {
   args: Bun.argv.slice(2),
@@ -45,6 +56,8 @@ const args = util.parseArgs(
 
 const action = args.positionals[0]
 
+/* ----------------------------------------------------------------------------
+ */
 function getArg(argname: string)
 {
   const arg = args.values[argname];
@@ -93,6 +106,13 @@ const actions =
 
     let bytes_sent = 0;
 
+    const start_time = Date.now();
+
+    const interval_id = setInterval(() =>
+    {
+      writeProgress(bytes_sent, stat.size, Date.now() - start_time);
+    }, 50);
+
     socket.addEventListener("message", async (event) =>
     {
       switch (event.data as string)
@@ -107,12 +127,12 @@ const actions =
         {
           socket.send("done");
           socket.close();
+          clearInterval(interval_id);
         }
         else
         {
           socket.send(chunk.value);
           bytes_sent += chunk.value.length;
-          writeProgress(bytes_sent, stat.size);
         }
         break;
       }
@@ -140,6 +160,15 @@ const actions =
 
     let bytes_recieved = 0;
     let size: number | undefined = undefined;
+
+    const start_time = Date.now();
+
+    const interval_id = setInterval(() =>
+    {
+      if (size != null)
+        writeProgress(bytes_recieved, size, Date.now() - start_time);
+    }, 50);
+
     socket.addEventListener("message", async (event) =>
     {
       if (event.data == undefined)
@@ -165,12 +194,12 @@ const actions =
         console.log("\ndone");
         writer.end();
         socket.close();
+        clearInterval(interval_id);
       }
       else
       {
         writer.write(event.data);
         bytes_recieved += event.data.length;
-        writeProgress(bytes_recieved, size);
       }
 
       socket.send("poll");

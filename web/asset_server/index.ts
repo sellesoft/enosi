@@ -19,13 +19,18 @@ const pw_hash = await Bun.password.hash((await pw_file.text()).trim());
 
 /* ----------------------------------------------------------------------------
  */
-function writeProgress(current: number, total: number)
+function writeProgress(current: number, total: number, time_spent: number)
 {
   process.stdout.clearLine(0);
   process.stdout.cursorTo(0);
   process.stdout.write(
     `${current} / ${total} ` +
-    `(${Math.floor(current / total * 100)}%)`);
+    `(${Math.floor(current / total * 100)}%) `);
+
+  const mb_sent = current / 1e6;
+  const mbps = mb_sent / (time_spent / 1000);
+
+  process.stdout.write(`${mbps.toFixed(2)} mb/s`);
 }
 
 /* ----------------------------------------------------------------------------
@@ -75,6 +80,13 @@ async function handleDownload(ws: bun.ServerWebSocket<WebSocketData>)
     ws.data.handler = sendChunks;
   }
 
+  const start_time = Date.now();
+
+  const interval_id = setInterval(() =>
+  {
+    writeProgress(bytes_sent, stat.size, Date.now() - start_time);
+  }, 50);
+
   let bytes_sent = 0;
   const sendChunks = async () =>
   {
@@ -83,12 +95,12 @@ async function handleDownload(ws: bun.ServerWebSocket<WebSocketData>)
     if (chunk.value == undefined)
     {
       ws.send("done");
+      clearInterval(interval_id);
     }
     else
     {
       ws.send(chunk.value);
       bytes_sent += chunk.value.length;
-      writeProgress(bytes_sent, stat.size);
     }
   }
 
@@ -136,6 +148,14 @@ async function handleUpload(ws: bun.ServerWebSocket<WebSocketData>)
 
   const writer = dest_file.writer();
 
+  const start_time = Date.now();
+
+  const interval_id = setInterval(() =>
+  {
+    if (size != null)
+      writeProgress(bytes_recieved, size, Date.now() - start_time);
+  }, 50);
+
   ws.data.handler = async (message: string | Buffer) =>
   {
     if (message == undefined)
@@ -153,12 +173,12 @@ async function handleUpload(ws: bun.ServerWebSocket<WebSocketData>)
       console.log("\ndone");
       writer.end();
       ws.close();
+      clearInterval(interval_id);
     }
     else
     {
       writer.write(message);
       bytes_recieved += (message as Buffer).length;
-      writeProgress(bytes_recieved, size);
     }
 
     ws.send("poll");
