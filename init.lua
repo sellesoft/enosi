@@ -305,10 +305,7 @@ do
   {
     "luajit",
   }
-  exe_params.shared_libs = List
-  {
-    "explain",
-  }
+  exe_params.shared_libs = List{}
 
   local exe_cmd = build_cmds.Exe.new(exe_params)
 
@@ -374,10 +371,7 @@ do
   {
     "luajit",
   }
-  exe_params.shared_libs = List
-  {
-    "explain",
-  }
+  exe_params.shared_libs = List{}
 
   local exe_cmd = build_cmds.Exe.new(exe_params)
 

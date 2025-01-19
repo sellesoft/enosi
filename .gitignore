@@ -19,3 +19,5 @@ lpp/build/
 user.lua
 bin/liblppclang.so
 **/upload_pw.txt
+
+web/localtestserv/
