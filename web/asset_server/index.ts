@@ -40,6 +40,7 @@ type WebSocketData =
   pathname: string,
   params: URLSearchParams,
   handler: Function,
+  onClose: Function,
 }
 
 /* ----------------------------------------------------------------------------
@@ -85,7 +86,7 @@ async function handleDownload(ws: bun.ServerWebSocket<WebSocketData>)
     writeProgress(bytes_sent, stat.size, Date.now() - start_time);
   }, 50);
 
-  const chunk_size = 1024*1024*30; // 30mb
+  const chunk_size = 1024*1024*15; // 15mb
 
   let bytes_sent = 0;
   const sendChunks = async () =>
@@ -105,6 +106,11 @@ async function handleDownload(ws: bun.ServerWebSocket<WebSocketData>)
       ws.send(chunk.slice(0, bytes_read));
       bytes_sent += bytes_read;
     }
+  }
+
+  ws.data.onClose = () =>
+  {
+    clearInterval(interval_id);
   }
 
   ws.data.handler = sendSize;
@@ -243,6 +249,11 @@ const server = Bun.serve<WebSocketData>(
     {
       ws.data.handler(message);
     },
+
+    close()
+    {
+
+    }
   }
 });
 

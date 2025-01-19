@@ -119,7 +119,7 @@ const actions =
 
     const file = await fs.open(upload_file_path, "r");
 
-    const chunk_size = 1024*1024*30; // 30mb
+    const chunk_size = 1024*1024*30; // 15mb
 
     socket.addEventListener("message", async (event) =>
     {
@@ -140,6 +140,7 @@ const actions =
           socket.send("done");
           socket.close();
           clearInterval(interval_id);
+          console.log("\ndone");
         }
         else
         {
@@ -148,6 +149,12 @@ const actions =
         }
         break;
       }
+    });
+
+    socket.addEventListener("close", () =>
+    {
+      // TODO(sushi) maybe show a reason for closing here if its in error idk
+      clearInterval(interval_id);
     });
   },
 
