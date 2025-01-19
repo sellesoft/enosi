@@ -1,0 +1,18 @@
+$ require "common"
+
+namespace phys
+{
+
+enum class ContactFlag
+{
+  Touching,
+};
+
+typedef Flags<ContactFlag> ContactFlags;
+
+struct Contact
+{
+  
+}
+
+}

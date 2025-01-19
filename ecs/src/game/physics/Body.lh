@@ -1,0 +1,70 @@
+$ local cmn = require "common"
+
+#include "math/vec.h"
+
+@@lpp.import "Transform.lh"
+@@lpp.import "BodyDef.lh"
+
+namespace phys
+{
+
+/* ============================================================================
+ *  Rigid body information not used in the solver.
+ */
+struct Body
+{
+  u32 id;
+
+  BodyDef::Kind kind;
+
+  f32 mass;
+  f32 inertia;
+
+  f32 sleep_threshhold;
+  f32 sleep_time;
+
+  b8 enable_sleep;
+  b8 fixed_rotation;
+};
+
+/* ============================================================================
+ *  Body state designed for fast conversion to and from SIMD.
+ */
+struct BodyState
+{
+  vec2f linear_velocity;
+  f32 angular_velocity;
+
+  vec2f delta_position;
+  Rotation delta_rotation;
+};
+
+/* ============================================================================
+ *  Body simulation data used for integration of position and velocity.
+ */
+struct BodySim
+{
+  Transform transform;
+  
+  // Center of mass position in world space.
+  vec2f center;
+
+  // Center of mass relative to body origin.
+  vec2f local_center;
+
+  vec2f force;
+  f32   torque;
+
+  f32 inv_mass;
+  f32 inv_inertia;
+
+  f32 min_extent;
+  f32 max_extent;
+
+  f32 linear_damping;
+  f32 angular_damping;
+
+  int id;
+};
+
+}

@@ -11,6 +11,8 @@ if sys.os == "linux" then
   ecs.report.ext.SharedLib "X11"
   ecs.report.ext.SharedLib "Xrandr"
   ecs.report.ext.SharedLib "Xcursor"
+else
+  error "unhandled os"
 end
 
 for lfile in lake.find "src/**/*.lpp" :each() do
