@@ -618,15 +618,18 @@ object.CMake = CMake
 
 --- Path to the configuration file.
 ---@param config string
+--- What generator to use.
+---@param generator string
+--- Arguments to be passed to CMake
+---@param args iro.List
 --- Path where build artifacts should be placed.
 ---@param output string
---- The build mode to be used.
----@param mode string
-CMake.new = function(config, output, mode)
+CMake.new = function(config, generator, args, output)
   local o = {}
   o.config = config
   o.output = output
-  o.mode = mode
+  o.generator = generator
+  o.args = args
   return setmetatable(o, CMake)
 end
 
@@ -639,11 +642,12 @@ end
 -- * --------------------------------------------------------------------------
 
 CMake.declareTask = function(self)
+  local output_path = self.proj.root.."/"..self.output
   self.task = 
     lake.task("cmake "..self.output)
-      :workingDirectory(self.proj.root.."/"..self.output)
+      :workingDirectory(output_path)
       :cond(function()
-        return not lake.pathExists("CMakeCache.txt")
+        return not lake.pathExists(output_path.."/CMakeCache.txt")
       end)
 end
 
@@ -651,30 +655,21 @@ end
 
 CMake.defineTask = function(self)
   ensureDirExists(self.output)
-  self.task:recipe(function()
-    local args = List
-    {
-			"-DLLVM_CCACHE_BUILD=ON",
-			"-DLLVM_OPTIMIZED_TABLEGEN=ON",
-			"-DLLVM_ENABLE_PROJECTS=clang;lld",
-			"-DCMAKE_BUILD_TYPE="..self.mode,
-			"-DLLVM_USE_LINKER=lld", -- TODO(sushi) support for other linkers
-    }
+  
+  ---@type cmd.CMake.Params | {}
+  local params = {}
 
-    local result = lake.cmd(
-      { "cmake", "-G", "Unix Makefiles", self.config, args },
-      { onRead = io.write })
+  params.args = self.args
+  params.generator = self.generator
+  params.config_dir = self.config
+
+  local cmd = build.cmd.CMake.new(params)
+
+  self.task:recipe(function()
+    local result = lake.cmd(cmd, { onRead = io.write })
 
     if result ~= 0 then
       sys.log:error("failed to configure cmake")
-    end
-
-    local result = lake.cmd(
-      { "make", "-j6" },
-      { onRead = io.write })
-
-    if result ~= 0 then
-      sys.log:error("failed to run make for cmake project")
     end
   end)
 end
