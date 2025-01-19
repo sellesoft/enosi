@@ -68,11 +68,9 @@ async function handleDownload(ws: bun.ServerWebSocket<WebSocketData>)
   if (!await pathExists(src_path))
     return err(`no file ${name} under ${platform}`);
 
-  const file = Bun.file(src_path);
+  const file = await fs.open(src_path, "r");
 
   const stat = await fs.stat(src_path);
-
-  const reader = file.stream().getReader();
 
   const sendSize = () =>
   {
@@ -87,20 +85,25 @@ async function handleDownload(ws: bun.ServerWebSocket<WebSocketData>)
     writeProgress(bytes_sent, stat.size, Date.now() - start_time);
   }, 50);
 
+  const chunk_size = 1024*1024*30; // 30mb
+
   let bytes_sent = 0;
   const sendChunks = async () =>
   {
-    const chunk = await reader.read();
+    const chunk = new Uint8Array(chunk_size);
 
-    if (chunk.value == undefined)
+    const read_result = await file.read(chunk, 0, chunk_size);
+    const bytes_read = read_result.bytesRead;
+
+    if (bytes_read == 0)
     {
       ws.send("done");
       clearInterval(interval_id);
     }
     else
     {
-      ws.send(chunk.value);
-      bytes_sent += chunk.value.length;
+      ws.send(chunk.slice(0, bytes_read));
+      bytes_sent += bytes_read;
     }
   }
 
@@ -194,8 +197,6 @@ const server = Bun.serve<WebSocketData>(
   // Prevent showing source code when an error occurs.
   development: false,
   port: 3000,
-  // Max request body size of 2 gb.
-  maxRequestBodySize: 2147483648,
   fetch(req, server)
   {
     const url = new URL(req.url);
@@ -216,6 +217,8 @@ const server = Bun.serve<WebSocketData>(
 
   websocket:
   {
+    maxPayloadLength: 1024*1024*50, // 50 mb
+
     open(ws)
     {
       console.log("connection opened from ", ws.remoteAddress);

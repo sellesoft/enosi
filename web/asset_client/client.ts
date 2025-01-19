@@ -32,6 +32,13 @@ function openSocket(url: URL)
 
 /* ----------------------------------------------------------------------------
  */
+async function pathExists(path: Bun.PathLike)
+{
+  return await fs.stat(path.toString()).catch(() => false);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 const args = util.parseArgs(
 {
   args: Bun.argv.slice(2),
@@ -87,8 +94,7 @@ const actions =
     if (!await pw_file.exists())
       throw new Error(`password file ${pw_file_path} does not exist`);
 
-    const upload_file = Bun.file(upload_file_path);
-    if (!await upload_file.exists())
+    if (!await pathExists(upload_file_path))
       throw new Error(`upload file ${upload_file_path} does not exist`);
 
     url.pathname = "upload";
@@ -102,8 +108,6 @@ const actions =
 
     const stat = await fs.stat(upload_file_path);
 
-    const file_reader = upload_file.stream().getReader();
-
     let bytes_sent = 0;
 
     const start_time = Date.now();
@@ -112,6 +116,10 @@ const actions =
     {
       writeProgress(bytes_sent, stat.size, Date.now() - start_time);
     }, 50);
+
+    const file = await fs.open(upload_file_path, "r");
+
+    const chunk_size = 1024*1024*30; // 30mb
 
     socket.addEventListener("message", async (event) =>
     {
@@ -122,8 +130,12 @@ const actions =
         break;
 
       case "poll":
-        const chunk = await file_reader.read();
-        if (chunk.value == undefined)
+        const chunk = new Uint8Array(chunk_size);
+
+        const read_result = await file.read(chunk, 0, chunk_size);
+        const bytes_read = read_result.bytesRead;
+
+        if (bytes_read == 0)
         {
           socket.send("done");
           socket.close();
@@ -131,8 +143,8 @@ const actions =
         }
         else
         {
-          socket.send(chunk.value);
-          bytes_sent += chunk.value.length;
+          socket.send(chunk.slice(0 , bytes_read));
+          bytes_sent += bytes_read;
         }
         break;
       }
