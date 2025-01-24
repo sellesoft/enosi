@@ -362,7 +362,7 @@ LppObj.defineTask = function(self, cmd)
     :dependsOn(cpp_task)
     :workingDirectory(self.proj.root)
 
-  tryLoadDepFile(dfile, obj_task)
+  tryLoadDepFile(dfile, cpp_task)
   
   setFileExistanceAndModTimeCondition(cpp_task)
   setFileExistanceAndModTimeCondition(obj_task)
@@ -412,7 +412,7 @@ end
 
 -- * --------------------------------------------------------------------------
 
-local defineLinkerTask = function(self, is_shared)
+local defineLinkerTask = function(self, is_shared, lib_filter)
   local out = self:getOutputPath()
 
   ---@type cmd.Exe.Params | {}
@@ -425,12 +425,18 @@ local defineLinkerTask = function(self, is_shared)
 
   params.static_libs = List{}
   self.proj:gatherBuildObjects(object.StaticLib, function(bobj)
+    if lib_filter and lib_filter[bobj.name] then
+      return
+    end
     self.task:dependsOn(bobj.task)
     params.static_libs:push(bobj.name)
   end)
 
   params.shared_libs = List{}
   self.proj:gatherBuildObjects(object.SharedLib, function(bobj)
+    if bobj.name and lib_filter and lib_filter[bobj.name] then
+      return
+    end
     if bobj ~= self then
       self.task:dependsOn(bobj.task)
       params.shared_libs:push(bobj.name)
@@ -511,10 +517,11 @@ object.SharedLib = SharedLib
 
 -- * --------------------------------------------------------------------------
 
-SharedLib.new = function(name, objs)
+SharedLib.new = function(name, objs, lib_filter)
   local o = {}
   o.name = name
   o.objs = objs
+  o.lib_filter = lib_filter
   return setmetatable(o, SharedLib)
 end
 
@@ -548,7 +555,7 @@ end
 -- * --------------------------------------------------------------------------
 
 SharedLib.defineTask = function(self)
-  defineLinkerTask(self, true)
+  defineLinkerTask(self, true, self.lib_filter)
 end
 
 -- * --------------------------------------------------------------------------

@@ -29,4 +29,11 @@ lppclang.report.defines
 
 lppclang.report.published(
   lppclang.report.pub.SharedLib("lppclang",
-    lppclang:gatherBuildObjects{bobj.CppObj, bobj.LuaObj}))
+    lppclang:gatherBuildObjects{bobj.CppObj, bobj.LuaObj},
+    {
+      -- Filter out luajit because it won't be built with PIC which for 
+      -- whatever reason is a problem all of a sudden.
+      -- Another weakpoint of this build system that kinda sucks, but idk
+      -- how to gracefully fix for now.
+      luajit=true
+    }))

@@ -106,6 +106,7 @@ cmd.CppObj.getIOIndependentFlags = function(params)
   local o
   if params.compiler == "clang++" then
     o = helpers.listBuilder(
+      "-fPIC",
       "-std="..(params.std or "c++20"),
       params.nortti and "-fno-rtti",
       params.debug_info and "-ggdb3" ,
