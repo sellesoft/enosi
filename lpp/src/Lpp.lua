@@ -263,7 +263,7 @@ lpp.processFile = function(path)
   local result = lua__processFile(lpp.handle, path)
   if not result then
     log:fatal("failed to process path ", path, "\n")
-    os.exit(1)
+    error()
   end
   return result
 end
