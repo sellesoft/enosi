@@ -138,7 +138,7 @@ end
 io.write("Compiling lfs...\n")
 
 if 0 ~= exec("cd tmp/luafilesystem-1_8_0 && ",
-   "gcc -shared src/lfs.c ",
+   "gcc -fPIC -shared src/lfs.c ",
    "-o ../lfs.so ",
    "-I../../luajit/src/src") then
   error "failed to compile lua filesystem!"
