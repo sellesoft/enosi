@@ -13,6 +13,8 @@ for lfile in lake.find("src/*.lua"):each() do
   lpp.report.LuaObj(lfile)
 end
 
+lpp.report.ext.SharedLib "z"
+
 local exe = 
   lpp.report.Exe("lpp", 
     lpp:gatherBuildObjects{bobj.CppObj, bobj.LuaObj})
