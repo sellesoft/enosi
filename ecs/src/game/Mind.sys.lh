@@ -4,6 +4,8 @@ $ local cmn = require "common"
 
 @@lpp.import "game/EntityId.lh"
 
+struct GameMgr;
+
 struct MindSys
 {
   EntityId attached = nil;

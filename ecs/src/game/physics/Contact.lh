@@ -13,6 +13,6 @@ typedef Flags<ContactFlag> ContactFlags;
 struct Contact
 {
   
-}
+};
 
 }
