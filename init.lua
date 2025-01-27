@@ -1,4 +1,4 @@
---- Here, we build lake based on what platform we are running on.
+--- Build lake based on what platform we are running on.
 
 local build_cmds = require "build.commands"
 local List = require "List"
@@ -183,12 +183,19 @@ local function walkDir(path, f)
   end
 end
 
+local objext
+if platform == "linux" then
+	objext = ".o"
+else
+	objext = ".obj"
+end
+
 local function getSourceToObj(path, bdir, c_to_o, l_to_o)
   walkDir(path, function(path)
     if path:match("%.cpp$") then
-      c_to_o:push{path, bdir.."/"..path..".o"}
+      c_to_o:push{path, bdir.."/"..path..objext}
     elseif l_to_o and path:match("%.lua$") then
-      l_to_o:push{path, bdir.."/"..path..".o"}
+      l_to_o:push{path, bdir.."/"..path..objext}
     end
     local odir = bdir.."/"..path:match("(.*)/")
     lfs.mkdir(odir)
