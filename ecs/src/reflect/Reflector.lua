@@ -107,11 +107,18 @@ local import_list = List{}
 lpp.import = function(path)
   local full_path = path
   if full_path:sub(1,1) ~= "/" then
-    local src_path = full_path
-    if not full_path:find("^src/") then
-      full_path = "src/"..full_path
+    -- Try to find the file relative to the one importing it.
+    local this_path = lpp.getCurrentInputSourceName()
+    this_path = this_path:match("(.*)/.*")
+    full_path = lpp.getFileFullPathIfExists(this_path.."/"..path)
+
+    if not full_path then
+      full_path = path
+      if not full_path:find("^src/") then
+        full_path = "src/"..full_path
+      end
+      full_path = lpp.getFileFullPathIfExists(full_path)
     end
-    full_path = lpp.getFileFullPathIfExists(full_path)
   end
   if not full_path or full_path == "" then
     error("could not form full path to "..path)

@@ -106,6 +106,7 @@ cmd.CppObj.getIOIndependentFlags = function(params)
   local o
   if params.compiler == "clang++" then
     o = helpers.listBuilder(
+      "-fPIC",
       "-std="..(params.std or "c++20"),
       params.nortti and "-fno-rtti",
       params.debug_info and "-ggdb3" ,
@@ -418,6 +419,28 @@ cmd.Makefile = Type.make()
 ---@param params cmd.Makefile.Params
 cmd.Makefile.new = function(params)
   return helpers.listBuilder("make", "-j") 
+end
+
+---@class cmd.CMake
+cmd.CMake = Type.make()
+
+---@class cmd.CMake.Params
+--- What generator to use.
+---@field generator string
+--- Arguments passed to CMake.
+---@field args iro.List
+--- Path to the configuration directory.
+---@field config_dir string
+
+cmd.CMake.new = function(params)
+  return helpers.listBuilder(
+    "cmake",
+    "-G",
+    params.generator or 
+      error("no generator specified"),
+    params.config_dir,
+    params.args
+  )
 end
 
 return cmd

@@ -1,0 +1,59 @@
+/*
+ *  Structure for the initial definition of a rigid body.
+ */
+
+$ require "common"
+
+#include "math/vec.h"
+
+@@lpp.import "Transform.lh"
+
+namespace phys
+{
+
+struct BodyDef
+{
+  enum class Kind
+  {
+    Static,
+    Kinematic,
+    Dynamic,
+  };
+
+  Kind kind = Kind::Static;
+
+  // The initial world position of the body.
+  vec2f position;
+  
+  // The initial world rotation of the body.
+  f32 rotation;
+
+  // The initial linear velocity of the body's origin.
+  vec2f linear_velocity;
+
+  // The initial angular velocity of the body. This is in radians per second.
+  f32 angular_velocity;
+
+  // Damping to be applied to either form of velocity.
+  f32 linear_damping;
+  f32 angular_damping;
+
+  // The speed below which the body will be put to sleep.
+  f32 sleep_threshold;
+
+  // Whether the body should be put to sleep or not.
+  b8 enable_sleep;
+
+  // Whether the body should initially be awake or sleeping.
+  b8 is_awake;
+
+  // If the body should be prevented from rotating.
+  b8 fixed_rotation;
+
+  // If the body should be allowed to move or collide.
+  b8 is_enabled;
+};
+
+}
+
+

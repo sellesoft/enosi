@@ -138,7 +138,7 @@ end
 io.write("Compiling lfs...\n")
 
 if 0 ~= exec("cd tmp/luafilesystem-1_8_0 && ",
-   "gcc -shared src/lfs.c ",
+   "gcc -fPIC -shared src/lfs.c ",
    "-o ../lfs.so ",
    "-I../../luajit/src/src") then
   error "failed to compile lua filesystem!"
@@ -312,10 +312,7 @@ do
   {
     "luajit",
   }
-  exe_params.shared_libs = List
-  {
-    "explain",
-  }
+  exe_params.shared_libs = List{}
 
   local exe_cmd = build_cmds.Exe.new(exe_params)
 
@@ -381,10 +378,7 @@ do
   {
     "luajit",
   }
-  exe_params.shared_libs = List
-  {
-    "explain",
-  }
+  exe_params.shared_libs = List{}
 
   local exe_cmd = build_cmds.Exe.new(exe_params)
 

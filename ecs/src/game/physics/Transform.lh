@@ -1,0 +1,20 @@
+$ local cmn = require "common"
+
+#include "math/vec.h"
+
+namespace phys
+{
+
+struct Rotation
+{
+  // cosine and sine.
+  f32 c, s;
+};
+
+struct Transform
+{
+  vec2f pos;
+  Rotation rot;
+};
+
+}

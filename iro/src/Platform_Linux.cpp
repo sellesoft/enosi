@@ -12,6 +12,7 @@
 #include "fcntl.h"
 #include "utime.h"
 #include "errno.h"
+#include "stdlib.h"
 #include "unistd.h"
 #include "dirent.h"
 #include "string.h"
@@ -21,11 +22,6 @@
 #include "sys/wait.h"
 #include "sys/ptrace.h"
 #include "sys/sendfile.h"
-
-// Lib providing detailed explanations for various errors
-// that may occur using the std linux api. Idrk if I 
-// actually like using this so might be removed later.
-#include "libexplain/libexplain.h"
 
 #include "ctime"
 
@@ -41,6 +37,7 @@ template<typename... T>
 b8 reportErrno(T... args)
 {
   ERROR(args..., "\n");
+  ERROR("errno: ", strerror(errno), "\n");
   errno = 0;
   return false;
 }
@@ -92,9 +89,7 @@ b8 open(fs::File::Handle* out_handle, String path, fs::OpenFlags flags)
 
   // TODO(sushi) handle non-null-terminated strings
   if (r == -1)
-    return reportErrno(
-        "failed to open file at path '", path, "': ", 
-        explain_open((char*)path.ptr, oflags, mode));
+    return reportErrno( "failed to open file at path '", path, "'");
 
   *out_handle = (u64)r;
 
@@ -106,9 +101,7 @@ b8 open(fs::File::Handle* out_handle, String path, fs::OpenFlags flags)
 b8 close(fs::File::Handle handle)
 {
   if (::close((s64)handle) == -1)
-    return reportErrno(
-        "failed to close file with handle ", handle, ": ", 
-        explain_close((s64)handle));
+    return reportErrno( "failed to close file with handle ", handle);
   return true;
 }
 
@@ -122,9 +115,7 @@ s64 read(fs::File::Handle handle, Bytes buffer, b8 non_blocking, b8 is_pty)
   {
     if ((errno != EAGAIN || !non_blocking) &&
         (errno != EIO || !is_pty))
-      return reportErrno(
-          "failed to read from file with handle ", handle, ": ", 
-          explain_read((s64)handle, buffer.ptr, buffer.len)), -1;
+      return reportErrno( "failed to read from file with handle ", handle);
     else 
       r = errno = 0;
   }
@@ -141,9 +132,7 @@ s64 write(fs::File::Handle handle, Bytes buffer, b8 non_blocking, b8 is_pty)
   {
     if ((errno != EAGAIN || !non_blocking) &&
         (errno != EIO || !is_pty))
-      return reportErrno(
-            "failed to write to file with handle ", handle, ": ", 
-          explain_write((s64)handle, buffer.ptr, buffer.len));
+      return reportErrno( "failed to write to file with handle ", handle);
     else 
       r = errno = 0;
   }
@@ -168,8 +157,7 @@ b8 poll(fs::File::Handle handle, fs::PollEventFlags* flags)
   flags->clear();
 
   if (-1 == poll(&pfd, 1, 0))
-    return reportErrno("failed to poll process with handle ", handle, ": ",
-                       explain_poll(&pfd, 1, 0));
+    return reportErrno("failed to poll process with handle ", handle);
 
 #define flagmap(x, y) \
     if (pfd.revents & x) flags->set(fs::PollEvent::y);
@@ -202,8 +190,7 @@ b8 setNonBlocking(fs::File::Handle handle)
         F_SETFL, 
         oldflags | O_NONBLOCK))
     return reportErrno(
-        "failed to set file with handle ", handle, " as non-blocking: ", 
-        explain_fcntl((s64)handle, F_SETFL, O_NONBLOCK | oldflags));
+        "failed to set file with handle ", handle, " as non-blocking");
   return true;
 }
 
@@ -234,9 +221,7 @@ b8 opendir(fs::Dir::Handle* out_handle, String path)
   DIR* dir = ::opendir((char*)path.ptr);
 
   if (!dir)
-    return reportErrno(
-        "failed to open dir at path '", path, "': ", 
-        explain_opendir((char*)path.ptr));
+    return reportErrno( "failed to open dir at path '", path, "'");
 
   *out_handle = dir;
   return true;
@@ -251,10 +236,8 @@ b8 opendir(fs::Dir::Handle* out_handle, fs::File::Handle file_handle)
   DIR* dir = fdopendir((s64)file_handle);
 
   if (!dir)
-    return reportErrno(
-        "failed to open dir from file handle ", file_handle, "': ", 
-        strerror(errno));
-
+    return reportErrno( "failed to open dir from file handle ", file_handle);
+        
   *out_handle = dir;
   return false;
 }
@@ -266,9 +249,7 @@ b8 closedir(fs::Dir::Handle handle)
   int r = ::closedir((DIR*)handle);
 
   if (r == -1)
-    return reportErrno(
-        "failed to close dir with handle ", handle, ": ", 
-        explain_closedir((DIR*)handle));
+    return reportErrno( "failed to close dir with handle ", handle);
 
   return true;
 }
@@ -287,8 +268,7 @@ s64 readdir(fs::Dir::Handle handle, Bytes buffer)
     if (errno == 0)
       return 0;
     reportErrno(
-      "failed to read directory stream with handle ", handle, ": ", 
-      explain_readdir((DIR*)handle));
+      "failed to read directory stream with handle ", handle);
     return -1;
   }
   
@@ -329,8 +309,7 @@ b8 stat(fs::FileInfo* out_info, String path)
       errno = 0;
     }
     else
-      reportErrno("failed to stat file at path '", path, "'", 
-                  strerror(errno));
+      reportErrno("failed to stat file at path '", path, "'");
     return false;
   }
 
@@ -410,8 +389,7 @@ b8 copyFile(String dst, String src)
     bytes_copied = 
       sendfile((s64)dstf.handle, (s64)srcf.handle, nullptr, srcinfo.byte_size);
     if (bytes_copied < 0)
-      return reportErrno(
-          "failed to copy '", src, "' to '", dst, "': ", strerror(errno));
+      return reportErrno( "failed to copy '", src, "' to '", dst, "'");
   }
 
   return true;
@@ -424,9 +402,7 @@ b8 unlinkFile(String path)
   assert(notnil(path) and not path.isEmpty());
 
   if (-1 == unlink((char*)path.ptr))
-    return reportErrno(
-        "failed to unlink file at path '", path, "': ", 
-        explain_unlink((char*)path.ptr));
+    return reportErrno( "failed to unlink file at path '", path, "'");
   return true;
 }
 
@@ -437,9 +413,7 @@ b8 removeDir(String path)
   assert(notnil(path) and not path.isEmpty());
 
   if (-1 == rmdir((char*)path.ptr))
-    return reportErrno(
-        "failed to remove directory at path '", path, "': ", 
-        explain_rmdir((char*)path.ptr));
+    return reportErrno( "failed to remove directory at path '", path, "'");
   return true;
 }
 
@@ -460,9 +434,7 @@ b8 makeDir(String path, b8 make_parents)
   if (!make_parents)
   {
     if (-1 == mkdir((char*)path.ptr, 0777))
-      return reportErrno(
-        "failed to make directory at path '", path, "': ", 
-        explain_mkdir((char*)path.ptr, 0777));
+      return reportErrno( "failed to make directory at path '", path, "'");
     return true;
   }
 
@@ -485,9 +457,7 @@ b8 makeDir(String path, b8 make_parents)
       if (-1 == mkdir((char*)path_buffer, 0777))
       {
         if (errno != EEXIST)
-          return reportErrno(
-            "failed to make directory at path '", path, "': ", 
-            explain_mkdir((char*)path_buffer, 0777));
+          return reportErrno( "failed to make directory at path '", path, "'");
         errno = 0;
       }
     }
@@ -547,8 +517,7 @@ b8 processSpawn(
 
     if (-1 == pipe(infos[i].pipes))
       return reportErrno(
-          "failed to open pipes for stream ", i, " for process '", file, 
-          "': ", explain_pipe(infos[i].pipes));
+          "failed to open pipes for stream ", i, " for process '", file);
   }
 
   if (pid_t pid = fork())
@@ -556,7 +525,7 @@ b8 processSpawn(
     // parent branch
 
     if (pid == -1)
-      return reportErrno("failed to fork process: ", explain_fork());
+      return reportErrno("failed to fork process");
 
     // close uneeded pipes
     for (s32 i = 0; i < 3; i++)
@@ -627,8 +596,7 @@ b8 processSpawn(
     if (-1 == execvp(argsc.arr[0], argsc.arr))
     {
       reportErrno(
-        "execvp failed to replace child process with file '", file, "': ", 
-        explain_execvp(argsc.arr[0], argsc.arr));
+        "execvp failed to replace child process with file '", file, "'");
       exit(1);
     }
   }
@@ -647,8 +615,7 @@ b8 stopProcess(Process::Handle handle, s32 exit_code)
   
   if (-1 == kill((pid_t)(s64)handle, SIGKILL))
     return reportErrno(
-      "failed to stop process with handle '", handle, "': ",
-      explain_kill((pid_t)(s64)handle, SIGKILL));
+      "failed to stop process with handle '", handle, "'");
   
   return true;
 }
@@ -664,8 +631,7 @@ b8 processSpawnPTY(
   int master, slave;
 
   if (-1 == openpty(&master, &slave, nullptr, nullptr, nullptr))
-    return reportErrno("failed to open pty for file '", file, "': ",
-                       strerror(errno));
+    return reportErrno("failed to open pty for file '", file, "'");
 
   auto argsc = Array<char*>::create(args.len+1);
   argsc.push((char*)file.ptr);
@@ -678,7 +644,7 @@ b8 processSpawnPTY(
   {
     // parent branch
     if (pid == -1)
-      return reportErrno("failed to fork process: ", explain_fork());
+      return reportErrno("failed to fork process");
 
     close(slave);
 
@@ -705,8 +671,7 @@ b8 processSpawnPTY(
     if (-1 == execvp(argsc.arr[0], argsc.arr))
     {
       reportErrno(
-        "execvp failed to replace child process with file '", file, "': ",
-        explain_execvp(argsc.arr[0], argsc.arr));
+        "execvp failed to replace child process with file '", file, "'");
       exit(1);
     }
   }
@@ -725,8 +690,7 @@ b8 stopProcessPTY(Process::Handle handle, s32 exit_code)
   
   if (-1 == kill((pid_t)(s64)handle, SIGKILL))
     return reportErrno(
-      "failed to stop process with handle '", handle, "': ",
-      explain_kill((pid_t)(s64)handle, SIGKILL));
+      "failed to stop process with handle '", handle, "'");
   
   return true;
 }
@@ -742,8 +706,7 @@ ProcessCheckResult processCheck(Process::Handle handle, s32* out_exit_code)
   if (-1 == r)
   {
     reportErrno(
-      "waitpid failed on process with handle ", handle, ": ", 
-      explain_waitpid((s64)handle, &status, WNOHANG));
+      "waitpid failed on process with handle ", handle);
     return ProcessCheckResult::Error;
   }
 
@@ -783,12 +746,7 @@ b8 realpath(fs::Path* path)
   StackArray<u8, PATH_MAX> buf;
 
   if (::realpath((char*)path->buffer.ptr, (char*)buf.arr) == nullptr)
-  {
-    reportErrno(
-      "failed to canonicalize path ", *path, "': ", 
-      explain_realpath((char*)path->buffer.ptr, (char*)buf.arr));
-    return false;
-  }
+    return reportErrno( "failed to canonicalize path ", *path, "'");
 
   buf.len = strlen((char*)buf.arr);
 
@@ -820,10 +778,8 @@ fs::Path cwd(mem::Allocator* allocator)
     {
       if (errno != ERANGE)
       {
-        reportErrno(
-          "failed to get cwd: ", 
-          explain_getcwd((char*)path.buffer.ptr, bufferlen));
         path.destroy();
+        reportErrno("failed to get cwd"); 
         return nil;
       }
 
@@ -853,8 +809,7 @@ b8 chdir(String path)
 {
   if (-1 == ::chdir((char*)path.ptr))
     return reportErrno(
-        "failed to chdir into path '", path, "': ", 
-        explain_chdir((char*)path.ptr));
+        "failed to chdir into path '", path, "'");
   return true;
 }
 
@@ -901,14 +856,14 @@ b8 touchFile(String path)
 {
   struct stat info;
   if (-1 == stat((char*)path.ptr, &info))
-    return reportErrno(explain_stat((char*)path.ptr, &info));
+    return reportErrno("failed to touch path '", path, "'");
 
   struct utimbuf newtimes;
   newtimes.modtime = time(0);
   newtimes.actime = info.st_atime;
 
   if (-1 == utime((char*)path.ptr, &newtimes))
-    return reportErrno(explain_utime((char*)path.ptr, &newtimes));
+    return reportErrno("failed to set modtime of path '", path, "'"); 
 
   return true;
 }
