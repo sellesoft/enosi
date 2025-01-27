@@ -48,6 +48,13 @@ cp luajit/src/src/lua51.dll -Destination bin
 md tmp
 echo "\n\n"
 
+# For requiring iro lua modules.
+$env:LUA_PATH += ";$PWD/iro/src/lua/?.lua"
+# For requiring modules relative to enosi's root (eg. the build stuff).
+$env:LUA_PATH += ";$PWD/?.lua"
+# So luajit can require its lua modules.
+$env:LUA_PATH += ";$PWD/luajit/src/src/?.lua"
+
 bin/luajit init.lua windows
 
 
