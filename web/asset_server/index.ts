@@ -209,16 +209,35 @@ const server = Bun.serve<WebSocketData>(
 
     console.log(req)
 
-    // Upgrade to a websocket.
-    const success = server.upgrade(req, 
-      { 
-        data: 
+    if (url.pathname == "/get_client")
+    {
+      // Respond with the server's special client.  
+      const params = url.searchParams;
+
+      const platform = params.get("platform");
+      if (platform == null)
+        return new Response("no platform specified", {status:500})
+
+      if (platform == "windows")
+        return new Response(Bun.file("assets/windows/client.exe"))
+      else if (platform == "linux")
+        return new Response(Bun.file("assets/linux/client"))
+      else 
+        return new Response("unknown platform", {status:500})
+    }
+    else
+    {
+      // Upgrade to a websocket.
+      const success = server.upgrade(req, 
         { 
-          pathname: url.pathname,
-          params: url.searchParams 
-        } 
-      });
-    return success? undefined : new Response("Upgrade failed", {status: 500});
+          data: 
+          { 
+            pathname: url.pathname,
+            params: url.searchParams 
+          } 
+        });
+      return success? undefined : new Response("Upgrade failed", {status: 500});
+    }
   },
 
   websocket:
