@@ -115,12 +115,18 @@ inline b8 matchSeqRev(V* v, T... args)
 //             so if I eventually reorganize platform to be more modular, move this there
 //         and well, ideally this could be replaced by something in lpp anyways.
 #if defined(IRO_CLANG) || defined(IRO_GCC)
+#if IRO_LINUX
 // NOTE(sushi) in order for this to work properly with executables (my use case of it) the obj
 //             files need to be compiled with the linker flag -fvisiblity=hidden and the executable
 //             then must be linked with the flag -E (aka --export-dynamic).
 //             Windows actually does better here.. __declspec(dllexport) works regardless of if 
 //             a shared lib or executable is being linked.
 #define EXPORT_DYNAMIC __attribute__((visibility("default")))
+#elif IRO_WIN32
+#define EXPORT_DYNAMIC __declspec(dllexport)
+#else
+#error "EXPORT_DYNAMIC not setup for this platform"
+#endif
 #else
 #define EXPORT_DYNAMIC "EXPORT_DYNAMIC is not setup for this platform!"
 #endif

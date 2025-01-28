@@ -20,6 +20,9 @@ using namespace iro;
 DEFINE_GDB_PY_SCRIPT("lpp-gdb.py");
 #endif // #if IRO_LINUX
 
+#include "stdio.h"
+#undef stdout
+
 int main(const int argc, const char* argv[]) 
 {
   if (!iro::log.init())
@@ -33,6 +36,8 @@ int main(const int argc, const char* argv[])
         | fs::OpenFlag::Truncate 
         | fs::OpenFlag::Write);
   defer { if (notnil(f)) f.close(); };
+
+  printf("stdout handle: %i\n", fs::stdout.handle);
 
   {
     using enum Log::Dest::Flag;

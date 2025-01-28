@@ -4,15 +4,6 @@
 #include "stdio.h"
 #include "../memory/Memory.h"
 
-// TODO(sushi) platform layers
-#if IRO_LINUX
-#include "fcntl.h"
-#include "sys/stat.h"
-#include "unistd.h"
-#endif // #if IRO_LINUX
-
-#include "sys/stat.h"
-
 #include "assert.h"
 
 namespace iro::io

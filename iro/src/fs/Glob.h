@@ -123,7 +123,7 @@ void Globber::run(GlobberCallback auto callback)
 
   // Just tossing all this memory into a bump alloc for now. Handle all this
   // memory stuff more gracefully later.
-  mem::Bump bump;
+  mem::LenientBump bump;
   if (!bump.init())
     return;
   defer { bump.deinit(); };

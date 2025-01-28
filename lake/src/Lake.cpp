@@ -30,8 +30,11 @@ extern "C"
 #include "luajit/lualib.h"
 #include "luajit/lauxlib.h"
 
+EXPORT_DYNAMIC
 int lua__cwd(lua_State* L);
+EXPORT_DYNAMIC
 int lua__canonicalizePath(lua_State* L);
+EXPORT_DYNAMIC
 int lua__glob(lua_State* L);
 }
 

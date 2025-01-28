@@ -96,6 +96,29 @@ end
 
 local platform = arg[1]
 
+local copyFile = function(src, dst)
+  local src_file = io.open(src, "rb")
+  local dst_file = io.open(dst, "wb")
+  dst_file:write(src_file:read("*a"))
+  src_file:close()
+  dst_file:close()
+end
+-- if platform == "linux" then
+--   copyFile = function(src, dst)
+--     if 0 ~= exec("cp ",src.." ",dst) then
+--       error("failed to copy "..src.." to "..dst)
+--     end
+--   end
+-- elseif platform == "windows" then
+--   copyFile = function(src, dst)
+--     if 0 ~= exec("copy ",src.." ",dst) then
+--       error("failed to copy "..src.." to "..dst)
+--     end
+--   end
+-- else
+--   error("unhandled os")
+-- end
+
 local tryDownload = function(name, link, reason)
   if mode ~= "ignore" then
     io.write("\n")
@@ -138,9 +161,13 @@ end
 io.write("Compiling lfs...\n")
 
 if 0 ~= exec("cd tmp/luafilesystem-1_8_0 && ",
-   "gcc -fPIC -shared src/lfs.c ",
+   "clang -shared src/lfs.c ",
    "-o ../lfs.so ",
-   "-I../../luajit/src/src") then
+   "-I../../luajit/src/src ", 
+   "-L../../luajit/src/src ",
+   "-D_CRT_SECURE_NO_WARNINGS ",
+   "-lluajit ",
+   "-llua51 ") then
   error "failed to compile lua filesystem!"
 end
 
@@ -154,6 +181,12 @@ local cd = function(path)
 end
 
 local root = lfs.currentdir()
+
+-- if platform == "windows" then
+--   -- Try to make the path more 'normal' by removing the prefix
+--   -- and normalizing \ to /
+--   root = root:sub(3):gsub("\\", "/")
+-- end
 
 local build_dir = root.."/tmp/build"
 lfs.mkdir(build_dir)
@@ -227,14 +260,21 @@ do
   cpp_params.compiler = "clang++"
   cpp_params.defines = List
   {
-    {"IRO_LINUX", "1"},
     {"IRO_CLANG", "1"},
   }
+	
+  if platform == "linux" then
+	cpp_params.defines:push { "IRO_LINUX", "1" }
+  else
+	cpp_params.defines:push { "IRO_WIN32", "1" }
+  end
+
   cpp_params.include_dirs = List
   {
     "../luajit/build/include",
   }
-  cpp_params.opt = "speed"
+  cpp_params.opt = "none"
+  cpp_params.debug_info = true
 
   local cpp_cmd = build_cmds.CppObj.new(cpp_params)
 
@@ -256,7 +296,7 @@ do
     if dirname then
       lfs.mkdir(iro_include.."/iro/"..dirname)
     end
-    lfs.link(root.."/iro/src/"..path, iro_include.."/iro/"..path, true)
+    lfs.link(root.."/iro/src/"..path, iro_include.."/iro/"..path)
   end)
 
   compileObj(c_to_o, cpp_cmd)
@@ -281,15 +321,22 @@ do
   cpp_params.compiler = "clang++"
   cpp_params.defines = List
   {
-    {"IRO_LINUX", "1"},
     {"IRO_CLANG", "1"},
   }
+
+  if platform == "linux" then
+	cpp_params.defines:push { "IRO_LINUX", "1" }
+  else
+	cpp_params.defines:push { "IRO_WIN32", "1" }
+  end
+
   cpp_params.include_dirs = List
   {
     iro_include,
     "../luajit/build/include",
   }
-  cpp_params.opt = "speed"
+  cpp_params.opt = "none"
+  cpp_params.debug_info = true
 
   local cpp_cmd = build_cmds.CppObj.new(cpp_params)
 
@@ -303,7 +350,7 @@ do
   ---@type cmd.Exe.Params | {}
   local exe_params = {}
 
-  exe_params.linker = "ld"
+  exe_params.linker = "lld"
   exe_params.libdirs = List
   {
     "../luajit/build/lib",
@@ -311,8 +358,13 @@ do
   exe_params.static_libs = List
   {
     "luajit",
+    "lua51"
   }
-  exe_params.shared_libs = List{}
+  exe_params.shared_libs = List
+  {
+    "ws2_32"
+  }
+  exe_params.debug_info = true
 
   local exe_cmd = build_cmds.Exe.new(exe_params)
 
@@ -330,15 +382,24 @@ do
   l_to_o:each(function(v) objs:push(v[2]) end)
   c_to_o:each(function(v) objs:push(v[2]) end)
 
-  if 0 ~= execBuildCmd(exe_cmd:complete(objs, lake_build.."/lake"))
+  local exe_name
+  if platform == "linux" then
+    exe_name = "lake"
+  elseif platform == "windows" then
+    exe_name = "lake.exe"
+  end
+
+  if 0 ~= execBuildCmd(exe_cmd:complete(objs, lake_build.."/"..exe_name))
   then
     error "failed to link lake!"
   end
 
   cd ".."
 
-  if 0 ~= exec("cp ",lake_build,"/lake bin/lake") then
-    error "failed to copy lake to bin/!"
+  copyFile(lake_build.."/"..exe_name, "bin/"..exe_name)
+
+  if platform == "windows" then
+    copyFile(lake_build.."/lake.pdb", "bin/lake.pdb")
   end
 end
 
@@ -354,22 +415,29 @@ do
   cpp_params.compiler = "clang++"
   cpp_params.defines = List
   {
-    {"IRO_LINUX", "1"},
     {"IRO_CLANG", "1"},
   }
+
+  if platform == "linux" then
+	cpp_params.defines:push { "IRO_LINUX", "1" }
+  else
+	cpp_params.defines:push { "IRO_WIN32", "1" }
+  end
+
   cpp_params.include_dirs = List
   {
     iro_include,
     "../luajit/build/include",
   }
-  cpp_params.opt = "speed"
+  cpp_params.opt = "none"
+  cpp_params.debug_info = true
 
   local cpp_cmd = build_cmds.CppObj.new(cpp_params)
 
   ---@type cmd.Exe.Params | {}
   local exe_params = {}
 
-  exe_params.linker = "ld"
+  exe_params.linker = "lld"
   exe_params.libdirs = List
   {
     "../luajit/build/lib",
@@ -377,8 +445,12 @@ do
   exe_params.static_libs = List
   {
     "luajit",
+    "lua51"
   }
-  exe_params.shared_libs = List{}
+  exe_params.shared_libs = List
+  {
+    "ws2_32"
+  }
 
   local exe_cmd = build_cmds.Exe.new(exe_params)
 
@@ -396,14 +468,19 @@ do
   objs:pushList(iro_objs)
   c_to_o:each(function(v) objs:push(v[2]) end)
 
-  if 0 ~= execBuildCmd(exe_cmd:complete(objs, elua_build.."/elua"))
+  local exe_name
+  if platform == "windows" then
+    exe_name = "elua.exe"
+  else
+    exe_name = "elua"
+  end
+
+  if 0 ~= execBuildCmd(exe_cmd:complete(objs, elua_build.."/"..exe_name))
   then
     error "failed to link elua!"
   end
 
   cd ".."
 
-  if 0 ~= exec("cp ",elua_build,"/elua bin/elua") then
-    error "failed to copy elua to bin/!"
-  end
+  copyFile(elua_build.."/"..exe_name, "bin/"..exe_name)
 end

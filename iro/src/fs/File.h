@@ -135,12 +135,19 @@ struct File : public io::IO
   FileInfo getInfo();
 };
 
+#if IRO_LINUX
 inline File stdout = 
   File::fromFileDescriptor(1, "stdout"_str, OpenFlag::Write);
 inline File stderr = 
   File::fromFileDescriptor(2, "stderr"_str, OpenFlag::Write);
 inline File stdin = 
   File::fromFileDescriptor(0, "stdin"_str, OpenFlag::Read);
+#elif IRO_WIN32
+// NOTE(sushi) these are defined in File_Win32.cpp
+extern File stdout;
+extern File stderr;
+extern File stdin;
+#endif
 
 /* ================================================================================================ fs::FileInfo
  */

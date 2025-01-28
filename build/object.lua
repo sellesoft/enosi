@@ -505,6 +505,12 @@ StaticLib.getTargetName = function(self)
     else
       return "lib"..base..".a"
     end
+  elseif sys.os == "windows" then
+    if dir then
+      return dir.."/"..base..".lib"
+    else
+      return base..".lib"
+    end
   else
     error("unhandled os "..sys.os)
   end
@@ -538,6 +544,12 @@ SharedLib.getTargetName = function(self)
       return dir.."/lib"..base..".so"
     else
       return "lib"..base..".so"
+    end
+  elseif sys.os == "windows" then
+    if dir then
+      return dir.."/"..base..".dll"
+    else
+      return base..".dll"
     end
   else
     error("unhandled os "..sys.os)

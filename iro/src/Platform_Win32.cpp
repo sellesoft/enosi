@@ -57,7 +57,15 @@ static wchar_t* makeWin32Path(String input, u64 extra_bytes = 0,
     return output;
   }
   
-  bytes += 5; // "\\?\" + null-terminator
+  // TODO(qh) this is necessary because GetFullPathNameA might give us a path 
+  //          that already has a \\?\ prefix. This should be done more cleanly
+  //          later but I'm just trying to get this stuff to work rn.
+  b8 has_prefix = 
+    full_path_length > 4 &&
+    (full_path[0] == '\\' && full_path[1] == '\\' &&
+     full_path[2] == '?'  && full_path[3] == '\\');
+
+  bytes += (has_prefix? 1 : 5); // "\\?\" + null-terminator
   if (bytes > win32_str_capacity || force_allocate)
   {
     output = (wchar_t*)mem::stl_allocator.allocate(bytes);
@@ -69,15 +77,25 @@ static wchar_t* makeWin32Path(String input, u64 extra_bytes = 0,
     }
   }
   
-  output[0] = L'\\';
-  output[1] = L'\\';
-  output[2] = L'?';
-  output[3] = L'\\';
+  if (!has_prefix)
+  {
+    output[0] = L'\\';
+    output[1] = L'\\';
+    output[2] = L'?';
+    output[3] = L'\\';
+  }
   
   assert(full_path_length <= INT_MAX);
   assert(bytes <= INT_MAX);
-  int converted_bytes = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
-    (LPCCH)full_path, (int)full_path_length, output + 4, (int)bytes - 5);
+  int converted_bytes = 
+    MultiByteToWideChar(
+      CP_UTF8, 
+      MB_ERR_INVALID_CHARS,
+      (LPCCH)full_path, 
+      (int)full_path_length, 
+      output + (has_prefix? 0 : 4), 
+      (int)bytes - (has_prefix? 1 : 5));
+
   if (converted_bytes == 0)
   {
     assert(GetLastError() == ERROR_NO_UNICODE_TRANSLATION);
@@ -87,9 +105,9 @@ static wchar_t* makeWin32Path(String input, u64 extra_bytes = 0,
   }
   
   if (output_len != nullptr)
-    *output_len = converted_bytes + 4;
+    *output_len = converted_bytes + (has_prefix? 0 : 4);
   
-  output[converted_bytes + 4] = L'\0';
+  output[converted_bytes + (has_prefix? 0 : 4)] = L'\0';
   return output;
 }
 
@@ -270,7 +288,13 @@ s64 read(fs::File::Handle handle, Bytes buffer, b8 non_blocking, b8 is_pty)
 }
 
 /* ----------------------------------------------------------------------------
+ *   This function uses a sentinel for detecting if a write error occurs on a 
+ *   file handle used by the logger, since if that happens we will hit a stack
+ *   overflow with the ERROR log macro used within. This is probably not a 
+ *   safe way to handle this, especially with multithreading, so should be 
+ *   made more robust later.
  */
+b8 iro_platform_writing_logging_error = false;
 s64 write(fs::File::Handle handle, Bytes buffer, b8 non_blocking, b8 is_pty)
 {
   assert((HANDLE)handle != INVALID_HANDLE_VALUE);
@@ -296,8 +320,18 @@ s64 write(fs::File::Handle handle, Bytes buffer, b8 non_blocking, b8 is_pty)
     DWORD error = GetLastError();
     if (!(non_blocking && error == ERROR_IO_PENDING))
     {
+      if (iro_platform_writing_logging_error)
+      {
+        printf("FATAL INTERNAL ERROR: recursion detected while writing an "
+               "error out of platform::write, this is likely because "
+               "we cannot write to a file handle stored in the logger!\n");
+        printf("Last win32 error was: \n%s\n", makeWin32ErrorMsg(error).ptr);
+        return 0;
+      }
+      iro_platform_writing_logging_error = true;
       ERROR("failed to write to file with handle ", handle, ": ",
         makeWin32ErrorMsg(error), "\n");
+      iro_platform_writing_logging_error = false;
       cleanupWin32ErrorMsg();
       return -1;
     }
@@ -552,67 +586,34 @@ s64 readdir(fs::Dir::Handle handle, Bytes buffer)
     
     // skip "." and ".."
     if (find_data.cFileName[0] == L'.' && (find_data.cFileName[1] == L'\0' ||
-      (find_data.cFileName[1] == L'.' && find_data.cFileName[2] == L'\0')))
+       (find_data.cFileName[1] == L'.' && find_data.cFileName[2] == L'\0')))
     {
       continue;
     }
     
     break;
   }
-  
-  // NOTE: returned path starts with "\\?\"
-  DWORD wpath_len = GetFullPathNameW(find_data.cFileName,
-    win32_str_capacity + 1, win32_str, NULL);
-  
-  assert(wpath_len - 4 <= (DWORD)INT_MAX);
-  int utf8_len = WideCharToMultiByte(CP_UTF8, MB_ERR_INVALID_CHARS,
-    win32_str + 4, (int)wpath_len, NULL, 0, NULL, NULL);
+
+  int utf8_len = 
+    WideCharToMultiByte(
+      CP_UTF8, 
+      WC_ERR_INVALID_CHARS, 
+      find_data.cFileName,
+      -1,
+      (char*)buffer.ptr,
+      (int)buffer.len,
+      nullptr,
+      nullptr);
+
   if (utf8_len == 0)
-    {
-      assert(GetLastError() == ERROR_NO_UNICODE_TRANSLATION);
-      ERROR("failed to close dir with handle ", handle, ": invalid unicode was"
-        " found in a string when converting from WideChar to UTF-8\n");
-      return -1;
-    }
-  
-  if (utf8_len > buffer.len)
   {
-    char* utf8_str = (char*)mem::stl_allocator.allocate(utf8_len);
-    if (utf8_str == nullptr)
-    {
-      ERROR("failed to close dir with handle ", handle, ": insufficient memory"
-        " when converting from WideChar to UTF-8\n");
-      return -1;
-    }
-    
-    int converted_bytes = WideCharToMultiByte(CP_UTF8, MB_ERR_INVALID_CHARS,
-      win32_str + 4, (int)(wpath_len - 4), utf8_str, utf8_len, NULL, NULL);
-    if (converted_bytes == 0)
-    {
-      assert(GetLastError() == ERROR_NO_UNICODE_TRANSLATION);
-      ERROR("failed to close dir with handle ", handle, ": invalid unicode was"
-        " found in a string when converting from WideChar to UTF-8\n");
-      return -1;
-    }
-    
-    ERROR("failed to close dir with handle ", handle, ": buffer given to"
-      " readdir() is too small. File name '", utf8_str, "' is ", utf8_len,
-      " bytes long, but given buffer is ", buffer.len, " bytes long\n");
+    ERROR("failed to convert dir entry to utf8: ", 
+          makeWin32ErrorMsg(GetLastError()));
+    cleanupWin32ErrorMsg();
     return -1;
   }
-  
-  int converted_bytes = WideCharToMultiByte(CP_UTF8, MB_ERR_INVALID_CHARS,
-    win32_str + 4, (int)(wpath_len - 4), (char*)buffer.ptr, (int)buffer.len,
-    NULL, NULL);
-  if (converted_bytes == 0)
-  {
-    assert(GetLastError() == ERROR_NO_UNICODE_TRANSLATION);
-    ERROR("failed to close dir with handle ", handle, ": invalid unicode was"
-      " found in a string when converting from WideChar to UTF-8\n");
-    return -1;
-  }
-  
-  return (s64)converted_bytes;
+
+  return utf8_len-1; // maybe safe idk
 }
 
 /* ----------------------------------------------------------------------------
@@ -1446,7 +1447,7 @@ b8 realpath(fs::Path* path)
   }
   
   assert(full_wpath_chars <= (DWORD)INT_MAX);
-  int utf8_bytes = WideCharToMultiByte(CP_UTF8, MB_ERR_INVALID_CHARS,
+  int utf8_bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
     full_wpath, (int)full_wpath_chars, NULL, 0, NULL, NULL);
   if (utf8_bytes == 0)
   {
@@ -1460,7 +1461,7 @@ b8 realpath(fs::Path* path)
   path->reserve((s32)utf8_bytes + 1);
   path->commit((s32)utf8_bytes);
   
-  int converted_bytes = WideCharToMultiByte(CP_UTF8, MB_ERR_INVALID_CHARS,
+  int converted_bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
     full_wpath, (int)full_wpath_chars, (char*)path->buffer.ptr,
     utf8_bytes + 1, NULL, NULL);
   if (converted_bytes == 0)
@@ -1512,7 +1513,7 @@ fs::Path cwd(mem::Allocator* allocator)
   }
   
   assert(wpath_chars <= (DWORD)INT_MAX);
-  int utf8_bytes = WideCharToMultiByte(CP_UTF8, MB_ERR_INVALID_CHARS,
+  int utf8_bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
     wpath, (int)wpath_chars, NULL, 0, NULL, NULL);
   if (utf8_bytes == 0)
   {
@@ -1532,7 +1533,7 @@ fs::Path cwd(mem::Allocator* allocator)
   path.reserve((s32)utf8_bytes + 1);
   path.commit((s32)utf8_bytes);
   
-  int converted_bytes = WideCharToMultiByte(CP_UTF8, MB_ERR_INVALID_CHARS,
+  int converted_bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
     wpath, (int)wpath_chars, (char*)path.buffer.ptr, utf8_bytes + 1,
     NULL, NULL);
   if (converted_bytes == 0)
@@ -1568,6 +1569,24 @@ b8 chdir(String path)
     return false;
   }
   
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 chdir(fs::Dir::Handle dir_handle)
+{
+  GetFinalPathNameByHandleW((HANDLE)dir_handle, win32_str,
+    win32_str_capacity + 1, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+
+  if (SetCurrentDirectoryW(win32_str) == 0)
+  {
+    ERROR("failed to get the current working directory: ",
+      makeWin32ErrorMsg(GetLastError()), "\n");
+    cleanupWin32ErrorMsg();
+    return false;
+  }
+
   return true;
 }
 

@@ -55,6 +55,8 @@ cmd.CppObj = Type.make()
 --- Force all symbols exposed to the dynamic table by default.
 --- Default is false.
 ---@field export_all boolean
+--- Compile with position independent code.
+---@field pic boolean
 
 ---@param params cmd.CppObj.Params
 ---@return cmd.CppObj
@@ -106,10 +108,10 @@ cmd.CppObj.getIOIndependentFlags = function(params)
   local o
   if params.compiler == "clang++" then
     o = helpers.listBuilder(
-      "-fPIC",
+      params.pic and "-fPIC",
       "-std="..(params.std or "c++20"),
       params.nortti and "-fno-rtti",
-      params.debug_info and "-ggdb3" ,
+      params.debug_info and "-g" ,
       not params.export_all and "-fvisibility=hidden",
       "-fpatchable-function-entry=16",
       "-Wno-#warnings",
@@ -324,6 +326,9 @@ cmd.Exe = Type:make()
 ---@field libdirs List
 --- If true, a shared library will be built.
 ---@field is_shared boolean
+--- Whether to output debug information. This is probably only useful on Windows where
+--- it intends to output a pdb.
+---@field debug_info boolean
 
 ---@param params cmd.Exe.Params
 ---@return cmd.Exe
@@ -332,6 +337,7 @@ cmd.Exe.new = function(params)
   o.linker = params.linker
 
   if "ld" == params.linker 
+	 or "lld" == params.linker
      or "mold" == params.linker 
   then
     -- TODO(sushi) it sucks that we operate the linker through clang here, but 
@@ -347,7 +353,8 @@ cmd.Exe.new = function(params)
     o.partial = helpers.listBuilder(
       "clang++",
       "-fuse-ld="..params.linker,
-      params.is_shared and "-shared")
+      params.is_shared and "-shared",
+	  params.debug_info and "-g")
 
     o.links = helpers.listBuilder(
       params.libdirs and params.libdirs:flatten():map(function(dir)
@@ -358,7 +365,7 @@ cmd.Exe.new = function(params)
         return "-l"..lib
       end),
       params.static_libs and params.static_libs:flatten():map(function(lib)
-        return "-l:lib"..lib..".a"
+        return "-l"..lib
       end),
       "-Wl,--end-group",
       "-Wl,-E")

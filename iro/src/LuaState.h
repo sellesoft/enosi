@@ -167,6 +167,7 @@ struct LuaState
 extern "C"
 {
 
+EXPORT_DYNAMIC
 int iro__lua_inspect(lua_State* L);
 
 }
