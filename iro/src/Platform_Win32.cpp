@@ -34,14 +34,20 @@ thread_local LPSTR win32_error_msg = nullptr;
 
 /* ----------------------------------------------------------------------------
  */
-static wchar_t* makeWin32Path(String input, u64 extra_bytes = 0,
-  u64* output_len = 0, b8 force_allocate = false)
+static wchar_t* makeWin32Path(
+    String input, 
+    u64 extra_bytes = 0,
+    u64* output_len = 0, 
+    b8 force_allocate = false)
 {
   wchar_t* output = win32_str;
+
+  char* null_terminated_input = (char*)_alloca((size_t)input.len + 1);
+  input.nullTerminate((u8*)null_terminated_input, input.len+1);
   
-  DWORD full_path_length = GetFullPathNameA((LPCSTR)input.ptr, 0, NULL, NULL);
+  DWORD full_path_length = GetFullPathNameA((LPCSTR)null_terminated_input, 0, NULL, NULL);
   char* full_path = (char*)_alloca((size_t)full_path_length + 1);
-  full_path_length = GetFullPathNameA((LPCSTR)input.ptr, full_path_length + 1,
+  full_path_length = GetFullPathNameA((LPCSTR)null_terminated_input, full_path_length + 1,
     full_path, NULL);
   if (full_path_length == 0)
   {
