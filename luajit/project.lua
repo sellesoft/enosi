@@ -35,13 +35,13 @@ luajit.report.dir.lib
   }
 }
 
-luajit.report.Makefile "src/src" 
+-- luajit.report.Makefile "src/src" 
 
-luajit.cleaner = function(self)
-  lake.task("clean luajit")
-    :cond(function() return true end)
-    :workingDirectory(self.root.."/src/src")
-    :recipe(function()
-      lake.cmd({"make", "clean"})
-    end)
-end
+-- luajit.cleaner = function(self)
+--   lake.task("clean luajit")
+--     :cond(function() return true end)
+--     :workingDirectory(self.root.."/src/src")
+--     :recipe(function()
+--       lake.cmd({"make", "clean"})
+--     end)
+-- end

@@ -1,7 +1,6 @@
 .direnv
 llvm/build
 .cache/
-compile_commands.json
 luajit/lib/
 luajit/include/
 temp/
@@ -21,3 +20,7 @@ bin/liblppclang.so
 **/upload_pw.txt
 
 web/localtestserv/
+
+.vs/
+
+.vscode/

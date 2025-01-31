@@ -37,8 +37,6 @@ int main(const int argc, const char* argv[])
         | fs::OpenFlag::Write);
   defer { if (notnil(f)) f.close(); };
 
-  printf("stdout handle: %i\n", fs::stdout.handle);
-
   {
     using enum Log::Dest::Flag;
     iro::log.newDestination("stdout"_str, &fs::stdout, 

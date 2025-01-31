@@ -173,7 +173,11 @@ File File::fromFileDescriptor(u64 fd, OpenFlags flags)
   if (flags.test(OpenFlag::NoBlock))
   {
     TRACE("setting as non-blocking\n");
-    platform::setNonBlocking(out.handle);
+    // TODO(sushi) fix this once back on linux, or just remove it, as its 
+    //             only used for process communication and setting handles as
+    //             non-blocking should be able to be handled inside those 
+    //             functions.
+    // platform::setNonBlocking(out.handle);
   }
 
   out.path = nil;

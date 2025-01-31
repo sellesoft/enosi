@@ -3,6 +3,7 @@
 local build_cmds = require "build.commands"
 local List = require "List"
 local Type = require "Type"
+local json = require "json"
 
 local writeSeparator = function()
   io.write
@@ -99,25 +100,14 @@ local platform = arg[1]
 local copyFile = function(src, dst)
   local src_file = io.open(src, "rb")
   local dst_file = io.open(dst, "wb")
+  if not dst_file then
+	  error("failed to open "..dst.." for copy. On Windows this likely means "..
+          "(if dst is an exe) that it is open in a debugger.")
+  end
   dst_file:write(src_file:read("*a"))
   src_file:close()
   dst_file:close()
 end
--- if platform == "linux" then
---   copyFile = function(src, dst)
---     if 0 ~= exec("cp ",src.." ",dst) then
---       error("failed to copy "..src.." to "..dst)
---     end
---   end
--- elseif platform == "windows" then
---   copyFile = function(src, dst)
---     if 0 ~= exec("copy ",src.." ",dst) then
---       error("failed to copy "..src.." to "..dst)
---     end
---   end
--- else
---   error("unhandled os")
--- end
 
 local tryDownload = function(name, link, reason)
   if mode ~= "ignore" then
@@ -180,13 +170,11 @@ local cd = function(path)
   lfs.chdir(path)
 end
 
-local root = lfs.currentdir()
+local getCwd = function()
+  return lfs.currentdir():gsub("\\", "/")
+end
 
--- if platform == "windows" then
---   -- Try to make the path more 'normal' by removing the prefix
---   -- and normalizing \ to /
---   root = root:sub(3):gsub("\\", "/")
--- end
+local root = getCwd()
 
 local build_dir = root.."/tmp/build"
 lfs.mkdir(build_dir)
@@ -235,9 +223,23 @@ local function getSourceToObj(path, bdir, c_to_o, l_to_o)
   end)
 end
 
+local compile_commands = {}
+
 local function compileObj(src_to_obj, cmd)
+  local cwd = getCwd()
   for v in src_to_obj:each() do
-    if 0 ~= execBuildCmd(cmd:complete(v[1], v[2]))  then
+    local args = flattenList(cmd:complete(v[1], v[2]))
+
+	if not v[1]:find("%.lua") then
+		table.insert(compile_commands, 
+		{
+		  directory = cwd,
+		  arguments = args,
+		  file = v[1]
+		})
+	end
+
+    if 0 ~= execBuildCmd(args)  then
       error("failed to compile "..v[1].."!")
     end
   end
@@ -275,6 +277,7 @@ do
   }
   cpp_params.opt = "none"
   cpp_params.debug_info = true
+  cpp_params.address_sanitizer = true
 
   local cpp_cmd = build_cmds.CppObj.new(cpp_params)
 
@@ -337,6 +340,7 @@ do
   }
   cpp_params.opt = "none"
   cpp_params.debug_info = true
+  cpp_params.address_sanitizer = true
 
   local cpp_cmd = build_cmds.CppObj.new(cpp_params)
 
@@ -365,6 +369,7 @@ do
     "ws2_32"
   }
   exe_params.debug_info = true
+  exe_params.address_sanitizer = true
 
   local exe_cmd = build_cmds.Exe.new(exe_params)
 
@@ -451,6 +456,7 @@ do
   {
     "ws2_32"
   }
+  exe_params.address_sanitizer = true
 
   local exe_cmd = build_cmds.Exe.new(exe_params)
 
@@ -483,4 +489,10 @@ do
   cd ".."
 
   copyFile(elua_build.."/"..exe_name, "bin/"..exe_name)
+end
+
+local compile_commands_file = io.open("compile_commands.json", "w")
+if compile_commands_file then
+  compile_commands_file:write(json.encode(compile_commands))
+  compile_commands_file:close()
 end

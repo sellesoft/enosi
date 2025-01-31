@@ -57,6 +57,10 @@ cmd.CppObj = Type.make()
 ---@field export_all boolean
 --- Compile with position independent code.
 ---@field pic boolean
+--- Compile with address sanitizer enabled.
+--- NOTE that if this is enabled for an object file, it must be enabled 
+---      when linking it as well!
+---@field address_sanitizer boolean
 
 ---@param params cmd.CppObj.Params
 ---@return cmd.CppObj
@@ -112,8 +116,9 @@ cmd.CppObj.getIOIndependentFlags = function(params)
       "-std="..(params.std or "c++20"),
       params.nortti and "-fno-rtti",
       params.debug_info and "-g" ,
+      params.address_sanitizer and "-fsanitize=address",
       not params.export_all and "-fvisibility=hidden",
-      "-fpatchable-function-entry=16",
+      --"-fpatchable-function-entry=16",
       "-Wno-#warnings",
       "-Wno-switch",
       "-Wno-return-type-c-linkage",
@@ -329,6 +334,10 @@ cmd.Exe = Type:make()
 --- Whether to output debug information. This is probably only useful on Windows where
 --- it intends to output a pdb.
 ---@field debug_info boolean
+--- Link with address sanitizer enabled.
+--- NOTE that if this is enabled, it must be enabled when compiling linked 
+---      object files as well!
+---@field address_sanitizer boolean
 
 ---@param params cmd.Exe.Params
 ---@return cmd.Exe
@@ -354,7 +363,8 @@ cmd.Exe.new = function(params)
       "clang++",
       "-fuse-ld="..params.linker,
       params.is_shared and "-shared",
-	  params.debug_info and "-g")
+      params.address_sanitizer and "-fsanitize=address",
+      params.debug_info and "-g")
 
     o.links = helpers.listBuilder(
       params.libdirs and params.libdirs:flatten():map(function(dir)

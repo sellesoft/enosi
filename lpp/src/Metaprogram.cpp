@@ -4,7 +4,7 @@
 #include "iro/LineMap.h"
 #include "iro/fs/File.h"
 
-#include "stdlib.h"
+#include "cstdlib"
 
 namespace lpp
 {

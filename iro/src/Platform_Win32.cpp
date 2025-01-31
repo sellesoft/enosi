@@ -12,6 +12,7 @@
 #include "Logger.h"
 #include "Unicode.h"
 #include "memory/Allocator.h"
+#include "io/IO.h"
 
 #include "climits"
 #include "cwchar"
@@ -22,22 +23,117 @@ namespace iro::platform
 static iro::Logger logger = 
   iro::Logger::create("platform.win32"_str, iro::Logger::Verbosity::Notice);
 
+/* ----------------------------------------------------------------------------
+ */
+static thread_local LPSTR win32_error_msg = nullptr;
+static String makeWin32ErrorMsg(DWORD error)
+{
+	DWORD win32_error_msg_len = 
+    FormatMessageA(
+          FORMAT_MESSAGE_ALLOCATE_BUFFER 
+        | FORMAT_MESSAGE_FROM_SYSTEM 
+        | FORMAT_MESSAGE_IGNORE_INSERTS, 
+        NULL, 
+        error,
+        MAKELANGID(LANG_NEUTRAL,SUBLANG_DEFAULT), 
+        (LPSTR)&win32_error_msg, 
+        0, 
+        NULL);
+
+  return String::from((u8*)win32_error_msg, (u64)win32_error_msg_len);
+}
+
+static void cleanupWin32ErrorMsg()
+{
+  LocalFree(win32_error_msg);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<typename... Args>
+static b8 win32Err(Args... args)
+{
+  ERROR(args..., ": ", makeWin32ErrorMsg(GetLastError()));
+  cleanupWin32ErrorMsg();
+  return false;
+}
+
+/* ----------------------------------------------------------------------------
+ *  Normalizes a path given by Win32 in place and returns a new String 
+ *  representing it. This replaces \\ with / and removes the UNC prefix if 
+ *  it exists. This does not canonicalize the path, eg. it does not try to
+ *  remove . and .. directories from it.
+ */
+static String normalizePath(String string)
+{
+  if (string.len > 4 && matchSeq(string.ptr, '\\', '\\', '?', '\\'))
+  {
+    mem::move(string.ptr, string.ptr + 4, string.len - 4);
+    string.len -= 4;
+  }
+
+  for (s32 i = 0; i < string.len; ++i)
+  {
+    if (string.ptr[i] == '\\')
+      string.ptr[i] = '/';
+  }
+
+  return string;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static s32 stringToWideChar(const char* ptr, int len, wchar_t* outptr, int outlen)
+{
+  int bytes_written = 
+    MultiByteToWideChar(
+        CP_UTF8, 
+        MB_ERR_INVALID_CHARS,
+        (LPCCH)ptr,
+        len,
+        outptr,
+        outlen);
+
+  if (bytes_written == 0)
+  {
+    ERROR("failed to convert utf8 to wide chars: ",
+          makeWin32ErrorMsg(GetLastError()));
+    cleanupWin32ErrorMsg();
+    return 0;
+  }
+  
+  return bytes_written;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static s32 stringToWideChar(String str, wchar_t* outptr, int outlen)
+{
+  return stringToWideChar((char*)str.ptr, str.len, outptr, outlen);
+}
+
 // NOTE: Ideally we would use less than 32771, but GetFinalPathNameByHandleW
 // can not be called to determine the output string length before filling
 // the string buffer. So, we provide it a buffer that can hold the max
 // WideChar path length 32767, plus 4 for the "\\?\" prefix.
+//
+// TODO(sushi) this NOTE is incorrect as GetFinalPathNameByHandleW returns 
+//             the required space when the provided buffer is too small (at
+//             least the docs say so, who knows). Ideally this global be 
+//             removed from the internals and we instead move towards mostly 
+//             requiring the user to provide a buffer of sufficient size or 
+//             just using a function local buffer). The Linux platform layer 
+//             also needs to move more towards this style as well iirc.
 #define win32_str_capacity 32771
-thread_local wchar_t win32_str[win32_str_capacity + 1] = {0};
-thread_local const char* win32_make_path_error = nullptr;
-
-thread_local LPSTR win32_error_msg = nullptr;
+thread_local static wchar_t win32_str[win32_str_capacity + 1] = {0};
+thread_local const static char* win32_make_path_error = nullptr;
 
 /* ----------------------------------------------------------------------------
  */
 static wchar_t* makeWin32Path(
     String input, 
     u64 extra_bytes = 0,
-    u64* output_len = 0, 
+    u64* output_len = nullptr, 
     b8 force_allocate = false)
 {
   wchar_t* output = win32_str;
@@ -45,10 +141,13 @@ static wchar_t* makeWin32Path(
   char* null_terminated_input = (char*)_alloca((size_t)input.len + 1);
   input.nullTerminate((u8*)null_terminated_input, input.len+1);
   
-  DWORD full_path_length = GetFullPathNameA((LPCSTR)null_terminated_input, 0, NULL, NULL);
+  DWORD full_path_length = 
+    GetFullPathNameA((LPCSTR)null_terminated_input, 0, NULL, NULL);
   char* full_path = (char*)_alloca((size_t)full_path_length + 1);
-  full_path_length = GetFullPathNameA((LPCSTR)null_terminated_input, full_path_length + 1,
+  full_path_length = 
+    GetFullPathNameA((LPCSTR)null_terminated_input, full_path_length + 1,
     full_path, NULL);
+
   if (full_path_length == 0)
   {
     win32_make_path_error = "insufficient memory when converting from UTF-8"
@@ -63,9 +162,10 @@ static wchar_t* makeWin32Path(
     return output;
   }
   
-  // TODO(qh) this is necessary because GetFullPathNameA might give us a path 
-  //          that already has a \\?\ prefix. This should be done more cleanly
-  //          later but I'm just trying to get this stuff to work rn.
+  // TODO(sushi) this is necessary because GetFullPathNameA might give us a 
+  //             path that already has a \\?\ prefix. This should be done more 
+  //             cleanly later but I'm just trying to get this stuff to work 
+  //             rn.
   b8 has_prefix = 
     full_path_length > 4 &&
     (full_path[0] == '\\' && full_path[1] == '\\' &&
@@ -93,43 +193,29 @@ static wchar_t* makeWin32Path(
   
   assert(full_path_length <= INT_MAX);
   assert(bytes <= INT_MAX);
-  int converted_bytes = 
-    MultiByteToWideChar(
-      CP_UTF8, 
-      MB_ERR_INVALID_CHARS,
-      (LPCCH)full_path, 
-      (int)full_path_length, 
-      output + (has_prefix? 0 : 4), 
-      (int)bytes - (has_prefix? 1 : 5));
+  int converted_bytes =
+    stringToWideChar(
+      full_path, 
+      full_path_length, 
+      output + (has_prefix? 0 : 4),
+      bytes - (has_prefix? 1 : 5));
 
   if (converted_bytes == 0)
   {
-    assert(GetLastError() == ERROR_NO_UNICODE_TRANSLATION);
-    win32_make_path_error = "invalid unicode was found in a string when"
-      " converting from UTF-8 to WideChar\n";
+    ERROR("failed to make win32 path: ", makeWin32ErrorMsg(GetLastError()));
     return nullptr;
   }
   
   if (output_len != nullptr)
     *output_len = converted_bytes + (has_prefix? 0 : 4);
   
-  output[converted_bytes + (has_prefix? 0 : 4)] = L'\0';
+  output[converted_bytes+(has_prefix? 4 : 0)] = L'\0';
+  NOTICE((char*)output, "\n");
   return output;
 }
 
-static String makeWin32ErrorMsg(DWORD error)
-{
-	DWORD win32_error_msg_len = FormatMessageA(FORMAT_MESSAGE_ALLOCATE_BUFFER |
-    FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, error,
-    MAKELANGID(LANG_NEUTRAL,SUBLANG_DEFAULT), (LPSTR)&win32_error_msg, 0, NULL);
-  return String::from((u8*)win32_error_msg, (u64)win32_error_msg_len);
-}
-
-static void cleanupWin32ErrorMsg()
-{
-  LocalFree(win32_error_msg);
-}
-
+/* ----------------------------------------------------------------------------
+ */
 static TimePoint filetimeToTimePoint(LARGE_INTEGER win32_time)
 {
   u64 time = (u64)win32_time.QuadPart;
@@ -160,7 +246,7 @@ b8 open(fs::File::Handle* out_handle, String path, fs::OpenFlags flags)
   defer{ if (wpath != win32_str) mem::stl_allocator.free(wpath); };
   
   DWORD access;
-  if (!flags.testAll<Read, Write>())
+  if (flags.testAll<Read, Write>())
     access = FILE_GENERIC_READ | FILE_GENERIC_WRITE;
   else if (flags.test(Write))
     access = FILE_GENERIC_WRITE;
@@ -178,8 +264,8 @@ b8 open(fs::File::Handle* out_handle, String path, fs::OpenFlags flags)
     access &= ~FILE_WRITE_DATA;
     access |= FILE_APPEND_DATA;
   }
-  
-  int filtered_flags = (int)flags.flags
+
+  int const filtered_flags = (int)flags.flags
     & (int)(Exclusive | Create | Truncate).flags;
   DWORD disposition;
   switch (filtered_flags)
@@ -257,39 +343,54 @@ b8 close(fs::File::Handle handle)
 
 /* ----------------------------------------------------------------------------
  */
-s64 read(fs::File::Handle handle, Bytes buffer, b8 non_blocking, b8 is_pty)
+s64 read(fs::File::Handle handle, Bytes buffer, b8 non_blocking, b8 /*is_pty*/)
 {
   assert((HANDLE)handle != INVALID_HANDLE_VALUE);
   assert(buffer.ptr != nullptr || buffer.len == 0);
-  
-  OVERLAPPED overlapped, *overlapped_ptr;
+
+  DWORD bytes_read = 0;
+
   if (non_blocking)
   {
-    memset(&overlapped, 0, sizeof(overlapped));
-    overlapped_ptr = &overlapped;
+    // Perform an 'overlapped' read, which requires an Event. 
+    // TODO(sushi) creating and closing an Event everytime we do this might not 
+    //             be very good, but the docs mention that it is safer to use 
+    //             separate Event objects for each overlapped operation:
+    // https://learn.microsoft.com/en-us/windows/win32/sync/synchronization-and-overlapped-input-and-output
+    OVERLAPPED overlapped = {};
+    overlapped.hEvent = CreateEvent(0,0,0,0);
+    if (overlapped.hEvent == NULL)
+      return win32Err("failed to create Event for non blocking read");
+    defer { CloseHandle(overlapped.hEvent); };
+
+    if (!ReadFile(
+          (HANDLE)handle, 
+          buffer.ptr, 
+          buffer.len, 
+          &bytes_read, 
+          &overlapped))
+    {
+      if (GetLastError() != ERROR_IO_PENDING)
+        return win32Err("non blocking read from ", handle, " failed");
+
+      // Cancel the pending I/O operation to avoid blocking on 
+      // GetOverlappedResult
+      if (!CancelIoEx((HANDLE)handle, &overlapped)
+          && GetLastError() != ERROR_NOT_FOUND)
+        return win32Err("failed to cancel I/O operations for ", handle);
+
+      // Get any data that we might have recieved before cancelling.
+      if (!GetOverlappedResult((HANDLE)handle, &overlapped, &bytes_read, true)
+          && GetLastError() != ERROR_OPERATION_ABORTED)
+        return win32Err("failed to get overlapped result from ", handle);
+    }
   }
   else
   {
-    overlapped_ptr = NULL;
+    if (!ReadFile((HANDLE)handle, buffer.ptr, buffer.len, &bytes_read, NULL))
+      return win32Err("failed to read from ", handle);
   }
-  
-  DWORD bytes_read;
-  BOOL success = ReadFile((HANDLE)handle, (LPVOID)buffer.ptr,
-    (DWORD)buffer.len, &bytes_read, overlapped_ptr);
-  
-  if (success == FALSE)
-  {
-    DWORD error = GetLastError();
-    if (!(non_blocking && error == ERROR_IO_PENDING) ||
-      error != ERROR_HANDLE_EOF)
-    {
-      ERROR("failed to read from file with handle ", handle, ": ",
-        makeWin32ErrorMsg(error), "\n");
-      cleanupWin32ErrorMsg();
-      return -1;
-    }
-  }
-  
+
   return (s64)bytes_read;
 }
 
@@ -297,11 +398,10 @@ s64 read(fs::File::Handle handle, Bytes buffer, b8 non_blocking, b8 is_pty)
  *   This function uses a sentinel for detecting if a write error occurs on a 
  *   file handle used by the logger, since if that happens we will hit a stack
  *   overflow with the ERROR log macro used within. This is probably not a 
- *   safe way to handle this, especially with multithreading, so should be 
- *   made more robust later.
+ *   safe way to handle this, so should be made more robust later.
  */
-b8 iro_platform_writing_logging_error = false;
-s64 write(fs::File::Handle handle, Bytes buffer, b8 non_blocking, b8 is_pty)
+thread_local static b8 iro_platform_writing_logging_error = false;
+s64 write(fs::File::Handle handle, Bytes buffer, b8 non_blocking, b8 /*is_pty*/)
 {
   assert((HANDLE)handle != INVALID_HANDLE_VALUE);
   assert(buffer.ptr != nullptr || buffer.len == 0);
@@ -354,35 +454,28 @@ b8 poll(fs::File::Handle handle, fs::PollEventFlags* flags)
   assert((HANDLE)handle != INVALID_HANDLE_VALUE);
   assert(flags != nullptr);
   
-  struct pollfd pfd = {};
-  pfd.fd = (SOCKET)handle;
-  
-  if (flags->test(fs::PollEvent::In))
-    pfd.events |= POLLIN;
-  if (flags->test(fs::PollEvent::Out))
-    pfd.events |= POLLOUT;
-  
+  OVERLAPPED overlapped = {};
+
+  HANDLE event = CreateEvent(NULL, 0, 0, NULL);
+  if (event == NULL)
+    return win32Err("failed to create event for polling ", handle);
+
+  overlapped.hEvent = event;
+
   flags->clear();
-  
-  if (WSAPoll(&pfd, 1, 0) == SOCKET_ERROR)
+
+  u8 buffer[25];
+  if (0 == ReadFile((HANDLE)handle, &buffer, 0, NULL, &overlapped))
   {
-    ERROR("failed to poll process with handle ", handle, ": ",
-      makeWin32ErrorMsg(WSAGetLastError()), "\n");
-    cleanupWin32ErrorMsg();
-    return false;
+    if (GetLastError() == ERROR_IO_PENDING)
+    {
+      CancelIoEx((HANDLE)handle, &overlapped);
+      flags->set(fs::PollEvent::In);
+      return true;
+    }
+	return win32Err("failed to poll ", handle);
   }
-  
-  if (pfd.revents & POLLIN)
-    flags->set(fs::PollEvent::In);
-  if (pfd.revents & POLLOUT)
-    flags->set(fs::PollEvent::Out);
-  if (pfd.revents & POLLERR)
-    flags->set(fs::PollEvent::Err);
-  if (pfd.revents & POLLNVAL)
-    flags->set(fs::PollEvent::Invalid);
-  if (pfd.revents & POLLHUP)
-    flags->set(fs::PollEvent::HangUp);
-  
+
   return true;
 }
 
@@ -402,19 +495,23 @@ b8 setNonBlocking(fs::File::Handle handle)
 {
   assert((HANDLE)handle != INVALID_HANDLE_VALUE);
   
-  DWORD access = FILE_GENERIC_READ | FILE_GENERIC_WRITE;
-  DWORD share = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
-  DWORD attributes = FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS |
-    FILE_FLAG_POSIX_SEMANTICS | FILE_FLAG_OVERLAPPED;
+  DWORD access = 
+      FILE_GENERIC_READ 
+    | FILE_GENERIC_WRITE;
+
+  DWORD share = 
+      FILE_SHARE_READ 
+    | FILE_SHARE_WRITE 
+    | FILE_SHARE_DELETE;
+
+  DWORD attributes = 
+      FILE_FLAG_BACKUP_SEMANTICS 
+    | FILE_FLAG_POSIX_SEMANTICS 
+    | FILE_FLAG_OVERLAPPED;
   
   HANDLE new_handle = ReOpenFile((HANDLE)handle, access, share, attributes);
   if (new_handle == INVALID_HANDLE_VALUE)
-  {
-    ERROR("failed to set the file handle ", handle, " to non blocking: ",
-        makeWin32ErrorMsg(GetLastError()), "\n");
-      cleanupWin32ErrorMsg();
-      return false;
-  }
+    return win32Err("failed to set file handle ", handle, " as non blocking");
   
   return true;
 }
@@ -889,9 +986,9 @@ b8 makeDir(String path, b8 make_parents)
   
   for (s64 i = 0; i < path.len; i += 1)
   {
-    if (path.ptr[i] == '/' || i == path.len - 1)
+    if ((path.ptr[i] == '/' && path.ptr[i-1] != ':') || i == path.len - 1)
     {
-      String partial_path = String{path.ptr, (u64)i+1};
+      auto partial_path = String{path.ptr, (u64)i+1};
       
       if (wpath != win32_str) mem::stl_allocator.free(wpath);
       wchar_t* wpath = makeWin32Path(partial_path);
@@ -901,7 +998,6 @@ b8 makeDir(String path, b8 make_parents)
           win32_make_path_error);
         return false;
       }
-      
       
       if (CreateDirectoryW(wpath, NULL) == 0)
       {
@@ -921,6 +1017,125 @@ b8 makeDir(String path, b8 make_parents)
   return true;
 }
 
+typedef io::StaticBuffer<64> PipeName;
+
+/* ----------------------------------------------------------------------------
+ */
+static b8 createServerPipe(
+    HANDLE* handle,
+    PipeName* pipe_name,
+    DWORD access,
+    u64 rand)
+{
+
+  for (;;)
+  {
+    io::formatv(pipe_name, R"(\\.\pipe\)", rand);
+
+    *handle = 
+      CreateNamedPipeA(
+        (LPCSTR)pipe_name->asStr().ptr,
+          access
+        | FILE_FLAG_FIRST_PIPE_INSTANCE,
+          PIPE_TYPE_BYTE
+        | PIPE_READMODE_BYTE
+        | PIPE_WAIT,
+        1, // Max number of instances of this pipe.
+        65536,
+        65536,
+        0,
+        nullptr);
+
+    if (*handle != INVALID_HANDLE_VALUE)
+      return true;
+
+    int err = GetLastError();
+    if (err != ERROR_PIPE_BUSY && err != ERROR_ACCESS_DENIED)
+      return win32Err("failed to create server pipe");
+
+    // There must have been a name collision, so increment rand until
+    // we find a good name.
+    rand += 1;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static b8 createPipePair(
+    HANDLE* server_pipe, 
+    DWORD server_access,
+    HANDLE* client_pipe,
+    DWORD client_access,
+    b8 inherit_client,
+    u64 rand)
+{
+  // server_access |= WRITE_DAC;
+  // client_access |= WRITE_DAC;
+
+  auto failsafe = deferWithCancel
+  {
+    if (*server_pipe != INVALID_HANDLE_VALUE)
+      CloseHandle(*server_pipe);
+    if (*client_pipe != INVALID_HANDLE_VALUE)
+      CloseHandle(*client_pipe);
+  };
+
+  PipeName server_pipe_name;
+  if (!createServerPipe(server_pipe, &server_pipe_name, server_access, rand))
+    return false;
+
+  SECURITY_ATTRIBUTES sec_attr;
+  sec_attr.nLength = sizeof(SECURITY_ATTRIBUTES);
+  sec_attr.lpSecurityDescriptor = nullptr;
+  sec_attr.bInheritHandle = inherit_client;
+
+  *client_pipe = 
+    CreateFileA(
+      (LPCSTR)server_pipe_name.asStr().ptr,
+      client_access,
+      0,
+      &sec_attr,
+      OPEN_EXISTING,
+      0,
+      nullptr);
+
+  if (*client_pipe == INVALID_HANDLE_VALUE)
+    return win32Err("failed to create client pipe");
+
+  if (!ConnectNamedPipe(*server_pipe, nullptr))
+  {
+    if (GetLastError() != ERROR_PIPE_CONNECTED)
+      return win32Err("failed to connect named pipe");
+  }
+
+  failsafe.cancel();
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static b8 createNullHandle(HANDLE* handle, DWORD access)
+{
+  SECURITY_ATTRIBUTES sec_attr;
+  sec_attr.nLength = sizeof(SECURITY_ATTRIBUTES);
+  sec_attr.lpSecurityDescriptor = NULL;
+  sec_attr.bInheritHandle = TRUE;
+
+  *handle = 
+    CreateFileW(
+      L"NUL",
+      access,
+      FILE_SHARE_READ | FILE_SHARE_WRITE,
+      &sec_attr,
+      OPEN_EXISTING,
+      0,
+      NULL);
+
+  if (*handle == INVALID_HANDLE_VALUE)
+    return win32Err("failed to create nul file handle");
+  return true;
+}
+
 /* ----------------------------------------------------------------------------
  */
 b8 processSpawn(
@@ -937,16 +1152,30 @@ b8 processSpawn(
   {
     fs::File* f = nullptr;
     b8 non_blocking = false;
-    HANDLE pipes[2] = {};
+    HANDLE pipes[2] = {INVALID_HANDLE_VALUE, INVALID_HANDLE_VALUE};
   };
+
   Info infos[3] =
   {
-    {streams[0].file, streams[0].non_blocking},
-    {streams[1].file, streams[1].non_blocking},
-    {streams[2].file, streams[2].non_blocking},
+    {.f=streams[0].file, .non_blocking=streams[0].non_blocking},
+    {.f=streams[1].file, .non_blocking=streams[1].non_blocking},
+    {.f=streams[2].file, .non_blocking=streams[2].non_blocking},
   };
-  
-  u64 file_chars = file.countCharacters();
+    
+  auto failsafe = deferWithCancel
+  {
+    ERROR("failed to spawn process '", file, "'\n");
+    for (auto& info : infos)
+    {
+      for (auto& pipe : info.pipes)
+      {
+        if (pipe != INVALID_HANDLE_VALUE)
+          CloseHandle(pipe);
+      }
+    }
+  };
+    
+  u64 file_chars = 2 + file.countCharacters();
   u64 cmd_chars = file_chars;
   for (int i = 0; i < args.len; i += 1)
     cmd_chars += 3 + args[i].countCharacters(); // +3 b/c "" and space
@@ -969,44 +1198,44 @@ b8 processSpawn(
   }
   defer{ if (wargs != win32_str) mem::stl_allocator.free(wargs); };
   
-  // convert the utf8 file to wchar
-  wargs[0] = L'"';
-  assert(file_chars <= INT_MAX);
-  int file_bytes = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
-    (LPCCH)file.ptr, (int)file.len, (wargs + 1), (int)cmd_chars);
-  if (file_bytes == 0)
+  mem::zero(wargs, cmd_chars);
+
+  u64 cmd_offset = 0;
+
+  auto cmdWriteChar = [&](wchar_t c)
   {
-    assert(GetLastError() == ERROR_NO_UNICODE_TRANSLATION);
-    ERROR("failed to spawn process '", file, "': invalid unicode was found in"
-      " a string when converting from UTF-8 to WideChar\n");
-    return false;
-  }
-  wargs[file_chars] = L'"';
+    wargs[cmd_offset++] = c;
+  };
+
+  auto cmdWriteString = [&](String s)
+  {
+    int bytes_written = 
+      stringToWideChar(s, (wargs + cmd_offset), cmd_chars - cmd_offset);
+    if (bytes_written == 0 || bytes_written != s.len)
+      return false;
+    cmd_offset += bytes_written;
+    return true;
+  };
+
+  // convert the utf8 file to wchar
+  cmdWriteChar(L'"');
+  assert(file_chars <= INT_MAX);
+  if (!cmdWriteString(file))
+    return ERROR("failed to spawn pty process '", file, "'\n");
+  cmdWriteChar(L'"');
   
   // convert the utf8 args to wchar
-  u64 args_offset = file_chars;
-  for (int i = 0; i < args.len + 1; i += 1)
+  for (int i = 0; i < args.len - 1; ++i)
   {
-    assert(args_offset < cmd_chars);
-    wargs[args_offset++] = L' ';
-    wargs[args_offset++] = L'"';
+    cmdWriteChar(L' ');
+    cmdWriteChar(L'"');
     
-    int arg_bytes = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
-      (LPCCH)args[i].ptr, (int)args[i].len, (wargs + args_offset),
-      (int)(cmd_chars - args_offset));
-    if (arg_bytes == 0)
-    {
-      assert(GetLastError() == ERROR_NO_UNICODE_TRANSLATION);
-      ERROR("failed to spawn process '", file, "': invalid unicode was found"
-        " in a string when converting from UTF-8 to WideChar\n");
-      return false;
-    }
-    
-    args_offset += arg_bytes;
-    wargs[args_offset++] = L'"';
+    if (!cmdWriteString(args[i]))
+      return ERROR("failed to spawn pty process '", file, "'\n");
+
+    cmdWriteChar(L'"');
   }
-  assert(args_offset == cmd_chars);
-  wargs[cmd_chars] = L'\0';
+  cmdWriteChar(L'\0');
   
   // convert the utf8 cwd to wchar
   wchar_t* wcwd = NULL;
@@ -1020,123 +1249,121 @@ b8 processSpawn(
         " converting from UTF-8 to WideChar\n");
       return false;
     }
-    
-    int cwd_bytes = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
-      (LPCCH)cwd.ptr, (int)cwd.len, wcwd, cwd_chars);
-    if (cwd_bytes == 0)
-    {
-      assert(GetLastError() == ERROR_NO_UNICODE_TRANSLATION);
-      ERROR("failed to spawn process '", file, "': invalid unicode was found"
-        " in a string when converting from UTF-8 to WideChar\n");
-      return false;
-    }
+
+    if (!stringToWideChar(cwd, wcwd, cwd_chars))
+      return ERROR("failed to convert cwd to wide chars\n");
   }
   defer{ if (wcwd != nullptr) mem::stl_allocator.free(wcwd); };
   
-  SECURITY_ATTRIBUTES security_attributes;
-  security_attributes.nLength = sizeof(security_attributes);
-  security_attributes.lpSecurityDescriptor = NULL;
-  security_attributes.bInheritHandle = TRUE;
-  
+  // Flags applied to the server/client pipes that the server 
+  // would write to.
+  DWORD out_server_flags = 
+    // NOTE(sushi) the server needs to be able to read and write because 
+    //             otherwise CreateNamedPipe will not give us the
+    //             FILE_READ_ATTRIBUTES permissions which prevents probing the 
+    //             state of the write buffer when trying to shutdown the pipe.
+      PIPE_ACCESS_OUTBOUND
+    | PIPE_ACCESS_INBOUND
+    | FILE_FLAG_OVERLAPPED
+    | WRITE_DAC;
+  DWORD out_client_flags = 
+      GENERIC_WRITE
+    | FILE_READ_ATTRIBUTES
+    | WRITE_DAC;
+
+  // Flags applied to the server/client pipes that the server 
+  // would read from.
+  DWORD in_server_flags = 
+      PIPE_ACCESS_INBOUND
+    | FILE_FLAG_OVERLAPPED
+    | WRITE_DAC;
+  DWORD in_client_flags = 
+      GENERIC_WRITE
+    | FILE_READ_ATTRIBUTES
+    | WRITE_DAC;
+
   // create a pipe for stdin; have the child process inherit the reading end
   if (infos[0].f != nullptr)
   {
     if (notnil(*infos[0].f))
-    {
-      ERROR("The file of the stdin stream was not nil when trying to spawn"
-        " process '", file, "': Given files cannot already own resources.\n");
+      return ERROR("the file of the stdin stream was not nil; given files "
+                   "cannot already own resources.\n");
+
+    if (!createPipePair(
+          &infos[0].pipes[0], out_server_flags,
+          &infos[0].pipes[1], out_client_flags,
+          true,
+          (u64)infos[0].f))
+      return ERROR("failed to open pipes for stdin\n");
+  }
+  else
+  {
+    if (!createNullHandle(&infos[0].pipes[0], FILE_GENERIC_READ))
       return false;
-    }
-    
-    if (CreatePipe(&infos[0].pipes[0], &infos[0].pipes[1],
-      &security_attributes, 0) == 0)
-    {
-      ERROR("failed to open pipes for the stdin stream when trying to spawn"
-        " process '", file, "': ", makeWin32ErrorMsg(GetLastError()), "\n");
-      cleanupWin32ErrorMsg();
-      return false;
-    }
-    
-    if (SetHandleInformation(infos[0].pipes[0], HANDLE_FLAG_INHERIT, 0) == 0)
-    {
-      ERROR("failed to set handle information for the stdin stream when"
-        " trying to spawn process '", file, "': ",
-        makeWin32ErrorMsg(GetLastError()), "\n");
-      cleanupWin32ErrorMsg();
-      return false;
-    }
   }
   
   // create a pipe for stdout; have the child process inherit the writing end
   if (infos[1].f != nullptr)
   {
     if (notnil(*infos[1].f))
-    {
-      ERROR("The file of the stdin stream was not nil when trying to spawn"
-        " process '", file, "': Given files cannot already own resources.\n");
-      return false;
-    }
+      return ERROR("the file of the stdout stream was not nil; given files "
+                   "cannot already own resources.\n");
     
-    if (CreatePipe(&infos[1].pipes[0], &infos[1].pipes[1],
-      &security_attributes, 0) == 0)
-    {
-      ERROR("failed to open pipes for the stdin stream when trying to spawn"
-        " process '", file, "': ", makeWin32ErrorMsg(GetLastError()), "\n");
-      cleanupWin32ErrorMsg();
+    if (!createPipePair(
+          &infos[1].pipes[0], in_server_flags,
+          &infos[1].pipes[1], in_client_flags,
+          true, 
+          (u64)infos[1].f))
+      return ERROR("failed to open pipes for stdout\n");
+  }
+  else
+  {
+    if (!createNullHandle(&infos[1].pipes[1], 
+          FILE_GENERIC_WRITE | FILE_READ_ATTRIBUTES))
       return false;
-    }
-    
-    if (SetHandleInformation(infos[1].pipes[1], HANDLE_FLAG_INHERIT, 0) == 0)
-    {
-      ERROR("failed to set handle information for the stdin stream when"
-        " trying to spawn process '", file, "': ",
-        makeWin32ErrorMsg(GetLastError()), "\n");
-      cleanupWin32ErrorMsg();
-      return false;
-    }
   }
   
   // create a pipe for stderr; have the child process inherit the writing end
   if (infos[2].f != nullptr)
   {
     if (notnil(*infos[2].f))
-    {
-      ERROR("The file of the stdin stream was not nil when trying to spawn"
-        " process '", file, "': Given files cannot already own resources.\n");
-      return false;
-    }
+      return ERROR("the file for the stderr stream was not nil; given files "
+                   "cannot already own resources\n");
     
-    if (CreatePipe(&infos[2].pipes[0], &infos[2].pipes[1],
-      &security_attributes, 0) == 0)
-    {
-      ERROR("failed to open pipes for the stdin stream when trying to spawn"
-        " process '", file, "': ", makeWin32ErrorMsg(GetLastError()), "\n");
-      cleanupWin32ErrorMsg();
+    if (!createPipePair(
+          &infos[2].pipes[0], in_server_flags,
+          &infos[2].pipes[1], in_client_flags,
+          true, (u64)infos[2].f))
+      return ERROR("failed to open pipes for stderr\n");
+  }
+  else
+  {
+    if (!createNullHandle(&infos[2].pipes[1], 
+          FILE_GENERIC_WRITE | FILE_READ_ATTRIBUTES))
       return false;
-    }
-    
-    if (SetHandleInformation(infos[2].pipes[1], HANDLE_FLAG_INHERIT, 0) == 0)
-    {
-      ERROR("failed to set handle information for the stdin stream when"
-        " trying to spawn process '", file, "': ",
-        makeWin32ErrorMsg(GetLastError()), "\n");
-      cleanupWin32ErrorMsg();
-      return false;
-    }
   }
   
-  STARTUPINFOW startup_info;
-  startup_info.cb = sizeof(startup_info);
-  startup_info.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+  STARTUPINFOW startup_info = {};
+  startup_info.cb          = sizeof(startup_info);
+  startup_info.dwFlags     = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
   startup_info.wShowWindow = SW_HIDE;
-  startup_info.hStdInput = infos[0].pipes[0];
-  startup_info.hStdOutput = infos[1].pipes[1];
-  startup_info.hStdError = infos[2].pipes[1];
+  startup_info.hStdInput   = infos[0].pipes[0];
+  startup_info.hStdOutput  = infos[1].pipes[1];
+  startup_info.hStdError   = infos[2].pipes[1];
   
   // create the process with handle duplication, no window, and parent stdio
-  PROCESS_INFORMATION process_info;
-  if (CreateProcessW(NULL, wargs, NULL, NULL, TRUE, CREATE_UNICODE_ENVIRONMENT,
-    NULL, wcwd, &startup_info, &process_info) == 0)
+  PROCESS_INFORMATION process_info = {};
+  if (CreateProcessW(
+        NULL, 
+        wargs, 
+        NULL, 
+        NULL, 
+        TRUE, 
+        CREATE_UNICODE_ENVIRONMENT,
+        NULL, 
+        wcwd, 
+        &startup_info, 
+        &process_info) == 0)
   {
     ERROR("failed to spawn process '", file, "': ",
       makeWin32ErrorMsg(GetLastError()), "\n");
@@ -1176,13 +1403,15 @@ b8 processSpawn(
   
   CloseHandle(process_info.hThread); // we don't need to track the thread
   
-  ERROR("started process ", file, ":", process_info.hProcess, " with args:\n");
-  for (String s : args)
-  {
-    ERROR(s, "\n");
-  }
-  
+  // ERROR("started process ", file, ":", process_info.hProcess, " with args:\n");
+  // for (String s : args)
+  // {
+  //   ERROR(s, "\n");
+  // }
+
   *out_handle = (Process::Handle)process_info.hProcess;
+
+  failsafe.cancel();
   return true;
 }
 
@@ -1219,166 +1448,19 @@ b8 processSpawnPTY(
   assert(notnil(file));
   assert(stream != nullptr);
   
-  u64 file_chars = file.countCharacters();
-  u64 cmd_chars = file_chars;
-  for (int i = 0; i < args.len; i += 1)
-    cmd_chars += 3 + args[i].countCharacters(); // +3 b/c "" and space
-  if (cmd_chars == 0)
-    return false;
-  cmd_chars += 1; // null-terminator
-  assert(cmd_chars <= 32766); // CreateProcessW() max lpCommandLine length
-  
-  // allocate the wchar string
-  wchar_t* wargs = win32_str;
-  if (cmd_chars - 1 > win32_str_capacity)
+  Process::Stream streams[3] = 
   {
-    wargs = (wchar_t*)mem::stl_allocator.allocate(cmd_chars);
-    if (wargs == nullptr)
-    {
-      ERROR("failed to spawn pty process '", file, "': insufficient memory"
-        " when converting from UTF-8 to WideChar\n");
-      return false;
-    }
-  }
-  defer{ if (wargs != win32_str) mem::stl_allocator.free(wargs); };
-  
-  // convert the utf8 file to wchar
-  wargs[0] = L'"';
-  assert(file_chars <= INT_MAX);
-  int file_bytes = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
-    (LPCCH)file.ptr, (int)file.len, (wargs + 1), (int)cmd_chars);
-  if (file_bytes == 0)
-  {
-    assert(GetLastError() == ERROR_NO_UNICODE_TRANSLATION);
-    ERROR("failed to spawn pty process '", file, "': invalid unicode was found"
-      " in a string when converting from UTF-8 to WideChar\n");
-    return false;
-  }
-  wargs[file_chars] = L'"';
-  
-  // convert the utf8 args to wchar
-  u64 args_offset = file_chars;
-  for (int i = 0; i < args.len + 1; i += 1)
-  {
-    assert(args_offset < cmd_chars);
-    wargs[args_offset++] = L' ';
-    wargs[args_offset++] = L'"';
-    
-    int arg_bytes = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS,
-      (LPCCH)args[i].ptr, (int)args[i].len, (wargs + args_offset),
-      (int)(cmd_chars - args_offset));
-    if (arg_bytes == 0)
-    {
-      assert(GetLastError() == ERROR_NO_UNICODE_TRANSLATION);
-      ERROR("failed to spawn pty process '", file, "': invalid unicode was"
-        " found in a string when converting from UTF-8 to WideChar\n");
-      return false;
-    }
-    
-    args_offset += arg_bytes;
-    wargs[args_offset++] = L'"';
-  }
-  assert(args_offset == cmd_chars);
-  wargs[cmd_chars] = L'\0';
-  
-  // create pipes to which the pty will connect
-  HANDLE pipe_in;
-  HANDLE pipe_out;
-  HANDLE pipe_in_pty;
-  HANDLE pipe_out_pty;
-  if (CreatePipe(&pipe_in_pty, &pipe_out, NULL, 0) == 0)
-  {
-    ERROR("failed to open pipes for the stdin stream when trying to spawn"
-      " pty process '", file, "': ", makeWin32ErrorMsg(GetLastError()), "\n");
-    cleanupWin32ErrorMsg();
-    return false;
-  }
-  if (CreatePipe(&pipe_in, &pipe_out_pty, NULL, 0) == 0)
-  {
-    ERROR("failed to open pipes for the stdin stream when trying to spawn"
-      " pty process '", file, "': ", makeWin32ErrorMsg(GetLastError()), "\n");
-    cleanupWin32ErrorMsg();
-    return false;
-  }
-  
-  HPCON console_handle;
-  CONSOLE_SCREEN_BUFFER_INFO console_buffer_info = {};
-  HANDLE stdout_handle = GetStdHandle(STD_OUTPUT_HANDLE);
-  GetConsoleScreenBufferInfo(stdout_handle, &console_buffer_info);
-  
-  // create the pty
-  if (CreatePseudoConsole(console_buffer_info.dwSize, pipe_in_pty, pipe_out_pty,
-    0, &console_handle) != S_OK)
-  {
-    ERROR("failed to create the pty when trying to spawn pty process '", file,
-      "': ", makeWin32ErrorMsg(GetLastError()), "\n");
-    cleanupWin32ErrorMsg();
-    return false;
-  }
-  
-  // no longer need the pty-end of the pipes in the parent process
-  CloseHandle(pipe_out_pty);
-  CloseHandle(pipe_in_pty);
-  
-  size_t attribute_list_size = 0;
-  if (InitializeProcThreadAttributeList(NULL, 1, 0, &attribute_list_size) == 0)
-  {
-    ERROR("failed to spawn pty process '", file,
-      "': ", makeWin32ErrorMsg(GetLastError()), "\n");
-    cleanupWin32ErrorMsg();
-    return false;
-  }
-  
-  STARTUPINFOEXW startup_info = {};
-  startup_info.StartupInfo.cb = sizeof(STARTUPINFOEXW);
-  startup_info.lpAttributeList = (LPPROC_THREAD_ATTRIBUTE_LIST)
-    mem::stl_allocator.allocate(attribute_list_size);
-  if (startup_info.lpAttributeList == nullptr)
-  {
-    ERROR("failed to spawn pty process '", file, "': insufficient memory\n");
-    return false;
-  }
-  defer{ mem::stl_allocator.free(startup_info.lpAttributeList); };
-  
-  if (InitializeProcThreadAttributeList(startup_info.lpAttributeList, 1, 0,
-    &attribute_list_size) == 0)
-  {
-    ERROR("failed to spawn pty process '", file,
-      "': ", makeWin32ErrorMsg(GetLastError()), "\n");
-    cleanupWin32ErrorMsg();
-    return false;
-  }
-  defer{ DeleteProcThreadAttributeList(startup_info.lpAttributeList); };
-  
-  if (UpdateProcThreadAttribute(startup_info.lpAttributeList, 0,
-    PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, console_handle,
-    sizeof(console_handle), NULL, NULL) == 0)
-  {
-    ERROR("failed to spawn pty process '", file,
-      "': ", makeWin32ErrorMsg(GetLastError()), "\n");
-    cleanupWin32ErrorMsg();
-    return false;
-  }
-  
-  // create the process for the pty
-  PROCESS_INFORMATION process_info;
-  if (CreateProcessW(NULL, wargs, NULL, NULL, FALSE,
-    EXTENDED_STARTUPINFO_PRESENT, NULL, NULL, &startup_info.StartupInfo,
-    &process_info) == 0)
-  {
-    ERROR("failed to spawn process '", file, "': ",
-      makeWin32ErrorMsg(GetLastError()), "\n");
-    cleanupWin32ErrorMsg();
-    return false;
-  }
-  
-  *out_handle = (Process::Handle)console_handle;
-  return true;
+    { .non_blocking=false, .file=nullptr },
+    { .non_blocking=true, .file=stream },
+    { .non_blocking=false, .file=nullptr },
+  };
+
+  return processSpawn(out_handle, file, args, streams, nil);
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 stopProcessPTY(Process::Handle handle, s32 exit_code)
+b8 stopProcessPTY(Process::Handle handle, s32 /*exit_code*/)
 {
   assert((HPCON)handle != INVALID_HANDLE_VALUE);
   
@@ -1433,7 +1515,7 @@ b8 realpath(fs::Path* path)
     return false;
   }
   
-  wchar_t* full_wpath = (wchar_t*)mem::stl_allocator.allocate(full_wpath_chars);
+  auto* full_wpath = (wchar_t*)mem::stl_allocator.allocate(full_wpath_chars);
   if (full_wpath == nullptr)
   {
     ERROR("failed to canonicalize path '", *path, "': insufficient memory when"
@@ -1442,7 +1524,7 @@ b8 realpath(fs::Path* path)
   }
   defer{ mem::stl_allocator.free(full_wpath); };
   
-  full_wpath_chars = GetFullPathNameW(wpath, (DWORD)full_wpath_chars,
+  full_wpath_chars = GetFullPathNameW(wpath, full_wpath_chars,
     full_wpath, NULL);
   if (full_wpath_chars == 0)
   {
@@ -1550,6 +1632,9 @@ fs::Path cwd(mem::Allocator* allocator)
     path.destroy();
     return nil;
   }
+
+  String normalized = normalizePath(path.buffer.asStr());
+  path.buffer.len = normalized.len;
   
   return path;
 }

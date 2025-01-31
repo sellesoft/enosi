@@ -27,8 +27,6 @@ using namespace iro;
 extern "C"
 {
 #include "luajit/lua.h"
-#include "luajit/lualib.h"
-#include "luajit/lauxlib.h"
 
 EXPORT_DYNAMIC
 int lua__cwd(lua_State* L);
@@ -176,7 +174,7 @@ void Lake::deinit()
 
 /* ----------------------------------------------------------------------------
  */
-b8 processMaxJobsArg(Lake* lake, ArgIter* iter)
+static b8 processMaxJobsArg(Lake* lake, ArgIter* iter)
 {
   String mjarg = iter->current;
 
@@ -203,7 +201,7 @@ b8 processMaxJobsArg(Lake* lake, ArgIter* iter)
     scan += 1;
   }
 
-  lake->max_jobs = atoi((char*)arg.ptr);
+  lake->max_jobs = strtol((char*)arg.ptr, nullptr, 10);
 
   DEBUG("max_jobs set to ", lake->max_jobs, " via command line argument\n");
 
@@ -214,10 +212,9 @@ b8 processMaxJobsArg(Lake* lake, ArgIter* iter)
 
 /* ----------------------------------------------------------------------------
  */
-b8 processArgDoubleDash(
+static b8 processArgDoubleDash(
     Lake* lake, 
     String arg, 
-    String* initfile, 
     ArgIter* iter)
 {
   switch (arg.hash())
@@ -265,6 +262,8 @@ b8 processArgDoubleDash(
   case "print-timers"_hashed:
     lake->print_timers = true;
     break;
+
+  default:;
   }
 
   return true;
@@ -272,10 +271,9 @@ b8 processArgDoubleDash(
 
 /* ----------------------------------------------------------------------------
  */
-b8 processArgSingleDash(
+static b8 processArgSingleDash(
     Lake* lake, 
     String arg, 
-    String* initfile, 
     ArgIter* iter)
 {
   switch (arg.hash())
@@ -292,6 +290,8 @@ b8 processArgSingleDash(
     if (!processMaxJobsArg(lake, iter))
       return false;
     break;
+
+  default:;
   }
 
   return true;
@@ -314,12 +314,12 @@ b8 Lake::processArgv(const char** argv, int argc, String* initfile)
     {
       if (arg.len > 2 && arg.ptr[1] == '-')
       {
-        if (!processArgDoubleDash(this, arg.sub(2), initfile, &iter))
+        if (!processArgDoubleDash(this, arg.sub(2), &iter))
           return false;
       }
       else
       {
-        if (!processArgSingleDash(this, arg.sub(1), initfile, &iter))
+        if (!processArgSingleDash(this, arg.sub(1), &iter))
           return false;
       }
     }
