@@ -123,7 +123,9 @@ cmd.CppObj.getIOIndependentFlags = function(params)
       "-Wno-switch",
       "-Wno-return-type-c-linkage",
       "-fmessage-length=80",
-      "-fdiagnostics-absolute-paths")
+      "-fdiagnostics-absolute-paths",
+	  "-D_DLL",
+	  "-D_MT")
 
     o:push(helpers.switch(params.opt,
     {
@@ -378,7 +380,11 @@ cmd.Exe.new = function(params)
         return "-l"..lib
       end),
       "-Wl,--end-group",
-      "-Wl,-E")
+      "-Wl,-E",
+	  "-lmsvcrt",
+	  "-lucrt",
+	  "-lversion",
+	  "-lntdll")
       -- Tell the exe's dynamic linker to check the directory its in 
       -- for shared libraries.
       -- NOTE(sushi) this is disabled for now as I'm not actually using it 

@@ -203,6 +203,8 @@ CppObj.defineTask = function(self, cmd)
   local dfile = self.proj:getBuildDir().."/"..self.src..".d"
   local cpp_cmd = cmd:complete(cfile, ofile)
 
+  sys.trackCompileCommandsCmd(self.proj.root, self.src, cpp_cmd)
+
   ensureDirExists(ofile)
 
   ---@type cmd.CppDeps.Params
@@ -412,7 +414,11 @@ end
 -- * --------------------------------------------------------------------------
 
 Exe.getTargetName = function(self)
-  return self.name
+  if sys.os == "linux" then
+    return self.name
+  else
+    return self.name..".exe"
+  end
 end
 
 -- * --------------------------------------------------------------------------

@@ -1,5 +1,0 @@
-local object = {}
-
-
-object.CppObj = {}
-

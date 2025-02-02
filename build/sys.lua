@@ -20,6 +20,18 @@ sys.projects =
   list = List{},
 }
 
+sys.compile_commands = {}
+
+--- Tracks a command for a compile_commands.json
+sys.trackCompileCommandsCmd = function(dir, file, cmd)
+  table.insert(sys.compile_commands, 
+  {
+    directory = dir,
+    file = file,
+    arguments = lake.flatten(cmd),
+  })
+end
+
 sys.root = lake.cwd()
 package.path = package.path..";"..sys.root.."/?.lua"
 
@@ -131,6 +143,18 @@ sys.run = function()
   Project = require "build.project"
 
   require "build.driver" .run()
+
+  if sys.cfg.mode == "debug" then
+    print "out ccjson"
+    -- If in debug, output a compile_commands.json
+    local json = require "json"
+    local file = io.open("compile_commands.json", "w")
+    if not file then
+      error("failed to open compile_commands.json")
+    end
+    file:write(json.encode(sys.compile_commands))
+    file:close()
+  end
 end
 
 return sys
