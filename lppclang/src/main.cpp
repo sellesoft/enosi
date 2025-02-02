@@ -10,6 +10,7 @@
 
 using namespace iro;
 
+#if IRO_LINUX
 #define DEFINE_GDB_PY_SCRIPT(script_name) \
   asm("\
 .pushsection \".debug_gdb_scripts\", \"MS\",@progbits,1\n\
@@ -19,6 +20,9 @@ using namespace iro;
 ");
 
 DEFINE_GDB_PY_SCRIPT("lpp-gdb.py");
+#endif
+
+#undef stdout
 
 static Logger logger = 
   Logger::create("main"_str, Logger::Verbosity::Trace);
@@ -534,14 +538,14 @@ int testFieldOffset()
 
 int main()
 {
-  if (!log.init())
+  if (!iro::log.init())
     return 1;
-  defer { log.deinit(); };
+  defer { iro::log.deinit(); };
 
   {
     using enum Log::Dest::Flag;
 
-    log.newDestination("stdout"_str, &fs::stdout, 
+    iro::log.newDestination("stdout"_str, &fs::stdout, 
         Log::Dest::Flags::from(
           ShowCategoryName, 
           ShowVerbosity, 

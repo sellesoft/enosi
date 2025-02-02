@@ -237,13 +237,17 @@ Ctx = makeStruct()
 Ctx.new = function(args)
   local o = setmetatable({}, Ctx)
 
-  local carr = ffi.new("String["..args:len().."]")
+  local carr = nil
+  local args_len = 0
+  if args then
+    carr = ffi.new("String["..args:len().."]")
+    args:eachWithIndex(function(arg, i)
+      carr[i-1] = make_str(arg)
+    end)
+    args_len = args:len()
+  end
 
-  args:eachWithIndex(function(arg, i)
-    carr[i-1] = make_str(arg)
-  end)
-    
-  o.handle = assert(lppclang.createContext(carr, args:len()),
+  o.handle = assert(lppclang.createContext(carr, args_len),
     "failed to create lppclang context!")
 
   -- automatically clean up the context
