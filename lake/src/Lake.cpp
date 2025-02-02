@@ -577,8 +577,14 @@ ActiveProcess* lua__processSpawn(Lake* lake, String* args, u32 args_count)
   // TODO(sushi) only use pty when outputting to a terminal or when explicitly
   //             requested via cli args.
   ActiveProcess* proc = lake->active_process_pool.add();
+  Process::Stream streams[3] = 
+  {
+	{ .non_blocking = false, .file = nullptr },
+	{ .non_blocking = true,  .file = &proc->stream },
+	{ .non_blocking = true,  .file = &proc->stream },
+  };
   proc->process = 
-    Process::spawnpty(args[0], {args+1, args_count-1}, &proc->stream);
+    Process::spawn(args[0], {.ptr=args+1, .len=args_count-1}, streams, nil);
   if (isnil(proc->process))
   {
     ERROR("failed to spawn process using file '", args[0], "'\n");

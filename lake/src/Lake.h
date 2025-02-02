@@ -38,7 +38,7 @@ struct Lake
   // for cases like a recipe changing its current directory as we need to
   // track this only when they actually change directories. 
   Task* active_task;
-
+ 
   TaskList active_recipes;
   u32 active_recipe_count;
 
