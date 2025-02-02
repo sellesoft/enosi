@@ -229,7 +229,8 @@ static wchar_t* makeWin32Path(
   if (output_len != nullptr)
     *output_len = converted_bytes + (has_prefix? 4 : 0);
   
-  output[converted_bytes+(has_prefix? 4 : 0)] = L'\0';
+  output[converted_bytes+(has_prefix? 0 : 4)] = L'\0';
+  //NOTICE((wchar_t*)output, "\n");
   return output;
 }
 
