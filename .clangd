@@ -1,0 +1,32 @@
+CompileFlags:
+  Add: [-ferror-limit=0]
+
+Index:
+  StandardLibrary: No
+
+Diagnostics:
+  ClangTidy:
+    Add: ['*']
+    Remove: 
+      [
+        'misc-use-anonymous-namespace', 
+        'llvmlibc-*', 
+        'altera-*',
+        'hicpp-*',
+        'fuchsia-*',
+        'cppcoreguidelines-*', 
+        'google-readability-casting',
+        'readability-braces-around-statements',
+        'google-readability-braces-around-statements',
+        'readability-implicit-bool-conversion',
+        'modernize-avoid-c-arrays',
+        'readability-identifier-length',
+        'modernize-use-trailing-return-type',
+        'google-build-using-namespace',
+        'cert-err58-cpp',
+        'misc-non-private-member-variables-in-classes',
+        'google-global-names-in-headers',
+        'misc-const-correctness',
+      ]
+    FastCheckFilter: None
+

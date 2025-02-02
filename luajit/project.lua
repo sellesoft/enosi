@@ -10,6 +10,11 @@ local luajit = sys.getLoadingProject()
 -- or 'external' projects.
 luajit.is_external = true
 
+-- TODO(sushi) we've moved the copying of these files into the init script,
+--             so the work this does to do that is no longer necessary. 
+--             LLVM also does not require us to move any files around 
+--             (I think), so we need a way to specify this without it trying
+--             to handle copying.
 luajit.report.dir.include
 {
   from = "src/src",
@@ -31,7 +36,8 @@ luajit.report.dir.lib
 
   filters = 
   {
-    bobj.StaticLib "luajit"
+    bobj.StaticLib "luajit",
+    bobj.StaticLib "lua51",
   }
 }
 

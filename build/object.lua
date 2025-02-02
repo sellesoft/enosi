@@ -160,7 +160,11 @@ local Obj = BuildObject:derive()
 
 --- Gets the full target name of this obj file.
 Obj.getTargetName = function(self)
-  return self.src..".o"
+  if sys.os == "linux" then
+    return self.src..".o"
+  else
+    return self.src..".obj"
+  end
 end
 
 -- * --------------------------------------------------------------------------
@@ -195,7 +199,7 @@ end
 ---@param cmd cmd.CppObj
 CppObj.defineTask = function(self, cmd)
   local cfile = self.proj.root.."/"..self.src
-  local ofile = self.proj:getBuildDir().."/"..self.src..".o"
+  local ofile = self.proj:getBuildDir().."/"..self:getTargetName()
   local dfile = self.proj:getBuildDir().."/"..self.src..".d"
   local cpp_cmd = cmd:complete(cfile, ofile)
 
@@ -218,7 +222,15 @@ CppObj.defineTask = function(self, cmd)
     :dependsOn(cpp_task)
     :workingDirectory(self.proj.root)
   dep_task
-    :dependsOn(cpp_task)
+    -- NOTE(sushi) the dep file needs to wait for prerequisite projects 
+    --             to finish because we may depend on their headers that
+    --             are moved to build/include, and so if we run the dep
+    --             task too early, clang won't give us a correct path 
+    --             to the headers.
+    -- TODO(sushi) ideally this is handled automatically, but that only 
+    --             works if in declareTask we also report secondary outputs
+    --             which we should probably be doing.
+    :dependsOn(cpp_task, self.proj.tasks.wait_for_deps)
     :workingDirectory(self.proj.root)
 
   tryLoadDepFile(dfile, obj_task)
@@ -234,18 +246,19 @@ CppObj.defineTask = function(self, cmd)
   dep_task
     :recipe(function()
       local result, output = run(dep_cmd)
-      
+
       local depfile = io.open(dfile, "w")
       if not depfile then
         error("failed to open depfile at "..dfile)
       end
-    
+
       for f in output:gmatch("%S+") do
         if f:sub(-1) ~= ":" and 
            f ~= "\\" 
         then
           local fullpath = f
-          if f:sub(1,1) ~= "/" then
+          fullpath = fullpath:gsub("\\", "/")
+          if fullpath:sub(1,1) ~= "/" and not fullpath:find("^%w:/") then
             fullpath = self.proj.root.."/"..f
           end
           fullpath = fullpath:gsub("/[^/]-/%.%.", "")

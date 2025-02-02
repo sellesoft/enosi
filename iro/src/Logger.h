@@ -26,17 +26,17 @@
   ((((u32)logger.verbosity <= (u32)Logger::Verbosity::v) && \
    (logger.log(Logger::Verbosity::v, nf, __VA_ARGS__), true)), r)
 
-#define TRACE(...) __HELPER(Trace, true, false, __VA_ARGS__)
-#define DEBUG(...) __HELPER(Debug, true, false, __VA_ARGS__)
-#define INFO(...) __HELPER(Info, true, false, __VA_ARGS__)
-#define NOTICE(...) __HELPER(Notice, true, false, __VA_ARGS__)
-#define WARN(...) __HELPER(Warn, true, false, __VA_ARGS__)
-#define ERROR(...) __HELPER(Error, false, false, __VA_ARGS__)
-#define FATAL(...) __HELPER(Fatal, false, false, __VA_ARGS__)
+#define TRACE(...)  __HELPER(Trace,  true,  false, __VA_ARGS__)
+#define DEBUG(...)  __HELPER(Debug,  true,  false, __VA_ARGS__)
+#define INFO(...)   __HELPER(Info,   true,  false, __VA_ARGS__)
+#define NOTICE(...) __HELPER(Notice, true,  false, __VA_ARGS__)
+#define WARN(...)   __HELPER(Warn,   true,  false, __VA_ARGS__)
+#define ERROR(...)  __HELPER(Error,  false, false, __VA_ARGS__)
+#define FATAL(...)  __HELPER(Fatal,  false, false, __VA_ARGS__)
 // Alternatives for logging w/o most formatting. This still handles colors.
 #define ERROR_NOFMT(...) __HELPER(Error, false, true, __VA_ARGS__)
 
-#define __SCOPED_INDENT(line) iro::ScopedIndent __scoped_indent##line
+#define __SCOPED_INDENT(line) const iro::ScopedIndent __scoped_indent##line
 #define _SCOPED_INDENT(line) __SCOPED_INDENT(line)
 #define SCOPED_INDENT _SCOPED_INDENT(__LINE__)
 

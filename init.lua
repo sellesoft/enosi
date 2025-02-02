@@ -224,6 +224,7 @@ local function getSourceToObj(path, bdir, c_to_o, l_to_o)
 end
 
 local compile_commands = {}
+local address_sanitizer = false
 
 local function compileObj(src_to_obj, cmd)
   local cwd = getCwd()
@@ -277,7 +278,7 @@ do
   }
   cpp_params.opt = "none"
   cpp_params.debug_info = true
-  cpp_params.address_sanitizer = true
+  cpp_params.address_sanitizer = address_sanitizer
 
   local cpp_cmd = build_cmds.CppObj.new(cpp_params)
 
@@ -340,7 +341,7 @@ do
   }
   cpp_params.opt = "none"
   cpp_params.debug_info = true
-  cpp_params.address_sanitizer = true
+  cpp_params.address_sanitizer = address_sanitizer
 
   local cpp_cmd = build_cmds.CppObj.new(cpp_params)
 
@@ -369,7 +370,7 @@ do
     "ws2_32"
   }
   exe_params.debug_info = true
-  exe_params.address_sanitizer = true
+  exe_params.address_sanitizer = address_sanitizer
 
   local exe_cmd = build_cmds.Exe.new(exe_params)
 
@@ -456,7 +457,7 @@ do
   {
     "ws2_32"
   }
-  exe_params.address_sanitizer = true
+  exe_params.address_sanitizer = address_sanitizer
 
   local exe_cmd = build_cmds.Exe.new(exe_params)
 
