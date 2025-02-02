@@ -16,14 +16,6 @@ Process Process::spawn(
   return out;
 }
 
-Process Process::spawnpty(String file, Slice<String> args, fs::File* stream)
-{
-  Process out = {};
-  if (!platform::processSpawnPTY(&out.handle, file, args, stream))
-    return nil;
-  return out;
-}
-
 void Process::checkStatus()
 {
   assert(handle);
@@ -45,10 +37,7 @@ void Process::checkStatus()
 b8 Process::stop(s32 exit_code)
 {
   assert(handle);
-  
-  if (ispty)
-    return platform::stopProcessPTY(handle, exit_code);
-  else if (status == Status::Running)
+  if (status == Status::Running)
     return platform::stopProcess(handle, exit_code);
   return false;
 }

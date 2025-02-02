@@ -197,20 +197,6 @@ b8 stopProcess(Process::Handle handle, s32 exit_code);
 
 /* ----------------------------------------------------------------------------
  *  Performs a check on the process referred to by 'handle' and determines if 
- */
-b8 processSpawnPTY(
-    Process::Handle* out_handle,
-    String           file,
-    Slice<String>    args,
-    fs::File*        stream);
-
-/* ----------------------------------------------------------------------------
- *  Stops a running PTY process and it's threads with the 'exit_code'.
- */
-b8 stopProcessPTY(Process::Handle handle, s32 exit_code);
-
-/* ----------------------------------------------------------------------------
- *  Performs a check on the process referred to by 'handle' and determines if 
  *  it has exited or not. If it has, the process's exit code is written into 
  *  'out_exit_code' and Exited is returned. Otherwise StillRunning is returned 
  *  or Error if an error occurs.

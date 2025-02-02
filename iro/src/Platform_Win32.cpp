@@ -887,22 +887,15 @@ b8 unlinkFile(String path)
   assert(notnil(path));
   assert(!path.isEmpty());
   
-  wchar_t* wpath = makeWin32Path(path);
-  if (wpath == nullptr)
-  {
-    ERROR("failed to unlink file at path '", path, "': ",
-      win32_make_path_error);
+  const u64 buflen = 4096;
+  wchar_t wpath[buflen];
+  if (0 == stringToWideChar(path, wpath, buflen))
     return false;
-  }
-  defer{ if (wpath != win32_str) mem::stl_allocator.free(wpath); };
-  
-  if (!DeleteFileW(wpath))
+
+  if (DeleteFileW(wpath))
     return true;
   
-  ERROR("failed to unlink file at path '", path, "': ",
-    makeWin32ErrorMsg(GetLastError()), "\n");
-  cleanupWin32ErrorMsg();
-  return false;
+  return win32Err("failed to unlink file at path '", path, "'");
 }
 
 /* ----------------------------------------------------------------------------
@@ -1182,11 +1175,28 @@ b8 processSpawn(
     wargs[cmd_offset++] = c;
   };
 
+  // Lazy way to handle properly quoting arguments. Should do this better later
+  // but idc for working out how to do this in utf16 rn.
+  io::Memory arg_quote_buf;
+  arg_quote_buf.open();
+  defer { arg_quote_buf.close(); };
   auto cmdWriteString = [&](String s)
   {
+    arg_quote_buf.clear();
+    for (u32 i = 0; i < s.len; ++i)
+    {
+      if (s.ptr[i] == '"')
+        io::formatv(&arg_quote_buf, '\\', '"');
+      else
+        io::format(&arg_quote_buf, (char)s.ptr[i]);
+    }
     int bytes_written = 
-      stringToWideChar(s, (wargs + cmd_offset), cmd_chars - cmd_offset);
-    if (bytes_written == 0 || bytes_written != s.len)
+      stringToWideChar(
+        arg_quote_buf.asStr(), 
+        (wargs + cmd_offset), 
+        cmd_chars - cmd_offset, 
+        false);
+    if (bytes_written == 0)
       return false;
     cmd_offset += bytes_written;
     return true;
@@ -1211,7 +1221,7 @@ b8 processSpawn(
     cmdWriteChar(L'"');
   }
   cmdWriteChar(L'\0');
-  
+
   // convert the utf8 cwd to wchar
   wchar_t* wcwd = NULL;
   if (notnil(cwd))
@@ -1305,11 +1315,35 @@ b8 processSpawn(
       return ERROR("the file for the stderr stream was not nil; given files "
                    "cannot already own resources\n");
     
-    if (!createPipePair(
-          &infos[2].pipes[0], in_server_flags,
-          &infos[2].pipes[1], in_client_flags,
-          true, (u64)infos[2].f))
-      return ERROR("failed to open pipes for stderr\n");
+    // Handle a special case where the same file is used for both stdout/err.
+    // This is undocumented for now as I'm only implementing it this 
+    // way to handle how I want to use processes in lake. This is very bad 
+    // design though, as nothing in iro should be designed based on how a 
+    // project using it wants it to work.
+    // Here we just use the same pipes for stdout and stderr.
+    //
+    // It would be nice to handle this how I believe libuv does, where you 
+    // can just pass the same uv_stream_t* for both stdio containers. We don't
+    // really have this concept, and File was chosen primarily becuse on linux
+    // it was easy to just assign a File the fd that we get for the pipes. 
+    // It might be we define a Pipe API or something to handle this better?
+    //
+    // Also, the reason I want to handle this this way for lake is that its 
+    // somewhat annoying to have stdout and stderr separated, as it means 
+    // you can't really get 
+    if (infos[2].f == infos[1].f)
+    {
+      infos[2].pipes[0] = infos[1].pipes[0];
+      infos[2].pipes[1] = infos[1].pipes[1];
+    }
+    else
+    {
+      if (!createPipePair(
+            &infos[2].pipes[0], in_server_flags,
+            &infos[2].pipes[1], in_client_flags,
+            true, (u64)infos[2].f))
+        return ERROR("failed to open pipes for stderr\n");
+    }
   }
   else
   {
@@ -1375,7 +1409,7 @@ b8 processSpawn(
   }
   
   // close writing end of the stderr pipe and set the stream to reading end
-  if (infos[2].f != nullptr)
+  if (infos[2].f != nullptr && infos[2].f != infos[1].f)
   {
     fs::OpenFlags flags = fs::OpenFlag::Read;
     if (infos[2].non_blocking)
@@ -1416,38 +1450,6 @@ b8 stopProcess(Process::Handle handle, s32 exit_code)
   }
   
   CloseHandle((HANDLE)handle);
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 processSpawnPTY(
-  Process::Handle* out_handle,
-  String file,
-  Slice<String> args,
-  fs::File* stream)
-{
-  assert(out_handle != nullptr);
-  assert(notnil(file));
-  assert(stream != nullptr);
-  
-  Process::Stream streams[3] = 
-  {
-    { .non_blocking=false, .file=nullptr },
-    { .non_blocking=true,  .file=stream },
-    { .non_blocking=false, .file=nullptr },
-  };
-
-  return processSpawn(out_handle, file, args, streams, nil);
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 stopProcessPTY(Process::Handle handle, s32 /*exit_code*/)
-{
-  assert((HPCON)handle != INVALID_HANDLE_VALUE);
-  
-  ClosePseudoConsole((HPCON)handle);
   return true;
 }
 

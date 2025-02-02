@@ -32,7 +32,6 @@ struct Process
 
   Handle handle;
   Status status;
-  b8 ispty;
   s32 exit_code;
 
   /* ==========================================================================
@@ -64,8 +63,6 @@ struct Process
       Slice<String> args, 
       Stream        streams[3], 
       String        cwd);
-
-  static Process spawnpty(String file, Slice<String> args, fs::File* stream);
 
   // Checks the status of this process and sets the status of the process.
   // If the process exits, 'exit_code' is set.
