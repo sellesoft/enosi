@@ -15,14 +15,11 @@
 
 #include "Metaprogram.h"
 
-#include "signal.h"
-#include "unistd.h"
-#include "sys/types.h"
-
 extern "C"
 {
 #include "luajit/lua.h"
 
+LPP_LUAJIT_FFI_FUNC
 int lua__processFile(lua_State* L);
 int lua__getFileFullPathIfExists(lua_State* L);
 int lua__debugBreak(lua_State* L);
@@ -238,7 +235,7 @@ static void makeLspTempOut()
     ERROR("failed to open lpplsp.log\n");
     return;
   }
-  log.newDestination("lpplsp.log"_str, f,
+  iro::log.newDestination("lpplsp.log"_str, f,
         ShowCategoryName
       | ShowVerbosity);
 }
@@ -478,7 +475,6 @@ extern "C"
 
 /* ----------------------------------------------------------------------------
  */
-LPP_LUAJIT_FFI_FUNC
 int lua__processFile(lua_State* L)
 {
   auto lua = LuaState::fromExistingState(L);

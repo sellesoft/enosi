@@ -749,7 +749,13 @@ extern "C"
  */
 
 // Forward decls, as needed.
+// NOTE(sushi) something declared here must not also apply the 
+//             LPP_LUAJIT_FFI_FUNC to its definition, since Windows does not 
+//             allow a declaration and its definition to have 
+//             __declspec(dllexport) applied to it.
+LPP_LUAJIT_FFI_FUNC
 b8 sectionIsDocument(SectionNode* section);
+LPP_LUAJIT_FFI_FUNC
 b8 sectionIsMacro(SectionNode* section);
 
 /* ----------------------------------------------------------------------------
@@ -1028,7 +1034,6 @@ SectionNode* sectionPrev(SectionNode* section)
 
 /* ----------------------------------------------------------------------------
  */
-LPP_LUAJIT_FFI_FUNC
 b8 sectionIsMacro(SectionNode* section)
 {
   return section->data->kind == Section::Kind::Macro;
@@ -1036,7 +1041,6 @@ b8 sectionIsMacro(SectionNode* section)
 
 /* ----------------------------------------------------------------------------
  */
-LPP_LUAJIT_FFI_FUNC
 b8 sectionIsDocument(SectionNode* section)
 {
   return section->data->kind == Section::Kind::Document;

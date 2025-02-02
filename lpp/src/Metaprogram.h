@@ -247,11 +247,9 @@ struct Metaprogram
 
 extern "C"
 {
-
   // TODO(sushi) maybe someday put the lua api here.
   //             Its really not necessary and is just another place I have 
   //             to update declarations at.
-
 }
 
 #endif // _lpp_metaprogram_h

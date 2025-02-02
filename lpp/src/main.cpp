@@ -5,6 +5,7 @@
 #include "iro/Logger.h"
 #include "iro/Platform.h"
 
+#if IRO_LINUX
 #define DEFINE_GDB_PY_SCRIPT(script_name) \
   asm("\
 .pushsection \".debug_gdb_scripts\", \"MS\",@progbits,1\n\
@@ -14,6 +15,7 @@
 ");
 
 DEFINE_GDB_PY_SCRIPT("lpp-gdb.py");
+#endif
 
 using namespace lpp;
 
