@@ -63,7 +63,6 @@ local libs = Twine.new
   "LLVMARMInfo"
   "LLVMHexagonDisassembler"
   "LLVMLanaiCodeGen"
-  "benchmark"
   "clangBasic"
   "LLVMipo"
   "clangStaticAnalyzerCheckers"
@@ -105,7 +104,7 @@ local libs = Twine.new
   "LLVMMipsDisassembler"
   "LLVMARMDesc"
   "LLVMNVPTXInfo"
-  "DynamicLibraryLib"
+  -- "DynamicLibraryLib"
   "LLVMOption"
   "clangToolingInclusionsStdlib"
   "LLVMMCDisassembler"
@@ -141,7 +140,6 @@ local libs = Twine.new
   "clangARCMigrate"
   "LLVMXCoreCodeGen"
   "LLVMAVRCodeGen"
-  "benchmark_main"
   "LLVMAArch64Desc"
   "LLVMDebugInfoDWARF"
   "LLVMIRPrinter"
@@ -286,7 +284,7 @@ local libs = Twine.new
   "LLVMInterpreter"
   "LLVMMSP430Info"
 
-llvm.report.ext.pub.SharedLib "z"
+-- llvm.report.ext.pub.SharedLib "z"
 
 for lib in libs:each() do
   llvm.report.ext.pub.StaticLib(lib)
@@ -301,16 +299,16 @@ llvm.report.dir.lib
 }
 
 llvm.report.ext.pub.Exe(llvm_builddir.."/bin/clang++")
-llvm.report.CMake(
-  llvm.root.."/src/llvm", 
-  "Unix Makefiles",
-  List
-  {
-    "-DLLVM_CCACHE_BUILD=ON",
-    "-DLLVM_OPTIMIZED_TABLEGEN=ON",
-    "-DLLVM_ENABLE_PROJECTS=clang;lld",
-    "-DCMAKE_BUILD_TYPE="..mode,
-    "-DLLVM_USE_LINKER=lld", -- TODO(sushi) support for other linkers
-    "-DLLVM_ENABLE_RUNTIMES=all",
-  },
-  llvm_builddir)
+-- llvm.report.CMake(
+--   llvm.root.."/src/llvm", 
+--   "Unix Makefiles",
+--   List
+--   {
+--     "-DLLVM_CCACHE_BUILD=ON",
+--     "-DLLVM_OPTIMIZED_TABLEGEN=ON",
+--     "-DLLVM_ENABLE_PROJECTS=clang;lld",
+--     "-DCMAKE_BUILD_TYPE="..mode,
+--     "-DLLVM_USE_LINKER=lld", -- TODO(sushi) support for other linkers
+--     "-DLLVM_ENABLE_RUNTIMES=all",
+--   },
+--   llvm_builddir)
