@@ -257,14 +257,12 @@ b8 open(fs::File::Handle* out_handle, String path, fs::OpenFlags flags)
   using enum fs::OpenFlag;
   assert(out_handle != nullptr);
   
-  wchar_t* wpath = makeWin32Path(path);
-  if (wpath == nullptr)
-  {
-    ERROR("failed to open file at path '", path, "': ", win32_make_path_error);
+  const u64 buflen = 4096;
+  wchar_t wpath[buflen];
+
+  if (0 == stringToWideChar(path, wpath, buflen))
     return false;
-  }
-  defer{ if (wpath != win32_str) mem::stl_allocator.free(wpath); };
-  
+
   DWORD access;
   if (flags.testAll<Read, Write>())
     access = FILE_GENERIC_READ | FILE_GENERIC_WRITE;
@@ -1486,42 +1484,29 @@ b8 realpath(fs::Path* path)
 {
   assert(path != nullptr);
   
-  wchar_t* wpath = makeWin32Path(path->buffer.asStr());
-  if (wpath == nullptr)
-  {
-    ERROR("failed to canonicalize path '", path, "': ", win32_make_path_error);
+  const u64 buflen = 4096;
+  wchar_t wpath[buflen];
+  if (0 == stringToWideChar(path->buffer.asStr(), wpath, buflen))
     return false;
-  }
-  defer{ if (wpath != win32_str) mem::stl_allocator.free(wpath); };
-  
+
+  wprintf(L"%ls\n", wpath);
+
   DWORD full_wpath_chars = GetFullPathNameW(wpath, 0, NULL, NULL);
   if (full_wpath_chars == 0)
-  {
-    ERROR("failed to canonicalize path '", *path, "': ",
-      makeWin32ErrorMsg(GetLastError()), "\n");
-    cleanupWin32ErrorMsg();
-    return false;
-  }
-  
-  auto* full_wpath = (wchar_t*)mem::stl_allocator.allocate(full_wpath_chars);
+    return win32Err("failed to canonicalize path ", *path);
+
+  wchar_t* full_wpath = 
+	  (wchar_t*)mem::stl_allocator.allocateType<wchar_t>(full_wpath_chars);
   if (full_wpath == nullptr)
-  {
-    ERROR("failed to canonicalize path '", *path, "': insufficient memory when"
-      " converting from UTF-8 to WideChar\n");
-    return false;
-  }
+    return ERROR("failed to canonicalize path '", *path, "': insufficient "
+                 "memory when converting from UTF-8 to WideChar\n");
   defer{ mem::stl_allocator.free(full_wpath); };
   
   full_wpath_chars = GetFullPathNameW(wpath, full_wpath_chars,
     full_wpath, NULL);
   if (full_wpath_chars == 0)
-  {
-    ERROR("failed to canonicalize path '", *path, "': ",
-      makeWin32ErrorMsg(GetLastError()), "\n");
-    cleanupWin32ErrorMsg();
-    return false;
-  }
-  
+    return win32Err("failed to canonicalize path ", *path);
+
   assert(full_wpath_chars <= (DWORD)INT_MAX);
   int utf8_bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
     full_wpath, (int)full_wpath_chars, NULL, 0, NULL, NULL);
@@ -1541,12 +1526,10 @@ b8 realpath(fs::Path* path)
     full_wpath, (int)full_wpath_chars, (char*)path->buffer.ptr,
     utf8_bytes + 1, NULL, NULL);
   if (converted_bytes == 0)
-  {
-    assert(GetLastError() == ERROR_NO_UNICODE_TRANSLATION);
-    ERROR("failed to canonicalize path '", *path, "': invalid unicode was"
-      " found in a string when converting from WideChar to UTF-8\n");
-    return false;
-  }
+    return win32Err("failed to canonicalize path ", *path);
+
+  auto normalized = normalizePath(path->buffer.asStr());
+  path->buffer.len = normalized.len;
   
   return true;
 }
