@@ -332,6 +332,29 @@ b8 Lpp::processArgv(int argc, const char** argv)
       lua.pop(2);
       break;
 
+    // A CPATH directory. Will append the given path + ?.dll/so to 
+    // package.cpath.
+    case "C"_hashed:
+      iter.next();
+      if (isnil(iter.current))
+        return FATAL("expected a path after '-C'\n");
+      lua.getglobal("package");
+      lua.pushstring("cpath"_str);
+      lua.gettable(-2);
+      lua.pushstring(";"_str);
+      lua.pushstring(iter.current);
+#if IRO_LINUX
+      lua.pushstring("/?.so"_str);
+#elif IRO_WIN32
+      lua.pushstring("/?.dll"_str);
+#endif
+      lua.concat(4);
+      lua.pushstring("cpath"_str);
+      lua.pushvalue(-2);
+      lua.settable(-4);
+      lua.pop(2);
+      break;
+
     // An include directory, which will be searched when using lpp.include.
     case "I"_hashed:
       iter.next();

@@ -3,6 +3,7 @@
 
 #include "iro/LineMap.h"
 #include "iro/fs/File.h"
+#include "iro/Platform.h"
 
 #include "cstdlib"
 
@@ -525,7 +526,8 @@ b8 Metaprogram::run()
   lua.pushvalue(I.metaprogram);
   if (!lua.pcall(0,0,I.errhandler))
   {
-    ERROR("failed to execute generated metaprogram\n");
+    ERROR("failed to execute generated metaprogram\n",
+		  lua.tostring(), "\n");
     return false;
   }
 
@@ -611,7 +613,7 @@ b8 Metaprogram::processScopeSections(Scope* scope)
     Section* section = current_section->data;
     
     // Any section is always an expansion into the resulting buffer.
-    expansions.pushTail({section->start_offset, output->cache.len});
+    expansions.pushTail({.from=section->start_offset, .to=output->cache.len});
 
     switch (section->kind)
     {
@@ -679,7 +681,7 @@ b8 Metaprogram::processScopeSections(Scope* scope)
  */
 String Metaprogram::consumeCurrentScope()
 {
-  auto scope = getCurrentScope();
+  auto* scope = getCurrentScope();
   if (!processScopeSections(scope))
     return nil;
 
