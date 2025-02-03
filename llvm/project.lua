@@ -137,7 +137,6 @@ local libs = Twine.new
   "LLVMGlobalISel"
   "LLVMARMAsmParser"
   "LLVMARMUtils"
-  "clangARCMigrate"
   "LLVMXCoreCodeGen"
   "LLVMAVRCodeGen"
   "LLVMAArch64Desc"
@@ -283,6 +282,11 @@ local libs = Twine.new
   "LLVMAVRDesc"
   "LLVMInterpreter"
   "LLVMMSP430Info"
+  "LLVMSPIRVAnalysis"
+  "LLVMSPIRVCodeGen"
+  "LLVMSPIRVDesc"
+  "LLVMSPIRVInfo"
+  "LLVMFrontendAtomic"
 
 -- llvm.report.ext.pub.SharedLib "z"
 
