@@ -124,8 +124,11 @@ cmd.CppObj.getIOIndependentFlags = function(params)
       "-Wno-return-type-c-linkage",
       "-fmessage-length=80",
       "-fdiagnostics-absolute-paths",
-	  "-D_DLL",
-	  "-D_MT")
+      "-fms-runtime-lib=static",
+      "-D_DISABLE_STRING_ANNOTATION",
+      "-D_DISABLE_VECTOR_ANNOTATION")
+      -- "-D_DLL",
+      -- "-D_MT")
 
     o:push(helpers.switch(params.opt,
     {
@@ -206,6 +209,8 @@ cmd.LppObj = Type.make()
 ---@field lpp string
 --- Require dirs.
 ---@field requires List
+--- Paths to be appended to package.cpath (eg. where to find shared libs).
+---@field cpaths List
 --- CppObj.Params that will be used to build an obj from the resulting cpp 
 --- file.
 ---@field cpp cmd.CppObj.Params
@@ -226,11 +231,18 @@ cmd.LppObj.new = function(params)
     requires:push "-R"
     requires:push(require)
   end
+
+  local cpaths = List{}
+  for cpath in List(params.cpaths):each() do
+	  cpaths:push "-C"
+    cpaths:push(cpath)
+  end
     
   o.partial = helpers.listBuilder(
     params.lpp,
     cargs,
     requires,
+    cpaths,
     -- little bit of cheating, really need to fix this somehow
     "-R", "src")
 
@@ -348,7 +360,7 @@ cmd.Exe.new = function(params)
   o.linker = params.linker
 
   if "ld" == params.linker 
-	 or "lld" == params.linker
+	   or "lld" == params.linker
      or "mold" == params.linker 
   then
     -- TODO(sushi) it sucks that we operate the linker through clang here, but 
@@ -381,10 +393,11 @@ cmd.Exe.new = function(params)
       end),
       "-Wl,--end-group",
       "-Wl,-E",
-	  "-lmsvcrt",
-	  "-lucrt",
-	  "-lversion",
-	  "-lntdll")
+      "-fms-runtime-lib=static",
+      -- "-lmsvcrt",
+      -- "-lucrt",
+      "-lversion",
+      "-lntdll")
       -- Tell the exe's dynamic linker to check the directory its in 
       -- for shared libraries.
       -- NOTE(sushi) this is disabled for now as I'm not actually using it 

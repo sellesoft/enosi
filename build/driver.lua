@@ -61,6 +61,8 @@ local createBuildCmds = function(proj)
       params.opt = "speed"
     end
 
+    params.address_sanitizer = true
+
     cmds[build.obj.CppObj] = build.cmds.CppObj.new(params)
 
     cpp_params = params
@@ -282,7 +284,7 @@ driver.subcmds.publish = function(args)
   driver.subcmds.build()
   
   -- Iterate over all projects and copy their executables to bin.
-  for name,proj in pairs(sys.projects.map) do
+  for name, proj in pairs(sys.projects.map) do
     for BObj, list in pairs(proj.bobjs.published) do
       for bobj in list:each() do
         local bobjpath = bobj:getOutputPath()

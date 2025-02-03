@@ -324,10 +324,13 @@ object.LppObj = LppObj
 -- * --------------------------------------------------------------------------
 
 ---@param src string
+--- A List of cpaths to pass to lpp.
+---@param cpaths iro.List
 ---@return object.LppObj
-LppObj.new = function(src)
+LppObj.new = function(src, cpaths)
   local o = {}
   o.src = src
+  o.cpaths = cpaths
   return setmetatable(o, LppObj)
 end
 
@@ -346,7 +349,11 @@ end
 -- * --------------------------------------------------------------------------
 
 LppObj.getTargetName = function(self)
-  return self.src..".cpp.o"
+  if sys.os == "linux" then
+    return self.src..".cpp.o"
+  else
+    return self.src..".cpp.obj"
+  end
 end   
 
 -- * --------------------------------------------------------------------------
@@ -358,7 +365,7 @@ LppObj.defineTask = function(self, cmd)
   
   local lfile = self.proj.root.."/"..self.src
   local cfile = self.proj:getBuildDir().."/"..self.src..".cpp"
-  local ofile = cfile..".o"
+  local ofile = self.proj:getBuildDir().."/"..self:getTargetName()
   local mfile = self.proj:getBuildDir().."/"..self.src..".meta"
   local dfile = self.proj:getBuildDir().."/"..self.src..".d"
 
@@ -463,6 +470,14 @@ local defineLinkerTask = function(self, is_shared, lib_filter)
   end)
 
   params.is_shared = is_shared
+
+  if sys.cfg.mode == "debug" then
+    -- TODO(sushi) would rather do this elsewhere.
+    --             On Windows this outputs the pdb for 
+    --             the linked thing.
+    params.debug_info = true
+    params.address_sanitizer = true
+  end 
 
   local cmd = build.cmd.Exe.new(params)
 
