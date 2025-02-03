@@ -464,7 +464,10 @@ struct Context
     diagprinter = new TextDiagnosticPrinter(*io, diagopts.get());
     diag_consumer = makeUnique<DiagConsumer>( *parser, diagprinter);
 
-    clang.createDiagnostics(diagprinter, false);
+    clang.createDiagnostics(
+        *llvm::vfs::getRealFileSystem(),
+        diagprinter, 
+        false);
     clang.getDiagnostics().setShowColors(true);
 
     clang.getPCHContainerOperations()->registerWriter(
