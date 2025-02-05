@@ -11,6 +11,7 @@ if sys.os == "linux" then
   ecs.report.ext.SharedLib "X11"
   ecs.report.ext.SharedLib "Xrandr"
   ecs.report.ext.SharedLib "Xcursor"
+elseif sys.os == "windows" then
 else
   error "unhandled os"
 end

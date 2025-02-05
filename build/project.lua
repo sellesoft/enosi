@@ -213,7 +213,6 @@ end
 --- project it actually needs, or how it uses that project. Very odd cases.
 Project.uses = function(self, ...)
   for bobj in List{...}:each() do
-    print(self.name, "uses", bobj.task.name)
     self.tasks.wait_for_deps:dependsOn(bobj.task)
   end
 end

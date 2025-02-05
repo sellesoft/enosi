@@ -465,7 +465,7 @@ struct Context
     diag_consumer = makeUnique<DiagConsumer>( *parser, diagprinter);
 
     clang.createDiagnostics(
-        *llvm::vfs::getRealFileSystem(),
+        *inmemfs,
         diagprinter, 
         false);
     clang.getDiagnostics().setShowColors(true);

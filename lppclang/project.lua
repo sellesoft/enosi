@@ -26,7 +26,8 @@ llvm:getPublicBuildObjects(bobj.Exe, llvm_exes)
 
 lppclang.report.defines 
 {
-  ENOSI_CLANG_EXECUTABLE='"'..llvm.root.."/"..llvm_exes[1].name..'"'
+  ENOSI_CLANG_EXECUTABLE='"'..llvm.root.."/"..llvm_exes[1].name..'"',
+  LLVM_ENABLE_ABI_BREAKING_CHECKS="1",
 }
 
 lppclang.report.published(

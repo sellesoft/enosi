@@ -6,7 +6,7 @@ local buffer = require "string.buffer"
 -- Load lppclang.
 -- TODO(sushi) the lib needs to be loaded in a better way.
 -- require "ffi" .load "lppclang"
-require "lppclang" .init "lppclang"
+require "lppclang" .init "../lppclang/build/debug/lppclang"
 
 
 -- Get the cargs so we can pass them to lppclang when we create the context.

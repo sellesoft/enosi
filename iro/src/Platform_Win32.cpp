@@ -1489,8 +1489,6 @@ b8 realpath(fs::Path* path)
   if (0 == stringToWideChar(path->buffer.asStr(), wpath, buflen))
     return false;
 
-  wprintf(L"%ls\n", wpath);
-
   DWORD full_wpath_chars = GetFullPathNameW(wpath, 0, NULL, NULL);
   if (full_wpath_chars == 0)
     return win32Err("failed to canonicalize path ", *path);

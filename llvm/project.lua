@@ -6,7 +6,7 @@ local llvm = sys.getLoadingProject()
 
 llvm.is_external = true
 
-local mode = sys.cfg.llvm and sys.cfg.llvm.mode or "Release"
+local mode = sys.cfg.llvm and sys.cfg.llvm.mode or "Debug"
 
 local llvm_builddir = "llvm_build/"..mode
 
@@ -233,7 +233,7 @@ local libs = Twine.new
   "LLVMSparcDesc"
   "clangAST"
   "LLVMProfileData"
-  "LLVMTableGenCommon"
+  -- "LLVMTableGenCommon"
   "LLVMARMCodeGen"
   "LLVMVECodeGen"
   "LLVMPowerPCDisassembler"
