@@ -2,6 +2,8 @@ $ local cmn = require "common"
 $ local CGen = require "CGen"
 $ local List = require "List"
 
+$ if IRO_LINUX then
+
 @@lpp.import "input/Input.events.lh"
 @@lpp.import "window/Window.events.lh"
 @@lpp.import "Engine.lh"
@@ -18,6 +20,8 @@ static Logger logger =
 
 X11Stuff x11;
 
+/* ----------------------------------------------------------------------------
+ */
 template<typename E>
 void Window::raise(const Engine& eng, E& event) 
 {
@@ -369,3 +373,5 @@ Key keysymToKey(KeySym k)
   }
   return Key::Invalid;
 }
+
+$ end -- if IRO_LINUX

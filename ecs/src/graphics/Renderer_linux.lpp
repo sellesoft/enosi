@@ -1,5 +1,7 @@
 $ local cmn = require "common"
 
+$ if IRO_LINUX then
+
 @lpp.import "graphics/Renderer.lh"
 @lpp.import "window/Window.lh"
 
@@ -69,11 +71,11 @@ b8 rendererPlatformInit(Window* window)
 	  GLX_DOUBLEBUFFER, GL_TRUE,
 	  //GLX_TRANSPARENT_TYPE, GLX_TRANSPARENT_RGB,
 	  GLX_RENDER_TYPE, GLX_RGBA_BIT,
-	  GLX_RED_SIZE, 8,
-	  GLX_GREEN_SIZE, 8,
-	  GLX_BLUE_SIZE, 8,
-	  GLX_ALPHA_SIZE, 8,
-	  GLX_DEPTH_SIZE, 24,
+	  GLX_RED_SIZE,     8,
+	  GLX_GREEN_SIZE,   8,
+	  GLX_BLUE_SIZE,    8,
+	  GLX_ALPHA_SIZE,   8,
+	  GLX_DEPTH_SIZE,   24,
 	  GLX_STENCIL_SIZE, 8,
 	  GLX_FRAMEBUFFER_SRGB_CAPABLE_EXT, GL_TRUE,
 	  0, //terminate  
@@ -177,3 +179,5 @@ b8 rendererPlatformSwapBuffers(Window* window)
 }
 
 }
+
+$ end -- if IRO_LINUX

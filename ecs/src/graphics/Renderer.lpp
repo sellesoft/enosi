@@ -38,10 +38,12 @@ static void GLAPIENTRY glMessageCallback(
   if (type == GL_DEBUG_TYPE_ERROR)
   {
     ERROR(message, "\n");
+    assert(false);
   }
   else
   {
-    INFO(message, "\n");
+    // spams quite bad
+    // INFO(message, "\n");
   }
 }
 
@@ -212,6 +214,8 @@ b8 Renderer::update()
   TRACE("clearing drawcmds\n");
   drawcmds.clear();
   
+  glFlush();
+
   TRACE("swapping buffers\n");
   rendererPlatformSwapBuffers(&engine->window);
 
@@ -349,6 +353,8 @@ b8 Renderer::loadTexture(Texture* texture)
     format.format,
     GL_UNSIGNED_BYTE,
     data->pixels);
+
+  assert(glGetError() == GL_NO_ERROR);
 
   GLint address_modes[] = 
   {

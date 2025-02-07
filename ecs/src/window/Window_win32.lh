@@ -1,0 +1,19 @@
+$ require "common"
+$ if IRO_WIN32 then
+
+#include "Windows.h"
+
+struct Win32Stuff
+{
+  HINSTANCE h_console_instance;
+
+  HWND dummy_window_handle;
+  HDC  dummy_window_device_handle;
+};
+
+extern Win32Stuff win32;
+
+const LPCSTR g_win32_dummy_window_classname = "_ECS_DUMMY_WINDOW_CLASS_";
+const LPCSTR g_win32_window_classname = "_ECS_WINDOW_CLASS_";
+
+$ end -- if IRO_WIN32

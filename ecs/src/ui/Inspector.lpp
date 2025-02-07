@@ -9,6 +9,9 @@ $ local glob = require "Glob"
 
 $ local buf = buffer.new()
 $ glob"**/*.lh":each(function(path) -- */
+$   if path:find "Window_win32.lh" then
+$     return
+$   end
 $   local result = lpp.import(path)
 $   if result then
 $     buf:put(result)

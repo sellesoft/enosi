@@ -56,6 +56,7 @@ MovedResourceRef ResourceMgr::allocateResource(u64 size, String name)
     "a Resource has already been allocated with the given name");
 
   auto* resource = (Resource*)allocator->allocate(size);
+  mem::zero(resource, size);
 
   map.insert(resource);
 

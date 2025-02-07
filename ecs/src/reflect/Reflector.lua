@@ -8,7 +8,6 @@ local buffer = require "string.buffer"
 -- require "ffi" .load "lppclang"
 require "lppclang" .init "../lppclang/build/debug/lppclang"
 
-
 -- Get the cargs so we can pass them to lppclang when we create the context.
 local args = List{}
 
@@ -29,6 +28,14 @@ for _,v in ipairs(lpp.argv) do
     local cargs = v:sub(#"--cargs="+1)
     for carg in cargs:gmatch("[^,]+") do
       args:push(carg)
+      -- Set -D defines as globals so we may use them in lpp as well.
+      local define = carg:match "^%-D(.*)"
+      if define then
+        local name, val = define:match "(.-)=(.*)"
+        if name and val then
+          _G[name] = val
+        end
+      end
     end
   end
 end
@@ -162,27 +169,43 @@ lpp.import = function(path)
   return buf:get()
 end
 
+local tu_name = lpp.getCurrentInputSourceName()
+
 if lpp.generating_dep_file then
   lpp.registerFinal(function(result)
+    if tu_name ~= lpp.getCurrentInputSourceName() then
+      return
+    end
+
     local makedeps = 
       lpp.clang.generateMakeDepFile(
         lpp.getCurrentInputSourceName(), result, args)
 
-    for f in makedeps:gmatch("%S+") do
-      -- NOTE(sushi) filtering out unwanted stuff here. This will unfortunately
-      --             break subtley if cpp files are ever included. But I 
-      --             currently don't plan to do this anyways.
-      -- TODO(sushi) write a custom dependency consumer thing so that 
-      --             we dont have to do this and can instead directly
-      --             output a newline delimited list.
-      if f:sub(-1) == ":" or f == "\\" or f:find(".cpp$") or f:find("^/usr/") 
-      then
-        goto continue
+    -- Skip the initial obj file thing.
+    makedeps = makedeps:match ".-:%s+(.*)"
+
+    -- This is INSANELY bad but I just want to get to porting ECS to Windows
+    -- so I WILL fix this later I PROMISE!
+    while #makedeps ~= 0 do
+      local path
+      local start, stop = makedeps:find "[^\\] "
+      if start then
+        path = makedeps:sub(1, stop)
+        makedeps = makedeps
+          :sub(stop)
+          :gsub("^%s+", "")
+          :gsub("^\\", "")
+          :gsub("^%s+", "")
+      else
+        path = makedeps
       end
-
-      lpp.addDependency(f)
-
-      ::continue::
+      path = path
+        :gsub("\\ ", " ")
+        :gsub("\\", "/")
+      lpp.addDependency(path)
+      if not start then
+        break
+      end
     end
   end)
 end

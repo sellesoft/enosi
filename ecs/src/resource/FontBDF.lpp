@@ -272,16 +272,14 @@ b8 Font::compileBDF(CompileParams& params)
         c->encoding = u16(consumeNumber());
         break;
       case "BBX"_hashed:
-        c->bbx = vec4i(
-          consumeNumber(),
-          consumeNumber(),
-          consumeNumber(),
-          consumeNumber());
+        c->bbx.x = consumeNumber();
+        c->bbx.y = consumeNumber();
+        c->bbx.z = consumeNumber();
+        c->bbx.w = consumeNumber();
         break;
       case "DWIDTH"_hashed:
-        c->dwidth = vec2i(
-          consumeNumber(),
-          consumeNumber());
+        c->dwidth.x = consumeNumber();
+        c->dwidth.y = consumeNumber();
         break;
       case "BITMAP"_hashed:
         skipLine();

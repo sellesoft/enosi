@@ -30,6 +30,11 @@ struct Window
 
   b8 focused;
 
+  // Not a fan of doing this but sorta have to 
+  // to be able to get it in win32's window callback garbage.
+  // Do this better later.
+  Engine* eng;
+
   enum class DisplayMode
   {
     Windowed,

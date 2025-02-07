@@ -6,7 +6,7 @@ local llvm = sys.getLoadingProject()
 
 llvm.is_external = true
 
-local mode = sys.cfg.llvm and sys.cfg.llvm.mode or "Debug"
+local mode = sys.cfg.llvm and sys.cfg.llvm.mode or "Release"
 
 local llvm_builddir = "llvm_build/"..mode
 

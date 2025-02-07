@@ -7,7 +7,9 @@ $ local event = require "event.Event"
 
 @lpp.import "Engine.lh"
 
+$ if IRO_LINUX then
 #include "iro/GDBScriptDef.h"
+$ end
 
 static Logger logger = 
   Logger::create("ecs"_str, Logger::Verbosity::Trace);
