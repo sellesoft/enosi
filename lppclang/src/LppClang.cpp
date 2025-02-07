@@ -2167,18 +2167,8 @@ String getDependencies(String filename, String file, String* args, u64 argc)
       ScanningOutputFormat::Full);
   DependencyScanningTool tool(service, ofs);
 
-  auto result_or_err = tool.getDependencyFile(compilation, cwd);
-  if (auto err = 
-        llvm::handleErrors(result_or_err.takeError(), 
-          [](const llvm::StringError& e)
-          {
-            printf("dep scanning failed: %s\n", e.getMessage().data());
-          }))
-  {
-    exit(1);
-  }
-
-  std::string result = *result_or_err;
+  llvm::ExitOnError exitOnErr;
+  auto result = exitOnErr(tool.getDependencyFile(compilation, cwd));
 
   String out;
   out.ptr = (u8*)mem::stl_allocator.allocate(result.size());
