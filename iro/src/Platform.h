@@ -180,38 +180,37 @@ b8 makeDir(String path, b8 make_parents);
  *  not nil then the child process will chdir into it before starting the 
  *  actual process.
  * 
- * 'streams' should only contain stdin, stdout, or stderr in that order, but
- * each of those is optional.
+ *  'streams' should only contain stdin, stdout, or stderr in that order, but
+ *  each of those is optional.
  */
 b8 processSpawn(
     Process::Handle* out_handle, 
     String           file, 
     Slice<String>    args, 
-    Process::Stream  streams[3], 
     String           cwd);
 
 /* ----------------------------------------------------------------------------
- *  Stops a running process and it's threads with the 'exit_code'.
+ *  Returns true if a Process has data to be read.
  */
-b8 stopProcess(Process::Handle handle, s32 exit_code);
+b8 processHasOutput(Process::Handle h_process);
 
 /* ----------------------------------------------------------------------------
- *  Performs a check on the process referred to by 'handle' and determines if 
- *  it has exited or not. If it has, the process's exit code is written into 
- *  'out_exit_code' and Exited is returned. Otherwise StillRunning is returned 
- *  or Error if an error occurs.
- *
- *  Its probably safe to assume that if Error is returned, the process is 
- *  terminated. BUT IDK!
+ *  Reads some amount of output from a process. Returns the number of bytes 
+ *  read, if any.
  */
-enum class ProcessCheckResult
-{
-  Error,
-  Exited,
-  StillRunning,
-};
+u64 processRead(Process::Handle h_process, Bytes buffer);
 
-ProcessCheckResult processCheck(Process::Handle handle, s32* out_exit_code);
+/* ----------------------------------------------------------------------------
+ *  Returns true if a Process has exited and its exit code if so.
+ */
+b8 processHasExited(Process::Handle h_process, s32* out_exit_code);
+
+/* ----------------------------------------------------------------------------
+ *  Cleans up handles held by a process. After this call, the given handle is 
+ *  no longer valid. If the process given is still running when this is called
+ *  it is terminated with exit code 0.
+ */
+b8 processClose(Process::Handle h_process);
 
 /* ----------------------------------------------------------------------------
  *  Converts the given path, that must exist, to a canonical path, that is with 

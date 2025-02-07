@@ -4,42 +4,66 @@
 namespace iro
 {
 
+/* ----------------------------------------------------------------------------
+ */
 Process Process::spawn(
     String        file, 
     Slice<String> args, 
-    Stream        streams[3], 
     String        cwd)
 {
   Process out = {};
-  if (!platform::processSpawn(&out.handle, file, args, streams, cwd))
+  if (!platform::processSpawn(&out.handle, file, args, cwd))
     return nil;
   return out;
 }
 
-void Process::checkStatus()
+/* ----------------------------------------------------------------------------
+ */
+b8 Process::hasOutput() const
+{
+  assert(handle);
+  return platform::processHasOutput(handle);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+u64 Process::read(Bytes buffer) const
+{
+  assert(handle);
+  return platform::processRead(handle, buffer);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Process::check()
 {
   assert(handle);
 
   if (status == Status::Running)
   {
-    switch (platform::processCheck(handle, &exit_code))
+    if (platform::processHasExited(handle, &exit_code))
     {
-    case platform::ProcessCheckResult::Exited:
       status = Status::ExitedNormally;
-      break;
-    case platform::ProcessCheckResult::Error:
-      status = Status::ExitedFatally;
-      break;
     }
   }
 }
 
-b8 Process::stop(s32 exit_code)
+/* ----------------------------------------------------------------------------
+ */
+b8 Process::close()
 {
-  assert(handle);
-  if (status == Status::Running)
-    return platform::stopProcess(handle, exit_code);
-  return false;
+  if (handle)
+  {
+    if (status == Status::Running)
+    {
+      status = Status::ExitedNormally;
+      exit_code = 0;
+    }
+    b8 success = platform::processClose(handle);
+    handle = nullptr;
+    return success;
+  }
+  return true;
 }
 
 }
