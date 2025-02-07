@@ -450,7 +450,7 @@ lake.cmd = function(args, options)
 
   local out_buf = buffer.new()
 
-  local space_wanted = 256
+  local space_wanted = 1024
 
   local exit_code = ffi.new("s32[1]")
   local out_read = ffi.new("u64[1]")
@@ -483,16 +483,12 @@ lake.cmd = function(args, options)
       -- try to read until we stop recieving data because the process can 
       -- report that its terminated before all of its buffered output is 
       -- consumed
-      while tryRead() ~= 0 do end
+      while tryRead() ~= 0 do print("reading excess data ", handle) end
 
       C.lua__processClose(lake.handle, handle)
 
       return assert(tonumber(exit_code[0]))
     else
-      -- yield if were running in a coroutine, otherwise 
-      -- just keep blocking 
-      -- TODO(sushi) make the stdout/stderr pipes blocking 
-      --             if this is called outside of a coroutine/recipe
       co.yield(false)
     end
   end

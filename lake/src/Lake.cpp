@@ -138,7 +138,12 @@ b8 Lake::init(const char** argv, int argc, mem::Allocator* allocator)
   if (!active_process_pool.init(allocator))
     return ERROR("failed to init active process pool\n");
 
-  active_process_pool = Pool<ActiveProcess>::create(allocator);
+  // TODO(sushi) maybe just use raw process handles and remove iro's
+  //             whole Process interface in favor of just putting 
+  //             Process platform stuff in its own interface and 
+  //             splitting up the Platform.h stuff into different 
+  //             files to begin with.
+  active_process_pool = Pool<Process>::create(allocator);
 
   if (!active_recipes.init(allocator)) 
     return false;
@@ -554,7 +559,7 @@ b8 lua__makeDir(String path, b8 make_parents)
 /* ----------------------------------------------------------------------------
  */
 EXPORT_DYNAMIC
-ActiveProcess* lua__processSpawn(Lake* lake, String* args, u32 args_count)
+Process* lua__processSpawn(Lake* lake, String* args, u32 args_count)
 {
   assert(args && args_count);
 
@@ -574,18 +579,10 @@ ActiveProcess* lua__processSpawn(Lake* lake, String* args, u32 args_count)
     cwd.destroy();
   } 
 
-  // TODO(sushi) only use pty when outputting to a terminal or when explicitly
-  //             requested via cli args.
-  ActiveProcess* proc = lake->active_process_pool.add();
-  Process::Stream streams[3] = 
-  {
-	{ .non_blocking = false, .file = nullptr },
-	{ .non_blocking = true,  .file = &proc->stream },
-	{ .non_blocking = true,  .file = &proc->stream },
-  };
-  proc->process = 
-    Process::spawn(args[0], {.ptr=args+1, .len=args_count-1}, streams, nil);
-  if (isnil(proc->process))
+  Process* proc = lake->active_process_pool.add();
+  *proc = 
+    Process::spawn(args[0], {.ptr=args+1, .len=args_count-1}, nil);
+  if (isnil(*proc))
   {
     ERROR("failed to spawn process using file '", args[0], "'\n");
     exit(1);
@@ -598,45 +595,38 @@ ActiveProcess* lua__processSpawn(Lake* lake, String* args, u32 args_count)
  */
 EXPORT_DYNAMIC
 void lua__processRead(
-    ActiveProcess* proc, 
+    Process* proc, 
     void* ptr, u64 len, u64* out_bytes_read)
 {
   assert(proc && ptr && len && out_bytes_read);
-  *out_bytes_read = proc->stream.read({(u8*)ptr, len});
+  *out_bytes_read = proc->read({(u8*)ptr, len});
 }
 
 /* ----------------------------------------------------------------------------
  *  TODO(sushi) maybe add support for writing someday.
- *
- *  This needs to be explicitly checked now that we use pty's instead of plain
- *  pipes (which is kinda a mistake, I shoulda made that optional!).
  */
 EXPORT_DYNAMIC
-b8 lua__processCanRead(ActiveProcess* proc)
+b8 lua__processCanRead(Process* proc)
 {
   assert(proc);
-
-  fs::PollEventFlags flags = fs::PollEvent::In;
-  if (!proc->stream.poll(&flags))
-    return false;
-
-  return flags.test(fs::PollEvent::In);
+  return proc->hasOutput();
 }
 
 /* ----------------------------------------------------------------------------
  */
 EXPORT_DYNAMIC
-b8 lua__processCheck(ActiveProcess* proc, s32* out_exit_code)
+b8 lua__processCheck(Process* proc, s32* out_exit_code)
 {
   assert(proc and out_exit_code);
   
-  proc->process.checkStatus();
-  if (proc->process.status == Process::Status::ExitedNormally)
+  proc->check();
+  if (proc->status == Process::Status::ExitedNormally)
   {
-    *out_exit_code = proc->process.exit_code;
+    *out_exit_code = proc->exit_code;
     return true;
   }
-  else if (proc->process.status == Process::Status::ExitedFatally)
+  
+  if (proc->status == Process::Status::ExitedFatally)
   {
     // Set exit code to one for the process since it crashed.
     *out_exit_code = 1;
@@ -649,13 +639,13 @@ b8 lua__processCheck(ActiveProcess* proc, s32* out_exit_code)
 /* ----------------------------------------------------------------------------
  */
 EXPORT_DYNAMIC
-void lua__processClose(Lake* lake, ActiveProcess* proc)
+void lua__processClose(Lake* lake, Process* proc)
 {
   assert(proc);
   TRACE("closing proc ", (void*)proc, "\n");
 
-  proc->stream.close();
-  proc->process.stop(0);
+  proc->close();
+
   lake->active_process_pool.remove(proc);
 }
 

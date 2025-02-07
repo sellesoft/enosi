@@ -15,14 +15,6 @@ struct Parser;
 
 /* ============================================================================
  */
-struct ActiveProcess
-{
-  Process process;
-  fs::File stream;
-};
-
-/* ============================================================================
- */
 struct Lake
 {
   LuaState lua;
@@ -42,7 +34,7 @@ struct Lake
   TaskList active_recipes;
   u32 active_recipe_count;
 
-  Pool<ActiveProcess> active_process_pool;
+  Pool<Process> active_process_pool;
 
   String initpath = nil;
 
