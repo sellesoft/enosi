@@ -10,7 +10,7 @@ notcurses/build/
 elua/build/
 luajit/obj/
 lamu/build/
-iro/include/
+iro/build/
 tmp/
 luajit/build/
 llvm/llvm_build/
