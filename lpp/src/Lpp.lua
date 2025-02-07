@@ -191,8 +191,12 @@ end
 
 lpp.generateDepFile = function()
   local buffer = buffer.new()
+  local depset = {}
   lpp.dependencies:each(function(dep)
-    buffer:put(dep, "\n")
+    if not depset[dep] then
+      buffer:put(dep, "\n")
+      depset[dep] = true
+    end
   end)
   return buffer:get()
 end
