@@ -61,7 +61,7 @@ local createBuildCmds = function(proj)
       params.opt = "speed"
     end
 
-	if sys.cfg.mode == "debug" then
+	if sys.cfg.mode == "debug" and sys.cfg.asan then
 	  params.address_sanitizer = true
 	end
 

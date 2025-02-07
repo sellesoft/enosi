@@ -145,7 +145,6 @@ sys.run = function()
   require "build.driver" .run()
 
   if sys.cfg.mode == "debug" then
-    print "out ccjson"
     -- If in debug, output a compile_commands.json
     local json = require "json"
     local file = io.open("compile_commands.json", "w")

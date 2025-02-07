@@ -26,7 +26,9 @@ local tryLoadDepFile = function(dfile, obj_task)
   local depfile = io.open(dfile, "r")
   if depfile then
     for file in depfile:lines() do
-      obj_task:dependsOn(lake.task(file))
+	    if file:find "%S" then
+        obj_task:dependsOn(lake.task(file))
+      end
     end
     depfile:close()
   end
@@ -476,7 +478,9 @@ local defineLinkerTask = function(self, is_shared, lib_filter)
     --             On Windows this outputs the pdb for 
     --             the linked thing.
     params.debug_info = true
-    params.address_sanitizer = true
+	  if sys.cfg.asan then
+      params.address_sanitizer = true
+    end
   end 
 
   local cmd = build.cmd.Exe.new(params)
