@@ -27,6 +27,9 @@ Diagnostics:
         'misc-non-private-member-variables-in-classes',
         'google-global-names-in-headers',
         'misc-const-correctness',
+        'readability-math-missing-parentheses',
+        'bugprone-easily-swappable-parameters',
+        'misc-no-recursion'
       ]
     FastCheckFilter: None
 

@@ -54,6 +54,22 @@ return
     },
   },
 
+  -- Attempt to enable address sanitizer. This doesn't appear to work well
+  -- under Windows for now especially when using LLVM, so enabling this will
+  -- likely break compilation. 
+  -- TODO(sushi) get this working. I think I just need to adjust how llvm is 
+  --             built or get it so that the build system is capable of 
+  --             generating different build objects for prerequisite projects
+  --             depending on the configuration of the project using it, which
+  --             seems like way too complicated of an undertaking for now. Eg.
+  --             trying to compile things using lppclang with this enabled will
+  --             cause clang to trip use-after-poison errors. The only project 
+  --             I actually want this for atm is ECS, but since enabling this 
+  --             implies it is compiled into iro, which is used by both ECS 
+  --             and lppclang, lppclang will also be using it which breaks 
+  --             stuff.
+  asan = false,
+
   -- Configuration intended to be applied to all projects.
   -- Note that any configuration specified in project specific 
   -- tables will override any that appear here.
