@@ -5,50 +5,17 @@ $ local cmn = require "common"
 
 @lpp.import "Engine.lh"
 
-// TODO(sushi) using events here is cool and all but really should move 
-//             to the window directly setting these values or calling the 
-//             on<...> functions directly!
-
-$ local on = function(E, c)
-    template<>
-    void InputMgr::on($(E)& event)
-    {
-      $(c);
-    }
-$ end
-
-@on(KeyPressed, keys_real[event.key] = true)
-@on(KeyReleased, keys_real[event.key] = false)
-@on(MousePressed, mouse_real[event.button] = true)
-@on(MouseReleased, mouse_real[event.button] = false)
-@on(MouseMoved, mouse.screen = event.screen_pos; 
-                mouse.window = event.window_pos)
-@on(MouseScroll, scroll += event.scroll)
-
 b8 InputMgr::init(Engine& engine)
 {
-$ local function sub(E, ...) 
-$   if not E then return end
-    engine.subscribeToBroadcast(this, &InputMgr::on<$(E)>);
-$   sub(...)
-$ end
-  @sub(
-    KeyPressed,
-    KeyReleased,
-    MousePressed,
-    MouseReleased,
-    MouseMoved,
-    MouseScroll);
-
   return true;
 }
 
 b8 InputMgr::update(Engine& engine)
 {
-  mem::copy(keys_old.arr, keys_new.arr, sizeof(keys_new.arr)); 
-  mem::copy(mouse_old.arr, mouse_new.arr, sizeof(mouse_new.arr));
-  mem::copy(mouse_new.arr, mouse_real.arr, sizeof(mouse_new.arr));
-  mem::copy(keys_new.arr, keys_real.arr, sizeof(keys_new.arr));
+  keys_old = keys_new;
+  mouse_old = mouse_new;
+  keys_new = keys_real;
+  mouse_new = mouse_real;
 
   return true;  
 }

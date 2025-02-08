@@ -7,7 +7,7 @@ $ require "common"
 #include "input/Keys.h"
 #include "math/vec.h"
 
-#include "iro/containers/EnumArray.h"
+#include "iro/containers/BitArray.h"
 
 using namespace iro;
 
@@ -15,9 +15,8 @@ struct Engine;
 
 struct InputMgr
 {
-  // TODO(sushi) these need to be bit arrays.
-  typedef EnumArray<Key, b8> KeyMap;
-  typedef EnumArray<MouseButton, b8> MouseButtonMap;
+  typedef EnumBitArray<Key> KeyMap;
+  typedef EnumBitArray<MouseButton> MouseButtonMap;
   
   KeyMap keys_old;
   KeyMap keys_new;
@@ -40,32 +39,29 @@ struct InputMgr
 
   b8 update(Engine& engine);
 
-  template<typename E>
-  void on(E&);
-
   b8 isKeyDown(Key key)
   {
-    return keys_new[key];
+    return keys_new.test(key);
   }
   b8 wasKeyPressed(Key key)
   {
-    return keys_new[key] && !keys_old[key];
+    return keys_new.test(key) && !keys_old.test(key);
   }
   b8 wasKeyReleased(Key key)
   {
-    return !keys_new[key] && keys_old[key];
+    return !keys_new.test(key) && keys_old.test(key);
   }
   b8 isMouseButtonDown(MouseButton button) 
   {
-    return mouse_new[button];
+    return mouse_new.test(button);
   }
   b8 wasMouseButtonPressed(MouseButton button)
   {
-    return mouse_new[button] && !mouse_old[button];
+    return mouse_new.test(button) && !mouse_old.test(button);
   }
   b8 wasMouseButtonReleased(MouseButton button)
   {
-    return !mouse_new[button] && mouse_old[button];
+    return !mouse_new.test(button) && mouse_old.test(button);
   }
   b8 anyMouseButtonPressed()
   {

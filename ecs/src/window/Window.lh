@@ -15,6 +15,7 @@
 using namespace iro;
 
 struct Engine;
+struct InputMgr;
 
 /* ============================================================================
  */
@@ -56,7 +57,12 @@ struct Window
   // Initializes whatever backend is being used to display windows.
   static b8 initializeBackend();
 
-  b8 init(String title);
+  // TODO(sushi) remove the inputmgr arg here and add a platform layer 
+  //             for inputmgr initialization as we only want to register
+  //             input for the first main window rather than each time they
+  //             are created. Since we are only creating one window for now
+  //             I'm not as concerned with adding a whole new plat layer yet.
+  b8 init(String title, InputMgr& inputmgr);
   void deinit();
 
   b8 update(Engine& engine);

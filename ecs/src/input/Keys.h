@@ -25,7 +25,7 @@ enum class Key
 
   Escape, Backquote, Tab, CapsLock, Minus, Equals, Backspace, LBracket, 
   RBracket, BackSlash, Semicolon, Apostrophe, Enter, Comma, Period, 
-  ForwardSlash, Space, 
+  ForwardSlash, Space,
 
   LShift, RShift,
   LCtrl, RCtrl,
@@ -37,7 +37,7 @@ enum class Key
   Pause,
 
   NP0, NP1, NP2, NP3, NP4, NP5, NP6, NP7, NP8, NP9,
-  NPMultiply, NPDivide, NPPlus, NPMinus, NPPeriod, NPNumLock,
+  NPMultiply, NPDivide, NPPlus, NPMinus, NPPeriod, NPNumLock, NPEnter,
 
   COUNT,
 };
@@ -58,6 +58,7 @@ enum class MouseButton
   Invalid,
 
   Left, Right, Middle,
+  M4, M5,
 
   COUNT,
 };

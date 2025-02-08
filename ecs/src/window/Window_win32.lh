@@ -2,6 +2,8 @@ $ require "common"
 $ if IRO_WIN32 then
 
 #include "Windows.h"
+#include "Windowsx.h"
+#include "hidusage.h"
 
 struct Win32Stuff
 {

@@ -478,9 +478,9 @@ local defineLinkerTask = function(self, is_shared, lib_filter)
     --             On Windows this outputs the pdb for 
     --             the linked thing.
     params.debug_info = true
-	  if sys.cfg.asan then
-      params.address_sanitizer = true
-    end
+	  if sys.cfg.asan and not self.proj.no_asan then
+		  params.address_sanitizer = true
+		end
   end 
 
   local cmd = build.cmd.Exe.new(params)

@@ -113,11 +113,11 @@ b8 Engine::init()
   start_time = TimePoint::now();
 
   @initSystem(eventbus.broadcast.init(),         broadcast event bus);
+  @initSystem(input.init(*this),                 input);
   @initSystem(Window::initializeBackend(),       window backend);
-  @initSystem(window.init("ecs"_str),            window);
+  @initSystem(window.init("ecs"_str,input),      window);
   @initSystem(renderer.init(*this),              renderer);
   @initSystem(rsrcmgr.init(&mem::stl_allocator), resource mgr);
-  @initSystem(input.init(*this),                 input);
   @initSystem(ui.init(*this),                    ui);
   @initSystem(gamemgr.init(this),                gamemgr);
   @initSystem(source_data_file_reg.init(),       source data file reg);
