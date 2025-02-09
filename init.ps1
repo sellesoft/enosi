@@ -28,6 +28,8 @@ cmd.exe /c "msvcbuild.bat"
 
 cd ../../../
 
+md bin -ea 0 | Out-Null
+
 md luajit/build/lib -ea 0 | Out-Null
 md luajit/build/include/luajit -ea 0 | Out-Null
 md luajit/build/obj -ea 0 | Out-Null
