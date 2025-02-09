@@ -34,6 +34,10 @@ EXPORT_DYNAMIC
 int lua__canonicalizePath(lua_State* L);
 EXPORT_DYNAMIC
 int lua__glob(lua_State* L);
+EXPORT_DYNAMIC
+int lua__getEnvVar(lua_State* L);
+EXPORT_DYNAMIC
+int lua__setEnvVar(lua_State* L);
 }
 
 #undef stdout
@@ -68,6 +72,8 @@ b8 Lake::init(const char** argv, int argc, mem::Allocator* allocator)
   addGlobalCFunc(lua__cwd);
   addGlobalCFunc(lua__canonicalizePath);
   addGlobalCFunc(lua__glob);
+  addGlobalCFunc(lua__getEnvVar);
+  addGlobalCFunc(lua__setEnvVar);
 
 #undef addGlobalCFunc
 
@@ -913,6 +919,45 @@ u64 lua__modtime(String path)
 {
   TimePoint modtime = fs::Path::modtime(path);
   return ((modtime - TimePoint{}).toMilliseconds());
+}
+
+/* ----------------------------------------------------------------------------
+ */
+int lua__getEnvVar(lua_State* L)
+{
+	auto lua = LuaState::fromExistingState(L);
+	if (!lua.isstring(1))
+		return ERROR("lua__getEnvVar expects a string as first argument\n");
+
+	String var = lua.tostring(1);
+
+	s32 bytes_needed = platform::getEnvVar(var, nil);
+
+  auto buffer = Bytes::from(
+      (u8*)mem::stl_allocator.allocate(bytes_needed), bytes_needed);
+
+  s32 bytes_written = platform::getEnvVar(var, buffer);
+
+	lua.pushstring(String::from(buffer));
+
+  mem::stl_allocator.free(buffer.ptr);
+
+	return 1;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+int lua__setEnvVar(lua_State* L)
+{
+	auto lua = LuaState::fromExistingState(L);
+	String name = lua.tostring(1);
+	String val = lua.tostring(2);
+
+  if (!platform::setEnvVar(name, val))
+	  return 0;
+
+  lua.pushboolean(true);
+  return 1;
 }
 
 }

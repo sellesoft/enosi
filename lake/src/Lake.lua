@@ -387,6 +387,27 @@ end
 
 -- * --------------------------------------------------------------------------
 
+lake.getEnvVar = function(name)
+  if not name or type(name) ~= "string" then
+    error("getEnvVar expects a string")
+  end
+  return lua__getEnvVar(name)
+end
+
+-- * --------------------------------------------------------------------------
+
+lake.setEnvVar = function(name, value)
+  if not name or type(name) ~= "string" then
+    error("setEnvVar expects a string as its first argument")
+  end
+  if value and type(value) ~= "string" then
+    error("setEnvVar expects a string for its second argument")
+  end
+  return lua__setEnvVar(name, value)
+end
+
+-- * --------------------------------------------------------------------------
+
 --- Executes the program referred to by the first parameter
 --- and passes any following arguments as cli args.
 ---
