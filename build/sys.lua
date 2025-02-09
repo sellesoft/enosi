@@ -7,6 +7,7 @@ local log = require "Logger" ("build.sys", Verbosity.Notice)
 local helpers = require "build.helpers"
 local List = require "List"
 
+
 -- Loaded in run(), so can only be used inside of functions here.
 local Project
 
@@ -35,6 +36,16 @@ end
 sys.root = lake.cwd()
 package.path = package.path..";"..sys.root.."/?.lua"
 
+-- Prepend our standard directories for tools to PATH.
+local win_root = sys.root:gsub("/", "\\")
+local PATH = 
+  win_root.."\\bin;"..
+	win_root.."\\llvm\\llvm_build\\Release\\Release\\bin;"..
+  lake.getEnvVar("PATH")
+if not lake.setEnvVar("PATH", PATH) then
+  error("failed to set PATH")
+end
+           
 sys.os = lake.os()
 
 sys.Error = helpers.enum(
