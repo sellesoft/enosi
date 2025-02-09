@@ -8,6 +8,7 @@
 #define _iro_Slice_h
 
 #include "../Common.h"
+#include "../traits/Nil.h"
 #include "assert.h"
 
 namespace iro
@@ -41,5 +42,12 @@ struct Slice
 typedef Slice<u8> Bytes;
 
 }
+
+template<typename T>
+struct NilValue<iro::Slice<T>>
+{
+  constexpr static const iro::Slice<T> Value = {nullptr};
+  inline static b8 isNil(const iro::Slice<T>& x) { return x.ptr == nullptr; }
+};
 
 #endif // _iro_slice_h
