@@ -1657,6 +1657,43 @@ b8 touchFile(String path)
 
 /* ----------------------------------------------------------------------------
  */
+s32 getEnvVar(String name, Bytes buffer)
+{
+	DWORD bytes_needed = GetEnvironmentVariable((LPCSTR)name.ptr, NULL, 0);
+
+	if (bytes_needed == 0)
+	{
+		if (GetLastError() == ERROR_ENVVAR_NOT_FOUND)
+      return -1;
+    return ERROR_WIN32("failed to get environment variable");
+	}
+
+  if (isnil(buffer))
+    return bytes_needed;
+
+	if (buffer.len < bytes_needed)
+	{
+		ERROR("provided buffer is not large enough to store env var value\n");
+		return -1;
+	}
+
+  if (0 == GetEnvironmentVariable((LPCSTR)name.ptr, (LPSTR)buffer.ptr, buffer.len))
+    return ERROR_WIN32("failed to get environment variable");
+
+  return s32(bytes_needed)-1;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 setEnvVar(String name, String value)
+{
+  if (!SetEnvironmentVariable((LPCSTR)name.ptr, (LPCSTR)value.ptr))
+    return ERROR_WIN32("failed to set envvar '", name, "' to '", value, "'");
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 isRunningUnderDebugger()
 {
   return IsDebuggerPresent();

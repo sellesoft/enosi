@@ -285,6 +285,14 @@ b8 touchFile(String path);
 b8 openptty();
 
 /* ----------------------------------------------------------------------------
+ */
+s32 getEnvVar(String name, Bytes buffer);
+
+/* ----------------------------------------------------------------------------
+ */
+b8 setEnvVar(String name, String value);
+
+/* ----------------------------------------------------------------------------
  *  Check if the process is running under a debugger.
  */
 b8 isRunningUnderDebugger();
