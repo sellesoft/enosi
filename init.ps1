@@ -11,12 +11,12 @@ if ($installationPath -and (test-path "$installationPath\Common7\Tools\vsdevcmd.
   }
 }
 
-echo "making sure submodules are initialized..."
+echo "making sure luajit submodule is initialized..."
 
-git submodule update --init --recursive
+git submodule update --init luajit
 if ($LASTEXITCODE -ne 0) 
 {
-	echo "initializing submodules failed!"
+	echo "initializing luajit submodule failed!"
 	Exit 1
 }
 
@@ -45,6 +45,22 @@ cp luajit/src/src/luaconf.h -Destination luajit/build/include/luajit/luaconf.h
 # 'Install' luajit to our standard bin folder.
 cp luajit/src/src/luajit.exe -Destination bin
 cp luajit/src/src/lua51.dll -Destination bin
+
+if (!(Test-Path bin/client.exe))
+{
+  echo "retrieving asset server client executable..."
+  curl 15.204.247.107:3000/get_client?platform=windows -o bin/client.exe
+}
+
+if (!(Test-Path llvm/llvm_build))
+{
+  echo "downloading llvm from asset server..."
+  echo "(this might take a minute...)"
+  & "$PSScriptRoot\web\download_file.ps1" llvm.zip llvm.zip
+  echo "unzipping llvm..."
+  tar -xf llvm.zip
+  rm llvm.zip
+}
 
 md tmp
 echo "\n\n"
