@@ -6,7 +6,6 @@ $ local Schema = require "resource.Schema"
 #include "iro/Unicode.h"
 #include "iro/containers/Array.h"
 #include "iro/containers/Slice.h"
-
 #include "math/vec.h"
 
 using namespace iro;
@@ -17,6 +16,7 @@ struct SourceData;
  */
 enum class BlockKind
 {
+  Empty,
   Wall,
   Floor,
 };

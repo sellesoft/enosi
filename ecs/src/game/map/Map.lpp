@@ -1,6 +1,7 @@
 $ local cmn = require "common"
 
 @@lpp.import "game/map/Map.lh"
+@@lpp.import "game/map/Map.schema.lh"
 @@lpp.import "game/GameMgr.lh"
 @@lpp.import "game/EntityLoader.lh"
 @@lpp.import "game/Spawner.comp.lh"

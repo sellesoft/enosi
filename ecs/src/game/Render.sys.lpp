@@ -1,12 +1,13 @@
 $ require "common"
 
-@@lpp.import "game/Render.sys.lh"
-@@lpp.import "game/GameMgr.lh"
-@@lpp.import "ui/UI.lh"
-@@lpp.import "graphics/Renderer.lh"
 @@lpp.import "Engine.lh"
+@@lpp.import "game/GameMgr.lh"
+@@lpp.import "game/map/Map.schema.lh"
+@@lpp.import "game/Render.sys.lh"
 @@lpp.import "game/Sprite.comp.lh"
 @@lpp.import "game/Transform.comp.lh"
+@@lpp.import "graphics/Renderer.lh"
+@@lpp.import "ui/UI.lh"
 
 #include "iro/Logger.h"
 

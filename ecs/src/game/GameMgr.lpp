@@ -1,14 +1,14 @@
 $ local cmn = require "common"
 
-@@lpp.import "game/GameMgr.lh"
-
 @@lpp.import "Engine.lh"
-@@lpp.import "game/Transform.comp.lh"
-@@lpp.import "game/Sprite.comp.lh"
+@@lpp.import "game/GameMgr.lh"
+@@lpp.import "game/map/Map.schema.lh"
 @@lpp.import "game/Movement.comp.lh"
-@@lpp.import "resource/SourceDataParser.lh"
-@@lpp.import "resource/SourceDataFile.lh"
+@@lpp.import "game/Sprite.comp.lh"
+@@lpp.import "game/Transform.comp.lh"
 @@lpp.import "resource/Packing.lh"
+@@lpp.import "resource/SourceDataFile.lh"
+@@lpp.import "resource/SourceDataParser.lh"
 
 #include "iro/Logger.h"
 
