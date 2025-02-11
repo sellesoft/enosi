@@ -58,8 +58,14 @@ local execBuildCmd = function(args)
   return os.execute(cmd)
 end
 
-writeSeparator()
 
+-- NOTE(sushi) disabling for now as I don't really think this is important
+--             anymore and we also already download stuff in the platform 
+--             wrapper script anyways and I don't feel like moving this 
+--             out to there.
+-- TODO(sushi) decide if we should completely remove this or reuse it later.
+if false then
+writeSeparator()
 io.write
 [[
 Throughout this script we will try to download things.
@@ -84,16 +90,19 @@ Otherwise to run normally, use 'y'.
 'n' - Cancel running the script.
 
 ]]
-
-local response = getResponse()
-
-local mode = "normal"
-if response == "a" then
-  mode = "ignore"
-elseif response ~= "y" then
-  io.write "Goodbye!\n"
-  os.exit(0)
 end
+
+-- local response = getResponse()
+-- 
+-- local mode = "normal"
+-- if response == "a" then
+--   mode = "ignore"
+-- elseif response ~= "y" then
+--   io.write "Goodbye!\n"
+--   os.exit(0)
+-- end
+ 
+local mode = "ignore"
 
 local platform = arg[1]
 
@@ -150,14 +159,22 @@ end
 
 io.write("Compiling lfs...\n")
 
-if 0 ~= exec("cd tmp/luafilesystem-1_8_0 && ",
-   "clang -shared src/lfs.c ",
-   "-o ../lfs.so ",
-   "-I../../luajit/src/src ", 
-   "-L../../luajit/src/src ",
-   "-D_CRT_SECURE_NO_WARNINGS ",
-   "-lluajit ",
-   "-llua51 ") then
+local lfscmd = 
+   "cd tmp/luafilesystem-1_8_0 && "..
+   "clang -shared src/lfs.c "..
+   "-o ../lfs.so "..
+   "-I../../luajit/src/src "..
+   "-L../../luajit/src/src "..
+   "-D_CRT_SECURE_NO_WARNINGS "..
+   "-lluajit "
+
+if platform == "windows" then
+  lfscmd = lfscmd.."-llua51"
+else
+  lfscmd = lfscmd.."-fPIC"
+end
+
+if 0 ~= exec(lfscmd) then
   error "failed to compile lua filesystem!"
 end
 
@@ -267,9 +284,9 @@ do
   }
 	
   if platform == "linux" then
-	cpp_params.defines:push { "IRO_LINUX", "1" }
+    cpp_params.defines:push { "IRO_LINUX", "1" }
   else
-	cpp_params.defines:push { "IRO_WIN32", "1" }
+    cpp_params.defines:push { "IRO_WIN32", "1" }
   end
 
   cpp_params.include_dirs = List
@@ -279,6 +296,10 @@ do
   cpp_params.opt = "none"
   cpp_params.debug_info = true
   cpp_params.address_sanitizer = address_sanitizer
+
+  if platform == "windows" then
+    cpp_params.static_msvcrt = true
+  end
 
   local cpp_cmd = build_cmds.CppObj.new(cpp_params)
 
@@ -329,9 +350,9 @@ do
   }
 
   if platform == "linux" then
-	cpp_params.defines:push { "IRO_LINUX", "1" }
+    cpp_params.defines:push { "IRO_LINUX", "1" }
   else
-	cpp_params.defines:push { "IRO_WIN32", "1" }
+    cpp_params.defines:push { "IRO_WIN32", "1" }
   end
 
   cpp_params.include_dirs = List
@@ -360,15 +381,25 @@ do
   {
     "../luajit/build/lib",
   }
-  exe_params.static_libs = List
-  {
-    "luajit",
-    "lua51"
-  }
-  exe_params.shared_libs = List
-  {
-    "ws2_32"
-  }
+  if platform == "windows" then
+    exe_params.static_libs = List
+    {
+      "luajit",
+      "lua51"
+    }
+    exe_params.shared_libs = List
+    {
+      "ws2_32",
+      "version",
+      "ntdll"
+    }
+    exe_params.static_msvcrt = true
+  else
+    exe_params.static_libs = List
+    {
+      "luajit"
+    }
+  end 
   exe_params.debug_info = true
   exe_params.address_sanitizer = address_sanitizer
 
@@ -425,9 +456,9 @@ do
   }
 
   if platform == "linux" then
-	cpp_params.defines:push { "IRO_LINUX", "1" }
+    cpp_params.defines:push { "IRO_LINUX", "1" }
   else
-	cpp_params.defines:push { "IRO_WIN32", "1" }
+    cpp_params.defines:push { "IRO_WIN32", "1" }
   end
 
   cpp_params.include_dirs = List
@@ -448,15 +479,25 @@ do
   {
     "../luajit/build/lib",
   }
-  exe_params.static_libs = List
-  {
-    "luajit",
-    "lua51"
-  }
-  exe_params.shared_libs = List
-  {
-    "ws2_32"
-  }
+  if platform == "windows" then
+    exe_params.static_libs = List
+    {
+      "luajit",
+      "lua51"
+    }
+    exe_params.shared_libs = List
+    {
+      "ws2_32",
+      "version",
+      "ntdll"
+    }
+    exe_params.static_msvcrt = true
+  else
+    exe_params.static_libs = List
+    {
+      "luajit"
+    }
+  end 
   exe_params.address_sanitizer = address_sanitizer
 
   local exe_cmd = build_cmds.Exe.new(exe_params)
