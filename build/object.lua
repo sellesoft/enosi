@@ -461,6 +461,10 @@ local defineLinkerTask = function(self, is_shared, lib_filter)
   end)
 
   params.shared_libs = List{}
+  if sys.os == "windows" then
+    params.shared_libs:push "version"
+    params.shared_libs:push "ntdll"
+  end
   self.proj:gatherBuildObjects(object.SharedLib, function(bobj)
     if bobj.name and lib_filter and lib_filter[bobj.name] then
       return
