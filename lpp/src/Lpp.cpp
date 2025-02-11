@@ -509,7 +509,7 @@ int lua__processFile(lua_State* L)
   if (!path.makeAbsolute())
   {
     FATAL("failed to make path ", path, " absolute\n");
-    _exit(1);
+    platform::exit(1);
   }
 
   if (!lua.require("Lpp"_str))
@@ -570,7 +570,7 @@ int lua__getFileFullPathIfExists(lua_State* L)
     if (!path.makeAbsolute())
     {
       FATAL("failed to make path ", path, "absolute!\n");
-      _exit(1);
+      platform::exit(1);
     }
     lua.pushstring(path.buffer.asStr());
     return 1;
