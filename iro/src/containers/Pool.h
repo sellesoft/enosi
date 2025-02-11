@@ -147,6 +147,16 @@ private:
   }
 };
 
+/* ============================================================================
+ *  Pool that initializes statically. This should be moved elsewhere to be 
+ *  reusable.
+ */
+template<typename T>
+struct StaticPool : public Pool<T>
+{
+  StaticPool() { Pool<T>::init(); }
+};
+
 }
 
 template<typename T>

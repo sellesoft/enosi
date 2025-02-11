@@ -293,6 +293,11 @@ s32 getEnvVar(String name, Bytes buffer);
 b8 setEnvVar(String name, String value);
 
 /* ----------------------------------------------------------------------------
+ */
+[[noreturn]]
+void exit(int status);
+
+/* ----------------------------------------------------------------------------
  *  Check if the process is running under a debugger.
  */
 b8 isRunningUnderDebugger();

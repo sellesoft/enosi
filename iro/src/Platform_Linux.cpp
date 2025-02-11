@@ -5,6 +5,7 @@
 #include "Logger.h"
 #include "Unicode.h"
 #include "containers/StackArray.h"
+#include "containers/Pool.h"
 
 #include "pty.h"
 #include "utmp.h"
@@ -466,30 +467,33 @@ b8 makeDir(String path, b8 make_parents)
   return true;
 }
 
+/* ============================================================================
+ */
+struct ProcessLinux
+{
+  // TODO(sushi) considering this is all we store here and all we need to store
+  //             on win32 is a HANDLE we should probably just store it on 
+  //             the Process and avoid this static pool stuff.
+  pid_t pid;
+  int stdout;
+};
+
+using ProcessPool = StaticPool<ProcessLinux>;
+static ProcessPool g_process_pool;
+
 /* ----------------------------------------------------------------------------
  */
 b8 processSpawn(
     Process::Handle* out_handle, 
     String file, 
     Slice<String> args, 
-    Process::Stream streams[3], 
     String cwd)
 {
   assert(out_handle);
 
-  struct Info
-  {
-    fs::File* f = nullptr;
-    b8 non_blocking = false;
-    int pipes[2] = {};
-  };
-
-  Info infos[3] = 
-  {
-    {streams[0].file, streams[0].non_blocking},
-    {streams[1].file, streams[1].non_blocking},
-    {streams[2].file, streams[2].non_blocking},
-  };
+  ProcessLinux* p_proc = g_process_pool.add();
+  if (p_proc == nullptr)
+    return ERROR("failed to allocate a ProcessLinux\n");
 
   // TODO(sushi) replace this with some container thats a stack buffer 
   //             up to a point then dynamically allocates
@@ -503,22 +507,10 @@ b8 processSpawn(
 
   defer { argsc.destroy(); };
 
-  for (s32 i = 0; i < 3; i++)
-  {
-    if (!infos[i].f)
-      continue;
+  int pipes[2];
 
-    if (notnil(*infos[i].f))
-    {
-      ERROR("stream ", i, ": file given to processSpawn is not nil! Given "
-          "files cannot already own resources.\n");
-      return false;
-    }
-
-    if (-1 == pipe(infos[i].pipes))
-      return reportErrno(
-          "failed to open pipes for stream ", i, " for process '", file);
-  }
+  if (-1 == pipe(pipes))
+    return reportErrno("failed to open pipes for process ", file);
 
   if (pid_t pid = fork())
   {
@@ -527,38 +519,18 @@ b8 processSpawn(
     if (pid == -1)
       return reportErrno("failed to fork process");
 
-    // close uneeded pipes
-    for (s32 i = 0; i < 3; i++)
-    {
-      if (!infos[i].f)
-        continue;
+    close(pipes[1]);
 
-      fs::OpenFlags flags = {};
+    int oldflags = fcntl(pipes[0], F_GETFL, 0);
+    if (-1 == fcntl(
+          pipes[0], 
+          F_SETFL, 
+          oldflags | O_NONBLOCK))
+      return reportErrno("failed to set child pipe as non-blocking");
 
-      if (infos[i].non_blocking)
-        flags.set(fs::OpenFlag::NoBlock);
-
-      if (i == 0)
-      {
-        // close reading end of stdin pipe and set stream file
-        // to write to it 
-        close(infos[i].pipes[0]);
-        // int fd = dup();
-        flags.set(fs::OpenFlag::Write);
-        *infos[i].f = fs::File::fromFileDescriptor(infos[i].pipes[1], flags);
-      }
-      else
-      {
-        // close writing end of stdout/err pipes and set stream
-        // files to read from them
-        close(infos[i].pipes[1]);
-        // int fd = dup();
-        flags.set(fs::OpenFlag::Read);
-        *infos[i].f = fs::File::fromFileDescriptor(infos[i].pipes[0], flags);
-      }
-    }
-
-    *out_handle = (void*)(s64)pid;
+    p_proc->pid = pid;
+    p_proc->stdout = pipes[0];
+    *out_handle = p_proc;
   }
   else
   {
@@ -572,26 +544,9 @@ b8 processSpawn(
       chdir(cwd);
     }
 
-    for (s32 i = 0; i < 3; i++)
-    {
-      if (!infos[i].f)
-        continue;
-
-      if (i == 0)
-      {
-        // close writing end of stdin pipe
-        close(infos[i].pipes[1]);
-        // replace our stdin fd with the one created by the parent
-        dup2(infos[i].pipes[0], 0);
-      }
-      else
-      {
-        // close reading end of stdout/err pipes
-        close(infos[i].pipes[0]);
-        // replace our stdout/err pipes with the ones created by the parent
-        dup2(infos[i].pipes[1], i);
-      }
-    }
+    close(pipes[0]);
+    dup2(pipes[1], 1);
+    dup2(pipes[1], 2);
 
     if (-1 == execvp(argsc.arr[0], argsc.arr))
     {
@@ -606,138 +561,101 @@ b8 processSpawn(
 
 /* ----------------------------------------------------------------------------
  */
-b8 stopProcess(Process::Handle handle, s32 exit_code)
+b8 processHasOutput(Process::Handle h_process)
 {
-  assert(handle);
-  
-  if (processCheck(handle, nullptr) != ProcessCheckResult::StillRunning)
-    return false;
-  
-  if (-1 == kill((pid_t)(s64)handle, SIGKILL))
-    return reportErrno(
-      "failed to stop process with handle '", handle, "'");
-  
-  return true;
+  auto* p_proc = (ProcessLinux*)h_process;
+  if (p_proc == nullptr)
+    return ERROR("processHasOutput passed a null process handle\n");
+
+  struct pollfd pfd = {};
+  pfd.fd = (s64)p_proc->stdout;
+
+  pfd.events = POLLIN;
+
+  if (-1 == poll(&pfd, 1, 0))
+    return reportErrno("failed to poll process with handle ", h_process);
+
+  if (pfd.revents & POLLIN)
+    return true;
+
+  return false;
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 processSpawnPTY(
-    Process::Handle* out_handle,
-    String file,
-    Slice<String> args,
-    fs::File* stream)
+u64 processRead(Process::Handle h_process, Bytes buffer)
 {
-  int master, slave;
+  auto* p_proc = (ProcessLinux*)h_process;
+  if (p_proc == nullptr)
+    return ERROR("processRead passed a null process handle\n");
 
-  if (-1 == openpty(&master, &slave, nullptr, nullptr, nullptr))
-    return reportErrno("failed to open pty for file '", file, "'");
+  int r = ::read(p_proc->stdout, buffer.ptr, buffer.len);
 
-  auto argsc = Array<char*>::create(args.len+1);
-  argsc.push((char*)file.ptr);
-  for (s32 i = 0; i < args.len; ++i)
-    argsc.push((char*)args[i].ptr);
-  argsc.push(nullptr);
-  defer { argsc.destroy(); };
-
-  if (pid_t pid = fork())
+  if (r == -1)
   {
-    // parent branch
-    if (pid == -1)
-      return reportErrno("failed to fork process");
-
-    close(slave);
-
-    *stream =
-      fs::File::fromFileDescriptor(
-        master,
-          fs::OpenFlag::Write
-        | fs::OpenFlag::Read);
-
-    *out_handle = (void*)(s64)pid;
-    stream->is_pty = true;
-  }
-  else
-  {
-    // child branch
-    close(master);
-
-    if (login_tty(slave))
-    {
-      FATAL("login_tty() failed\n");
-      exit(1);
-    }
-
-    if (-1 == execvp(argsc.arr[0], argsc.arr))
-    {
-      reportErrno(
-        "execvp failed to replace child process with file '", file, "'");
-      exit(1);
-    }
+    if (errno == EAGAIN)
+      r = errno = 0;
+    else
+      return reportErrno("failed to read from process\n");
   }
 
-  return true;
+  return r;
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 stopProcessPTY(Process::Handle handle, s32 exit_code)
+b8 processHasExited(Process::Handle h_process, s32* out_exit_code)
 {
-  assert(handle);
-  
-  if (processCheck(handle, nullptr) != ProcessCheckResult::StillRunning)
-    return false;
-  
-  if (-1 == kill((pid_t)(s64)handle, SIGKILL))
-    return reportErrno(
-      "failed to stop process with handle '", handle, "'");
-  
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-ProcessCheckResult processCheck(Process::Handle handle, s32* out_exit_code)
-{
-  assert(handle);
+  auto* p_proc = (ProcessLinux*)h_process;
+  if (p_proc == nullptr)
+    return ERROR("processHasExited passed a null process handle\n");
 
   int status = 0;
-  int r = waitpid((s64)handle, &status, WNOHANG);
+  int r = waitpid(p_proc->pid, &status, WNOHANG);
   if (-1 == r)
   {
+    if (errno == ECHILD)
+    {
+      // The child mist have exited.
+      errno = 0;
+      return true;
+    }
     reportErrno(
-      "waitpid failed on process with handle ", handle);
-    return ProcessCheckResult::Error;
+      "waitpid failed on process with handle ", h_process);
+    return true;
   }
 
   if (r)
   {
-#if 0
-#define x(name) STRINGIZE(name), ": ", name(status), "\n"
-    NOTICE("\n",
-      x(WIFEXITED),
-      x(WEXITSTATUS),
-      x(WIFSIGNALED),
-      x(WTERMSIG),
-      x(WCOREDUMP),
-      x(WIFSTOPPED),
-      x(WSTOPSIG),
-      x(WIFCONTINUED));
-#undef x
-#endif
-
     if (WIFEXITED(status))
     {
       if (out_exit_code)
         *out_exit_code = WEXITSTATUS(status);
-      return ProcessCheckResult::Exited;
+      return true;
     }
   }
 
-  return ProcessCheckResult::StillRunning;
+  return false;
 }
 
+/* ----------------------------------------------------------------------------
+ */
+b8 processClose(Process::Handle h_process)
+{
+  auto* p_proc = (ProcessLinux*)h_process;
+  if (p_proc == nullptr)
+    return ERROR("processClose passed a null process handle\n");
+  
+  if (!processHasExited(h_process, nullptr))
+  {
+    if (-1 == kill(p_proc->pid, SIGKILL))
+      return reportErrno("failed to close process ", h_process);
+  }
 
+  g_process_pool.remove(p_proc);
+
+  return true;
+}
 
 /* ----------------------------------------------------------------------------
  */
@@ -866,6 +784,44 @@ b8 touchFile(String path)
     return reportErrno("failed to set modtime of path '", path, "'"); 
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+s32 getEnvVar(String name, Bytes buffer)
+{
+  char* val = getenv((char*)name.ptr);
+  if (val == nullptr)
+    return -1;
+
+  s32 bytes_needed = strlen(val);
+  if (isnil(buffer))
+    return bytes_needed;
+
+  if (buffer.len < bytes_needed)
+  {
+    ERROR("provided buffer is not large enough to store env var value\n");
+    return -1;
+  }
+
+  mem::copy(buffer.ptr, val, bytes_needed+1);
+  return bytes_needed;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 setEnvVar(String name, String value)
+{
+  if (-1 == setenv((char*)name.ptr, (char*)value.ptr, true))
+    return reportErrno("failed to set envvar ", name);
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void exit(int status)
+{
+  ::exit(status);
 }
 
 /* ----------------------------------------------------------------------------

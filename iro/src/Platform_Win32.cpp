@@ -1123,15 +1123,6 @@ struct ProcessWin32
   HANDLE h_stdout = INVALID_HANDLE_VALUE;
 };
 
-/* ============================================================================
- *  Pool that initializes statically. This should be moved elsewhere to be 
- *  reusable.
- */
-template<typename T>
-struct StaticPool : public Pool<T>
-{
-  StaticPool() { Pool<T>::init(); }
-};
 
 // TODO(sushi) make thread safe.
 using ProcessPool = StaticPool<ProcessWin32>;
@@ -1690,6 +1681,13 @@ b8 setEnvVar(String name, String value)
   if (!SetEnvironmentVariable((LPCSTR)name.ptr, (LPCSTR)value.ptr))
     return ERROR_WIN32("failed to set envvar '", name, "' to '", value, "'");
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void exit(int status)
+{
+  _exit(status);
 }
 
 /* ----------------------------------------------------------------------------
