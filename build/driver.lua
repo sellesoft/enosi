@@ -61,9 +61,13 @@ local createBuildCmds = function(proj)
       params.opt = "speed"
     end
 
-	if sys.cfg.mode == "debug" and sys.cfg.asan and not proj.no_asan then
-	  params.address_sanitizer = true
-	end
+    if sys.cfg.mode == "debug" and sys.cfg.asan and not proj.no_asan then
+      params.address_sanitizer = true
+    end
+
+    if sys.os == "linux" then
+      params.pic = true
+    end
 
     cmds[build.obj.CppObj] = build.cmds.CppObj.new(params)
 

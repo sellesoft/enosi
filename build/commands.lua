@@ -61,6 +61,8 @@ cmd.CppObj = Type.make()
 --- NOTE that if this is enabled for an object file, it must be enabled 
 ---      when linking it as well!
 ---@field address_sanitizer boolean
+--- Compile with a statically linked msvcrt.
+---@field static_msvcrt boolean
 
 ---@param params cmd.CppObj.Params
 ---@return cmd.CppObj
@@ -124,7 +126,7 @@ cmd.CppObj.getIOIndependentFlags = function(params)
       "-Wno-return-type-c-linkage",
       "-fmessage-length=80",
       "-fdiagnostics-absolute-paths",
-      "-fms-runtime-lib=static",
+      params.static_msvcrt and "-fms-runtime-lib=static",
       "-D_DISABLE_STRING_ANNOTATION",
       "-D_DISABLE_VECTOR_ANNOTATION")
       -- "-D_DLL",
@@ -352,6 +354,8 @@ cmd.Exe = Type:make()
 --- NOTE that if this is enabled, it must be enabled when compiling linked 
 ---      object files as well!
 ---@field address_sanitizer boolean
+--- Link with a static msvcrt.
+---@field static_msvcrt boolean
 
 ---@param params cmd.Exe.Params
 ---@return cmd.Exe
@@ -393,11 +397,7 @@ cmd.Exe.new = function(params)
       end),
       "-Wl,--end-group",
       "-Wl,-E",
-      "-fms-runtime-lib=static",
-      -- "-lmsvcrt",
-      -- "-lucrt",
-      "-lversion",
-      "-lntdll")
+      params.static_msvcrt and "-fms-runtime-lib=static")
       -- Tell the exe's dynamic linker to check the directory its in 
       -- for shared libraries.
       -- NOTE(sushi) this is disabled for now as I'm not actually using it 

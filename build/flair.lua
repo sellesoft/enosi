@@ -11,10 +11,10 @@ local flair = {}
 
 -- * --------------------------------------------------------------------------
 
-local reset = "\027[0m"
-local green = "\027[0;32m"
-local blue  = "\027[0;34m"
-local red   = "\027[0;31m"
+flair.reset = "\027[0m"
+flair.green = "\027[0;32m"
+flair.blue  = "\027[0;34m"
+flair.red   = "\027[0;31m"
 
 -- * --------------------------------------------------------------------------
 
@@ -25,7 +25,7 @@ end
 -- * --------------------------------------------------------------------------
 
 flair.writeSuccessOnlyOutput = function(output, time)
-  io.write(blue, rootRelativePath(output), reset)
+  io.write(flair.blue, rootRelativePath(output), flair.reset)
   if time then
     io.write(" ", time, "s")
   end
@@ -36,9 +36,9 @@ end
 
 flair.writeSuccessInputToOutput = function(input, output, time)
   io.write(
-    green, rootRelativePath(input), reset, 
+    flair.green, rootRelativePath(input), flair.reset, 
     " -> ", 
-    blue, rootRelativePath(output), reset)
+    flair.blue, rootRelativePath(output), flair.reset)
   if time then
     io.write(" ", time, "s")
   end
@@ -48,8 +48,8 @@ end
 -- * --------------------------------------------------------------------------
 
 flair.writeFailure = function(output)
-  io.write(red, "failed to build ", blue, rootRelativePath(output), reset, 
-           "\n")
+  io.write(flair.red, "failed to build ", flair.blue, 
+           rootRelativePath(output), flair.reset, "\n")
 end
 
 return flair

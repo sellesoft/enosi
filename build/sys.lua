@@ -7,6 +7,17 @@ local log = require "Logger" ("build.sys", Verbosity.Notice)
 local helpers = require "build.helpers"
 local List = require "List"
 
+local build_start = lake.getMonotonicClock()
+lake.registerFinalCallback(function(success)
+  local flair = require "build.flair"
+  io.write("build ")
+  if success then
+    io.write(flair.green, "succeeded ", flair.reset)
+  else
+    io.write(flair.red, "failed ", flair.reset)
+  end
+  io.write("in ", (lake.getMonotonicClock() - build_start)/1000000, "s\n")
+end)
 
 -- Loaded in run(), so can only be used inside of functions here.
 local Project
