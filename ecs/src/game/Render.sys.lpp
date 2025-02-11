@@ -69,19 +69,19 @@ b8 RenderSys::update(GameMgr& gamemgr)
   u32 layer_idx = 0;
   for (Layer& layer : map.layers)
   {
-    for (const Block& block : layer.blocks)
+    for (const Tile& tile : layer.tiles)
     {
-      if (block.def == nullptr)
+      if (tile.def == nullptr)
         continue;
 
-      const MapBlockDef& def = *block.def;
+      const MapTileDef& def = *tile.def;
       
       Color color;
 
       switch (def.kind)
       {
-      case BlockKind::Wall: color = 0x00ff00ff; break;
-      case BlockKind::Floor: color = 0x0000ffff; break;
+      case TileKind::Wall: color = 0x00ff00ff; break;
+      case TileKind::Floor: color = 0x0000ffff; break;
       }
 
       color *= 1.f - layer_idx * 0.25f;

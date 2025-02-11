@@ -13,7 +13,6 @@ using namespace iro;
 
 @@lpp.import "game/EntityId.lh"
 
-struct CompPools;
 
 /* ============================================================================
  */
@@ -38,62 +37,7 @@ struct Component
 
 DefineNilValue(Component, {0}, { return x.kind == 0; });
 
+/* ----------------------------------------------------------------------------
+ */
 template<typename T>
 u64 getComponentKind();
-
-template<typename T>
-struct ComponentIterState
-{
-  typedef SLinkedPool<T>::Node Node;
-
-  Node* node;
-
-  Node* operator++()
-  {
-    node = node->next;
-    return node;
-  }
-
-  b8 operator !=(const ComponentIterState<T>& rhs)
-  {
-    return node != rhs.node;
-  }
-
-  T* operator->()
-  {
-    return node->data;
-  }
-
-  T& operator *()
-  {
-    return *node->data;
-  }
-};
-
-/* ============================================================================
- */
-template<typename T>
-struct ComponentIter
-{
-  typedef SLinkedPool<T>::Node Node;
-  Node* start;
-
-  ComponentIterState<T> begin() { return ComponentIterState<T>{start}; }
-  ComponentIterState<T> end() { return ComponentIterState<T>{nullptr}; }
-};
-
-/* ============================================================================
- */
-struct ComponentMgr
-{
-  CompPools* pools;
-
-  b8 init();
-
-  template<typename T>
-  T* allocateComponent();
-
-  template<typename T>
-  ComponentIter<T> iterate();
-};
-

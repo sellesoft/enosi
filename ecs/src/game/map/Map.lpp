@@ -15,7 +15,7 @@ $ local cmn = require "common"
 
 /* ----------------------------------------------------------------------------
  */
-b8 Block::init(const MapBlockDef& def, u32 layer_idx, GameMgr& gamemgr)
+b8 Tile::init(const MapTileDef& def, u32 layer_idx, GameMgr& gamemgr)
 {
   EntityMgr& entmgr = gamemgr.entmgr;
 
@@ -39,15 +39,15 @@ b8 Layer::init(const MapLayerDef& def, u32 layer_idx, GameMgr& gamemgr)
 {
   this->def = &def;
 
-  if (!blocks.init())
+  if (!tiles.init())
     return ERROR("failed to initialize block array\n");
 
-  blocks.resize(def.size.x * def.size.y);
+  tiles.resize(def.size.x * def.size.y);
 
-  for (const MapBlockDef& block_def : def.blocks)
+  for (const MapTileDef& block_def : def.tiles)
   {
-    Block* block = 
-      blocks.arr + block_def.pos.x + block_def.pos.y * def.size.x;
+    Tile* block = 
+      tiles.arr + block_def.pos.x + block_def.pos.y * def.size.x;
 
     if (!block->init(block_def, layer_idx, gamemgr))
       return false;

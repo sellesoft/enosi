@@ -70,7 +70,7 @@ static int window_event_masks =
 
 /* ----------------------------------------------------------------------------
  */
-b8 Window::init(String title)
+b8 Window::init(String title, InputMgr& inputmgr)
 {
   Display* display = x11.display;
   int screen = x11.screen;
@@ -201,7 +201,7 @@ b8 Window::update(Engine& engine)
       {
         KeySym ks = XLookupKeysym(&event.xkey, 0);
         Key key = keysymToKey(ks);
-        raise<KeyPressed>(engine, {key});
+        engine.input.keys_real.set(key);
       }
       break;
 
@@ -209,7 +209,7 @@ b8 Window::update(Engine& engine)
       {
         KeySym ks = XLookupKeysym(&event.xkey, 0);
         Key key = keysymToKey(ks);
-        raise<KeyReleased>(engine, {key});
+        engine.input.keys_real.unset(key);
       } 
       break;
 
@@ -222,8 +222,8 @@ b8 Window::update(Engine& engine)
 $ local map = function(x, y)
         case $(x):
           (event.type == ButtonPress?
-            raise<MousePressed>(engine, {MouseButton::$(y)}) :
-            raise<MouseReleased>(engine,{MouseButton::$(y)}));
+            engine.input.mouse_real.set(MouseButton::$(y)) :
+            engine.input.mouse_real.unset(MouseButton::$(y)));
             break;
 $ end
         @map(Button1, Left)
@@ -231,8 +231,8 @@ $ end
         @map(Button3, Right)
 $ map = nil
 
-        case Button4: raise<MouseScroll>(engine, { 1.f}); break;
-        case Button5: raise<MouseScroll>(engine, {-1.f}); break;
+        case Button4: engine.input.scroll += 1.f; break;
+        case Button5: engine.input.scroll -= 1.f; break;
         default:
             WARN("unhandled button given by XButtonEvent: ", bev.button, 
                  "\n");
@@ -244,12 +244,8 @@ $ map = nil
     case MotionNotify:
       {
         XMotionEvent motion = event.xmotion;
-        raise<MouseMoved>(
-          engine, 
-          {
-            .window_pos = vec2f(motion.x, motion.y),
-            .screen_pos = vec2f(motion.x_root, motion.y_root)
-          });
+        engine.input.mouse.window = vec2f(motion.x, motion.y);
+        engine.input.mouse.screen = vec2f(motion.x_root, motion.y_root);
       }
       break;
 

@@ -14,7 +14,7 @@ struct SourceData;
 
 /* ============================================================================
  */
-enum class BlockKind
+enum class TileKind
 {
   Empty,
   Wall,
@@ -23,9 +23,9 @@ enum class BlockKind
 
 /* ============================================================================
  */
-struct MapBlockDef
+struct MapTileDef
 {
-  BlockKind kind;
+  TileKind kind;
   vec2i pos;
   Array<const SourceData*> entities;
 };
@@ -36,7 +36,7 @@ struct MapLayerDef
 {
   vec2i size;
   vec2i pos;
-  Array<MapBlockDef> blocks;
+  Array<MapTileDef> tiles;
 };
 
 /* ============================================================================

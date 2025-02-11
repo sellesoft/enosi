@@ -7,9 +7,10 @@ $ local buffer = require "string.buffer"
 #include "iro/Common.h"
 #include "iro/containers/LinkedPool.h"
 
-@@lpp.import "game/Entity.lh"
-@@lpp.import "game/IndexedPool.lh"
-@@lpp.import "game/Component.lh"
+@@lpp.import "Entity.lh"
+@@lpp.import "IndexedPool.lh"
+@@lpp.import "Component.lh"
+@@lpp.import "ComponentMgr.lh"
 
 /* ============================================================================
  */

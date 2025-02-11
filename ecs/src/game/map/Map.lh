@@ -13,11 +13,11 @@ struct MapLayerDef;
 
 /* ============================================================================
  */
-struct Block
+struct Tile
 {
-  const MapBlockDef* def = nullptr;
+  const MapTileDef* def = nullptr;
 
-  b8 init(const MapBlockDef& def, u32 layer_idx, GameMgr& gamemgr);
+  b8 init(const MapTileDef& def, u32 layer_idx, GameMgr& gamemgr);
   void deinit();
 };
 
@@ -27,7 +27,7 @@ struct Layer
 {
   const MapLayerDef* def = nullptr; 
 
-  Array<Block> blocks;
+  Array<Tile> tiles;
 
   b8 init(const MapLayerDef& def, u32 layer_idx, GameMgr& gamemgr);
   void deinit();
