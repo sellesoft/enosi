@@ -37,7 +37,8 @@ luajit.report.dir.lib
   filters = 
   {
     bobj.StaticLib "luajit",
-    bobj.StaticLib "lua51",
+    sys.os == "windows" and 
+      bobj.StaticLib "lua51",
   }
 }
 
