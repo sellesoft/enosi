@@ -1,5 +1,5 @@
 $ local cmn = require "common"
-$ local Schema = require "resource.Schema"
+$ local Schema = require "asset.Schema"
 $ local glob = require "Glob"
 $ local Processor = require "reflect.Processor"
 $ local ast = require "reflect.AST"
@@ -13,8 +13,8 @@ using namespace iro;
 
 @cmn.defFileLogger(packing, Info)
 
-@@lpp.import "resource/Packing.lh"
-@@lpp.import "resource/SourceData.lh"
+@@lpp.import "asset/Packing.lh"
+@@lpp.import "asset/SourceData.lh"
 
 $$$
 local imported = cmn.buffer.new()

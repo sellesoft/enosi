@@ -233,7 +233,7 @@ void TextState::checkFont(String name, UI* ui)
 
     DEBUG("item specifies font ", name, "\n");
 
-    font.track(Font::load(name, ui->eng->rsrcmgr, ui->eng->renderer));
+    font.track(Font::load(name, ui->eng->assetmgr, ui->eng->renderer));
 
     if (isnil(font))
     {

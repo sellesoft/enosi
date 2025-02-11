@@ -7,7 +7,7 @@ $ local ui = require "ui.UI"
 
 #include "iro/containers/AVL.h"
 
-@@lpp.import "resource/Font.lh"
+@@lpp.import "asset/Font.lh"
 
 struct AssetMgr;
 

@@ -1,0 +1,79 @@
+/* 
+ *  Manager for blobs of memory that need to be ref counted and garbage 
+ *  collected. 
+ *
+ *  Assets may be named, allowing us to reuse them as needed. But they can
+ *  also be anonymous. It is good practice, though, to try and consistently
+ *  name resources such that they may be reused!
+ */  
+
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+#include "iro/containers/AVL.h"
+#include "iro/containers/LinkedPool.h"
+#include "iro/fs/Path.h"
+#include "iro/memory/Allocator.h"
+#include "iro/memory/Bump.h"
+
+$ local cmn = require "common"
+$ local Ref = require "asset.Ref"
+
+@@lpp.import "Asset.lh"
+
+using namespace iro;
+
+/* ============================================================================
+ */
+struct AssetMgr
+{
+  typedef DLinkedPool<Asset> AssetPool;
+  typedef AVL<Asset, Asset::getHash> AssetMap;
+
+  typedef DList<Asset> AssetList;
+
+  AssetList list;
+  AssetMap map;
+
+  mem::Allocator* allocator;
+
+  b8 init(mem::Allocator* allocator);
+  void deinit();
+
+  // Allocates a block of memory as an Asset, returns a reference to it 
+  // and registers it with 'name'.
+  // This will assert if an Asset with the given name already exists, as 
+  // these functions are expected to be called when we know that the 
+  // wanted Asset doesn't already exist!
+  MovedAssetRef allocateAsset(u64 size, String name);
+
+  template<typename T>
+  MovedAssetRef allocateAsset(String name)
+  {
+    TypedAssetRef<T> ref = allocateAsset(sizeof(T), name);
+    new (ref.getData()) T;
+    
+    auto* asset = ref.getData();
+
+    asset->name = name.allocateCopy(&mem::stl_allocator);
+    asset->hash = name.hash();
+    asset->rc.addRef();
+    asset->rsrcmgr = this;
+
+    return ref.move();
+  }
+
+  // Attempts to find an asset from a given name and returns it.
+  MovedAssetRef findAsset(String name) const;
+
+  static b8 checkNeedsCompiled(String asset_path, String data_path);
+
+  String getAssetDir() const { return "assets"_str; }
+  String getDataDir() const { return "data"_str; }
+
+private:
+
+  // Only asset refs may unload a asset.
+  friend AssetRef;
+
+  void unloadAsset(Asset* asset);
+};

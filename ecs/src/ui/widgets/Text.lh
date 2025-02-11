@@ -6,7 +6,7 @@ $ local cmn = require "common"
 $ local ui = require "ui.UI"
 
 @@lpp.import "ui/Item.lh"
-@@lpp.import "resource/Font.lh"
+@@lpp.import "asset/Font.lh"
 
 #include "iro/containers/SmallArray.h"
 #include "iro/Pair.h"

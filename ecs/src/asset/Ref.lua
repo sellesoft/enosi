@@ -92,7 +92,7 @@ struct $(R)
 
   void release();
 
-  void track(MovedResourceRef&& ref)
+  void track($(M)&& ref)
   {
     assert(ptr == nullptr);
     ptr = ref.ptr;

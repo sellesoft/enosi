@@ -1,0 +1,85 @@
+/*
+ *  An Asset is any information loaded from disk, with the exception of 
+ *  SourceDataFiles.
+ *
+ *  TODO(sushi) rework the ref counting RAII stuff we're doing as its kinda
+ *              annoying and its implementation is extremely complex.
+ */
+
+$ local cmn = require "common"
+$ local Ref = require "asset.Ref"
+
+@@lpp.import "RefCounting.lh"
+
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+
+using namespace iro;
+
+struct AssetMgr;
+
+/* ============================================================================
+ *  The base of all Assets, including an interface that allows an Asset 
+ *  to define behavior on load, reload, and unload.
+ */
+struct Asset 
+{
+  u64 hash = 0;
+  RefCounter rc = {};
+
+  static u64 getHash(const Asset* asset) { return asset->hash; }
+
+  // Note that this String is owned by this Asset, so only point to it 
+  // if you know that pointer will be used only during the lifetime of the 
+  // Asset it was retrieved from.
+  String name;
+
+  virtual void onLoad() {}
+  virtual void onReload() {}
+  virtual void onUnload() {}
+
+  // A Asset's position in the linked pool. This kinda sucks really bad.
+  // TODO(sushi) manually implement a better linked list solution here.
+  void* node;
+
+  AssetMgr* rsrcmgr;
+
+  friend AssetMgr;
+};
+
+// Define the AssetRef type.
+@Ref(Asset, AssetMgr);
+
+/* ============================================================================
+ *  Helper for defining a typed asset handle.
+ */
+template<typename T>
+struct TypedAssetRef : public AssetRef
+{
+  constexpr TypedAssetRef() : AssetRef() {}
+  constexpr TypedAssetRef(Nil) {}
+
+  constexpr TypedAssetRef(MovedAssetRef&& ref)
+    : AssetRef(ref) {}
+
+  constexpr TypedAssetRef(AssetRef&& handle)
+    : AssetRef(static_cast<decltype(handle)&&>(handle)) {}
+
+  constexpr TypedAssetRef(TypedAssetRef<T>&& handle)
+    : AssetRef(static_cast<decltype(handle)&&>(handle)) {}
+
+  T* getData() const { return (T*)getAsset(); }
+};
+
+template<typename T>
+struct NilValue<TypedAssetRef<T>>
+{
+  constexpr static const TypedAssetRef<T> Value = {nullptr};
+
+  inline static b8 isNil(const TypedAssetRef<T>& x)
+  {
+    return NilValue<AssetRef>::isNil((const AssetRef&)x);
+  }
+};
+
+

@@ -7,7 +7,7 @@ $ local cmn = require "common"
 @@lpp.import "game/Spawner.comp.lh"
 @@lpp.import "game/Transform.comp.lh"
 
-@@lpp.import "resource/SourceData.lh"
+@@lpp.import "asset/SourceData.lh"
 
 #include "iro/Logger.h"
 

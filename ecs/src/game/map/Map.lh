@@ -7,9 +7,9 @@ $ local cmn = require "common"
 using namespace iro;
 
 struct GameMgr;
-struct MapBlockDef;
-struct MapDef;
+struct MapTileDef;
 struct MapLayerDef;
+struct MapDef;
 
 /* ============================================================================
  */

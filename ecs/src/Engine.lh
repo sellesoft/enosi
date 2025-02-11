@@ -11,9 +11,9 @@ $ local cmn = require "common"
 @@lpp.import "input/InputMgr.lh"
 @@lpp.import "input/Input.events.lh"
 @@lpp.import "window/Window.lh"
-@@lpp.import "resource/ResourceMgr.lh"
-@@lpp.import "resource/Font.lh"
-@@lpp.import "resource/SourceDataFileReg.lh"
+@@lpp.import "asset/AssetMgr.lh"
+@@lpp.import "asset/Font.lh"
+@@lpp.import "asset/SourceDataFileReg.lh"
 
 @@lpp.import "game/GameMgr.lh"
 
@@ -40,7 +40,7 @@ struct Engine
 
   gfx::Renderer renderer;
 
-  ResourceMgr rsrcmgr;
+  AssetMgr assetmgr;
   SourceDataFileReg source_data_file_reg;
 
   ui::UI ui;

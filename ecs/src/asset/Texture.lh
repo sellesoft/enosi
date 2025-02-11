@@ -1,7 +1,7 @@
 $ local cmn = require "common"
-$ local SourceData = require "resource.SourceData"
+$ local SourceData = require "asset.SourceData"
 
-@@lpp.import "resource/Resource.lh"
+@@lpp.import "asset/Asset.lh"
 
 #include "iro/Common.h"
 #include "iro/Unicode.h"
@@ -9,7 +9,7 @@ $ local SourceData = require "resource.SourceData"
 
 using namespace iro;
 
-struct ResourceMgr;
+struct AssetMgr;
 
 namespace iro::io
 {
@@ -63,7 +63,7 @@ struct TextureData
   b8 serialize(io::IO* out);
 };
 
-struct Texture : public Resource
+struct Texture : public Asset
 {
   TextureData* compiled;
  
@@ -75,12 +75,12 @@ struct Texture : public Resource
   // Handle to the gfx representation of this Texture.
   u32 gfx_handle;
 
-  static s64 writeAssetPath(io::IO* io, String name, ResourceMgr& rsrcmgr);
-  static s64 writeDataPath(io::IO* io, String name, ResourceMgr& rsrcmgr);
+  static s64 writeAssetPath(io::IO* io, String name, AssetMgr& assetmgr);
+  static s64 writeDataPath(io::IO* io, String name, AssetMgr& assetmgr);
 
-  static MovedResourceRef load(
+  static MovedAssetRef load(
     String name, 
-    ResourceMgr& rsrcmgr);
+    AssetMgr& assetmgr);
 
   struct CompileParams
   {
@@ -94,7 +94,7 @@ struct Texture : public Resource
     ImageFilter filter;
     ImageAddressMode address_mode;
     mem::Allocator* allocator;
-    ResourceMgr* rsrcmgr;
+    AssetMgr* assetmgr;
   };
 
   static b8 compile(CompileParams& params);
@@ -103,4 +103,4 @@ struct Texture : public Resource
   static b8 compileFromMemory(void* data, CompileParams& params);
 };
 
-typedef TypedResourceRef<Texture> TextureRef;
+typedef TypedAssetRef<Texture> TextureRef;

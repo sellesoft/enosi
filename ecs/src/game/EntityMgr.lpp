@@ -2,8 +2,8 @@ $ local cmn = require "common"
 
 @@lpp.import "game/EntityMgr.lh"
 @@lpp.import "game/EntityLoader.lh"
-@@lpp.import "resource/SourceDataFile.lh"
-@@lpp.import "resource/SourceDataParser.lh"
+@@lpp.import "asset/SourceDataFile.lh"
+@@lpp.import "asset/SourceDataParser.lh"
 
 #include "iro/fs/File.h"
 

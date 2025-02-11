@@ -1,14 +1,14 @@
 $ local cmn = require "common"
 
-@@lpp.import "resource/Resource.lh"
-@@lpp.import "resource/ResourceMgr.lh"
+@@lpp.import "asset/Asset.lh"
+@@lpp.import "asset/AssetMgr.lh"
 
 /* ----------------------------------------------------------------------------
  */ 
-void ResourceRef::release()
+void AssetRef::release()
 {
   assert(ptr != nullptr);
   if (ptr->rc.remRef())
-    ptr->rsrcmgr->unloadResource(ptr);
+    ptr->rsrcmgr->unloadAsset(ptr);
   ptr = nullptr;
 }

@@ -5,8 +5,8 @@ $ local cmn = require "common"
 #include "iro/fs/Path.h"
 #include "iro/Platform.h"
 
-@@lpp.import "resource/Texture.lh"
-@@lpp.import "resource/ResourceMgr.lh"
+@@lpp.import "asset/Texture.lh"
+@@lpp.import "asset/AssetMgr.lh"
 
 #include "cassert"
 
@@ -18,10 +18,10 @@ typedef io::StaticBuffer<512> PathBuffer;
 
 /* ----------------------------------------------------------------------------
  */
-s64 Texture::writeDataPath(io::IO* io, String name, ResourceMgr& rsrcmgr)
+s64 Texture::writeDataPath(io::IO* io, String name, AssetMgr& assetmgr)
 {
   return io::formatv(io, 
-      rsrcmgr.getDataDir(), "/textures/", name, ".texture");
+      assetmgr.getDataDir(), "/textures/", name, ".texture");
 }
 
 /* ----------------------------------------------------------------------------
@@ -40,14 +40,14 @@ b8 TextureData::serialize(io::IO* out)
 
 /* ----------------------------------------------------------------------------
  */
-MovedResourceRef Texture::load(
+MovedAssetRef Texture::load(
     String name,
-    ResourceMgr& rsrcmgr)
+    AssetMgr& assetmgr)
 {
   using namespace fs;
 
   PathBuffer data_path_buf;
-  writeDataPath(&data_path_buf, name, rsrcmgr);
+  writeDataPath(&data_path_buf, name, assetmgr);
 
   String data_path = data_path_buf.asStr();
 
@@ -58,7 +58,7 @@ MovedResourceRef Texture::load(
     return nil;
   }
 
-  auto r_texture = TextureRef(rsrcmgr.allocateResource<Texture>(data_path));
+  auto r_texture = TextureRef(assetmgr.allocateAsset<Texture>(data_path));
   if (isnil(r_texture))
   {
     ERROR("failed to load texture '", name, "'\n");

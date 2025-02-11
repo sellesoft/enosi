@@ -6,9 +6,9 @@ $ local cmn = require "common"
 @@lpp.import "game/Movement.comp.lh"
 @@lpp.import "game/Sprite.comp.lh"
 @@lpp.import "game/Transform.comp.lh"
-@@lpp.import "resource/Packing.lh"
-@@lpp.import "resource/SourceDataFile.lh"
-@@lpp.import "resource/SourceDataParser.lh"
+@@lpp.import "asset/Packing.lh"
+@@lpp.import "asset/SourceDataFile.lh"
+@@lpp.import "asset/SourceDataParser.lh"
 
 #include "iro/Logger.h"
 

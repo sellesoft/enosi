@@ -1,6 +1,6 @@
 $ local cmn = require "common"
 
-@@lpp.import "resource/ResourceMgr.lh"
+@@lpp.import "asset/AssetMgr.lh"
 
 #include "iro/memory/Memory.h"
 #include "iro/fs/File.h"
@@ -10,14 +10,14 @@ $ local cmn = require "common"
 
 /* ----------------------------------------------------------------------------
  */
-b8 ResourceMgr::init(mem::Allocator* allocator)
+b8 AssetMgr::init(mem::Allocator* allocator)
 {
-  INFO("initializing ResourceMgr\n");
+  INFO("initializing AssetMgr\n");
   
   this->allocator = allocator;
 
   if (!map.init(allocator))
-    return ERROR("failed to init resource map\n");
+    return ERROR("failed to init asset map\n");
 
   INFO("finished\n");
 
@@ -26,20 +26,20 @@ b8 ResourceMgr::init(mem::Allocator* allocator)
 
 /* ----------------------------------------------------------------------------
  */
-void ResourceMgr::deinit()
+void AssetMgr::deinit()
 {
-  INFO("deinitializing ResourceMgr\n");
+  INFO("deinitializing AssetMgr\n");
 
   if (!map.isEmpty())
   {
-    ERROR("ResourceMgr::deinit called but Resources still exist!\n",
+    ERROR("AssetMgr::deinit called but Assets still exist!\n",
           "  Currently allocated resources are: \n");
-    for (Resource& resource : map)
+    for (Asset& asset : map)
     {
-      ERROR("    ", resource.name, "\n");
+      ERROR("    ", asset.name, "\n");
     }
 
-    assert(!"ResourceMgr::deinit called while Resources are still active!");
+    assert(!"AssetMgr::deinit called while Assets are still active!");
   }
   
   map.deinit();
@@ -49,43 +49,43 @@ void ResourceMgr::deinit()
 
 /* ----------------------------------------------------------------------------
  */
-MovedResourceRef ResourceMgr::allocateResource(u64 size, String name)
+MovedAssetRef AssetMgr::allocateAsset(u64 size, String name)
 {
   u64 name_hash = name.hash();
   assert(map.find(name_hash) == nullptr && 
-    "a Resource has already been allocated with the given name");
+    "a Asset has already been allocated with the given name");
 
-  auto* resource = (Resource*)allocator->allocate(size);
-  mem::zero(resource, size);
+  auto* asset = (Asset*)allocator->allocate(size);
+  mem::zero(asset, size);
 
-  map.insert(resource);
+  map.insert(asset);
 
-  return MovedResourceRef(resource);
+  return MovedAssetRef(asset);
 }
 
 /* ----------------------------------------------------------------------------
  */
-MovedResourceRef ResourceMgr::findResource(String name) const
+MovedAssetRef AssetMgr::findAsset(String name) const
 {
-  return MovedResourceRef(map.find(name.hash()));
+  return MovedAssetRef(map.find(name.hash()));
 }
 
 /* ----------------------------------------------------------------------------
  */
-void ResourceMgr::unloadResource(Resource* resource)
+void AssetMgr::unloadAsset(Asset* asset)
 {
-  assert(!resource->rc.isReferenced());
+  assert(!asset->rc.isReferenced());
 
-  resource->onUnload();
+  asset->onUnload();
 
-  map.remove(resource);
+  map.remove(asset);
 
-  allocator->free(resource);
+  allocator->free(asset);
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 ResourceMgr::checkNeedsCompiled(String asset_path, String data_path)
+b8 AssetMgr::checkNeedsCompiled(String asset_path, String data_path)
 {
   using namespace fs;
   return !Path::exists(data_path) ||

@@ -10,7 +10,7 @@ using namespace iro;
 // Introduce events and the event bus definitions.
 @@lpp.import "event/BroadcastEventBus.lh"
 
-@@lpp.import "resource/Font.lh"
+@@lpp.import "asset/Font.lh"
 
 @@lpp.import "ui/widgets/Text.lh"
 @@lpp.import "ui/widgets/Button.lh"
@@ -22,9 +22,9 @@ using namespace iro;
 @@lpp.import "game/Component.lh"
 @@lpp.import "game/Entity.lh"
 @@lpp.import "game/Transform.comp.lh"
-@@lpp.import "resource/SourceDataParser.lh"
-@@lpp.import "resource/SourceDataFile.lh"
-@@lpp.import "resource/Packing.lh"
+@@lpp.import "asset/SourceDataParser.lh"
+@@lpp.import "asset/SourceDataFile.lh"
+@@lpp.import "asset/Packing.lh"
 
 static Logger logger = 
   Logger::create("ecs.eng"_str, Logger::Verbosity::Info);
@@ -93,6 +93,12 @@ namespace ui
 
 ui::Demo demo;
 
+/* ----------------------------------------------------------------------------
+ */ 
+b8 Engine::init()
+{
+  INFO("initializing engine...\n");
+  start_time = TimePoint::now();
 
 $ local initSystem = function(act, name)
     {
@@ -105,22 +111,15 @@ $ local initSystem = function(act, name)
     }
 $ end
 
-/* ----------------------------------------------------------------------------
- */ 
-b8 Engine::init()
-{
-  INFO("initializing engine...\n");
-  start_time = TimePoint::now();
-
-  @initSystem(eventbus.broadcast.init(),         broadcast event bus);
-  @initSystem(input.init(*this),                 input);
-  @initSystem(Window::initializeBackend(),       window backend);
-  @initSystem(window.init("ecs"_str,input),      window);
-  @initSystem(renderer.init(*this),              renderer);
-  @initSystem(rsrcmgr.init(&mem::stl_allocator), resource mgr);
-  @initSystem(ui.init(*this),                    ui);
-  @initSystem(gamemgr.init(this),                gamemgr);
-  @initSystem(source_data_file_reg.init(),       source data file reg);
+  @initSystem(eventbus.broadcast.init(),          broadcast event bus);
+  @initSystem(input.init(*this),                  input);
+  @initSystem(Window::initializeBackend(),        window backend);
+  @initSystem(window.init("ecs"_str,input),       window);
+  @initSystem(renderer.init(*this),               renderer);
+  @initSystem(assetmgr.init(&mem::stl_allocator), asset mgr);
+  @initSystem(ui.init(*this),                     ui);
+  @initSystem(gamemgr.init(this),                 gamemgr);
+  @initSystem(source_data_file_reg.init(),        source data file reg);
 
 #if ECS_HOT_RELOAD
   reloader = hr::createReloader();
@@ -144,7 +143,7 @@ b8 Engine::init()
     .data_path = "data/fonts/gohu.cmp_font"_str,
     .ranges = CodepointRanges::from(&ascii, 1),
     .allocator = &mem::stl_allocator,
-    .rsrcmgr = &rsrcmgr,
+    .assetmgr = &assetmgr,
   };
 
   Font::compileBDF(params);
