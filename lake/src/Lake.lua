@@ -534,6 +534,16 @@ lake.getRealtimeClock = function()
   return 0
 end
 
+-- * --------------------------------------------------------------------------
+
+--- Define a callback to be invoked when lake finds that the build has 
+--- finished.
+---
+---@param f function
+lake.registerFinalCallback = function(f)
+  lake.finalCallback = f
+end
+
 -- * << - << - << - << - << - << - << - << - << - << - << - << - << - << - << -
 --      
 --      Task api

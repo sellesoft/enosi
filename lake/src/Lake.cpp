@@ -410,6 +410,7 @@ b8 Lake::run()
       addLeaf(&task);
   }
     
+  b8 success = true;
   for (u64 build_pass = 0, recipe_pass = 0;;)
   {
     if (leaves.isEmpty() && active_recipes.isEmpty())
@@ -464,6 +465,7 @@ b8 Lake::run()
             task->flags.set(Task::Flag::Errored);
             active_recipes.remove(task_node);
             active_recipe_count -= 1;
+            success = false;
           }
           break;
 
@@ -474,6 +476,17 @@ b8 Lake::run()
       }
     }
   }
+
+  lua.pushvalue(I.lake);
+  lua.pushstring("finalCallback"_str);
+  lua.gettable(-2);
+  if (!lua.isnil())
+  {
+    lua.pushboolean(success);
+    if (!lua.pcall(1, 0))
+      return ERROR("lake.finalCallback failed: ", lua.tostring(), "\n");
+  }
+  lua.pop(); // Pop the table.
 
   return true;
 }
