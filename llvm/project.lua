@@ -288,7 +288,9 @@ local libs = Twine.new
   "LLVMSPIRVInfo"
   "LLVMFrontendAtomic"
 
--- llvm.report.ext.pub.SharedLib "z"
+if sys.os == "linux" then
+  llvm.report.ext.pub.SharedLib "z"
+end
 
 for lib in libs:each() do
   llvm.report.ext.pub.StaticLib(lib)
