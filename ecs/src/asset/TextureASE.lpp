@@ -1,0 +1,235 @@
+$ require "common"
+
+@@lpp.import "asset/AssetMgr.lh"
+@@lpp.import "asset/Font.lh"
+@@lpp.import "asset/Texture.lh"
+
+#include "iro/fs/Path.h"
+#include "iro/fs/File.h"
+#include "iro/Logger.h"
+#include "iro/memory/Bump.h"
+#include "iro/Platform.h"
+
+static Logger logger
+  = Logger::create("texture.ase"_str, Logger::Verbosity::Debug);
+
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
+static inline T extract(u8*& cursor)
+{
+  T t = *(T*)cursor;
+  cursor += sizeof(T);
+  return t;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Texture::compileASE(CompileParams& params)
+{
+  if (!fs::Path::exists(params.asset_path))
+    return ERROR("attempt to compile texture '", params.name, "' but there"
+      " is no asset at path '", params.asset_path, "'\n");
+
+  //TODO(delle) add a way to force an asset recompile when
+  //  we need to update the compiled data format
+  if (!AssetMgr::checkNeedsCompiled(params.asset_path, params.data_path))
+    return true;
+
+  INFO("compiling '", params.asset_path, ":'\n");
+  SCOPED_INDENT;
+
+  // TODO(delle) take in an allocator to use for temp data.
+  mem::LenientBump allocator;
+  if (!allocator.init())
+    return ERROR("failed to initialize temp allocator\n");
+  defer { allocator.deinit(); };
+
+  // Ensure the data directories exist.
+  if (!platform::makeDir(fs::Path::removeBasename(params.data_path), true))
+    return ERROR("failed to make directories\n");
+
+  auto asset_file = fs::File::from(params.asset_path, fs::OpenFlag::Read);
+  if (isnil(asset_file))
+    return ERROR("failed to open font asset file at '",
+      params.data_path, "'\n");
+  defer { asset_file.close(); };
+  u64 asset_file_size = asset_file.getInfo().byte_size;
+
+  auto data_file =
+    fs::File::from(params.data_path,
+        fs::OpenFlag::Write
+      | fs::OpenFlag::Truncate
+      | fs::OpenFlag::Create);
+
+  if (isnil(data_file))
+    return ERROR(
+      "failed to open data file for writing at '", params.data_path, "'\n");
+  defer { data_file.close(); };
+
+  auto delete_data_file_if_failure = deferWithCancel
+  {
+    data_file.close();
+    fs::File::unlink(params.data_path);
+  };
+
+  io::Memory buffer;
+  if (!buffer.open(asset_file_size, &allocator))
+    return ERROR("failed to open buffer for reading file data\n");
+  defer { buffer.close(); };
+
+  if (asset_file_size != buffer.consume(&asset_file, asset_file_size))
+    return ERROR("failed to read entire asset file\n");
+
+  // Begin parsing.
+  u8* cursor = buffer.ptr;
+  u8* max_cursor = buffer.ptr + asset_file_size;
+
+  // Parse file header.
+  if (cursor + 128 > max_cursor)
+    return ERROR("failed to read the header because the file ended early\n");
+
+  auto header_file_bytes = extract<u32>(cursor);
+  if (header_file_bytes != asset_file_size)
+    return ERROR("failed to validate the header's file size\n");
+
+  auto header_magic = extract<u16>(cursor);
+  if (header_magic != 0xA5E0)
+    return ERROR("failed to validate the header's magic number\n");
+
+  auto frame_count = extract<u16>(cursor);
+  auto width = extract<u16>(cursor);
+  auto height = extract<u16>(cursor);
+  auto depth = extract<u16>(cursor);
+  auto flags = extract<u32>(cursor);
+  auto speed_deprecated = extract<u16>(cursor);
+  cursor += 8;
+  auto transparent_index = extract<u8>(cursor);
+  cursor += 3;
+  auto color_count = extract<u16>(cursor);
+  auto pixel_width = extract<u8>(cursor);
+  auto pixel_height = extract<u8>(cursor);
+  auto grid_x = extract<s16>(cursor);
+  auto grid_y = extract<s16>(cursor);
+  auto grid_width = extract<u16>(cursor);
+  auto grid_height = extract<u16>(cursor);
+  cursor += 84;
+  assert(cursor - buffer.ptr == 128);
+
+  if (depth != 8)
+    transparent_index = 0;
+
+  if (color_count == 0)
+    color_count = 256;
+
+  if (pixel_width == 0 || pixel_height == 0)
+    pixel_width = pixel_height = 1;
+
+  if (depth != 32 && depth != 16 && depth != 8)
+    return ERROR("failed because it has an invalid color depth ", depth, "\n");
+
+  if (width < 1 || height < 1)
+    return ERROR("failed because it has an invalid width or height ",
+      width, "x", height, "\n");
+
+  // Parse frames.
+  for (u16 frame_index = 0; frame_index < frame_count; frame_index++)
+  {
+    u8* frame_cursor_start = cursor;
+
+    if (cursor + 16 > max_cursor)
+      return ERROR("failed to read frame ", frame_index, "'s header because"
+        " the file ended early\n");
+
+    auto frame_bytes = extract<u32>(cursor);
+    if (cursor + frame_bytes - 4 > max_cursor)
+      return ERROR("failed to validate frame ", frame_index, "'s size\n");
+
+    auto frame_magic = extract<u16>(cursor);
+    if (frame_magic != 0xF1FA)
+      return ERROR("failed to validate frame ", frame_index, "'s"
+        " magic number\n");
+
+    auto frame_chunk_count = extract<u16>(cursor);
+    auto frame_duration_ms = extract<u16>(cursor);
+    cursor += 2;
+
+    auto frame_chunk_count_ex = extract<u32>(cursor);
+    if (frame_chunk_count == 0xFFFF)
+      frame_chunk_count = frame_chunk_count_ex;
+    assert(cursor - frame_cursor_start == 16);
+
+    // Parse frame chunks.
+    for (u16 chunk_index = 0; chunk_index < frame_chunk_count; chunk_index++)
+    {
+      u8* chunk_cursor_start = cursor;
+
+      if (cursor + 6 > max_cursor)
+        return ERROR("failed to read frame ", frame_index, " chunk ",
+          chunk_index, "'s header because the file ended early\n");
+
+      auto chunk_bytes = extract<u32>(cursor);
+      if (cursor + chunk_bytes > max_cursor)
+        return ERROR("failed to validate frame ", frame_index, " chunk ",
+          chunk_index, "'s size\n");
+
+      auto chunk_type = extract<u16>(cursor);
+      switch(chunk_type)
+      {
+      case 0x2004: // Layer Chunk
+      {
+        if (cursor + 18 > max_cursor)
+          return ERROR("failed to read frame ", frame_index, " chunk ",
+            chunk_index, "'s contents because the file ended early\n");
+
+        auto flags = extract<u16>(cursor);
+        auto type = extract<u16>(cursor);
+        auto level = extract<u16>(cursor);
+        cursor += 4;
+        auto blend = extract<u16>(cursor);
+        auto opacity = extract<u8>(cursor);
+        cursor += 3;
+
+        auto name_length = extract<u16>(cursor);
+        u8* name = cursor;
+        if (cursor + name_length > max_cursor)
+          return ERROR("failed to read frame ", frame_index, " chunk ",
+            chunk_index, "'s contents because the file ended early\n");
+
+        cursor += name_length;
+
+        u32 tileset_index = -1;
+        if (type == 2)
+        {
+          if (cursor + 4 > max_cursor)
+            return ERROR("failed to read frame ", frame_index, " chunk ",
+              chunk_index, "'s contents because the file ended early\n");
+
+          tileset_index = extract<u32>(cursor);
+        }
+
+        //TODO(delle) handle layers
+      }break;
+
+      case 0x2005:
+      {
+        //TODO(delle) parse cel
+      }break;
+
+      default:
+        return ERROR("failed to read frame ", frame_index, " chunk ",
+          chunk_index, " because handling for chunk type ", chunk_type,
+          " is not yet implemented\n");
+      }
+
+      assert(cursor - chunk_cursor_start == chunk_bytes);
+    }
+
+    assert(cursor - frame_cursor_start == frame_bytes);
+  }
+
+  //TODO(delle) generate .texture
+
+  delete_data_file_if_failure.cancel();
+  return true;
+}

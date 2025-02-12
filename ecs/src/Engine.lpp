@@ -3,6 +3,7 @@ $ local ui = require "ui.UI"
 
 @@lpp.import "Engine.lh"
 
+#include "iro/fs/Glob.h"
 #include "iro/Logger.h"
 #include "iro/time/Time.h"
 using namespace iro;
@@ -147,6 +148,36 @@ $ end
   };
 
   Font::compileBDF(params);
+
+  //TODO(delle) update the bump allocators to have a reset() and clear()
+  mem::LenientBump texture_compile_allocator;
+  if (!texture_compile_allocator.init())
+    return ERROR("failed to initialize texture compile allocator\n");
+  auto aseGlob = fs::Globber::create("assets/textures/*.ase"_str);
+  aseGlob.run([&](fs::Path& asset_path)
+    {
+      String name = asset_path.basename().subToFirst('.');
+
+      fs::Path data_path;
+      data_path.init("data/textures/"_str, &texture_compile_allocator);
+      data_path.append(name, ".texture"_str);
+
+      Texture::CompileParams params =
+      {
+        .name = name,
+        .asset_path = asset_path.buffer.asStr(),
+        .data_path = data_path.buffer.asStr(),
+        .filter = ImageFilter::Nearest,
+        .address_mode = ImageAddressMode::ClampToWhite,
+        .allocator = &mem::stl_allocator,
+        .assetmgr = &assetmgr,
+      };
+      Texture::compileASE(params);
+
+      return true;
+    });
+  aseGlob.destroy();
+  texture_compile_allocator.deinit();
 
   // demo.place(ui);
 

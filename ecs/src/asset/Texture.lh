@@ -97,7 +97,7 @@ struct Texture : public Asset
     AssetMgr* assetmgr;
   };
 
-  static b8 compile(CompileParams& params);
+  static b8 compileASE(CompileParams& params);
 
   // In this case 'asset_path' is unused.
   static b8 compileFromMemory(void* data, CompileParams& params);
