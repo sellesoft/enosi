@@ -70,6 +70,9 @@ return
   --             stuff.
   asan = false,
 
+  -- Report files successfully built.
+  report_success = true,
+
   -- Configuration intended to be applied to all projects.
   -- Note that any configuration specified in project specific 
   -- tables will override any that appear here.

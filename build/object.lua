@@ -79,7 +79,7 @@ local runAndReportResult = function(args, infile, outfile)
 
   if result ~= 0 then
     flair.writeFailure(outfile)
-  else
+  elseif sys.cfg.report_success then
     if infile then
       flair.writeSuccessInputToOutput(infile, outfile, time)
     else
