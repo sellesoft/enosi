@@ -38,46 +38,40 @@ struct SourceDataFileHeader
  */
 struct SourceDataFileHandle
 {
-  constexpr SourceDataFileHandle() {}
-  constexpr SourceDataFileHandle(Nil) {} 
-  constexpr ~SourceDataFileHandle() { assert(header == nullptr); }
-
-  SourceDataFileHandle& operator=(Nil)
-  {
-    release();
-    return *this;
+  SourceDataFileHandle() {}
+  ~SourceDataFileHandle() 
+  { 
+    if (header != nullptr)
+      release();
   }
 
-  // Disallow implicit copying.
-  SourceDataFileHandle(const SourceDataFileHandle& rhs) = delete;
-
-  SourceDataFileHandle(SourceDataFileHandle&& rhs)
+  SourceDataFileHandle(const SourceDataFileHandle& rhs)
   {
+    if (header != nullptr)
+      release();
     header = rhs.header;
-    rhs.header = nullptr;
+    if (header)
+      header->rc.addRef();
   }
 
-  SourceDataFileHandle copy()
+  SourceDataFileHandle& operator =(const SourceDataFileHandle& rhs)
   {
-    assert(header && "attempt to copy a nil SourceDataFileHandle!");
-    header->rc.addRef();
-    return SourceDataFileHandle{header};
-  }
-
-  SourceDataFileHandle move()
-  {
-    assert(header && "attempt to move a nil SourceDataFileHandle!");
-    auto out = SourceDataFileHandle{header};
-    header = nullptr;
-    return out;
+    if (header != nullptr)
+      release();
+    header = rhs.header;
+    if (header != nullptr)
+      header->rc.addRef();
+    return *this;
   }
 
   void release();
 
-  // For use in NilValue.
+  static SourceDataFileHandle invalid() { return {}; }
+
   SourceDataFile* getFile() const 
     { return header? header->getFile() : nullptr; }
 
+  // For use in NilValue.
   b8 isValid() const { return header != nullptr; }
 
 private:
@@ -88,25 +82,5 @@ private:
   friend SourceDataFileReg;
 
   SourceDataFileHandle(SourceDataFileHeader* header) : header(header) {}
-};
-
-DefineNilValue(SourceDataFileHandle, {}, 
-  { return !x.isValid(); });
-
-/* ============================================================================
- *  A helper for automatically releasing a SourceDataFileHandle at the end of 
- *  a scope.
- */
-struct ScopedSourceDataFileHandle : public SourceDataFileHandle
-{
-  ScopedSourceDataFileHandle(SourceDataFileHandle&& handle)
-    : SourceDataFileHandle(
-        // Force the compiler to move handle into the actual constructor.
-        static_cast<decltype(handle)&&>(handle)) { }
-
-  ~ScopedSourceDataFileHandle()
-  {
-    release();
-  }
 };
 

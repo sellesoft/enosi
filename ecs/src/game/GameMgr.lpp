@@ -27,7 +27,7 @@ b8 GameMgr::init(Engine* eng)
   if (!entmgr.init())
     return ERROR("failed to initialize entity mgr\n");
 
-  if (!rendersys.init(*this))
+  if (!rendersys.init(engine->renderer))
     return ERROR("failed to initialize render sys\n");
 
   using namespace fs;
@@ -80,7 +80,17 @@ b8 GameMgr::update()
   if (!eye.update(*this))
     return false;
 
-  if (!rendersys.update(*this))
+  RenderSys::UpdateParams render_params = 
+  {
+    .viewport = {{0.f,0.f},engine->window.size},
+    .renderer = &engine->renderer,
+    .entmgr = &entmgr,
+    .map = &map,
+  };
+
+  eye.getViewMat(&render_params.view);
+
+  if (!rendersys.update(render_params))
     return false;
 
   vec2f screen_pos = engine->input.mouse.window;

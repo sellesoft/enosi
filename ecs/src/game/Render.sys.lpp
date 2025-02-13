@@ -14,10 +14,10 @@ $ require "common"
 static Logger logger = 
   Logger::create("rendersys"_str, Logger::Verbosity::Info);
 
-b8 RenderSys::init(GameMgr& gamemgr)
+/* ----------------------------------------------------------------------------
+ */
+b8 RenderSys::init(gfx::Renderer& renderer)
 {
-  gfx::Renderer& renderer = gamemgr.engine->renderer;
-
   gfxbuf = renderer.createBuffer();
   if (!gfxbuf)
     return ERROR("failed to create gfx::Buffer\n");
@@ -31,26 +31,21 @@ b8 RenderSys::init(GameMgr& gamemgr)
   return true;
 }
 
-b8 RenderSys::update(GameMgr& gamemgr)
+/* ----------------------------------------------------------------------------
+ */
+b8 RenderSys::update(const UpdateParams& params)
 {
-  Engine& engine = *gamemgr.engine;
-  gfx::Renderer& renderer = engine.renderer;
-  EntityMgr& entmgr = gamemgr.entmgr;
-  ComponentMgr& cmpmgr = entmgr.cmpmgr;
-  EyeSys& eye = gamemgr.eye;
-  Map& map = gamemgr.map;
+  gfx::Renderer& renderer = *params.renderer;
 
   renderer.pushBindBuffer(gfxbuf);
 
-  mat3x2 view;
-  eye.getViewMat(&view);
-
   auto proj = mat3x2::identity();
-  proj.set(0, 0, EyeSys::pixels_per_meter * 2.f / engine.window.size.x);
-  proj.set(1, 1, EyeSys::pixels_per_meter * 2.f / engine.window.size.y);
+  vec2f viewport_size = params.viewport.max - params.viewport.min;
+  proj.set(0, 0, EyeSys::pixels_per_meter * 2.f / viewport_size.x);
+  proj.set(1, 1, EyeSys::pixels_per_meter * 2.f / viewport_size.y);
 
   renderer.pushUniformMat3x2("proj"_str, proj);
-  renderer.pushUniformMat3x2("view"_str, view);
+  renderer.pushUniformMat3x2("view"_str, params.view);
 
   gfxbuf->map();
 
@@ -61,60 +56,72 @@ b8 RenderSys::update(GameMgr& gamemgr)
 
   mat3x2 tm = 
     mat3x2::createTransform(
-      vec2f(0,0),
+      params.viewport.min,
       0.f);
 
   renderer.pushUniformMat3x2("model"_str, tm);
 
-  u32 layer_idx = 0;
-  for (Layer& layer : map.layers)
+  if (params.map)
   {
-    for (const Tile& tile : layer.tiles)
+    Map& map = *params.map;
+
+    u32 layer_idx = 0;
+    for (Layer& layer : map.layers)
     {
-      if (tile.def == nullptr)
-        continue;
-
-      const MapTileDef& def = *tile.def;
-      
-      Color color;
-
-      switch (def.kind)
+      for (const Tile& tile : layer.tiles)
       {
-      case TileKind::Wall: color = 0x00ff00ff; break;
-      case TileKind::Floor: color = 0x0000ffff; break;
+        if (tile.def == nullptr)
+          continue;
+
+        const MapTileDef& def = *tile.def;
+        
+        Color color;
+
+        switch (def.kind)
+        {
+        case TileKind::Wall: color = 0x00ff00ff; break;
+        case TileKind::Floor: color = 0x0000ffff; break;
+        }
+
+        color *= 1.f - layer_idx * 0.25f;
+
+        sum += 
+          gfx::putFilledRect(
+            vp,
+            ip,
+            sum,
+            layer.def->pos + def.pos,
+            vec2f(1,1),
+            color);
       }
 
-      color *= 1.f - layer_idx * 0.25f;
-
-      sum += 
-        gfx::putFilledRect(
-          vp,
-          ip,
-          sum,
-          layer.def->pos + def.pos,
-          vec2f(1,1),
-          color);
+      layer_idx += 1;
     }
-
-    layer_idx += 1;
   }
 
-  for (Sprite& sprite : cmpmgr.iterate<Sprite>())
+  if (params.entmgr && params.map)
   {
-    Entity* owner = entmgr.getEntity(sprite.owner);
+    Map&          map    = *params.map;
+    EntityMgr&    entmgr = *params.entmgr;
+    ComponentMgr& cmpmgr = entmgr.cmpmgr;
 
-    if (auto* transform = owner->tryComp<Transform>())
+    for (Sprite& sprite : cmpmgr.iterate<Sprite>())
     {
-      Layer& layer = map.layers[transform->placement_layer];
+      Entity* owner = entmgr.getEntity(sprite.owner);
 
-      sum +=
-        gfx::putFilledRect(
-          vp,
-          ip,
-          sum,
-          layer.def->pos + transform->pos,
-          vec2f(1,1),
-          0xff0000ff);
+      if (auto* transform = owner->tryComp<Transform>())
+      {
+        Layer& layer = map.layers[transform->placement_layer];
+
+        sum +=
+          gfx::putFilledRect(
+            vp,
+            ip,
+            sum,
+            layer.def->pos + transform->pos,
+            vec2f(1,1),
+            0xff0000ff);
+      }
     }
   }
 

@@ -13,7 +13,9 @@ using namespace iro;
 #include "math/vec.h"
 #include "math/mat.h"
 
-@@lpp.import "graphics/Geo.lh"
+@@lpp.import "Geo.lh"
+@@lpp.import "Buffer.lh"
+@@lpp.import "DrawCmd.lh"
 
 struct Engine;
 struct Window;
@@ -22,106 +24,6 @@ struct WindowResized;
 
 namespace gfx
 {
-
-/* ============================================================================
- */
-struct Buffer
-{
-  u32 vbo = 0;
-  u32 ibo = 0;
-  u32 vao = 0;
-
-  u64 vertex_size = 0;
-  u64 index_size = 0;
-
-  u64 num_vertexes = 0;
-  u64 num_indexes = 0;
-
-  struct
-  {
-    void* vp = nullptr;
-    void* ip = nullptr;
-  } mapped;
-
-  b8   init(u64 vsize, u64 isize);
-  void deinit();
-
-  void setF32AttribF32(
-      u32 idx, 
-      u32 len, 
-      b8 normalized, 
-      u64 stride, 
-      u64 offset);
-  void setF32AttribU8(
-      u32 idx, 
-      u32 len, 
-      b8 normalized, 
-      u64 stride,
-      u64 offset);
-
-  // Sets the vertex attributes of this buffer to gfx's default 
-  // Vertex/Index stuff.
-  void setGfxAttributes();
-
-  void map();
-  void unmap();
-};
-
-/* ============================================================================
- */
-struct DrawCmd
-{
-  enum class Kind
-  {
-    Invalid,
-    BindBuffer,
-    Draw,
-    SetScissor,
-    BindTexture,
-    PushUniformVec2,
-    PushUniformFloat,
-    PushUniformBool,
-    PushUniformMat3x2,
-  };
-
-  Kind kind;
-
-  union
-  {
-    Buffer* bind_buffer;
-
-    struct 
-    {
-      u64 index_start;
-      u64 index_count;
-      u64 vertex_start;
-    } draw;
-
-    struct 
-    {
-      vec2i pos;
-      vec2i size;
-    } set_scissor;
-
-    const Texture* bind_texture;
-    
-    struct
-    {
-      String name;
-      union
-      {
-        vec2f v;
-        f32 f;
-        b8 b;
-        mat3x2 m;
-      };
-    } push_uniform;
-  };
-
-  DrawCmd() : kind(Kind::Invalid), bind_buffer() {}
-};
-
-static Pool<Buffer>::Chunk __test;
 
 /* ============================================================================
  */

@@ -1,0 +1,38 @@
+/*
+ *  UI for editing maps.
+ */
+
+$ require "common"
+
+$ local ui = require "ui.UI"
+
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+
+@@lpp.import "ui/UI.lh"
+@@lpp.import "asset/SourceDataFileHandle.lh"
+
+namespace ui
+{
+
+/* ============================================================================
+ */
+@ui.widget(MapEditor,
+schema
+{
+  font = inherit;
+  font_height = inherit;
+  text_color = inherit;
+},
+struct
+{ 
+  SourceDataFileHandle h_selected_map = {};
+
+  static MapEditor* create(UI& ui);
+  void destroy();
+
+  void selectMap(SourceDataFileHandle& h_map);
+})
+
+}
+

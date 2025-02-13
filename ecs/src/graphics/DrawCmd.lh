@@ -1,0 +1,66 @@
+/*
+ *  A command that alters the state of the renderer.
+ */ 
+
+#include "math/vec.h"
+
+struct Texture;
+
+namespace gfx
+{
+
+/* ============================================================================
+ */
+struct DrawCmd
+{
+  enum class Kind
+  {
+    Invalid,
+    BindBuffer,
+    Draw,
+    SetScissor,
+    BindTexture,
+    PushUniformVec2,
+    PushUniformFloat,
+    PushUniformBool,
+    PushUniformMat3x2,
+  };
+
+  Kind kind;
+
+  union
+  {
+    Buffer* bind_buffer;
+
+    struct 
+    {
+      u64 index_start;
+      u64 index_count;
+      u64 vertex_start;
+    } draw;
+
+    struct 
+    {
+      vec2i pos;
+      vec2i size;
+    } set_scissor;
+
+    const Texture* bind_texture;
+    
+    struct
+    {
+      String name;
+      union
+      {
+        vec2f v;
+        f32 f;
+        b8 b;
+        mat3x2 m;
+      };
+    } push_uniform;
+  };
+
+  DrawCmd() : kind(Kind::Invalid), bind_buffer() {}
+};
+
+}

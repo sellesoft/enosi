@@ -415,29 +415,6 @@ b8 Renderer::loadTexture(Texture* texture)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Buffer::init(u64 vsize, u64 isize)
-{
-  glGenBuffers(1, &vbo);
-  glGenBuffers(1, &ibo);
-  glGenVertexArrays(1, &vao);
-
-  glBindVertexArray(vao);
-  glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glBindBuffer(GL_ARRAY_BUFFER, 0);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
-  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-
-  vertex_size = vsize;
-  index_size = isize;
-
-  glNamedBufferStorage(vbo, vertex_size, nullptr, GL_MAP_WRITE_BIT);
-  glNamedBufferStorage(ibo, index_size, nullptr, GL_MAP_WRITE_BIT);
-
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
 void Renderer::pushBindBuffer(Buffer* buffer)
 {
   DrawCmd cmd;
@@ -527,91 +504,6 @@ void Renderer::pushUniformMat3x2(String name, const mat3x2& m)
   cmd.push_uniform.name = name;
   cmd.push_uniform.m = m;
   drawcmds.push(cmd);
-}
-
-/* ----------------------------------------------------------------------------
- */
-static void setAttrib(
-    u32 bufferidx, 
-    u32 idx, 
-    u32 len, 
-    u32 type, 
-    b8 normalized,
-    u64 stride,
-    u64 offset)
-{
-  glBindBuffer(GL_ARRAY_BUFFER, bufferidx);
-  u8* baseOffset = 0;
-  glVertexAttribPointer(
-    idx, 
-    len, 
-    type, 
-    normalized, 
-    stride, 
-    (void*)(baseOffset+offset));
-  glEnableVertexAttribArray(idx);
-  glBindBuffer(GL_ARRAY_BUFFER, 0);
-}
-
-/* ----------------------------------------------------------------------------
- */
-void Buffer::setF32AttribF32(
-    u32 idx, 
-    u32 len, 
-    b8 normalized, 
-    u64 stride,
-    u64 offset)
-{
-  glBindVertexArray(vao);
-  setAttrib(vbo, idx, len, GL_FLOAT, normalized, stride, offset);
-}
-
-/* ----------------------------------------------------------------------------
- */
-void Buffer::setF32AttribU8(
-    u32 idx, 
-    u32 len, 
-    b8 normalized, 
-    u64 stride,
-    u64 offset)
-{
-  glBindVertexArray(vao);
-  setAttrib(vbo, idx, len, GL_UNSIGNED_BYTE, normalized, stride, offset);
-}
-
-/* ----------------------------------------------------------------------------
- */
-void Buffer::setGfxAttributes()
-{
-  setF32AttribF32(
-      0, 2, false, sizeof(Vertex), offsetof(Vertex, pos));
-  setF32AttribF32(
-      1, 2, false, sizeof(Vertex), offsetof(Vertex, uv));
-  setF32AttribU8(
-      2, 4, true,  sizeof(Vertex), offsetof(Vertex, color));
-}
-
-/* ----------------------------------------------------------------------------
- */
-void Buffer::map()
-{
-  assert(!mapped.vp && !mapped.ip && "buffer is already mapped");
-  
-  glBindVertexArray(vao);
-  mapped.vp = glMapNamedBuffer(vbo, GL_WRITE_ONLY);
-  mapped.ip = glMapNamedBuffer(ibo, GL_WRITE_ONLY);
-}
-
-/* ----------------------------------------------------------------------------
- */
-void Buffer::unmap()
-{
-  assert(mapped.vp && mapped.ip && "buffer is not mapped");
-
-  assert(glUnmapNamedBuffer(vbo));
-  assert(glUnmapNamedBuffer(ibo));
-
-  mapped.vp = mapped.ip = nullptr;
 }
 
 /* ----------------------------------------------------------------------------

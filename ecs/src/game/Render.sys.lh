@@ -5,14 +5,35 @@
 $ require "common"
 
 #include "iro/Common.h"
+#include "math/Rect.h"
+#include "math/mat.h"
 
-namespace gfx { struct Buffer; }
+namespace gfx 
+{ 
+  struct Buffer; 
+  struct Renderer;
+}
+
 struct GameMgr;
+struct EntityMgr;
+struct Map;
 
+/* ============================================================================
+ */
 struct RenderSys
 {
   gfx::Buffer* gfxbuf;
 
-  b8 init(GameMgr& gamemgr);
-  b8 update(GameMgr& gamemgr);
+  b8 init(gfx::Renderer& renderer);
+
+  struct UpdateParams
+  {
+    Rect           viewport;
+    mat3x2         view;
+    gfx::Renderer* renderer;
+    EntityMgr*     entmgr;
+    Map*           map;
+  };
+
+  b8 update(const UpdateParams& params);
 };

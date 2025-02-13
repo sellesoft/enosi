@@ -54,7 +54,7 @@ SourceDataFileHandle SourceDataFileReg::loadFromDisk(String path)
   if (isnil(file))
   {
     ERROR("failed to open source data file at ", path, "\n");
-    return nil;
+    return SourceDataFileHandle::invalid();
   }
   defer { file.close(); };
 
@@ -67,7 +67,7 @@ SourceDataFileHandle SourceDataFileReg::loadFromDisk(String path)
   {
     ERROR("failed to initialize source data file\n");
     pool.remove(slot);
-    return nil;
+    return SourceDataFileHandle::invalid();
   }
 
   SourceDataParser parser;
@@ -75,14 +75,14 @@ SourceDataFileHandle SourceDataFileReg::loadFromDisk(String path)
   {
     ERROR("failed to init source data file parser\n");
     pool.remove(slot);
-    return nil;
+    return SourceDataFileHandle::invalid();
   }
   defer { parser.deinit(); };
 
   if (!parser.parse())
   {
     pool.remove(slot);
-    return nil;
+    return SourceDataFileHandle::invalid();
   }
 
   map.insert(slot);

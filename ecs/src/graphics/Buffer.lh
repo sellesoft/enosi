@@ -1,0 +1,55 @@
+/*
+ *  A Buffer through which vertex and index information is given to the GPU.
+ */
+ 
+#include "iro/Common.h"
+
+namespace gfx
+{
+
+/* ============================================================================
+ */
+struct Buffer
+{
+  u32 vbo = 0;
+  u32 ibo = 0;
+  u32 vao = 0;
+
+  u64 vertex_size = 0;
+  u64 index_size = 0;
+
+  u64 num_vertexes = 0;
+  u64 num_indexes = 0;
+
+  struct
+  {
+    void* vp = nullptr;
+    void* ip = nullptr;
+  } mapped;
+
+  b8   init(u64 vsize, u64 isize);
+  void deinit();
+
+  void setF32AttribF32(
+      u32 idx, 
+      u32 len, 
+      b8 normalized, 
+      u64 stride, 
+      u64 offset);
+
+  void setF32AttribU8(
+      u32 idx, 
+      u32 len, 
+      b8 normalized, 
+      u64 stride,
+      u64 offset);
+
+  // Sets the vertex attributes of this buffer to gfx's default 
+  // Vertex/Index stuff.
+  void setGfxAttributes();
+
+  void map();
+  void unmap();
+};
+
+}

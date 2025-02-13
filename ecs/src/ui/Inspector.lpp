@@ -7,6 +7,8 @@ $ local glob = require "Glob"
 
 #include "math/util.h"
 
+$ if false then
+
 $ local buf = buffer.new()
 $ glob"**/*.lh":each(function(path) -- */
 $   if path:find "Window_win32.lh" then
@@ -931,3 +933,4 @@ $ local tree = ui.createItemContext("InspectorEngineTree", "tree")
 
 } // namespace ui
 
+$ end

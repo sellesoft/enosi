@@ -1,0 +1,45 @@
+$ require "common"
+$ local ui = require "ui.UI"
+
+@@lpp.import "Editor.lh"
+
+namespace ui
+{
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+MapEditor* UI::make(String id)
+{
+  auto* editor = mem::stl_allocator.construct<MapEditor>();
+  if (!initItem(id, editor))
+  {
+    mem::stl_allocator.free(editor);
+    return nullptr;
+  }
+  return editor;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+MapEditor* MapEditor::create(UI& ui)
+{
+  
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void MapEditor::destroy()
+{
+  if (h_selected_map.isValid())
+    h_selected_map.release();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void MapEditor::selectMap(SourceDataFileHandle& h_map)
+{
+  h_selected_map = h_map;
+}
+
+}

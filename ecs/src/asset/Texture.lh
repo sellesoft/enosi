@@ -16,6 +16,8 @@ namespace iro::io
   struct IO;
 }
 
+/* ============================================================================
+ */
 enum class ImageFormat
 {
   BW,
@@ -24,12 +26,16 @@ enum class ImageFormat
   RGBA,
 };
 
+/* ============================================================================
+ */
 enum class ImageFilter
 {
   Nearest,
   Linear,
 };
 
+/* ============================================================================
+ */
 enum class ImageAddressMode
 {
   Repeat,
@@ -40,6 +46,8 @@ enum class ImageAddressMode
   ClampToTransparent,
 };
 
+/* ============================================================================
+ */
 enum class ImageKind
 {
   OneD,
@@ -48,6 +56,8 @@ enum class ImageKind
   Cube,
 };
 
+/* ============================================================================
+ */
 struct TextureData
 {
   ImageFormat format;
@@ -63,6 +73,8 @@ struct TextureData
   b8 serialize(io::IO* out);
 };
 
+/* ============================================================================
+ */
 struct Texture : public Asset
 {
   TextureData* compiled;

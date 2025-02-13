@@ -19,6 +19,8 @@ common.defFileLogger = function(name, verbosity)
 
   return buf:get()
 end
+-- Introduce as global given how common this is.
+defFileLogger = common.defFileLogger
 
 common.failIf = function(errval)
   return function(cond, ...)

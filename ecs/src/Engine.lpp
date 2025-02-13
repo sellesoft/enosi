@@ -187,15 +187,6 @@ $ end
 
   INFO("done!\n");
 
-  auto h_sfile = 
-    ScopedSourceDataFileHandle(
-      source_data_file_reg.loadFromDisk("assets/fonts/gohu.font"_str));
-
-  SourceDataFile* sfile = h_sfile.getFile();
-
-  FontSchema fschema;
-  packSourceDataIntoType(*sfile->returned_data, &fschema);
-
   return true;
 }
 
@@ -276,11 +267,11 @@ b8 Engine::update()
 
   gamemgr.update();
 
-  inspector->fps->dirty = true;
-  
-  io::StaticBuffer<255> fps;
-  io::format(&fps, 1.f / (TimePoint::now() - start).toSeconds());
-  inspector->fps->set(fps.asStr());
+  // inspector->fps->dirty = true;
+  // 
+  // io::StaticBuffer<255> fps;
+  // io::format(&fps, 1.f / (TimePoint::now() - start).toSeconds());
+  // inspector->fps->set(fps.asStr());
 
   // ui.root->dirty = true;
 
