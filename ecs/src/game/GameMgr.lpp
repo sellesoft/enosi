@@ -59,7 +59,10 @@ b8 GameMgr::init(Engine* eng)
     *test_map_source_data_file.returned_data,
     map_def);
   
-  map.init(*map_def, *this);
+  if(!map.init(*map_def, *this))
+  {
+    return ERROR("failed to initialize the map '", map_def->name, "'\n");
+  }
 
   return true;
 }

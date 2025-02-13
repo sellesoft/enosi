@@ -11,6 +11,8 @@ using namespace iro;
 
 struct AssetMgr;
 
+namespace gfx { struct Renderer; }
+
 namespace iro::io
 {
   struct IO;
@@ -92,7 +94,8 @@ struct Texture : public Asset
 
   static MovedAssetRef load(
     String name, 
-    AssetMgr& assetmgr);
+    AssetMgr& assetmgr,
+    gfx::Renderer& renderer);
 
   struct CompileParams
   {
@@ -109,6 +112,7 @@ struct Texture : public Asset
     AssetMgr* assetmgr;
   };
 
+  static b8 compilePNG(CompileParams& params);
   static b8 compileASE(CompileParams& params);
 
   // In this case 'asset_path' is unused.

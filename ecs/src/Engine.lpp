@@ -118,6 +118,31 @@ $ end
   @initSystem(window.init("ecs"_str,input),       window);
   @initSystem(renderer.init(*this),               renderer);
   @initSystem(assetmgr.init(&mem::stl_allocator), asset mgr);
+
+  io::StaticBuffer<511> texture_data_path_buffer;
+  auto png_glob = fs::Globber::create("assets/textures/*.png"_str);
+  png_glob.run([&](fs::Path& asset_path)
+    {
+      texture_data_path_buffer.len = 0;
+      String name = asset_path.basename().subToFirst('.');
+      Texture::writeDataPath(&texture_data_path_buffer, name, assetmgr);
+      Texture::CompileParams params =
+      { //TODO(delle) add TextureDef for specifying these params
+        .name = name,
+        .asset_path = asset_path.buffer.asStr(),
+        .data_path = texture_data_path_buffer.asStr(),
+        .format = ImageFormat::RGBA,
+        .kind = ImageKind::TwoD,
+        .filter = ImageFilter::Nearest,
+        .address_mode = ImageAddressMode::ClampToWhite,
+        .allocator = &mem::stl_allocator,
+        .assetmgr = &assetmgr,
+      };
+      Texture::compilePNG(params);
+      return true;
+    });
+  png_glob.destroy();
+
   @initSystem(ui.init(*this),                     ui);
   @initSystem(gamemgr.init(this),                 gamemgr);
   @initSystem(source_data_file_reg.init(),        source data file reg);
@@ -148,37 +173,7 @@ $ end
   };
 
   Font::compileBDF(params);
-
-  //TODO(delle) update the bump allocators to have a reset() and clear()
-  mem::LenientBump texture_compile_allocator;
-  if (!texture_compile_allocator.init())
-    return ERROR("failed to initialize texture compile allocator\n");
-  auto aseGlob = fs::Globber::create("assets/textures/*.ase"_str);
-  aseGlob.run([&](fs::Path& asset_path)
-    {
-      String name = asset_path.basename().subToFirst('.');
-
-      fs::Path data_path;
-      data_path.init("data/textures/"_str, &texture_compile_allocator);
-      data_path.append(name, ".texture"_str);
-
-      Texture::CompileParams params =
-      {
-        .name = name,
-        .asset_path = asset_path.buffer.asStr(),
-        .data_path = data_path.buffer.asStr(),
-        .filter = ImageFilter::Nearest,
-        .address_mode = ImageAddressMode::ClampToWhite,
-        .allocator = &mem::stl_allocator,
-        .assetmgr = &assetmgr,
-      };
-      Texture::compileASE(params);
-
-      return true;
-    });
-  aseGlob.destroy();
-  texture_compile_allocator.deinit();
-
+  
   // demo.place(ui);
 
   inspector = ui::Inspector::create(ui, this);

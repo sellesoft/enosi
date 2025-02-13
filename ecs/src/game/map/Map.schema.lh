@@ -27,6 +27,7 @@ struct MapTileDef
 {
   TileKind kind;
   vec2i pos;
+  String texture;
   Array<const SourceData*> entities;
 };
 
