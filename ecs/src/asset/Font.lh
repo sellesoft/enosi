@@ -128,7 +128,7 @@ struct Font : public Asset
     String name, 
     AssetMgr& assetmgr);
 
-  static MovedAssetRef load(
+  static Font* load(
     String name, 
     AssetMgr& assetmgr,
     gfx::Renderer& renderer);

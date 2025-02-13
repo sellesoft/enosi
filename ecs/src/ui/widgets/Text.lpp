@@ -221,7 +221,7 @@ void TextState::deinit()
  */
 void TextState::checkFont(String name, UI* ui)
 {
-  if (isnil(font))
+  if (!font.isValid())
   {
     DEBUG("font not loaded yet\n");
 
@@ -235,7 +235,7 @@ void TextState::checkFont(String name, UI* ui)
 
     font.track(Font::load(name, ui->eng->assetmgr, ui->eng->renderer));
 
-    if (isnil(font))
+    if (!font.isValid())
     {
       ERROR("evaluate called on a Text item with font '", name, "' ",
             "but the font failed to load\n");

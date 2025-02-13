@@ -44,26 +44,24 @@ struct AssetMgr
   // This will assert if an Asset with the given name already exists, as 
   // these functions are expected to be called when we know that the 
   // wanted Asset doesn't already exist!
-  MovedAssetRef allocateAsset(u64 size, String name);
+  Asset* allocateAsset(u64 size, String name);
 
   template<typename T>
-  MovedAssetRef allocateAsset(String name)
+  T* allocateAsset(String name)
   {
-    TypedAssetRef<T> ref = allocateAsset(sizeof(T), name);
-    new (ref.getData()) T;
-    
-    auto* asset = ref.getData();
+    auto* asset = (T*)allocateAsset(sizeof(T), name);
+    new (asset) T;
 
     asset->name = name.allocateCopy(&mem::stl_allocator);
     asset->hash = name.hash();
     asset->rc.addRef();
     asset->rsrcmgr = this;
 
-    return ref.move();
+    return asset;
   }
 
   // Attempts to find an asset from a given name and returns it.
-  MovedAssetRef findAsset(String name) const;
+  Asset* findAsset(String name) const;
 
   static b8 checkNeedsCompiled(String asset_path, String data_path);
 

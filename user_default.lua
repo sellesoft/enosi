@@ -71,7 +71,7 @@ return
   asan = false,
 
   -- Report files successfully built.
-  report_success = true,
+  report_success = false,
 
   -- Configuration intended to be applied to all projects.
   -- Note that any configuration specified in project specific 

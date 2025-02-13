@@ -305,16 +305,3 @@ llvm.report.dir.lib
 }
 
 llvm.report.ext.pub.Exe(llvm_builddir.."/bin/clang++")
--- llvm.report.CMake(
---   llvm.root.."/src/llvm", 
---   "Unix Makefiles",
---   List
---   {
---     "-DLLVM_CCACHE_BUILD=ON",
---     "-DLLVM_OPTIMIZED_TABLEGEN=ON",
---     "-DLLVM_ENABLE_PROJECTS=clang;lld",
---     "-DCMAKE_BUILD_TYPE="..mode,
---     "-DLLVM_USE_LINKER=lld", -- TODO(sushi) support for other linkers
---     "-DLLVM_ENABLE_RUNTIMES=all",
---   },
---   llvm_builddir)

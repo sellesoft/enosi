@@ -164,19 +164,68 @@ $ end
 
   Font::CompileParams params =
   {
-    .name = "gohu"_str,
+    .name       = "gohu"_str,
     .asset_path = "assets/fonts/gohu.bdf"_str,
-    .data_path = "data/fonts/gohu.cmp_font"_str,
-    .ranges = CodepointRanges::from(&ascii, 1),
-    .allocator = &mem::stl_allocator,
-    .assetmgr = &assetmgr,
+    .data_path  = "data/fonts/gohu.cmp_font"_str,
+    .ranges     = CodepointRanges::from(&ascii, 1),
+    .allocator  = &mem::stl_allocator,
+    .assetmgr   = &assetmgr,
   };
 
   Font::compileBDF(params);
-  
+
+  //TODO(delle) update the bump allocators to have a reset() and clear()
+  mem::LenientBump texture_compile_allocator;
+  if (!texture_compile_allocator.init())
+    return ERROR("failed to initialize texture compile allocator\n");
+
+  Texture::CompileParams white_texture_params =
+  {
+    .name         = "white"_str,
+    .data_path    = "data/textures/white.texture"_str,
+    .width        = 4,
+    .height       = 4,
+    .format       = ImageFormat::BW,
+    .kind         = ImageKind::TwoD,
+    .filter       = ImageFilter::Nearest,
+    .address_mode = ImageAddressMode::ClampToWhite,
+    .allocator    = &texture_compile_allocator,
+    .assetmgr     = &assetmgr,
+  };
+
+  u8 pixels[4] = { 0xff, 0xff, 0xff, 0xff, };
+
+  Texture::compileFromMemory(pixels, white_texture_params);
+
+  auto aseGlob = fs::Globber::create("assets/textures/*.ase"_str);
+  aseGlob.run([&](fs::Path& asset_path)
+    {
+      String name = asset_path.basename().subToFirst('.');
+
+      fs::Path data_path;
+      data_path.init("data/textures/"_str, &texture_compile_allocator);
+      data_path.append(name, ".texture"_str);
+
+      Texture::CompileParams params =
+      {
+        .name         = name,
+        .asset_path   = asset_path.buffer.asStr(),
+        .data_path    = data_path.buffer.asStr(),
+        .filter       = ImageFilter::Nearest,
+        .address_mode = ImageAddressMode::ClampToWhite,
+        .allocator    = &mem::stl_allocator,
+        .assetmgr     = &assetmgr,
+      };
+      Texture::compileASE(params);
+
+      return true;
+    });
+  aseGlob.destroy();
+  texture_compile_allocator.deinit();
+
   // demo.place(ui);
 
-  inspector = ui::Inspector::create(ui, this);
+  // inspector = ui::Inspector::create(ui, this);
 
   $ local inspector = ui.createItemContext("Inspector", "inspector")
 

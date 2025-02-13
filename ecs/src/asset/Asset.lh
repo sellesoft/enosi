@@ -47,8 +47,53 @@ struct Asset
   friend AssetMgr;
 };
 
-// Define the AssetRef type.
-@Ref(Asset, AssetMgr);
+/* ============================================================================
+ */
+struct AssetRef
+{
+  AssetRef() {}
+  
+  ~AssetRef()
+  {
+    if (ptr != nullptr)
+      release();
+  }
+
+  AssetRef(const AssetRef& rhs)
+  {
+    assert(!"copying asset refs is not allowed");
+  }
+
+  void trackNoRef(Asset* asset)
+  {
+    if (ptr != nullptr)
+      release();
+    ptr = asset;
+  }
+
+  void track(Asset* asset)
+  {
+    if (ptr != nullptr)
+      release();
+    ptr = asset;
+    if (ptr != nullptr)
+      ptr->rc.addRef();
+  }
+
+  void release();
+
+  b8 isValid() const { return ptr != nullptr; }
+
+  Asset* getAsset() const
+  {
+    return ptr;
+  }
+
+private:
+  Asset* ptr = nullptr;
+
+  friend AssetMgr;
+};
 
 /* ============================================================================
  *  Helper for defining a typed asset handle.
@@ -56,30 +101,7 @@ struct Asset
 template<typename T>
 struct TypedAssetRef : public AssetRef
 {
-  constexpr TypedAssetRef() : AssetRef() {}
-  constexpr TypedAssetRef(Nil) {}
-
-  constexpr TypedAssetRef(MovedAssetRef&& ref)
-    : AssetRef(ref) {}
-
-  constexpr TypedAssetRef(AssetRef&& handle)
-    : AssetRef(static_cast<decltype(handle)&&>(handle)) {}
-
-  constexpr TypedAssetRef(TypedAssetRef<T>&& handle)
-    : AssetRef(static_cast<decltype(handle)&&>(handle)) {}
+  TypedAssetRef() : AssetRef() {}
 
   T* getData() const { return (T*)getAsset(); }
 };
-
-template<typename T>
-struct NilValue<TypedAssetRef<T>>
-{
-  constexpr static const TypedAssetRef<T> Value = {nullptr};
-
-  inline static b8 isNil(const TypedAssetRef<T>& x)
-  {
-    return NilValue<AssetRef>::isNil((const AssetRef&)x);
-  }
-};
-
-

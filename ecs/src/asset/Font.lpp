@@ -88,7 +88,7 @@ s64 Font::writeDataPath(io::IO* io, String name, AssetMgr& assetmgr)
 
 /* ----------------------------------------------------------------------------
  */
-MovedAssetRef Font::load(
+Font* Font::load(
     String name, 
     AssetMgr& assetmgr,
     gfx::Renderer& renderer)
@@ -102,32 +102,30 @@ MovedAssetRef Font::load(
 
   String data_path = data_path_buf.asStr();
 
-  MovedAssetRef existing = assetmgr.findAsset(data_path);
-  if (notnil(existing))
-    return existing;
+  Asset* existing = assetmgr.findAsset(data_path);
+  if (existing != nullptr)
+    return (Font*)existing;
 
   if (!Path::exists(data_path))
   {
     ERROR("attempt to load font '", name, "' but there is no data at "
           "path '", data_path, "'\n");
-    return nil;
+    return nullptr;
   }
 
-  auto r_font = FontRef(assetmgr.allocateAsset<Font>(data_path));
-  if (isnil(r_font))
+  auto* font = assetmgr.allocateAsset<Font>(data_path);
+  if (font == nullptr)
   {
-    ERROR("failed to load font '", name, "'\n");
-    return nil;
+    ERROR("failed to allocate font asset\n");
+    return nullptr;
   }
-
-  Font* font = r_font.getData();
 
   // Open the compiled data from disk.
   auto compiled_data_file = File::from(data_path, OpenFlag::Read);
   if (isnil(compiled_data_file))
   {
     ERROR("failed to open compiled font data from '", data_path, "'\n");
-    return nil;
+    return nullptr;
   }
 
   u64 file_size = compiled_data_file.getInfo().byte_size;
@@ -150,14 +148,15 @@ MovedAssetRef Font::load(
   INFO("loading font's texture\n");
 
   // Load the texture.
-  font->r_texture.track(Texture::load(name, assetmgr, renderer));
-  if (isnil(font->r_texture))
+  font->r_texture.trackNoRef(Texture::load(name, assetmgr));
+  if (!font->r_texture.isValid())
   {
     ERROR("failed to load font texture\n");
-    return nil;
+    return nullptr;
   }
 
-  return r_font.move();
+
+  return font;
 }
 
 /* ----------------------------------------------------------------------------

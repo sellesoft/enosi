@@ -52,9 +52,9 @@ b8 TextureData::serialize(io::IO* out)
 
 /* ----------------------------------------------------------------------------
  */
-MovedAssetRef Texture::load(
-    String name,
-    AssetMgr& assetmgr,
+Texture* Texture::load(
+    String name, 
+    AssetMgr& assetmgr, 
     gfx::Renderer& renderer)
 {
   using namespace fs;
@@ -77,23 +77,21 @@ MovedAssetRef Texture::load(
   {
     ERROR("attempt to load texture '", name, "' but there is no asset "
           "at path '", data_path, "'\n");
-    return nil;
+    return nullptr;
   }
 
-  auto r_texture = TextureRef(assetmgr.allocateAsset<Texture>(data_path));
-  if (isnil(r_texture))
+  auto* texture = assetmgr.allocateAsset<Texture>(data_path);
+  if (texture == nullptr)
   {
     ERROR("failed to load texture '", name, "'\n");
-    return nil;
+    return nullptr;
   }
 
-  Texture* texture = r_texture.getData();
-  
   auto compiled_data_file = File::from(data_path, OpenFlag::Read);
   if (isnil(compiled_data_file))
   {
     ERROR("failed to open compiled texture data from '", data_path, "'\n");
-    return nil;
+    return nullptr;
   }
 
   u64 file_size = compiled_data_file.getInfo().byte_size;
@@ -108,7 +106,7 @@ MovedAssetRef Texture::load(
 
   renderer.loadTexture(texture);
 
-  return r_texture.move();
+  return texture;
 }
 
 /* ----------------------------------------------------------------------------

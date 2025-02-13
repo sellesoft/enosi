@@ -92,7 +92,7 @@ struct Texture : public Asset
   static s64 writeAssetPath(io::IO* io, String name, AssetMgr& assetmgr);
   static s64 writeDataPath(io::IO* io, String name, AssetMgr& assetmgr);
 
-  static MovedAssetRef load(
+  static Texture* load(
     String name, 
     AssetMgr& assetmgr,
     gfx::Renderer& renderer);
