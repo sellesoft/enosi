@@ -31,3 +31,4 @@ bin/
 
 CppProperties.json
 *.rdbg
+tree-sitter-lpp/
