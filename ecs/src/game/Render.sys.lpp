@@ -65,35 +65,25 @@ b8 RenderSys::update(GameMgr& gamemgr)
       0.f);
 
   renderer.pushUniformMat3x2("model"_str, tm);
+  renderer.pushUniformBool("has_texture"_str, true);
 
   u32 layer_idx = 0;
   for (Layer& layer : map.layers)
   {
+    Color color = Color(0xffffffff) * (1.0f - (layer_idx * 0.25f));
+
     for (const Tile& tile : layer.tiles)
     {
       if (tile.def == nullptr)
         continue;
 
-      const MapTileDef& def = *tile.def;
-      
-      Color color;
+      if (isnil(tile.r_texture))
+        continue;
+        
+      renderer.pushBindTexture(tile.r_texture.getData());
 
-      switch (def.kind)
-      {
-      case TileKind::Wall: color = 0x00ff00ff; break;
-      case TileKind::Floor: color = 0x0000ffff; break;
-      }
-
-      color *= 1.f - layer_idx * 0.25f;
-
-      sum += 
-        gfx::putFilledRect(
-          vp,
-          ip,
-          sum,
-          layer.def->pos + def.pos,
-          vec2f(1,1),
-          color);
+      vec2f pos = layer.def->pos + tile.def->pos;
+      sum += gfx::putFilledRect(vp, ip, sum, pos, vec2f(1,1), color);
     }
 
     layer_idx += 1;

@@ -199,7 +199,7 @@ struct StaticBuffer : public IO
       (slice.len > bytes_remaining? bytes_remaining : slice.len);
     if (bytes_to_write == 0)
       return 0;
-    mem::copy(buffer+len, slice.ptr, slice.len);
+    mem::copy(buffer+len, slice.ptr, bytes_to_write);
     len += bytes_to_write;
     buffer[len] = 0;
     return len;

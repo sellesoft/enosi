@@ -1,13 +1,14 @@
 $ local cmn = require "common"
 
+@@lpp.import "asset/AssetMgr.lh"
+@@lpp.import "asset/SourceData.lh"
+@@lpp.import "Engine.lh"
 @@lpp.import "game/map/Map.lh"
 @@lpp.import "game/map/Map.schema.lh"
 @@lpp.import "game/GameMgr.lh"
 @@lpp.import "game/EntityLoader.lh"
 @@lpp.import "game/Spawner.comp.lh"
 @@lpp.import "game/Transform.comp.lh"
-
-@@lpp.import "asset/SourceData.lh"
 
 #include "iro/Logger.h"
 
@@ -17,14 +18,25 @@ $ local cmn = require "common"
  */
 b8 Tile::init(const MapTileDef& def, u32 layer_idx, GameMgr& gamemgr)
 {
-  EntityMgr& entmgr = gamemgr.entmgr;
+  TRACE("initializing tile at (",def.pos.x,",",def.pos.y,",",layer_idx,")\n");
+  if (r_texture.isValid())
+    return ERROR("duplicate tiles at (",def.pos.x,",",def.pos.y,",",
+      layer_idx,")\n");
 
   this->def = &def;
   
+  if (notnil(def.texture))
+  {
+    r_texture.track(Texture::load(
+      def.texture,
+      gamemgr.engine->assetmgr,
+      gamemgr.engine->renderer));
+  }
+
   for (const SourceData* ent_data : def.entities)
   {
-    auto entid = loadEntity(*ent_data, entmgr);
-    auto* ent = entmgr.getEntity(entid);
+    auto entid = loadEntity(*ent_data, gamemgr.entmgr);
+    auto* ent = gamemgr.entmgr.getEntity(entid);
     auto* transform = ent->tryComp<Transform>();
     transform->pos = def.pos;
     transform->placement_layer = layer_idx;
@@ -37,6 +49,9 @@ b8 Tile::init(const MapTileDef& def, u32 layer_idx, GameMgr& gamemgr)
  */
 b8 Layer::init(const MapLayerDef& def, u32 layer_idx, GameMgr& gamemgr)
 {
+  TRACE("initializing layer at (",def.pos.x,",",def.pos.y,",",layer_idx,")\n");
+  assert(isnil(tiles));
+
   this->def = &def;
 
   if (!tiles.init())
@@ -60,6 +75,9 @@ b8 Layer::init(const MapLayerDef& def, u32 layer_idx, GameMgr& gamemgr)
  */
 b8 Map::init(const MapDef& def, GameMgr& gamemgr)
 {
+  INFO("initializing map '",def.name,"'\n");
+  assert(isnil(layers));
+
   this->def = &def;
 
   if (!layers.init())

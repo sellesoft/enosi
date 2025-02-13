@@ -8,7 +8,6 @@ $ local cmn = require "common"
 
 @@lpp.import "asset/Font.lh"
 @@lpp.import "asset/AssetMgr.lh"
-@@lpp.import "graphics/Renderer.lh"
 
 static Logger logger = 
   Logger::create("font"_str, Logger::Verbosity::Debug);
@@ -151,14 +150,12 @@ MovedAssetRef Font::load(
   INFO("loading font's texture\n");
 
   // Load the texture.
-  font->r_texture.track(Texture::load(name, assetmgr));
+  font->r_texture.track(Texture::load(name, assetmgr, renderer));
   if (isnil(font->r_texture))
   {
     ERROR("failed to load font texture\n");
     return nil;
   }
-
-  renderer.loadTexture(font->r_texture.getData());
 
   return r_font.move();
 }

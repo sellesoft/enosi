@@ -11,6 +11,8 @@ using namespace iro;
 
 struct AssetMgr;
 
+namespace gfx { struct Renderer; }
+
 namespace iro::io
 {
   struct IO;
@@ -80,7 +82,8 @@ struct Texture : public Asset
 
   static MovedAssetRef load(
     String name, 
-    AssetMgr& assetmgr);
+    AssetMgr& assetmgr,
+    gfx::Renderer& renderer);
 
   struct CompileParams
   {

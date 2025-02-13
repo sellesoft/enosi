@@ -7,6 +7,7 @@ $ local cmn = require "common"
 
 @@lpp.import "asset/Texture.lh"
 @@lpp.import "asset/AssetMgr.lh"
+@@lpp.import "graphics/Renderer.lh"
 
 #include "cassert"
 
@@ -33,7 +34,18 @@ b8 TextureData::serialize(io::IO* out)
   void* dummy = (void*)0xff;
   out->write(&dummy);
 
-  out->write({(u8*)pixels, u64(width*height)});
+  u64 pixel_stride = 0;
+  switch (format)
+  {
+    case ImageFormat::BW: pixel_stride = 1; break;
+    case ImageFormat::BWA: pixel_stride = 2; break;
+    case ImageFormat::RGB: pixel_stride = 3; break;
+    case ImageFormat::RGBA: pixel_stride = 4; break;
+  }
+  assert(pixel_stride != 0);
+
+  u64 pixels_bytes = width * height * pixel_stride;
+  out->write({(u8*)pixels, pixels_bytes});
 
   return true;
 }
@@ -42,14 +54,24 @@ b8 TextureData::serialize(io::IO* out)
  */
 MovedAssetRef Texture::load(
     String name,
-    AssetMgr& assetmgr)
+    AssetMgr& assetmgr,
+    gfx::Renderer& renderer)
 {
   using namespace fs;
+
+  TRACE("loading '", name, "'\n");
 
   PathBuffer data_path_buf;
   writeDataPath(&data_path_buf, name, assetmgr);
 
   String data_path = data_path_buf.asStr();
+
+  MovedAssetRef existing = assetmgr.findAsset(data_path);
+  if (notnil(existing))
+    return existing;
+
+  TRACE("loading '", name, "' which is unloaded\n");
+  SCOPED_INDENT;
 
   if (!Path::exists(data_path))
   {
@@ -83,6 +105,8 @@ MovedAssetRef Texture::load(
 
   // Repoint the data's pixels.
   data->pixels = (void*)(data + 1);
+
+  renderer.loadTexture(texture);
 
   return r_texture.move();
 }
