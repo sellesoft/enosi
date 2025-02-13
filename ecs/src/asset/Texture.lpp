@@ -66,9 +66,9 @@ Texture* Texture::load(
 
   String data_path = data_path_buf.asStr();
 
-  MovedAssetRef existing = assetmgr.findAsset(data_path);
-  if (notnil(existing))
-    return existing;
+  Asset* existing = assetmgr.findAsset(data_path);
+  if (existing != nullptr)
+    return (Texture*)existing;
 
   TRACE("loading '", name, "' which is unloaded\n");
   SCOPED_INDENT;
