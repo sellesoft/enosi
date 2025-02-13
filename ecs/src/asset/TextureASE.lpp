@@ -23,6 +23,82 @@ static inline T extract(u8*& cursor)
   return t;
 }
 
+// drop alpha values and convert rgb to luminance when downcasting
+static void convert(
+  u8* dst,
+  u8* src,
+  u32 dst_stride,
+  u32 src_stride,
+  u32 bytes)
+{
+  u8* src_end = src + bytes;
+  while (src < src_end)
+  {
+    switch (dst_stride)
+    {
+      case 1:
+        switch (src_stride)
+        {
+        case 2:
+          dst[0] = src[0];
+          break;
+        case 4:
+          dst[0] = (src[0]*0.2126f + src[1]*0.7152f + src[2]*0.0722f)*255.0f;
+          break;
+        }break;
+      case 2:
+        switch (src_stride)
+        {
+        case 1:
+          dst[0] = src[0];
+          dst[1] = 0xFF;
+          break;
+        case 4:
+          dst[0] = (src[0]*0.2126f + src[1]*0.7152f + src[2]*0.0722f)*255.0f;
+          dst[1] = src[3];
+          break;
+        }break;
+      case 3:
+        switch (src_stride)
+        {
+        case 1:
+          dst[0] = src[0];
+          dst[1] = src[0];
+          dst[2] = src[0];
+          break;
+        case 2:
+          dst[0] = src[0];
+          dst[1] = src[0];
+          dst[2] = src[0];
+          break;
+        case 4:
+          dst[0] = src[1];
+          dst[1] = src[2];
+          dst[2] = src[3];
+          break;
+        }break;
+      case 4:
+        switch (src_stride)
+        {
+        case 1:
+          dst[0] = src[0];
+          dst[1] = src[0];
+          dst[2] = src[0];
+          dst[3] = 0xFF;
+          break;
+        case 2:
+          dst[0] = src[0];
+          dst[1] = src[0];
+          dst[2] = src[0];
+          dst[3] = src[1];
+          break;
+        }break;
+    }
+    src += src_stride;
+    dst += dst_stride;
+  }
+}
+
 /* ----------------------------------------------------------------------------
  */
 b8 Texture::compileASE(CompileParams& params)
@@ -31,7 +107,7 @@ b8 Texture::compileASE(CompileParams& params)
     return ERROR("attempt to compile texture '", params.name, "' but there"
       " is no asset at path '", params.asset_path, "'\n");
 
-  //TODO(delle) add a way to force an asset recompile when
+  //TODO add a way to force an asset recompile when
   //  we need to update the compiled data format
   if (!AssetMgr::checkNeedsCompiled(params.asset_path, params.data_path))
     return true;
@@ -39,7 +115,7 @@ b8 Texture::compileASE(CompileParams& params)
   INFO("compiling '", params.asset_path, ":'\n");
   SCOPED_INDENT;
 
-  // TODO(delle) take in an allocator to use for temp data.
+  // TODO take in an allocator to use for temp data.
   mem::LenientBump allocator;
   if (!allocator.init())
     return ERROR("failed to initialize temp allocator\n");
@@ -98,6 +174,10 @@ b8 Texture::compileASE(CompileParams& params)
     return ERROR("failed to validate the header's magic number\n");
 
   auto frame_count = extract<u16>(cursor);
+  if (frame_count > 1)
+    return ERROR("failed because it has an more than one frame which is"
+      " not yet supported\n");
+
   auto width = extract<u16>(cursor);
   auto height = extract<u16>(cursor);
   auto depth = extract<u16>(cursor);
@@ -132,6 +212,20 @@ b8 Texture::compileASE(CompileParams& params)
     return ERROR("failed because it has an invalid width or height ",
       width, "x", height, "\n");
 
+  // Prepare destination pixel buffer.
+  u8* pixel_buffer = nullptr;
+  u32 source_pixel_byte_stride = depth / 8;
+  u32 target_pixel_byte_stride = (u32)params.format;
+  assert(width * height <= MAX_U32 / target_pixel_byte_stride);
+  u32 pixel_buffer_size = width * height * target_pixel_byte_stride;
+  if (source_pixel_byte_stride != target_pixel_byte_stride)
+  {
+    pixel_buffer = (u8*)allocator.allocate(pixel_buffer_size);
+    if (pixel_buffer == nullptr)
+      return ERROR("pixel buffer allocation of ", pixel_buffer_size,
+        " bytes failed\n");
+  }
+
   // Parse frames.
   for (u16 frame_index = 0; frame_index < frame_count; frame_index++)
   {
@@ -159,6 +253,8 @@ b8 Texture::compileASE(CompileParams& params)
       frame_chunk_count = frame_chunk_count_ex;
     assert(cursor - frame_cursor_start == 16);
 
+    u16 layer_count = 0;
+
     // Parse frame chunks.
     for (u16 chunk_index = 0; chunk_index < frame_chunk_count; chunk_index++)
     {
@@ -178,6 +274,10 @@ b8 Texture::compileASE(CompileParams& params)
       {
       case 0x2004: // Layer Chunk
       {
+        if (layer_count > 0)
+          return ERROR("failed because handling more than one layer is"
+            " not yet implemented\n");
+
         if (cursor + 18 > max_cursor)
           return ERROR("failed to read frame ", frame_index, " chunk ",
             chunk_index, "'s contents because the file ended early\n");
@@ -208,12 +308,59 @@ b8 Texture::compileASE(CompileParams& params)
           tileset_index = extract<u32>(cursor);
         }
 
-        //TODO(delle) handle layers
+        //TODO handle multiple layers
+        layer_count += 1;
       }break;
 
       case 0x2005:
       {
-        //TODO(delle) parse cel
+        if (cursor + 16 > max_cursor)
+          return ERROR("failed to read frame ", frame_index, " chunk ",
+            chunk_index, "'s contents because the file ended early\n");
+
+        auto layer_index = extract<u16>(cursor);
+        auto x_pos = extract<s16>(cursor);
+        auto y_pos = extract<s16>(cursor);
+        auto opacity = extract<u8>(cursor);
+        auto type = extract<u16>(cursor);
+        auto z_index = extract<s16>(cursor);
+        cursor += 5;
+
+        switch (type)
+        {
+        case 0:
+        {
+          if (cursor + 4 > max_cursor)
+            return ERROR("failed to read frame ", frame_index, " chunk ",
+              chunk_index, "'s contents because the file ended early\n");
+
+          auto width = extract<u16>(cursor);
+          auto height = extract<u16>(cursor);
+          auto cel_pixel_bytes = width * height * source_pixel_byte_stride;
+          if (cursor + cel_pixel_bytes > max_cursor)
+            return ERROR("failed to read frame ", frame_index, " chunk ",
+              chunk_index, "'s contents because the file ended early\n");
+
+          if (pixel_buffer == nullptr)
+          {
+            pixel_buffer = cursor;
+          }
+          else
+          {
+            convert(
+              pixel_buffer,
+              cursor,
+              target_pixel_byte_stride,
+              source_pixel_byte_stride,
+              cel_pixel_bytes);
+          }
+        }break;
+
+        default:
+          return ERROR("failed to read frame ", frame_index, " chunk ",
+            chunk_index, " because handling for cel type ", type,
+              " is not yet implemented\n");
+        }
       }break;
 
       default:
@@ -228,7 +375,7 @@ b8 Texture::compileASE(CompileParams& params)
     assert(cursor - frame_cursor_start == frame_bytes);
   }
 
-  //TODO(delle) generate .texture
+  //TODO generate .texture
 
   delete_data_file_if_failure.cancel();
   return true;

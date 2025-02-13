@@ -149,35 +149,30 @@ $ end
 
   Font::compileBDF(params);
 
-  //TODO(delle) update the bump allocators to have a reset() and clear()
-  mem::LenientBump texture_compile_allocator;
-  if (!texture_compile_allocator.init())
-    return ERROR("failed to initialize texture compile allocator\n");
-  auto aseGlob = fs::Globber::create("assets/textures/*.ase"_str);
-  aseGlob.run([&](fs::Path& asset_path)
-    {
-      String name = asset_path.basename().subToFirst('.');
-
-      fs::Path data_path;
-      data_path.init("data/textures/"_str, &texture_compile_allocator);
-      data_path.append(name, ".texture"_str);
-
-      Texture::CompileParams params =
-      {
-        .name = name,
-        .asset_path = asset_path.buffer.asStr(),
-        .data_path = data_path.buffer.asStr(),
-        .filter = ImageFilter::Nearest,
-        .address_mode = ImageAddressMode::ClampToWhite,
-        .allocator = &mem::stl_allocator,
-        .assetmgr = &assetmgr,
-      };
-      Texture::compileASE(params);
-
-      return true;
-    });
-  aseGlob.destroy();
-  texture_compile_allocator.deinit();
+  
+  //io::StaticBuffer<511> texture_data_path_buffer;
+  //auto ase_glob = fs::Globber::create("assets/textures/*.ase"_str);
+  //ase_glob.run([&](fs::Path& asset_path)
+  //  {
+  //    texture_data_path_buffer.len = 0;
+  //    String name = asset_path.basename().subToFirst('.');
+  //    Texture::writeDataPath(&texture_data_path_buffer, name, assetmgr);
+  //    Texture::CompileParams params =
+  //    { //TODO add TextureDef for specifying these params
+  //      .name = name,
+  //      .asset_path = asset_path.buffer.asStr(),
+  //      .data_path = texture_data_path_buffer.asStr(),
+  //      .format = ImageFormat::RGBA,
+  //      .kind = ImageKind::TwoD,
+  //      .filter = ImageFilter::Nearest,
+  //      .address_mode = ImageAddressMode::ClampToWhite,
+  //      .allocator = &mem::stl_allocator,
+  //      .assetmgr = &assetmgr,
+  //    };
+  //    Texture::compileASE(params);
+  //    return true;
+  //  });
+  //ase_glob.destroy();
 
   // demo.place(ui);
 
