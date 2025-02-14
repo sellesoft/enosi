@@ -4,6 +4,8 @@
 
 $ require "common"
 
+@@lpp.import "asset/Texture.lh"
+
 #include "iro/Common.h"
 #include "math/Rect.h"
 #include "math/mat.h"
@@ -14,6 +16,7 @@ namespace gfx
   struct Renderer;
 }
 
+struct AssetMgr;
 struct GameMgr;
 struct EntityMgr;
 struct Map;
@@ -22,18 +25,30 @@ struct Map;
  */
 struct RenderSys
 {
-  gfx::Buffer* gfxbuf;
-
-  b8 init(gfx::Renderer& renderer);
+  static constexpr u32 MAX_QUADS = 8192;
+  static constexpr u32 MAX_BATCHES = 256;
+  struct QuadBatch
+  {
+    u32 quad_count;
+    const Texture* texture;
+  };
+  
+  b8 init(gfx::Renderer& renderer, AssetMgr& assetmgr);
 
   struct UpdateParams
   {
     Rect           viewport;
     mat3x2         view;
-    gfx::Renderer* renderer;
+    gfx::Renderer& renderer;
     EntityMgr*     entmgr;
     Map*           map;
   };
 
   b8 update(const UpdateParams& params);
+
+  gfx::Buffer* gfxbuf;
+  TextureRef null_texture;
+  QuadBatch batches[MAX_BATCHES];
+  u32 batch_count;
+  u32 quad_count;
 };

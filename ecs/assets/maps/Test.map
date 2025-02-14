@@ -9,31 +9,131 @@ return Map
       pos = { x = 1, y = 0 },
       tiles = 
       {
-        { kind = "Wall", pos = { x = 0, y = 0 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 1, y = 0 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 2, y = 0 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 3, y = 0 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 4, y = 0 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 0, y = 1 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 4, y = 1 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 0, y = 2 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 4, y = 2 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 0, y = 3 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 4, y = 3 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 0, y = 4 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 1, y = 4 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 2, y = 4 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 3, y = 4 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 4, y = 4 }, texture = "floor_tiles_lightgray" },
-        { kind = "Floor", pos = { x = 1, y = 1 }, texture = "floor_tiles_lightgray" },
-        { kind = "Floor", pos = { x = 2, y = 1 }, texture = "floor_tiles_lightgray" },
-        { kind = "Floor", pos = { x = 3, y = 1 }, texture = "floor_tiles_lightgray" },
-        { kind = "Floor", pos = { x = 1, y = 2 }, texture = "floor_tiles_lightgray" },
-        { kind = "Floor", pos = { x = 2, y = 2 }, texture = "floor_tiles_lightgray" },
-        { kind = "Floor", pos = { x = 3, y = 2 }, texture = "floor_tiles_lightgray" },
-        { kind = "Floor", pos = { x = 1, y = 3 }, texture = "floor_tiles_lightgray" },
-        { kind = "Floor", pos = { x = 2, y = 3 }, texture = "floor_tiles_lightgray" },
-        { kind = "Floor", pos = { x = 3, y = 3 }, texture = "floor_tiles_lightgray" },
+        {
+          kind = "Wall",
+          pos = { x = 0, y = 0 },
+          texture = "wall_botleft_corner_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 1, y = 0 },
+          texture = "wall_horizontal_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 2, y = 0 },
+          texture = "wall_horizontal_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 3, y = 0 },
+          texture = "wall_horizontal_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 4, y = 0 },
+          texture = "wall_botright_corner_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 0, y = 1 },
+          texture = "wall_vertical_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 4, y = 1 },
+          texture = "wall_vertical_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 0, y = 2 },
+          texture = "wall_vertical_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 4, y = 2 },
+          texture = "wall_vertical_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 0, y = 3 },
+          texture = "wall_vertical_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 4, y = 3 },
+          texture = "wall_vertical_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 0, y = 4 },
+          texture = "wall_topleft_corner_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 1, y = 4 },
+          texture = "wall_horizontal_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 2, y = 4 },
+          texture = "wall_horizontal_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 3, y = 4 },
+          texture = "wall_horizontal_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 4, y = 4 },
+          texture = "wall_topright_corner_olive"
+        },
+        {
+          kind = "Floor",
+          pos = { x = 1, y = 1 },
+          texture = "floor_tiles_lightgray"
+        },
+        {
+          kind = "Floor",
+          pos = { x = 2, y = 1 },
+          texture = "floor_tiles_lightgray"
+        },
+        {
+          kind = "Floor",
+          pos = { x = 3, y = 1 },
+          texture = "floor_tiles_lightgray"
+        },
+        {
+          kind = "Floor",
+          pos = { x = 1, y = 2 },
+          texture = "floor_tiles_lightgray"
+        },
+        {
+          kind = "Floor",
+          pos = { x = 2, y = 2 },
+          texture = "floor_tiles_lightgray"
+        },
+        {
+          kind = "Floor",
+          pos = { x = 3, y = 2 },
+          texture = "floor_tiles_lightgray"
+        },
+        {
+          kind = "Floor",
+          pos = { x = 1, y = 3 },
+          texture = "floor_tiles_lightgray"
+        },
+        {
+          kind = "Floor",
+          pos = { x = 2, y = 3 },
+          texture = "floor_tiles_lightgray"
+        },
+        {
+          kind = "Floor",
+          pos = { x = 3, y = 3 },
+          texture = "floor_tiles_lightgray"
+        },
       }
     },
     {
@@ -41,25 +141,85 @@ return Map
       pos = { x = 0, y = 2 },
       tiles = 
       {
-        { kind = "Wall", pos = { x = 0, y = 0 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 1, y = 0 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 2, y = 0 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 3, y = 0 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 0, y = 1 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 3, y = 1 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 0, y = 2 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 3, y = 2 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 0, y = 3 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 1, y = 3 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 2, y = 3 }, texture = "floor_tiles_lightgray" },
-        { kind = "Wall", pos = { x = 3, y = 3 }, texture = "floor_tiles_lightgray" },
-        { kind = "Floor", pos = { x = 1, y = 1 }, texture = "floor_tiles_lightgray" },
-        { kind = "Floor", pos = { x = 2, y = 1 }, texture = "floor_tiles_lightgray" },
-        { kind = "Floor", pos = { x = 1, y = 2 }, texture = "floor_tiles_lightgray" },
+        {
+          kind = "Wall",
+          pos = { x = 0, y = 0 },
+          texture = "wall_botleft_corner_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 1, y = 0 },
+          texture = "wall_horizontal_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 2, y = 0 },
+          texture = "wall_horizontal_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 3, y = 0 },
+          texture = "wall_botright_corner_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 0, y = 1 },
+          texture = "wall_vertical_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 3, y = 1 },
+          texture = "wall_vertical_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 0, y = 2 },
+          texture = "wall_vertical_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 3, y = 2 },
+          texture = "wall_vertical_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 0, y = 3 },
+          texture = "wall_topleft_corner_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 1, y = 3 },
+          texture = "wall_horizontal_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 2, y = 3 },
+          texture = "wall_horizontal_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 3, y = 3 },
+          texture = "wall_topright_corner_olive"
+        },
+        {
+          kind = "Floor",
+          pos = { x = 1, y = 1 },
+          texture = "floor_tiles_darkgray"
+        },
+        {
+          kind = "Floor",
+          pos = { x = 2, y = 1 },
+          texture = "floor_tiles_darkgray"
+        },
+        {
+          kind = "Floor",
+          pos = { x = 1, y = 2 },
+          texture = "floor_tiles_darkgray"
+        },
         { 
           kind = "Floor", 
           pos = { x = 2, y = 2 },
-          texture = "floor_tiles_lightgray",
+          texture = "floor_tiles_darkgray",
           entities =
           {
             Entity

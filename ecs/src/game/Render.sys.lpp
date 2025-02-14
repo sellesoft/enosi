@@ -16,61 +16,165 @@ static Logger logger =
 
 /* ----------------------------------------------------------------------------
  */
-b8 RenderSys::init(gfx::Renderer& renderer)
+b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
 {
+  //allocate the quad vertex and index buffers
   gfxbuf = renderer.createBuffer();
   if (!gfxbuf)
     return ERROR("failed to create gfx::Buffer\n");
   if (!gfxbuf->init(
-        sizeof(gfx::Vertex) * 0xffffff, 
-        sizeof(gfx::Index) * 0xffffff))
+        MAX_QUADS*4*sizeof(gfx::Vertex),
+        MAX_QUADS*6*sizeof(gfx::Index)))
     return ERROR("failed to init gfx::Buffer\n");
-
   gfxbuf->setGfxAttributes();
+
+  //initialize the quad indices
+  gfxbuf->map();
+  auto ip = (gfx::Index*)gfxbuf->mapped.ip;
+  for (int i = 0, j = 0; i < 6*MAX_QUADS; j++, i += 6)
+  {
+    ip[i+0] = 4*j + 0;
+    ip[i+1] = 4*j + 1;
+    ip[i+2] = 4*j + 2;
+    ip[i+3] = 4*j + 0;
+    ip[i+4] = 4*j + 2;
+    ip[i+5] = 4*j + 3;
+  }
+  gfxbuf->unmap();
+
+  //load the null texture
+  null_texture.track(Texture::load("null"_str, assetmgr, renderer));
+  if (!null_texture.isValid())
+  {
+    null_texture.track(assetmgr.findAsset("white"_str));
+    if (!null_texture.isValid())
+      return ERROR("failed to find a valid null texture\n");
+  }
+  assert(null_texture.isValid());
+
+  //init batches
+  batches[0].texture = null_texture.getData();
+  batch_count = 1;
+  quad_count = 0;
 
   return true;
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 RenderSys::update(const UpdateParams& params)
+static void drawBatches(
+  RenderSys& sys,
+  const RenderSys::UpdateParams& params)
 {
-  gfx::Renderer& renderer = *params.renderer;
+  assert(sys.batch_count <= RenderSys::MAX_BATCHES);
+  assert(sys.quad_count <= RenderSys::MAX_QUADS);
 
-  renderer.pushBindBuffer(gfxbuf);
+  gfx::Renderer& renderer = params.renderer;
+  renderer.pushBindBuffer(sys.gfxbuf);
 
   auto proj = mat3x2::identity();
   vec2f viewport_size = params.viewport.max - params.viewport.min;
   proj.set(0, 0, EyeSys::pixels_per_meter * 2.f / viewport_size.x);
   proj.set(1, 1, EyeSys::pixels_per_meter * 2.f / viewport_size.y);
-
   renderer.pushUniformMat3x2("proj"_str, proj);
+
   renderer.pushUniformMat3x2("view"_str, params.view);
+
+  mat3x2 tm = mat3x2::createTransform(params.viewport.min, 0.0f);
+  renderer.pushUniformMat3x2("model"_str, tm);
+
+  renderer.pushUniformBool("has_texture"_str, true);
+
+  u32 index_offset = 0;
+  for (u32 i = 0; i < sys.batch_count; i++)
+  {
+    assert(sys.batches[i].texture != nullptr);
+    renderer.pushBindTexture(sys.batches[i].texture);
+    renderer.pushDraw(index_offset, 6*sys.batches[i].quad_count, 0);
+    index_offset += 6*sys.batches[i].quad_count;
+  }
+  assert(index_offset == 6*sys.quad_count);
+
+  sys.gfxbuf->num_vertexes = 4*sys.quad_count;
+  sys.gfxbuf->num_indexes = 6*sys.quad_count;
+
+  renderer.pushUniformBool("has_texture"_str, false);
+
+  sys.batches[0].quad_count = 0;
+  sys.batches[0].texture = sys.null_texture.getData();
+  sys.batch_count = 1;
+  sys.quad_count = 0;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static void drawQuad(
+  RenderSys& sys,
+  const RenderSys::UpdateParams& params,
+  vec2f pos,
+  const Texture* texture,
+  Color color)
+{
+  assert(sys.gfxbuf != nullptr);
+  assert(sys.gfxbuf->mapped.vp != nullptr);
+
+  if (texture != sys.batches[sys.batch_count-1].texture)
+  {
+    if (sys.batches[sys.batch_count-1].quad_count > 0)
+    {
+      if (sys.batch_count >= RenderSys::MAX_BATCHES)
+      {
+        sys.gfxbuf->unmap();
+        drawBatches(sys, params);
+        sys.gfxbuf->map(); // TODO(delle) investigate if this stalls
+        assert(sys.gfxbuf->mapped.vp != nullptr);
+      }
+      else
+      {
+        sys.batch_count++;
+      }
+    }
+
+    sys.batches[sys.batch_count-1].quad_count = 0;
+    sys.batches[sys.batch_count-1].texture = texture;
+  }
+
+  auto vp = (gfx::Vertex*)sys.gfxbuf->mapped.vp + 4*sys.quad_count;
+  vp[0] = gfx::Vertex{ pos,              { 0.0f, 1.0f }, color.rgba };
+  vp[1] = gfx::Vertex{ pos + vec2f(1,0), { 1.0f, 1.0f }, color.rgba };
+  vp[2] = gfx::Vertex{ pos + vec2f(1,1), { 1.0f, 0.0f }, color.rgba };
+  vp[3] = gfx::Vertex{ pos + vec2f(0,1), { 0.0f, 0.0f }, color.rgba };
+
+  sys.batches[sys.batch_count-1].quad_count++;
+  sys.quad_count++;
+
+  if (sys.quad_count >= RenderSys::MAX_QUADS)
+  {
+    sys.gfxbuf->unmap();
+    drawBatches(sys, params);
+    sys.gfxbuf->map(); // TODO(delle) investigate if this stalls
+    assert(sys.gfxbuf->mapped.vp != nullptr);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 RenderSys::update(const UpdateParams& params)
+{
+  // TODO(delle) We might want to sort quads by texture before
+  // building their vertexes so we can produce bigger batches.
 
   gfxbuf->map();
 
-  auto vp = (gfx::Vertex*)gfxbuf->mapped.vp;
-  auto ip = (gfx::Index*)gfxbuf->mapped.ip;
-
-  vec2i sum = {};
-
-  mat3x2 tm = 
-    mat3x2::createTransform(
-      params.viewport.min,
-      0.f);
-
-  renderer.pushUniformMat3x2("model"_str, tm);
-  renderer.pushUniformBool("has_texture"_str, true);
-
+  // TODO(delle) only update changed tiles after init
   if (params.map)
   {
     Map& map = *params.map;
-    
+
     u32 layer_idx = 0;
     for (const Layer& layer : map.layers)
     {
-      Color color = Color(0xffffffff) * (1.0f - (layer_idx * 0.25f));
-      layer_idx += 1;
+      Color tint = Color(0xffffffff) * (1.0f - (layer_idx * 0.25f));
 
       for (const Tile& tile : layer.tiles)
       {
@@ -79,12 +183,13 @@ b8 RenderSys::update(const UpdateParams& params)
 
         if (!tile.r_texture.isValid())
           continue;
-          
-        renderer.pushBindTexture(tile.r_texture.getData());
 
         vec2f pos = layer.def->pos + tile.def->pos;
-        sum += gfx::putFilledRect(vp, ip, sum, pos, vec2f(1,1), color);
+        const Texture* texture = tile.r_texture.getData();
+        drawQuad(*this, params, pos, texture, tint);
       }
+
+      layer_idx++;
     }
   }
 
@@ -102,23 +207,18 @@ b8 RenderSys::update(const UpdateParams& params)
       {
         Layer& layer = map.layers[transform->placement_layer];
 
-        sum +=
-          gfx::putFilledRect(
-            vp,
-            ip,
-            sum,
-            layer.def->pos + transform->pos,
-            vec2f(1,1),
-            0xff0000ff);
+        vec2f pos = layer.def->pos + transform->pos;
+        drawQuad(*this, params, pos, null_texture.getData(), 0xff0000ff);
       }
     }
   }
 
   gfxbuf->unmap();
 
-  gfxbuf->num_indexes = gfxbuf->index_size / sizeof(gfx::Index);
-
-  renderer.pushDraw(0, sum.y, 0);
+  if (batch_count > 0)
+  {
+    drawBatches(*this, params);
+  }
 
   return true;
 }
