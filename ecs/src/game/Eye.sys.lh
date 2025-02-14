@@ -10,7 +10,7 @@ struct GameMgr;
 
 struct EyeSys
 {
-  static const u32 pixels_per_meter = 32;
+  static const u32 pixels_per_meter = 64;
 
   vec2f pos = {};
   f32   rotation = 0.f;

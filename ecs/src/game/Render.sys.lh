@@ -46,9 +46,10 @@ struct RenderSys
 
   b8 update(const UpdateParams& params);
 
-  gfx::Buffer* gfxbuf;
+  gfx::Buffer* quads_buffer;
   TextureRef null_texture;
   QuadBatch batches[MAX_BATCHES];
   u32 batch_count;
   u32 quad_count;
+  gfx::Buffer* background_buffer;
 };

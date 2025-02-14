@@ -10,6 +10,7 @@ $ require "common"
 @@lpp.import "ui/UI.lh"
 
 #include "iro/Logger.h"
+#include "iro/time/Time.h"
 
 static Logger logger = 
   Logger::create("rendersys"_str, Logger::Verbosity::Info);
@@ -18,19 +19,19 @@ static Logger logger =
  */
 b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
 {
-  //allocate the quad vertex and index buffers
-  gfxbuf = renderer.createBuffer();
-  if (!gfxbuf)
-    return ERROR("failed to create gfx::Buffer\n");
-  if (!gfxbuf->init(
+  //allocate quad buffers
+  quads_buffer = renderer.createBuffer();
+  if (!quads_buffer)
+    return ERROR("failed to create the quads buffer\n");
+  if (!quads_buffer->init(
         MAX_QUADS*4*sizeof(gfx::Vertex),
         MAX_QUADS*6*sizeof(gfx::Index)))
-    return ERROR("failed to init gfx::Buffer\n");
-  gfxbuf->setGfxAttributes();
+    return ERROR("failed to init the quads buffer\n");
+  quads_buffer->setGfxAttributes();
 
-  //initialize the quad indices
-  gfxbuf->map();
-  auto ip = (gfx::Index*)gfxbuf->mapped.ip;
+  //init quad indexes
+  quads_buffer->map();
+  auto ip = (gfx::Index*)quads_buffer->mapped.ip;
   for (int i = 0, j = 0; i < 6*MAX_QUADS; j++, i += 6)
   {
     ip[i+0] = 4*j + 0;
@@ -40,7 +41,7 @@ b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
     ip[i+4] = 4*j + 2;
     ip[i+5] = 4*j + 3;
   }
-  gfxbuf->unmap();
+  quads_buffer->unmap();
 
   //load the null texture
   null_texture.track(Texture::load("null"_str, assetmgr, renderer));
@@ -52,10 +53,32 @@ b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
   }
   assert(null_texture.isValid());
 
-  //init batches
+  //init quads batches
   batches[0].texture = null_texture.getData();
   batch_count = 1;
   quad_count = 0;
+
+  //allocate background buffers
+  background_buffer = renderer.createBuffer();
+  if (!background_buffer)
+    return ERROR("failed to create the background buffer\n");
+  if (!background_buffer->init(
+        4*sizeof(gfx::Vertex),
+        6*sizeof(gfx::Index)))
+    return ERROR("failed to init the background buffer\n");
+  background_buffer->setGfxAttributes();
+
+  //init background vertexes/indexes
+  background_buffer->map();
+  auto vp = (gfx::Vertex*)background_buffer->mapped.vp;
+  vp[0] = gfx::Vertex{ vec2f(0,0), vec2f(0,1), 0xFFFFFFFF };
+  vp[1] = gfx::Vertex{ vec2f(1,0), vec2f(1,1), 0xFFFFFFFF };
+  vp[2] = gfx::Vertex{ vec2f(1,1), vec2f(1,0), 0xFFFFFFFF };
+  vp[3] = gfx::Vertex{ vec2f(0,1), vec2f(0,0), 0xFFFFFFFF };
+  ip = (gfx::Index*)background_buffer->mapped.ip;
+  ip[0] = 0; ip[1] = 1; ip[2] = 2;
+  ip[3] = 0; ip[4] = 2; ip[5] = 3;
+  background_buffer->unmap();
 
   return true;
 }
@@ -70,7 +93,7 @@ static void drawBatches(
   assert(sys.quad_count <= RenderSys::MAX_QUADS);
 
   gfx::Renderer& renderer = params.renderer;
-  renderer.pushBindBuffer(sys.gfxbuf);
+  renderer.pushBindBuffer(sys.quads_buffer);
 
   auto proj = mat3x2::identity();
   vec2f viewport_size = params.viewport.max - params.viewport.min;
@@ -95,8 +118,8 @@ static void drawBatches(
   }
   assert(index_offset == 6*sys.quad_count);
 
-  sys.gfxbuf->num_vertexes = 4*sys.quad_count;
-  sys.gfxbuf->num_indexes = 6*sys.quad_count;
+  sys.quads_buffer->num_vertexes = 4*sys.quad_count;
+  sys.quads_buffer->num_indexes = 6*sys.quad_count;
 
   renderer.pushUniformBool("has_texture"_str, false);
 
@@ -115,8 +138,8 @@ static void drawQuad(
   const Texture* texture,
   Color color)
 {
-  assert(sys.gfxbuf != nullptr);
-  assert(sys.gfxbuf->mapped.vp != nullptr);
+  assert(sys.quads_buffer != nullptr);
+  assert(sys.quads_buffer->mapped.vp != nullptr);
 
   if (texture != sys.batches[sys.batch_count-1].texture)
   {
@@ -124,10 +147,10 @@ static void drawQuad(
     {
       if (sys.batch_count >= RenderSys::MAX_BATCHES)
       {
-        sys.gfxbuf->unmap();
+        sys.quads_buffer->unmap();
         drawBatches(sys, params);
-        sys.gfxbuf->map(); // TODO(delle) investigate if this stalls
-        assert(sys.gfxbuf->mapped.vp != nullptr);
+        sys.quads_buffer->map(); // TODO(delle) investigate if this stalls
+        assert(sys.quads_buffer->mapped.vp != nullptr);
       }
       else
       {
@@ -139,21 +162,21 @@ static void drawQuad(
     sys.batches[sys.batch_count-1].texture = texture;
   }
 
-  auto vp = (gfx::Vertex*)sys.gfxbuf->mapped.vp + 4*sys.quad_count;
-  vp[0] = gfx::Vertex{ pos,              { 0.0f, 1.0f }, color.rgba };
-  vp[1] = gfx::Vertex{ pos + vec2f(1,0), { 1.0f, 1.0f }, color.rgba };
-  vp[2] = gfx::Vertex{ pos + vec2f(1,1), { 1.0f, 0.0f }, color.rgba };
-  vp[3] = gfx::Vertex{ pos + vec2f(0,1), { 0.0f, 0.0f }, color.rgba };
+  auto vp = (gfx::Vertex*)sys.quads_buffer->mapped.vp + 4*sys.quad_count;
+  vp[0] = gfx::Vertex{ pos,              vec2f(0,1), color.rgba };
+  vp[1] = gfx::Vertex{ pos + vec2f(1,0), vec2f(1,1), color.rgba };
+  vp[2] = gfx::Vertex{ pos + vec2f(1,1), vec2f(1,0), color.rgba };
+  vp[3] = gfx::Vertex{ pos + vec2f(0,1), vec2f(0,0), color.rgba };
 
   sys.batches[sys.batch_count-1].quad_count++;
   sys.quad_count++;
 
   if (sys.quad_count >= RenderSys::MAX_QUADS)
   {
-    sys.gfxbuf->unmap();
+    sys.quads_buffer->unmap();
     drawBatches(sys, params);
-    sys.gfxbuf->map(); // TODO(delle) investigate if this stalls
-    assert(sys.gfxbuf->mapped.vp != nullptr);
+    sys.quads_buffer->map(); // TODO(delle) investigate if this stalls
+    assert(sys.quads_buffer->mapped.vp != nullptr);
   }
 }
 
@@ -163,10 +186,31 @@ b8 RenderSys::update(const UpdateParams& params)
 {
   // TODO(delle) We might want to sort quads by texture before
   // building their vertexes so we can produce bigger batches.
+  // Alternatively, we could use instancing.
+  // Alternatively, we could build a sprite sheet so we don't need
+  // to change the texture (this is probably the better option).
+  gfx::Renderer& renderer = params.renderer;
 
-  gfxbuf->map();
 
+  ///////////////////////////////////////////////
+  // 1. Draw Background
+  renderer.pushUseProgram(renderer.stars_program);
+  gfx::Buffer empty_buffer{ .ibo = 0, .vao = 0 };
+  renderer.pushBindBuffer(background_buffer);
+  f32 time = TimeSpan::fromNanoseconds(
+    iro::TimePoint::monotonic().ns).toSeconds();
+  renderer.pushUniformFloat("u_time"_str, time);
+  vec2f viewport_size = params.viewport.max - params.viewport.min;
+  renderer.pushUniformVec2("u_resolution"_str, viewport_size);
+  renderer.pushDraw(0, 6, 0);
+
+
+  ///////////////////////////////////////////////
+  // 2. Draw Map Tiles
   // TODO(delle) only update changed tiles after init
+  renderer.pushUseProgram(renderer.shader_program);
+  quads_buffer->map();
+
   if (params.map)
   {
     Map& map = *params.map;
@@ -193,6 +237,9 @@ b8 RenderSys::update(const UpdateParams& params)
     }
   }
 
+
+  ///////////////////////////////////////////////
+  // 3. Draw Sprite Components
   if (params.entmgr && params.map)
   {
     Map&          map    = *params.map;
@@ -213,12 +260,12 @@ b8 RenderSys::update(const UpdateParams& params)
     }
   }
 
-  gfxbuf->unmap();
-
+  quads_buffer->unmap();
   if (batch_count > 0)
   {
     drawBatches(*this, params);
   }
+
 
   return true;
 }

@@ -31,9 +31,8 @@ struct Renderer
 {
   u64 frame;
 
-  u32 vertex_shader;
-  u32 frag_shader;
   u32 shader_program;
+  u32 stars_program;
 
   SLinkedPool<Buffer> buffers;
   Array<DrawCmd> drawcmds;
@@ -62,6 +61,7 @@ struct Renderer
   void pushUniformFloat(String name, f32 f);
   void pushUniformBool(String name, b8 b);
   void pushUniformMat3x2(String name, const mat3x2& m);
+  void pushUseProgram(u32 program);
   
   Renderer() {}
 

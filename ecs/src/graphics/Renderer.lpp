@@ -108,6 +108,7 @@ b8 Renderer::update()
 
   DEBUG("executing draw commands\n");
 
+  u32 last_program = shader_program;
   Buffer* last_buff = nullptr;
   for (DrawCmd& cmd : drawcmds)
   {
@@ -156,7 +157,7 @@ b8 Renderer::update()
         TRACE("pushing vec2 uniform ", cmd.push_uniform.name, "\n");
         u32 loc = 
           glGetUniformLocation(
-            shader_program, 
+            last_program,
             (char*)cmd.push_uniform.name.ptr);
         glUniform2f(loc, cmd.push_uniform.v.x, cmd.push_uniform.v.y);
       }
@@ -167,7 +168,7 @@ b8 Renderer::update()
         TRACE("pushing float uniform ", cmd.push_uniform.name, "\n");
         u32 loc = 
           glGetUniformLocation(
-            shader_program, 
+            last_program,
             (char*)cmd.push_uniform.name.ptr);
         glUniform1f(loc, cmd.push_uniform.f);
       }
@@ -178,7 +179,7 @@ b8 Renderer::update()
         TRACE("pushing bool uniform ", cmd.push_uniform.name, "\n");
         u32 loc = 
           glGetUniformLocation(
-            shader_program, 
+            last_program,
             (char*)cmd.push_uniform.name.ptr);
         glUniform1i(loc, cmd.push_uniform.b);
       }
@@ -186,10 +187,10 @@ b8 Renderer::update()
 
     case DrawCmd::Kind::PushUniformMat3x2:
       {
-        TRACE("pushing bool uniform ", cmd.push_uniform.name, "\n");
+        TRACE("pushing mat3x2 uniform ", cmd.push_uniform.name, "\n");
         u32 loc = 
           glGetUniformLocation(
-            shader_program, 
+            last_program,
             (char*)cmd.push_uniform.name.ptr);
 
         auto& m = cmd.push_uniform.m;
@@ -206,6 +207,14 @@ b8 Renderer::update()
           1,
           GL_FALSE,
           extended);
+      }
+      break;
+
+    case DrawCmd::Kind::UseProgram:
+      {
+        TRACE("pushing program ", cmd.use_program, "\n");
+        glUseProgram(cmd.use_program);
+        last_program = cmd.use_program;
       }
       break;
     }
@@ -266,39 +275,73 @@ static b8 compileShader(String path, int kind, u32* out_shader_id)
  */
 b8 Renderer::compileShaders()
 {
+  // TODO shader asse/compilation API
+  // TODO(sushi) use the rsrcmgr here
   INFO("compiling shaders\n");
 
-  // TODO(sushi) use the rsrcmgr here
-  if (!compileShader(
-        "assets/shaders/frag.glsl"_str, 
-        GL_FRAGMENT_SHADER,
-        &frag_shader))
-    return false;
-  
-  if (!compileShader(
+  {
+    u32 vertex_shader;
+    if (!compileShader(
         "assets/shaders/vertex.glsl"_str, 
         GL_VERTEX_SHADER,
         &vertex_shader))
     return false;
+    defer { glDeleteShader(vertex_shader); };
 
-  shader_program = glCreateProgram();
+    u32 frag_shader;
+    if (!compileShader(
+          "assets/shaders/frag.glsl"_str,
+          GL_FRAGMENT_SHADER,
+          &frag_shader))
+      return false;
+    defer { glDeleteShader(frag_shader); };
 
-  glAttachShader(shader_program, vertex_shader);
-  glAttachShader(shader_program, frag_shader);
-  glLinkProgram(shader_program);
+    shader_program = glCreateProgram();
+    glAttachShader(shader_program, vertex_shader);
+    glAttachShader(shader_program, frag_shader);
+    glLinkProgram(shader_program);
 
-  int success;
-  glGetProgramiv(shader_program, GL_LINK_STATUS, &success);
-  
-  if (!success)
-  {
-    u8 buffer[512];
-    glGetShaderInfoLog(shader_program, 512, nullptr, (char*)buffer);
-    return ERROR("failed to link shaders\n");
+    int success;
+    glGetProgramiv(shader_program, GL_LINK_STATUS, &success);
+    if (!success)
+    {
+      u8 buffer[512];
+      glGetShaderInfoLog(shader_program, 512, nullptr, (char*)buffer);
+      return ERROR("failed to link shaders\n");
+    }
   }
 
-  glDeleteShader(vertex_shader);
-  glDeleteShader(frag_shader);
+  {
+    u32 fullscreen_shader;
+    if (!compileShader(
+        "assets/shaders/fullscreen_vert.glsl"_str,
+        GL_VERTEX_SHADER,
+        &fullscreen_shader))
+    return false;
+    defer { glDeleteShader(fullscreen_shader); };
+
+    u32 stars_shader;
+    if (!compileShader(
+          "assets/shaders/stars_frag.glsl"_str,
+          GL_FRAGMENT_SHADER,
+          &stars_shader))
+      return false;
+    defer { glDeleteShader(stars_shader); };
+
+    stars_program = glCreateProgram();
+    glAttachShader(stars_program, fullscreen_shader);
+    glAttachShader(stars_program, stars_shader);
+    glLinkProgram(stars_program);
+
+    int success;
+    glGetProgramiv(stars_program, GL_LINK_STATUS, &success);
+    if (!success)
+    {
+      u8 buffer[512];
+      glGetShaderInfoLog(stars_program, 512, nullptr, (char*)buffer);
+      return ERROR("failed to link shaders\n");
+    }
+  }
 
   return true;
 }
@@ -503,6 +546,16 @@ void Renderer::pushUniformMat3x2(String name, const mat3x2& m)
   cmd.kind = DrawCmd::Kind::PushUniformMat3x2;
   cmd.push_uniform.name = name;
   cmd.push_uniform.m = m;
+  drawcmds.push(cmd);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::pushUseProgram(u32 program)
+{
+  DrawCmd cmd;
+  cmd.kind = DrawCmd::Kind::UseProgram;
+  cmd.use_program = program;
   drawcmds.push(cmd);
 }
 

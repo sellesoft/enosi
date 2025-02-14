@@ -24,6 +24,7 @@ struct DrawCmd
     PushUniformFloat,
     PushUniformBool,
     PushUniformMat3x2,
+    UseProgram,
   };
 
   Kind kind;
@@ -58,6 +59,8 @@ struct DrawCmd
         mat3x2 m;
       };
     } push_uniform;
+
+    u32 use_program;
   };
 
   DrawCmd() : kind(Kind::Invalid), bind_buffer() {}
