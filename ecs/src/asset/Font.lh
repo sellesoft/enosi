@@ -14,8 +14,8 @@ $ local SourceData = require "asset.SourceData"
 using namespace iro;
 
 @@lpp.import "asset/Asset.lh"
-@@lpp.import "asset/Texture.lh"
 @@lpp.import "asset/Font.schema.lh"
+@@lpp.import "graphics/CompiledTexture.lh"
 
 struct AssetMgr;
 
@@ -92,7 +92,7 @@ typedef TypedAssetRef<Font> FontRef;
 struct Font : public Asset 
 {
   FontData* data = nullptr;
-  TextureRef r_texture = {};
+  gfx::CompiledTextureRef r_texture = {};
 
   const FontData* getFontData() const
   {

@@ -5,21 +5,23 @@ $ local cmn = require "common"
 #include "iro/fs/Path.h"
 #include "iro/Platform.h"
 
-@@lpp.import "asset/Texture.lh"
 @@lpp.import "asset/AssetMgr.lh"
 @@lpp.import "graphics/Renderer.lh"
+@@lpp.import "graphics/CompiledTexture.lh"
 
 #include "cassert"
 
-static Logger logger = 
-  Logger::create("ecs.texture"_str, Logger::Verbosity::Debug);
+namespace gfx
+{
+
+@defFileLogger(ecs.texture, Debug)
 
 // TODO(sushi) put somewhere common.
 typedef io::StaticBuffer<512> PathBuffer;
 
 /* ----------------------------------------------------------------------------
  */
-s64 Texture::writeDataPath(io::IO* io, String name, AssetMgr& assetmgr)
+s64 CompiledTexture::writeDataPath(io::IO* io, String name, AssetMgr& assetmgr)
 {
   return io::formatv(io, 
       assetmgr.getDataDir(), "/textures/", name, ".texture");
@@ -27,9 +29,9 @@ s64 Texture::writeDataPath(io::IO* io, String name, AssetMgr& assetmgr)
 
 /* ----------------------------------------------------------------------------
  */
-b8 TextureData::serialize(io::IO* out)
+b8 CompiledTextureData::serialize(io::IO* out)
 {
-  out->write({(u8*)this, offsetof(TextureData, pixels)});
+  out->write({(u8*)this, offsetof(CompiledTextureData, pixels)});
 
   void* dummy = (void*)0xff;
   out->write(&dummy);
@@ -37,9 +39,9 @@ b8 TextureData::serialize(io::IO* out)
   u64 pixel_stride = 0;
   switch (format)
   {
-    case ImageFormat::BW: pixel_stride = 1; break;
-    case ImageFormat::BWA: pixel_stride = 2; break;
-    case ImageFormat::RGB: pixel_stride = 3; break;
+    case ImageFormat::BW:   pixel_stride = 1; break;
+    case ImageFormat::BWA:  pixel_stride = 2; break;
+    case ImageFormat::RGB:  pixel_stride = 3; break;
     case ImageFormat::RGBA: pixel_stride = 4; break;
   }
   assert(pixel_stride != 0);
@@ -52,7 +54,7 @@ b8 TextureData::serialize(io::IO* out)
 
 /* ----------------------------------------------------------------------------
  */
-Texture* Texture::load(
+CompiledTexture* CompiledTexture::load(
     String name, 
     AssetMgr& assetmgr, 
     gfx::Renderer& renderer)
@@ -68,7 +70,7 @@ Texture* Texture::load(
 
   Asset* existing = assetmgr.findAsset(data_path);
   if (existing != nullptr)
-    return (Texture*)existing;
+    return (CompiledTexture*)existing;
 
   TRACE("loading '", name, "' which is unloaded\n");
   SCOPED_INDENT;
@@ -80,7 +82,7 @@ Texture* Texture::load(
     return nullptr;
   }
 
-  auto* texture = assetmgr.allocateAsset<Texture>(data_path);
+  auto* texture = assetmgr.allocateAsset<CompiledTexture>(data_path);
   if (texture == nullptr)
   {
     ERROR("failed to load texture '", name, "'\n");
@@ -95,11 +97,12 @@ Texture* Texture::load(
   }
 
   u64 file_size = compiled_data_file.getInfo().byte_size;
-  texture->compiled = (TextureData*)mem::stl_allocator.allocate(file_size);
+  texture->data = 
+    (CompiledTextureData*)mem::stl_allocator.allocate(file_size);
 
-  compiled_data_file.read({(u8*)texture->compiled, file_size});
+  compiled_data_file.read({(u8*)texture->data, file_size});
 
-  TextureData* data = texture->compiled;
+  CompiledTextureData* data = texture->data;
 
   // Repoint the data's pixels.
   data->pixels = (void*)(data + 1);
@@ -111,7 +114,7 @@ Texture* Texture::load(
 
 /* ----------------------------------------------------------------------------
  */
-b8 Texture::compileFromMemory(void* pixels, CompileParams& params)
+b8 CompiledTexture::compileFromMemory(void* pixels, CompileParams& params)
 {
   using namespace fs;
 
@@ -120,7 +123,7 @@ b8 Texture::compileFromMemory(void* pixels, CompileParams& params)
     return ERROR("failed to create data directories for data at '",
                  params.data_path);
 
-  TextureData data;
+  CompiledTextureData data;
 
   data.format = params.format;
   data.filter = params.filter;
@@ -146,4 +149,6 @@ b8 Texture::compileFromMemory(void* pixels, CompileParams& params)
     return ERROR("failed to serialize texture\n");
 
   return true;
+}
+
 }

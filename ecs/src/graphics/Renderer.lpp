@@ -7,7 +7,7 @@ $ local cmn = require "common"
 @@lpp.import "window/Window.events.lh"
 
 @@lpp.import "asset/AssetMgr.lh"
-@@lpp.import "asset/Texture.lh"
+@@lpp.import "graphics/CompiledTexture.lh"
 
 #include "iro/Logger.h"
 #include "iro/fs/File.h"
@@ -148,8 +148,8 @@ b8 Renderer::update()
       break;
 
     case DrawCmd::Kind::BindTexture:
-      TRACE("binding texture ", cmd.bind_texture, "\n");
-      glBindTexture(GL_TEXTURE_2D, cmd.bind_texture->gfx_handle);
+      TRACE("binding texture ", cmd.bind_texture.id, "\n");
+      glBindTexture(GL_TEXTURE_2D, cmd.bind_texture.id);
       break;
     
     case DrawCmd::Kind::PushUniformVec2:
@@ -355,105 +355,26 @@ Buffer* Renderer::createBuffer()
 
 /* ----------------------------------------------------------------------------
  */
-b8 Renderer::loadTexture(Texture* texture)
+b8 Renderer::loadTexture(CompiledTexture* texture)
 {
-  if (texture->gfx_handle != 0)
+  if (texture->gfx_texture.id != 0)
     return ERROR("call to loadTexture with a texture that has already "
-                 "been assigned a gfx_handle\n");
+                 "been assigned a gfx::Texture\n");
 
-  glGenTextures(1, &texture->gfx_handle);
+  const CompiledTextureData* data = texture->data;
+  assert(data);
 
-  glBindTexture(GL_TEXTURE_2D, texture->gfx_handle);
+  texture->gfx_texture = 
+    gfx::Texture::create(
+      data->width,
+      data->height,
+      data->format,
+      data->address_mode,
+      data->filter,
+      data->kind,
+      data->pixels);
 
-  const TextureData* data = texture->compiled;
-
-  if (data->width % 4 != 0)
-  {
-    // TODO(sushi) handle alignments of 2 as well.
-    WARN("provided texture '", texture->name, "' has a width that is not "
-         "aligned to 4 and will likely be loaded improperly\n");
-  }
-
-  struct GLFormat { GLint internal; GLint format; };
-
-  GLFormat formats[] = 
-  {
-    { GL_R8,    GL_RED  },
-    { GL_RG8,   GL_RG   },
-    { GL_RGB8,  GL_RGB  },
-    { GL_RGBA8, GL_RGBA },
-  };
-
-  GLFormat format = formats[(u32)data->format];
-
-  glTexImage2D(
-    GL_TEXTURE_2D, 
-    0, 
-    format.internal,
-    data->width,
-    data->height,
-    0,
-    format.format,
-    GL_UNSIGNED_BYTE,
-    data->pixels);
-
-  assert(glGetError() == GL_NO_ERROR);
-
-  GLint address_modes[] = 
-  {
-    GL_REPEAT,
-    GL_MIRRORED_REPEAT,
-    GL_CLAMP_TO_EDGE,
-  };
-
-  f32 border_colors[6][4] = 
-  {
-    {},{},{},
-    { 1.f, 1.f, 1.f, 1.f },
-    { 0.f, 0.f, 0.f, 1.f },
-    { 0.f, 0.f, 0.f, 0.f },
-  };
-
-  GLint address_mode;
-
-  switch (data->address_mode)
-  {
-  case ImageAddressMode::ClampToWhite:
-  case ImageAddressMode::ClampToBlack:
-  case ImageAddressMode::ClampToTransparent:
-    address_mode = GL_CLAMP_TO_BORDER;
-    glTexParameterfv(
-      GL_TEXTURE_2D, 
-      GL_TEXTURE_BORDER_COLOR, 
-      border_colors[(u32)data->address_mode]);
-    break;
-  default:
-    address_mode = address_modes[(u32)data->address_mode];
-    break;
-  }
-
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, address_mode);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, address_mode);
-
-  GLint filters[] = 
-  {
-    GL_NEAREST,
-    GL_LINEAR,
-  };
-
-  GLint filter = filters[(u32)data->filter];
-
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, filter);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, filter);
-
-  if (data->format == ImageFormat::BW)
-  {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, GL_RED);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, GL_RED);
-  }
-
-  return true;
+  return notnil(texture->gfx_texture);
 }
 
 /* ----------------------------------------------------------------------------
@@ -497,7 +418,7 @@ void Renderer::pushSetScissor(vec2i pos, vec2i size)
 
 /* ----------------------------------------------------------------------------
  */
-void Renderer::pushBindTexture(const Texture* texture)
+void Renderer::pushBindTexture(gfx::Texture texture)
 {
   DrawCmd cmd;
   cmd.kind = DrawCmd::Kind::BindTexture;

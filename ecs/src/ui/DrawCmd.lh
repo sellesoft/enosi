@@ -7,10 +7,9 @@ $ local reflect = require "reflect.Reflector"
 #include "math/vec.h"
 
 @lpp.import "graphics/Geo.lh"
+@lpp.import "graphics/Texture.lh"
 
 using namespace iro;
-
-struct Texture;
 
 namespace ui
 {
@@ -25,7 +24,7 @@ struct DrawCmd
   vec2i counts_reserved = {};
   vec2i counts_used = {};
 
-  Texture* tex = nullptr;
+  gfx::Texture tex = nil;
 
   b8 freed = false;
   

@@ -27,7 +27,7 @@ b8 Tile::init(const MapTileDef& def, u32 layer_idx, GameMgr& gamemgr)
   
   if (notnil(def.texture))
   {
-    r_texture.track(Texture::load(
+    r_texture.track(gfx::CompiledTexture::load(
       def.texture,
       gamemgr.engine->assetmgr,
       gamemgr.engine->renderer));

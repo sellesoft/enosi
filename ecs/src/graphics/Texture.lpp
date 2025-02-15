@@ -1,0 +1,122 @@
+$ require "common"
+
+#include "iro/Logger.h"
+
+using namespace iro;
+
+@defFileLogger(texture, Info)
+
+@@lpp.import "Texture.lh"
+
+#include "graphics/glad/gl.h"
+
+
+namespace gfx
+{
+
+/* ----------------------------------------------------------------------------
+ */
+Texture Texture::create(
+    u32              width,
+    u32              height,
+    ImageFormat      format,
+    ImageAddressMode address_mode,
+    ImageFilter      filter,
+    ImageKind        kind,
+    void*            pixels)
+{
+  Texture out = {};
+
+  glGenTextures(1, &out.id);
+  glBindTexture(GL_TEXTURE_2D, out.id);
+
+  if (width % 4 != 0)
+  {
+    // TODO(sushi) handle alignments of 2 as well.
+    WARN("provided texture has a width that is not "
+         "aligned to 4 and will likely be loaded improperly\n");
+  }
+
+  struct GLFormat { GLint internal; GLint format; };
+
+  GLFormat formats[] = 
+  {
+    { GL_R8,    GL_RED  },
+    { GL_RG8,   GL_RG   },
+    { GL_RGB8,  GL_RGB  },
+    { GL_RGBA8, GL_RGBA },
+  };
+
+  GLFormat gl_format = formats[(u32)format];
+
+  glTexImage2D(
+    GL_TEXTURE_2D, 
+    0, 
+    gl_format.internal,
+    width,
+    height,
+    0,
+    gl_format.format,
+    GL_UNSIGNED_BYTE,
+    pixels);
+
+  assert(glGetError() == GL_NO_ERROR);
+
+  GLint address_modes[] = 
+  {
+    GL_REPEAT,
+    GL_MIRRORED_REPEAT,
+    GL_CLAMP_TO_EDGE,
+  };
+
+  f32 border_colors[6][4] = 
+  {
+    {},{},{},
+    { 1.f, 1.f, 1.f, 1.f },
+    { 0.f, 0.f, 0.f, 1.f },
+    { 0.f, 0.f, 0.f, 0.f },
+  };
+
+  GLint gl_address_mode;
+
+  switch (address_mode)
+  {
+  case ImageAddressMode::ClampToWhite:
+  case ImageAddressMode::ClampToBlack:
+  case ImageAddressMode::ClampToTransparent:
+    gl_address_mode = GL_CLAMP_TO_BORDER;
+    glTexParameterfv(
+      GL_TEXTURE_2D, 
+      GL_TEXTURE_BORDER_COLOR, 
+      border_colors[(u32)address_mode]);
+    break;
+  default:
+    gl_address_mode = address_modes[(u32)address_mode];
+    break;
+  }
+
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, gl_address_mode);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, gl_address_mode);
+
+  GLint filters[] = 
+  {
+    GL_NEAREST,
+    GL_LINEAR,
+  };
+
+  GLint gl_filter = filters[(u32)filter];
+
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_filter);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_filter);
+
+  if (format == ImageFormat::BW)
+  {
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, GL_RED);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, GL_RED);
+  }
+
+  return out;
+}
+
+}

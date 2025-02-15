@@ -1,8 +1,9 @@
 $ local cmn = require "common"
 
-@@lpp.import "asset/Font.lh"
-@@lpp.import "asset/Texture.lh"
 @@lpp.import "asset/AssetMgr.lh"
+
+@@lpp.import "asset/Font.lh"
+@@lpp.import "graphics/CompiledTexture.lh"
 
 #include "iro/Logger.h"
 #include "iro/Platform.h"
@@ -466,23 +467,24 @@ $ end
     return error("failed to serialize font data\n");
 
   PathBuffer texture_data_path;
-  Texture::writeDataPath(&texture_data_path, params.name, *params.assetmgr);
+  gfx::CompiledTexture::writeDataPath(
+    &texture_data_path, params.name, *params.assetmgr);
 
-  Texture::CompileParams tparams =
+  gfx::CompiledTexture::CompileParams tparams =
   {
-    .name = params.name,
-    .data_path = texture_data_path.asStr(),
-    .width = u32(tex_size.x),
-    .height = u32(tex_size.y),
-    .format = ImageFormat::BW,
-    .kind = ImageKind::TwoD,
-    .filter = ImageFilter::Nearest,
-    .address_mode = ImageAddressMode::ClampToWhite,
-    .allocator = params.allocator,
-    .assetmgr = params.assetmgr,
+    .name         = params.name,
+    .data_path    = texture_data_path.asStr(),
+    .width        = u32(tex_size.x),
+    .height       = u32(tex_size.y),
+    .format       = gfx::ImageFormat::BW,
+    .kind         = gfx::ImageKind::TwoD,
+    .filter       = gfx::ImageFilter::Nearest,
+    .address_mode = gfx::ImageAddressMode::ClampToWhite,
+    .allocator    = params.allocator,
+    .assetmgr     = params.assetmgr,
   };
 
-  if (!Texture::compileFromMemory(pixels, tparams))
+  if (!gfx::CompiledTexture::compileFromMemory(pixels, tparams))
     return error("failed to compile font texture\n");
 
   return true;

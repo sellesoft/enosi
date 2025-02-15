@@ -1,0 +1,20 @@
+/*
+ *  A Framebuffer...
+ */
+
+#include "iro/Common.h"
+
+namespace gfx
+{
+
+/* ============================================================================
+ */
+struct Framebuffer
+{
+  u32 id;
+
+  static Framebuffer create();
+  void destroy();
+};
+
+}

@@ -4,7 +4,7 @@
 
 $ require "common"
 
-@@lpp.import "asset/Texture.lh"
+@@lpp.import "graphics/CompiledTexture.lh"
 
 #include "iro/Common.h"
 #include "math/Rect.h"
@@ -30,7 +30,7 @@ struct RenderSys
   struct QuadBatch
   {
     u32 quad_count;
-    const Texture* texture;
+    const gfx::CompiledTexture* texture;
   };
   
   b8 init(gfx::Renderer& renderer, AssetMgr& assetmgr);
@@ -46,8 +46,10 @@ struct RenderSys
 
   b8 update(const UpdateParams& params);
 
+  gfx::CompiledTextureRef null_texture;
+
   gfx::Buffer* quads_buffer;
-  TextureRef null_texture;
+
   QuadBatch batches[MAX_BATCHES];
   u32 batch_count;
   u32 quad_count;

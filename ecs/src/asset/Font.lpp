@@ -148,7 +148,8 @@ Font* Font::load(
   INFO("loading font's texture\n");
 
   // Load the texture.
-  font->r_texture.trackNoRef(Texture::load(name, assetmgr, renderer));
+  font->r_texture.trackNoRef(
+    gfx::CompiledTexture::load(name, assetmgr, renderer));
   if (!font->r_texture.isValid())
   {
     ERROR("failed to load font texture\n");

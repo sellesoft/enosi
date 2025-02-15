@@ -1,0 +1,40 @@
+/*
+ *  Representation of a Texture on the GPU. This likely should only be used 
+ *  when a reference to a Texture needs to be kept around, eg. to render to
+ *  one using a Framebuffer.
+ */
+$ require "common"
+
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+#include "iro/memory/Allocator.h"
+
+#include "math/vec.h"
+
+@@lpp.import "asset/Asset.lh"
+@@lpp.import "graphics/TextureParams.lh"
+
+namespace gfx
+{
+
+/* ============================================================================
+ */
+struct Texture
+{
+  u32 id;
+
+  static Texture create(
+    u32              width,
+    u32              height,
+    ImageFormat      format,
+    ImageAddressMode address_mode,
+    ImageFilter      filter,
+    ImageKind        kind,
+    void*            pixels);
+
+  void destroy();
+};
+
+}
+
+DefineNilValue(gfx::Texture, { 0 }, { return x.id == 0; });

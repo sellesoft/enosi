@@ -1,0 +1,26 @@
+$ require "common"
+@@lpp.import "Framebuffer.lh"
+
+#include "graphics/glad/gl.h"
+
+namespace gfx
+{
+
+/* ----------------------------------------------------------------------------
+ */
+Framebuffer Framebuffer::create()
+{
+  Framebuffer out = {};
+  glGenFramebuffers(1, &out.id);
+  glBindFramebuffer(GL_FRAMEBUFFER, out.id);
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Framebuffer::destroy()
+{
+  glDeleteFramebuffers(1, &id); 
+}
+
+}

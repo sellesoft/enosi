@@ -1,0 +1,81 @@
+/*
+ *  A Texture we compile from some raw asset on disk.
+ */
+
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+#include "iro/memory/Allocator.h"
+
+@@lpp.import "asset/Asset.lh"
+@@lpp.import "graphics/Texture.lh"
+
+namespace gfx
+{
+
+struct Renderer;
+
+/* ============================================================================
+ *  Note that this structure represents exactly what we save to disk.
+ */
+struct CompiledTextureData
+{
+  ImageFormat      format;
+  ImageFilter      filter;
+  ImageAddressMode address_mode;
+  ImageKind        kind;
+
+  s32 width;
+  s32 height;
+
+  void* pixels;
+
+  b8 serialize(io::IO* out);
+};
+
+/* ============================================================================
+ */
+struct CompiledTexture : public Asset
+{
+  CompiledTextureData* data;
+
+  CompiledTextureData* getData()
+  {
+    return data;
+  }
+
+  // The texture loaded on the gpu.
+  Texture gfx_texture;
+
+  static s64 writeAssetPath(io::IO* io, String name, AssetMgr& assetmgr);
+  static s64 writeDataPath(io::IO* io, String name, AssetMgr& assetmgr);
+
+  static CompiledTexture* load(
+    String name,
+    AssetMgr& assetmgr,
+    Renderer& renderer);
+
+  struct CompileParams
+  {
+    String           name;
+    String           asset_path;
+    String           data_path;
+    u32              width;
+    u32              height;
+    ImageFormat      format;
+    ImageKind        kind;
+    ImageFilter      filter;
+    ImageAddressMode address_mode;
+    mem::Allocator*  allocator;
+    AssetMgr*        assetmgr;
+  };
+
+  static b8 compilePNG(CompileParams& params);
+  static b8 compileASE(CompileParams& params);
+
+  // In this case 'asset_path' is unused.
+  static b8 compileFromMemory(void* data, CompileParams& params);
+};
+
+typedef TypedAssetRef<CompiledTexture> CompiledTextureRef;
+
+}

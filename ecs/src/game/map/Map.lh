@@ -1,6 +1,6 @@
 $ local cmn = require "common"
 
-@@lpp.import "asset/Texture.lh"
+@@lpp.import "graphics/Texture.lh"
 
 #include "iro/Common.h"
 #include "iro/containers/Array.h"
@@ -18,7 +18,7 @@ struct MapDef;
 struct Tile
 {
   const MapTileDef* def = nullptr;
-  TextureRef r_texture;
+  gfx::CompiledTextureRef r_texture;
 
   b8 init(const MapTileDef& def, u32 layer_idx, GameMgr& gamemgr);
   void deinit();

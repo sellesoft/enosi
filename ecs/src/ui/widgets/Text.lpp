@@ -146,7 +146,7 @@ void TextRenderer::draw(
   u32 nchars = text.countCharacters();
   vec2i nucounts = gfx::putFilledRectCounts() * nchars;
   auto [vp, ip] = dc->realloc(ui, nucounts);
-  dc->tex = font->r_texture.getData();
+  dc->tex = font->r_texture.getData()->gfx_texture;
   
   vec2f cursor = pos;
   FontData* font_data = font->data;

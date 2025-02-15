@@ -2,7 +2,7 @@ $ require "common"
 
 @@lpp.import "asset/AssetMgr.lh"
 @@lpp.import "asset/Font.lh"
-@@lpp.import "asset/Texture.lh"
+@@lpp.import "graphics/CompiledTexture.lh"
 
 #include "iro/fs/Path.h"
 #include "iro/fs/File.h"
@@ -10,8 +10,10 @@ $ require "common"
 #include "iro/memory/Bump.h"
 #include "iro/Platform.h"
 
-static Logger logger
-  = Logger::create("texture.ase"_str, Logger::Verbosity::Debug);
+namespace gfx
+{
+
+@defFileLogger(texture.ase, Debug)
 
 /* ----------------------------------------------------------------------------
  */
@@ -101,7 +103,7 @@ static void convert(
 
 /* ----------------------------------------------------------------------------
  */
-b8 Texture::compileASE(CompileParams& params)
+b8 CompiledTexture::compileASE(CompileParams& params)
 {
   if (!fs::Path::exists(params.asset_path))
     return ERROR("attempt to compile texture '", params.name, "' but there"
@@ -379,4 +381,6 @@ b8 Texture::compileASE(CompileParams& params)
 
   delete_data_file_if_failure.cancel();
   return true;
+}
+
 }

@@ -1,0 +1,51 @@
+/*
+ *  Some parameters used for textures uploaded to the GPU that need to be 
+ *  shared.
+ */
+
+#include "iro/Common.h"
+
+namespace gfx
+{
+
+/* ============================================================================
+ */
+enum class ImageFormat : u8
+{
+  BW,
+  BWA,
+  RGB,
+  RGBA,
+};
+
+/* ============================================================================
+ */
+enum class ImageFilter :u8
+{
+  Nearest,
+  Linear,
+};
+
+/* ============================================================================
+ */
+enum class ImageAddressMode : u8
+{
+  Repeat,
+  MirroredRepeat,
+  ClampToEdge,
+  ClampToWhite,
+  ClampToBlack,
+  ClampToTransparent,
+};
+
+/* ============================================================================
+ */
+enum class ImageKind : u8
+{
+  OneD,
+  TwoD,
+  ThreeD,
+  Cube,
+};
+
+}

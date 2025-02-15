@@ -2,7 +2,7 @@ $ require "common"
 
 @@lpp.import "asset/AssetMgr.lh"
 @@lpp.import "asset/Font.lh"
-@@lpp.import "asset/Texture.lh"
+@@lpp.import "graphics/CompiledTexture.lh"
 
 #include "iro/fs/File.h"
 #include "iro/fs/Path.h"
@@ -13,12 +13,14 @@ $ require "common"
 #define STB_IMAGE_IMPLEMENTATION
 #include "external/stb_image.h"
 
-static Logger logger
-  = Logger::create("texture.png"_str, Logger::Verbosity::Debug);
+namespace gfx
+{
+
+@defFileLogger(texture.png, Debug)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Texture::compilePNG(CompileParams& params)
+b8 CompiledTexture::compilePNG(CompileParams& params)
 {
   if (!fs::Path::exists(params.asset_path))
     return ERROR("attempt to compile texture '", params.name, "' but there"
@@ -96,9 +98,11 @@ b8 Texture::compilePNG(CompileParams& params)
   params.width = width;
   params.height = height;
 
-  if (!Texture::compileFromMemory(pixels, params))
+  if (!CompiledTexture::compileFromMemory(pixels, params))
     return false;
   
   delete_data_file_if_failure.cancel();
   return true;
+}
+
 }

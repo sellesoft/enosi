@@ -2,9 +2,11 @@
  *  A command that alters the state of the renderer.
  */ 
 
+$ require "common"
+
 #include "math/vec.h"
 
-struct Texture;
+@@lpp.import "graphics/Texture.lh"
 
 namespace gfx
 {
@@ -46,7 +48,7 @@ struct DrawCmd
       vec2i size;
     } set_scissor;
 
-    const Texture* bind_texture;
+    gfx::Texture bind_texture;
     
     struct
     {
