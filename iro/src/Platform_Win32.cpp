@@ -22,7 +22,7 @@
 namespace iro::platform
 {
 
-static iro::Logger logger = 
+static iro::Logger logger =
   iro::Logger::create("platform.win32"_str, iro::Logger::Verbosity::Info);
 
 /* ----------------------------------------------------------------------------
@@ -30,16 +30,16 @@ static iro::Logger logger =
 static thread_local LPSTR win32_error_msg = nullptr;
 static String makeWin32ErrorMsg(DWORD error)
 {
-	DWORD win32_error_msg_len = 
+	DWORD win32_error_msg_len =
     FormatMessageA(
-          FORMAT_MESSAGE_ALLOCATE_BUFFER 
-        | FORMAT_MESSAGE_FROM_SYSTEM 
-        | FORMAT_MESSAGE_IGNORE_INSERTS, 
-        NULL, 
+          FORMAT_MESSAGE_ALLOCATE_BUFFER
+        | FORMAT_MESSAGE_FROM_SYSTEM
+        | FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL,
         error,
-        MAKELANGID(LANG_NEUTRAL,SUBLANG_DEFAULT), 
-        (LPSTR)&win32_error_msg, 
-        0, 
+        MAKELANGID(LANG_NEUTRAL,SUBLANG_DEFAULT),
+        (LPSTR)&win32_error_msg,
+        0,
         NULL);
 
   return String::from((u8*)win32_error_msg, (u64)win32_error_msg_len);
@@ -59,8 +59,8 @@ static b8 win32Err(Args... args)
 }
 
 /* ----------------------------------------------------------------------------
- *  Normalizes a path given by Win32 in place and returns a new String 
- *  representing it. This replaces \\ with / and removes the UNC prefix if 
+ *  Normalizes a path given by Win32 in place and returns a new String
+ *  representing it. This replaces \\ with / and removes the UNC prefix if
  *  it exists. This does not canonicalize the path, eg. it does not try to
  *  remove . and .. directories from it.
  */
@@ -84,15 +84,15 @@ static String normalizePath(String string)
 /* ----------------------------------------------------------------------------
  */
 static s32 stringToWideChar(
-    const char* ptr, 
-    int len, 
-    wchar_t* outptr, 
+    const char* ptr,
+    int len,
+    wchar_t* outptr,
     int outlen,
     b8 null_terminate = true)
 {
-  int bytes_written = 
+  int bytes_written =
     MultiByteToWideChar(
-        CP_UTF8, 
+        CP_UTF8,
         MB_ERR_INVALID_CHARS,
         (LPCCH)ptr,
         len,
@@ -111,16 +111,16 @@ static s32 stringToWideChar(
 /* ----------------------------------------------------------------------------
  */
 static s32 stringToWideChar(
-    String str, 
-    wchar_t* outptr, 
-    int outlen, 
+    String str,
+    wchar_t* outptr,
+    int outlen,
     b8 null_terminate = true)
 {
   return stringToWideChar(
-      (char*)str.ptr, 
-      str.len, 
-      outptr, 
-      outlen, 
+      (char*)str.ptr,
+      str.len,
+      outptr,
+      outlen,
       null_terminate);
 }
 
@@ -136,12 +136,12 @@ static b8 isPathDeliminator(wchar_t c)
 // the string buffer. So, we provide it a buffer that can hold the max
 // WideChar path length 32767, plus 4 for the "\\?\" prefix.
 //
-// TODO(sushi) this NOTE is incorrect as GetFinalPathNameByHandleW returns 
+// TODO(sushi) this NOTE is incorrect as GetFinalPathNameByHandleW returns
 //             the required space when the provided buffer is too small (at
-//             least the docs say so, who knows). Ideally this global be 
-//             removed from the internals and we instead move towards mostly 
-//             requiring the user to provide a buffer of sufficient size or 
-//             just using a function local buffer). The Linux platform layer 
+//             least the docs say so, who knows). Ideally this global be
+//             removed from the internals and we instead move towards mostly
+//             requiring the user to provide a buffer of sufficient size or
+//             just using a function local buffer). The Linux platform layer
 //             also needs to move more towards this style as well iirc.
 #define win32_str_capacity 32771
 thread_local static wchar_t win32_str[win32_str_capacity + 1] = {0};
@@ -150,20 +150,20 @@ thread_local const static char* win32_make_path_error = nullptr;
 /* ----------------------------------------------------------------------------
  */
 static wchar_t* makeWin32Path(
-    String input, 
+    String input,
     u64 extra_bytes = 0,
-    u64* output_len = nullptr, 
+    u64* output_len = nullptr,
     b8 force_allocate = false)
 {
   wchar_t* output = win32_str;
 
   char* null_terminated_input = (char*)_alloca((size_t)input.len + 1);
   input.nullTerminate((u8*)null_terminated_input, input.len+1);
-  
-  DWORD full_path_length = 
+
+  DWORD full_path_length =
     GetFullPathNameA((LPCSTR)null_terminated_input, 0, NULL, NULL);
   char* full_path = (char*)_alloca((size_t)full_path_length + 1);
-  full_path_length = 
+  full_path_length =
     GetFullPathNameA((LPCSTR)null_terminated_input, full_path_length + 1,
     full_path, NULL);
 
@@ -173,19 +173,19 @@ static wchar_t* makeWin32Path(
         " to WideChar\n";
     return nullptr;
   }
-  
+
   u64 bytes = full_path_length + extra_bytes;
   if (bytes == 0)
   {
     output[0] = L'\0';
     return output;
   }
-  
-  // TODO(sushi) this is necessary because GetFullPathNameA might give us a 
-  //             path that already has a \\?\ prefix. This should be done more 
-  //             cleanly later but I'm just trying to get this stuff to work 
+
+  // TODO(sushi) this is necessary because GetFullPathNameA might give us a
+  //             path that already has a \\?\ prefix. This should be done more
+  //             cleanly later but I'm just trying to get this stuff to work
   //             rn.
-  b8 has_prefix = 
+  b8 has_prefix =
     full_path_length > 4 &&
     (full_path[0] == '\\' && full_path[1] == '\\' &&
      full_path[2] == '?'  && full_path[3] == '\\');
@@ -201,7 +201,7 @@ static wchar_t* makeWin32Path(
       return nullptr;
     }
   }
-  
+
   if (!has_prefix)
   {
     output[0] = L'\\';
@@ -209,13 +209,13 @@ static wchar_t* makeWin32Path(
     output[2] = L'?';
     output[3] = L'\\';
   }
-  
+
   assert(full_path_length <= INT_MAX);
   assert(bytes <= INT_MAX);
   int converted_bytes =
     stringToWideChar(
-      full_path, 
-      full_path_length, 
+      full_path,
+      full_path_length,
       output + (has_prefix? 0 : 4),
       bytes - (has_prefix? 1 : 5),
       false);
@@ -225,10 +225,10 @@ static wchar_t* makeWin32Path(
     ERROR("failed to make win32 path: ", makeWin32ErrorMsg(GetLastError()));
     return nullptr;
   }
-  
+
   if (output_len != nullptr)
     *output_len = converted_bytes + (has_prefix? 4 : 0);
-  
+
   output[converted_bytes+(has_prefix? 0 : 4)] = L'\0';
   //NOTICE((wchar_t*)output, "\n");
   return output;
@@ -256,7 +256,7 @@ b8 open(fs::File::Handle* out_handle, String path, fs::OpenFlags flags)
 {
   using enum fs::OpenFlag;
   assert(out_handle != nullptr);
-  
+
   const u64 buflen = 4096;
   wchar_t wpath[buflen];
 
@@ -276,7 +276,7 @@ b8 open(fs::File::Handle* out_handle, String path, fs::OpenFlags flags)
         "': one of OpenFlag::Read/Write was not given\n");
     return false;
   }
-  
+
   if (flags.test(Append))
   {
     access &= ~FILE_WRITE_DATA;
@@ -310,16 +310,16 @@ b8 open(fs::File::Handle* out_handle, String path, fs::OpenFlags flags)
       assert(!"should not be possible");
       return false;
   }
-  
+
   DWORD share = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
   DWORD attributes = FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS |
     FILE_FLAG_POSIX_SEMANTICS;
-  
+
   if (flags.test(NoBlock))
   {
     attributes |= FILE_FLAG_OVERLAPPED;
   }
-  
+
   HANDLE handle = CreateFileW(wpath, access, share, NULL, disposition,
     attributes, NULL);
   if (handle == INVALID_HANDLE_VALUE)
@@ -339,7 +339,7 @@ b8 open(fs::File::Handle* out_handle, String path, fs::OpenFlags flags)
     }
     return false;
   }
-  
+
   *out_handle = (fs::File::Handle)handle;
   return true;
 }
@@ -349,10 +349,10 @@ b8 open(fs::File::Handle* out_handle, String path, fs::OpenFlags flags)
 b8 close(fs::File::Handle handle)
 {
   assert((HANDLE)handle != INVALID_HANDLE_VALUE);
-  
+
   if (CloseHandle((HANDLE)handle))
     return true;
-  
+
   ERROR("failed to close file with handle ", handle, ": ",
     makeWin32ErrorMsg(GetLastError()), "\n");
   cleanupWin32ErrorMsg();
@@ -374,9 +374,9 @@ s64 read(fs::File::Handle handle, Bytes buffer, b8 non_blocking, b8 /*is_pty*/)
     TRACE("non-blocking read from ", (u64)handle, "\n");
     defer { TRACE("read ", (u64)bytes_read, " bytes\n"); };
 
-    // Perform an 'overlapped' read, which requires an Event. 
-    // TODO(sushi) creating and closing an Event everytime we do this might not 
-    //             be very good, but the docs mention that it is safer to use 
+    // Perform an 'overlapped' read, which requires an Event.
+    // TODO(sushi) creating and closing an Event everytime we do this might not
+    //             be very good, but the docs mention that it is safer to use
     //             separate Event objects for each overlapped operation:
     // https://learn.microsoft.com/en-us/windows/win32/sync/synchronization-and-overlapped-input-and-output
     OVERLAPPED overlapped = {};
@@ -386,10 +386,10 @@ s64 read(fs::File::Handle handle, Bytes buffer, b8 non_blocking, b8 /*is_pty*/)
     defer { CloseHandle(overlapped.hEvent); };
 
     if (!ReadFile(
-          (HANDLE)handle, 
-          buffer.ptr, 
-          buffer.len, 
-          &bytes_read, 
+          (HANDLE)handle,
+          buffer.ptr,
+          buffer.len,
+          &bytes_read,
           &overlapped))
     {
       if (GetLastError() == ERROR_BROKEN_PIPE)
@@ -400,7 +400,7 @@ s64 read(fs::File::Handle handle, Bytes buffer, b8 non_blocking, b8 /*is_pty*/)
       if (GetLastError() != ERROR_IO_PENDING)
         return win32Err("non blocking read from ", handle, " failed");
 
-      // Cancel the pending I/O operation to avoid blocking on 
+      // Cancel the pending I/O operation to avoid blocking on
       // GetOverlappedResult
       if (!CancelIoEx((HANDLE)handle, &overlapped)
           && GetLastError() != ERROR_NOT_FOUND)
@@ -422,9 +422,9 @@ s64 read(fs::File::Handle handle, Bytes buffer, b8 non_blocking, b8 /*is_pty*/)
 }
 
 /* ----------------------------------------------------------------------------
- *   This function uses a sentinel for detecting if a write error occurs on a 
+ *   This function uses a sentinel for detecting if a write error occurs on a
  *   file handle used by the logger, since if that happens we will hit a stack
- *   overflow with the ERROR log macro used within. This is probably not a 
+ *   overflow with the ERROR log macro used within. This is probably not a
  *   safe way to handle this, so should be made more robust later.
  */
 thread_local static b8 iro_platform_writing_logging_error = false;
@@ -432,7 +432,7 @@ s64 write(fs::File::Handle handle, Bytes buffer, b8 non_blocking, b8 /*is_pty*/)
 {
   assert((HANDLE)handle != INVALID_HANDLE_VALUE);
   assert(buffer.ptr != nullptr || buffer.len == 0);
-  
+
   OVERLAPPED overlapped, *overlapped_ptr;
   if (non_blocking)
   {
@@ -443,11 +443,11 @@ s64 write(fs::File::Handle handle, Bytes buffer, b8 non_blocking, b8 /*is_pty*/)
   {
     overlapped_ptr = NULL;
   }
-  
+
   DWORD bytes_written;
   BOOL success = WriteFile((HANDLE)handle, (LPCVOID)buffer.ptr,
     (DWORD)buffer.len, &bytes_written, overlapped_ptr);
-  
+
   if (success == FALSE)
   {
     DWORD error = GetLastError();
@@ -469,18 +469,18 @@ s64 write(fs::File::Handle handle, Bytes buffer, b8 non_blocking, b8 /*is_pty*/)
       return -1;
     }
   }
-  
+
   assert((DWORD)((s64)bytes_written) == bytes_written);
   return (s64)bytes_written;
 }
 
 /* ----------------------------------------------------------------------------
- *  On Windows this function is somewhat of a special case. Since we don't 
- *  really have an equivalent to linux's poll, and this is currently only 
- *  used for checking if a non-blocking file has data to read, we just use 
- *  PeekNamedPipe and check if there are any bytes available to read. Once 
- *  I'm back on Linux, I need to figure out why I added this to begin with 
- *  and ideally find a way to remove it. It was apparently added because 
+ *  On Windows this function is somewhat of a special case. Since we don't
+ *  really have an equivalent to linux's poll, and this is currently only
+ *  used for checking if a non-blocking file has data to read, we just use
+ *  PeekNamedPipe and check if there are any bytes available to read. Once
+ *  I'm back on Linux, I need to figure out why I added this to begin with
+ *  and ideally find a way to remove it. It was apparently added because
  *  it was necessary for pseudo terminals, which don't work with async I/O on
  *  Windows anyways.
  */
@@ -495,11 +495,11 @@ b8 poll(fs::File::Handle handle, fs::PollEventFlags* flags)
   DWORD bytes_available;
   DWORD bytes_available_message;
   if (!PeekNamedPipe(
-        (HANDLE)handle, 
-        NULL, 
-        0, 
-        NULL, 
-        &bytes_available, 
+        (HANDLE)handle,
+        NULL,
+        0,
+        NULL,
+        &bytes_available,
         &bytes_available_message))
   {
     // Its possible the process closed and the pipe has no more information.
@@ -529,25 +529,25 @@ b8 isatty(fs::File::Handle handle)
 b8 setNonBlocking(fs::File::Handle handle)
 {
   assert((HANDLE)handle != INVALID_HANDLE_VALUE);
-  
-  DWORD access = 
-      FILE_GENERIC_READ 
+
+  DWORD access =
+      FILE_GENERIC_READ
     | FILE_GENERIC_WRITE;
 
-  DWORD share = 
-      FILE_SHARE_READ 
-    | FILE_SHARE_WRITE 
+  DWORD share =
+      FILE_SHARE_READ
+    | FILE_SHARE_WRITE
     | FILE_SHARE_DELETE;
 
-  DWORD attributes = 
-      FILE_FLAG_BACKUP_SEMANTICS 
-    | FILE_FLAG_POSIX_SEMANTICS 
+  DWORD attributes =
+      FILE_FLAG_BACKUP_SEMANTICS
+    | FILE_FLAG_POSIX_SEMANTICS
     | FILE_FLAG_OVERLAPPED;
-  
+
   HANDLE new_handle = ReOpenFile((HANDLE)handle, access, share, attributes);
   if (new_handle == INVALID_HANDLE_VALUE)
     return win32Err("failed to set file handle ", handle, " as non blocking");
-  
+
   return true;
 }
 
@@ -568,13 +568,13 @@ Timespec clock_monotonic()
   static LARGE_INTEGER ticks_per_sec;
   if (ticks_per_sec.QuadPart == 0)
     QueryPerformanceFrequency(&ticks_per_sec);
-  
+
   LARGE_INTEGER ticks;
   QueryPerformanceCounter(&ticks);
-  
+
   u64 seconds = ticks.QuadPart / ticks_per_sec.QuadPart;
-  u64 nanoseconds = ((ticks.QuadPart % ticks_per_sec.QuadPart) * 1000ULL) /
-    ticks_per_sec.QuadPart;
+  u64 nanoseconds = (ticks.QuadPart % ticks_per_sec.QuadPart)
+    * (1000000000ULL / ticks_per_sec.QuadPart);
   return {seconds, nanoseconds};
 }
 
@@ -584,16 +584,16 @@ b8 opendir(fs::Dir::Handle* out_handle, String path)
 {
   assert(out_handle != nullptr);
   assert(!path.isEmpty());
-  
+
   const u64 buflen = 4096;
   wchar_t wpath[buflen];
   s32 wpath_len = stringToWideChar(path, wpath, buflen-3);
   assert(wpath_len != buflen-3 && "temp buffer too small in opendir");
-  
+
   if (!(GetFileAttributesW(wpath) & FILE_ATTRIBUTE_DIRECTORY))
-    return ERROR("failed to open dir at path '", path, 
+    return ERROR("failed to open dir at path '", path,
                  "': not a directory\n");
-  
+
   if (isPathDeliminator(wpath[wpath_len-1]))
   {
     wpath[wpath_len] = L'*';
@@ -605,13 +605,13 @@ b8 opendir(fs::Dir::Handle* out_handle, String path)
     wpath[wpath_len+1] = L'*';
     wpath[wpath_len+2] = L'\0';
   }
-  
+
   WIN32_FIND_DATAW data;
   HANDLE search_handle = FindFirstFileW(wpath, &data);
-  
+
   if (search_handle == INVALID_HANDLE_VALUE)
     return win32Err("failed to open path '", path, "'");
-  
+
   *out_handle = (fs::Dir::Handle)search_handle;
   return true;
 }
@@ -622,21 +622,21 @@ b8 opendir(fs::Dir::Handle* out_handle, fs::File::Handle file_handle)
 {
   assert(out_handle != nullptr);
   assert((HANDLE)file_handle != INVALID_HANDLE_VALUE);
-  
+
   BY_HANDLE_FILE_INFORMATION file_info;
   if (!GetFileInformationByHandle((HANDLE)file_handle, &file_info))
     return win32Err("failed to open dir from handle ", file_handle);
-  
+
   if (!(file_info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
   {
     ERROR("failed to open dir from file handle ", file_handle, "': "
       "not a directory\n");
     return false;
   }
-  
+
   GetFinalPathNameByHandleW((HANDLE)file_handle, win32_str,
     win32_str_capacity + 1, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
-  
+
   WIN32_FIND_DATAW data;
   HANDLE search_handle = FindFirstFileW(win32_str, &data);
   if (search_handle == INVALID_HANDLE_VALUE)
@@ -646,7 +646,7 @@ b8 opendir(fs::Dir::Handle* out_handle, fs::File::Handle file_handle)
     cleanupWin32ErrorMsg();
     return false;
   }
-  
+
   *out_handle = (fs::Dir::Handle)search_handle;
   return true;
 }
@@ -656,10 +656,10 @@ b8 opendir(fs::Dir::Handle* out_handle, fs::File::Handle file_handle)
 b8 closedir(fs::Dir::Handle handle)
 {
   assert((HANDLE)handle != INVALID_HANDLE_VALUE);
-  
+
   if (FindClose((HANDLE)handle))
     return true;
-  
+
   ERROR("failed to close dir with handle ", handle, ": ",
     makeWin32ErrorMsg(GetLastError()), "\n");
   cleanupWin32ErrorMsg();
@@ -672,7 +672,7 @@ s64 readdir(fs::Dir::Handle handle, Bytes buffer)
 {
   assert((HANDLE)handle != INVALID_HANDLE_VALUE);
   assert(buffer.isValid());
-  
+
   WIN32_FIND_DATAW find_data;
   while (true)
   {
@@ -691,21 +691,21 @@ s64 readdir(fs::Dir::Handle handle, Bytes buffer)
         return -1;
       }
     }
-    
+
     // skip "." and ".."
     if (find_data.cFileName[0] == L'.' && (find_data.cFileName[1] == L'\0' ||
        (find_data.cFileName[1] == L'.' && find_data.cFileName[2] == L'\0')))
     {
       continue;
     }
-    
+
     break;
   }
 
-  int utf8_len = 
+  int utf8_len =
     WideCharToMultiByte(
-      CP_UTF8, 
-      WC_ERR_INVALID_CHARS, 
+      CP_UTF8,
+      WC_ERR_INVALID_CHARS,
       find_data.cFileName,
       -1,
       (char*)buffer.ptr,
@@ -715,7 +715,7 @@ s64 readdir(fs::Dir::Handle handle, Bytes buffer)
 
   if (utf8_len == 0)
   {
-    ERROR("failed to convert dir entry to utf8: ", 
+    ERROR("failed to convert dir entry to utf8: ",
           makeWin32ErrorMsg(GetLastError()));
     cleanupWin32ErrorMsg();
     return -1;
@@ -731,9 +731,9 @@ b8 stat(fs::FileInfo* out_info, String path)
   assert(out_info != nullptr);
   assert(notnil(path));
   assert(!path.isEmpty());
-  
+
   mem::zero(out_info, sizeof(*out_info));
-  
+
   if (path.len == 2 && path.ptr[1] == ':')
   {
     out_info->kind = fs::FileKind::NotFound;
@@ -744,20 +744,20 @@ b8 stat(fs::FileInfo* out_info, String path)
   wchar_t wpath[buflen];
   if (0 == stringToWideChar(path, wpath, buflen))
     return false;
-  
-  HANDLE handle = 
+
+  HANDLE handle =
     CreateFileW(
-        wpath, 
+        wpath,
         FILE_READ_ATTRIBUTES,
-          FILE_SHARE_READ 
-        | FILE_SHARE_WRITE 
-        | FILE_SHARE_DELETE, 
+          FILE_SHARE_READ
+        | FILE_SHARE_WRITE
+        | FILE_SHARE_DELETE,
         NULL,
-        OPEN_EXISTING, 
-          FILE_FLAG_BACKUP_SEMANTICS 
+        OPEN_EXISTING,
+          FILE_FLAG_BACKUP_SEMANTICS
         | FILE_FLAG_POSIX_SEMANTICS,
         NULL);
-  
+
   if (handle == INVALID_HANDLE_VALUE)
   {
     DWORD error = GetLastError();
@@ -774,7 +774,7 @@ b8 stat(fs::FileInfo* out_info, String path)
     return false;
   }
   defer{ CloseHandle(handle); };
-  
+
   switch (GetFileType(handle))
   {
     case FILE_TYPE_CHAR:
@@ -804,7 +804,7 @@ b8 stat(fs::FileInfo* out_info, String path)
       out_info->kind = fs::FileKind::Unknown;
       return false;
   }
-  
+
   FILE_BASIC_INFO basic_info;
   if (GetFileInformationByHandleEx(handle, FileBasicInfo, &basic_info,
     sizeof(basic_info)) == 0)
@@ -814,7 +814,7 @@ b8 stat(fs::FileInfo* out_info, String path)
     cleanupWin32ErrorMsg();
     return false;
   }
-  
+
   FILE_STANDARD_INFO standard_info;
   if (GetFileInformationByHandleEx(handle, FileStandardInfo, &standard_info,
     sizeof(standard_info)) == 0)
@@ -824,7 +824,7 @@ b8 stat(fs::FileInfo* out_info, String path)
     cleanupWin32ErrorMsg();
     return false;
   }
-  
+
   if (basic_info.FileAttributes & FILE_ATTRIBUTE_REPARSE_POINT)
   {
     out_info->kind = fs::FileKind::SymLink;
@@ -839,12 +839,12 @@ b8 stat(fs::FileInfo* out_info, String path)
     out_info->kind = fs::FileKind::Regular;
     out_info->byte_size = (u64)standard_info.EndOfFile.QuadPart;
   }
-  
+
   out_info->last_access_time = filetimeToTimePoint(basic_info.LastAccessTime);
   out_info->last_modified_time = filetimeToTimePoint(basic_info.LastWriteTime);
   out_info->last_status_change_time = filetimeToTimePoint(basic_info.ChangeTime);
   out_info->birth_time = filetimeToTimePoint(basic_info.CreationTime);
-  
+
   return true;
 }
 
@@ -854,7 +854,7 @@ b8 fileExists(String path)
 {
   assert(notnil(path));
   assert(!path.isEmpty());
-  
+
   const u64 buflen = 4096;
 
   wchar_t wpath[buflen] = {};
@@ -872,7 +872,7 @@ b8 copyFile(String dst, String src)
   assert(notnil(src));
   assert(!dst.isEmpty());
   assert(!src.isEmpty());
-  
+
   const u64 buflen = 4096;
   wchar_t wpath_dst[buflen];
   wchar_t wpath_src[buflen];
@@ -885,7 +885,7 @@ b8 copyFile(String dst, String src)
 
   if (SUCCEEDED(CopyFileW(wpath_src, wpath_dst, NULL)) == TRUE)
     return true;
-  
+
   return win32Err("failed to copy file from ", src, " to ", dst);
 }
 
@@ -895,7 +895,7 @@ b8 unlinkFile(String path)
 {
   assert(notnil(path));
   assert(!path.isEmpty());
-  
+
   const u64 buflen = 4096;
   wchar_t wpath[buflen];
   if (0 == stringToWideChar(path, wpath, buflen))
@@ -903,7 +903,7 @@ b8 unlinkFile(String path)
 
   if (DeleteFileW(wpath))
     return true;
-  
+
   return win32Err("failed to unlink file at path '", path, "'");
 }
 
@@ -913,7 +913,7 @@ b8 removeDir(String path)
 {
   assert(notnil(path));
   assert(!path.isEmpty());
-  
+
   wchar_t* wpath = makeWin32Path(path);
   if (wpath == nullptr)
   {
@@ -922,10 +922,10 @@ b8 removeDir(String path)
     return false;
   }
   defer{ if (wpath != win32_str) mem::stl_allocator.free(wpath); };
-  
+
   if (!RemoveDirectoryW(wpath))
     return true;
-  
+
   ERROR("failed to remove dir at path '", path, "': ",
     makeWin32ErrorMsg(GetLastError()), "\n");
   cleanupWin32ErrorMsg();
@@ -937,10 +937,10 @@ b8 removeDir(String path)
 b8 makeDir(String path, b8 make_parents)
 {
   assert(notnil(path));
-  
+
   if (path.isEmpty())
     return true;
-  
+
   const u64 buflen = 4096;
   wchar_t wpath[buflen];
   s32 wpath_length = stringToWideChar(path, wpath, buflen);
@@ -954,11 +954,11 @@ b8 makeDir(String path, b8 make_parents)
     wpath[wpath_length] = '\\';
     wpath[wpath_length+1] = '\0';
   }
-  
+
   // early out if path already exists
   if (GetFileAttributesW(wpath) != INVALID_FILE_ATTRIBUTES)
     return true;
-  
+
   if (!make_parents)
   {
     if (CreateDirectoryW(wpath, NULL) == 0)
@@ -970,14 +970,14 @@ b8 makeDir(String path, b8 make_parents)
     }
     return true;
   }
-  
+
   wchar_t wpath_partial[buflen];
   for (s64 i = 0; i < path.len; i += 1)
   {
     if ((path.ptr[i] == '/' && path.ptr[i-1] != ':') || i == path.len - 1)
     {
       auto partial_path = String{path.ptr, (u64)i+1};
-      
+
       if (0 == stringToWideChar(partial_path, wpath_partial, buflen))
         return false;
 
@@ -990,7 +990,7 @@ b8 makeDir(String path, b8 make_parents)
       }
     }
   }
-  
+
   return true;
 }
 
@@ -1009,7 +1009,7 @@ static b8 createServerPipe(
   {
     io::formatv(pipe_name, R"(\\.\pipe\)", rand);
 
-    *handle = 
+    *handle =
       CreateNamedPipeA(
         (LPCSTR)pipe_name->asStr().ptr,
           access
@@ -1039,7 +1039,7 @@ static b8 createServerPipe(
 /* ----------------------------------------------------------------------------
  */
 static b8 createPipePair(
-    HANDLE* server_pipe, 
+    HANDLE* server_pipe,
     DWORD server_access,
     HANDLE* client_pipe,
     DWORD client_access,
@@ -1066,7 +1066,7 @@ static b8 createPipePair(
   sec_attr.lpSecurityDescriptor = nullptr;
   sec_attr.bInheritHandle = inherit_client;
 
-  *client_pipe = 
+  *client_pipe =
     CreateFileA(
       (LPCSTR)server_pipe_name.asStr().ptr,
       client_access,
@@ -1098,7 +1098,7 @@ static b8 createNullHandle(HANDLE* handle, DWORD access)
   sec_attr.lpSecurityDescriptor = NULL;
   sec_attr.bInheritHandle = TRUE;
 
-  *handle = 
+  *handle =
     CreateFileW(
       L"NUL",
       access,
@@ -1118,7 +1118,7 @@ static b8 createNullHandle(HANDLE* handle, DWORD access)
 struct ProcessWin32
 {
   HANDLE h_process = INVALID_HANDLE_VALUE;
-  // A handle to the pipe end that we read from. Both the child's stdout and 
+  // A handle to the pipe end that we read from. Both the child's stdout and
   // stderr are set to this pipe.
   HANDLE h_stdout = INVALID_HANDLE_VALUE;
 };
@@ -1138,7 +1138,7 @@ b8 processSpawn(
 {
   assert(out_handle);
   assert(notnil(file));
-  
+
   ProcessWin32* p_proc = g_process_pool.add();
   if (p_proc == nullptr)
     return ERROR("failed to allocate a ProcessWin32\n");
@@ -1146,14 +1146,14 @@ b8 processSpawn(
   HANDLE h_child_stdout_write = INVALID_HANDLE_VALUE;
   HANDLE h_child_stdout_read = INVALID_HANDLE_VALUE;
 
-  auto failsafe = deferWithCancel 
-  { 
+  auto failsafe = deferWithCancel
+  {
     ERROR("failed to spawn process ", file, "\n");
     if (h_child_stdout_write != INVALID_HANDLE_VALUE)
       CloseHandle(h_child_stdout_write);
     if (h_child_stdout_read != INVALID_HANDLE_VALUE)
       CloseHandle(h_child_stdout_read);
-    g_process_pool.remove(p_proc); 
+    g_process_pool.remove(p_proc);
   };
 
   u64 file_chars = 2 + file.countCharacters();
@@ -1164,7 +1164,7 @@ b8 processSpawn(
     return false;
   cmd_chars += 1; // null-terminator
   assert(cmd_chars <= 32766); // CreateProcessW() max lpCommandLine length
-  
+
   // allocate the wchar string
   wchar_t* wargs = win32_str;
   if (cmd_chars - 1 > win32_str_capacity)
@@ -1178,7 +1178,7 @@ b8 processSpawn(
     }
   }
   defer{ if (wargs != win32_str) mem::stl_allocator.free(wargs); };
-  
+
   mem::zero(wargs, cmd_chars);
 
   u64 cmd_offset = 0;
@@ -1203,11 +1203,11 @@ b8 processSpawn(
       else
         io::format(&arg_quote_buf, (char)s.ptr[i]);
     }
-    int bytes_written = 
+    int bytes_written =
       stringToWideChar(
-        arg_quote_buf.asStr(), 
-        (wargs + cmd_offset), 
-        cmd_chars - cmd_offset, 
+        arg_quote_buf.asStr(),
+        (wargs + cmd_offset),
+        cmd_chars - cmd_offset,
         false);
     if (bytes_written == 0)
       return false;
@@ -1221,13 +1221,13 @@ b8 processSpawn(
   if (!cmdWriteString(file))
     return ERROR("failed to spawn pty process '", file, "'\n");
   cmdWriteChar(L'"');
-  
+
   // convert the utf8 args to wchar
   for (int i = 0; i < args.len - 1; ++i)
   {
     cmdWriteChar(L' ');
     cmdWriteChar(L'"');
-    
+
     if (!cmdWriteString(args[i]))
       return ERROR("failed to spawn pty process '", file, "'\n");
 
@@ -1252,7 +1252,7 @@ b8 processSpawn(
       return ERROR("failed to convert cwd to wide chars\n");
   }
   defer{ if (wcwd != nullptr) mem::stl_allocator.free(wcwd); };
-  
+
   SECURITY_ATTRIBUTES sec_attr = {};
   sec_attr.nLength = sizeof(SECURITY_ATTRIBUTES);
   sec_attr.bInheritHandle = TRUE;
@@ -1263,7 +1263,7 @@ b8 processSpawn(
 
   if (!SetHandleInformation(h_child_stdout_read, HANDLE_FLAG_INHERIT, 0))
     return win32Err("failed to set child stdout read as non-inherited");
-   
+
   STARTUPINFOW startup_info = {};
   startup_info.cb          = sizeof(startup_info);
   startup_info.dwFlags     = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
@@ -1275,15 +1275,15 @@ b8 processSpawn(
   // create the process with handle duplication, no window, and parent stdio
   PROCESS_INFORMATION process_info = {};
   if (!CreateProcessW(
-        NULL, 
-        wargs, 
-        NULL, 
-        NULL, 
-        TRUE, 
+        NULL,
+        wargs,
+        NULL,
+        NULL,
+        TRUE,
         0,
-        NULL, 
-        wcwd, 
-        &startup_info, 
+        NULL,
+        wcwd,
+        &startup_info,
         &process_info))
     return win32Err("failed to create process");
 
@@ -1291,7 +1291,7 @@ b8 processSpawn(
   p_proc->h_process = process_info.hProcess;
   CloseHandle(h_child_stdout_write);
   CloseHandle(process_info.hThread); // we don't need to track the thread
-  
+
   TRACE("started process ", file, ":", (u64)process_info.hProcess, " with args:\n");
   for (String s : args)
   {
@@ -1339,7 +1339,7 @@ u64 processRead(Process::Handle h_process, Bytes buffer)
   {
     // The process is still running, so peek the pipe.
     if (!PeekNamedPipe(
-          p_proc->h_stdout, 
+          p_proc->h_stdout,
           NULL,
           0,
           NULL,
@@ -1360,10 +1360,10 @@ u64 processRead(Process::Handle h_process, Bytes buffer)
   DWORD bytes_read;
   TRACE("read from ", (u64)p_proc->h_process, "\n");
   if (!ReadFile(
-        p_proc->h_stdout, 
-        buffer.ptr, 
-        bytes_to_read, 
-        &bytes_read, 
+        p_proc->h_stdout,
+        buffer.ptr,
+        bytes_to_read,
+        &bytes_read,
         NULL))
     return win32Err("failed to read process stdout pipe");
   TRACE("found ", (u64)bytes_read, " bytes\n");
@@ -1398,13 +1398,13 @@ b8 processClose(Process::Handle h_process)
   auto* p_proc = (ProcessWin32*)h_process;
   if (p_proc == nullptr)
     return ERROR("processClose passed a null process handle\n");
-  
+
   if (!processHasExited(h_process, nullptr))
   {
     if (!TerminateProcess(p_proc->h_process, 0))
       return win32Err("failed to stop process with handle ", h_process);
   }
-  
+
   if (p_proc->h_stdout != INVALID_HANDLE_VALUE)
     CloseHandle(p_proc->h_stdout);
   CloseHandle(p_proc->h_process);
@@ -1418,7 +1418,7 @@ b8 processClose(Process::Handle h_process)
 b8 realpath(fs::Path* path)
 {
   assert(path != nullptr);
-  
+
   const u64 buflen = 4096;
   wchar_t wpath[buflen];
   if (0 == stringToWideChar(path->buffer.asStr(), wpath, buflen))
@@ -1428,13 +1428,13 @@ b8 realpath(fs::Path* path)
   if (full_wpath_chars == 0)
     return win32Err("failed to canonicalize path ", *path);
 
-  wchar_t* full_wpath = 
+  wchar_t* full_wpath =
 	  (wchar_t*)mem::stl_allocator.allocateType<wchar_t>(full_wpath_chars);
   if (full_wpath == nullptr)
     return ERROR("failed to canonicalize path '", *path, "': insufficient "
                  "memory when converting from UTF-8 to WideChar\n");
   defer{ mem::stl_allocator.free(full_wpath); };
-  
+
   full_wpath_chars = GetFullPathNameW(wpath, full_wpath_chars,
     full_wpath, NULL);
   if (full_wpath_chars == 0)
@@ -1450,11 +1450,11 @@ b8 realpath(fs::Path* path)
       " found in a string when converting from WideChar to UTF-8\n");
     return false;
   }
-  
+
   path->clear();
   path->reserve((s32)utf8_bytes + 1);
   path->commit((s32)utf8_bytes);
-  
+
   int converted_bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
     full_wpath, (int)full_wpath_chars, (char*)path->buffer.ptr,
     utf8_bytes + 1, NULL, NULL);
@@ -1463,7 +1463,7 @@ b8 realpath(fs::Path* path)
 
   auto normalized = normalizePath(path->buffer.asStr());
   path->buffer.len = normalized.len;
-  
+
   return true;
 }
 
@@ -1472,7 +1472,7 @@ b8 realpath(fs::Path* path)
 fs::Path cwd(mem::Allocator* allocator)
 {
   assert(allocator != nullptr);
-  
+
   DWORD wpath_chars = GetCurrentDirectoryW(0, NULL);
   if (wpath_chars == 0)
   {
@@ -1481,7 +1481,7 @@ fs::Path cwd(mem::Allocator* allocator)
     cleanupWin32ErrorMsg();
     return nil;
   }
-  
+
   wchar_t* wpath = win32_str;
   if (wpath_chars > win32_str_capacity)
   {
@@ -1494,7 +1494,7 @@ fs::Path cwd(mem::Allocator* allocator)
     }
   }
   defer{ if (wpath != win32_str) mem::stl_allocator.free(wpath); };
-  
+
   wpath_chars = GetCurrentDirectoryW(wpath_chars + 1, wpath);
   if (wpath_chars == 0)
   {
@@ -1503,7 +1503,7 @@ fs::Path cwd(mem::Allocator* allocator)
     cleanupWin32ErrorMsg();
     return nil;
   }
-  
+
   assert(wpath_chars <= (DWORD)INT_MAX);
   int utf8_bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
     wpath, (int)wpath_chars, NULL, 0, NULL, NULL);
@@ -1514,7 +1514,7 @@ fs::Path cwd(mem::Allocator* allocator)
       " found in a string when converting from WideChar to UTF-8\n");
     return nil;
   }
-  
+
   fs::Path path;
   if (!path.init(allocator))
   {
@@ -1524,7 +1524,7 @@ fs::Path cwd(mem::Allocator* allocator)
   }
   path.reserve((s32)utf8_bytes + 1);
   path.commit((s32)utf8_bytes);
-  
+
   int converted_bytes = WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS,
     wpath, (int)wpath_chars, (char*)path.buffer.ptr, utf8_bytes + 1,
     NULL, NULL);
@@ -1539,7 +1539,7 @@ fs::Path cwd(mem::Allocator* allocator)
 
   String normalized = normalizePath(path.buffer.asStr());
   path.buffer.len = normalized.len;
-  
+
   return path;
 }
 
@@ -1548,7 +1548,7 @@ fs::Path cwd(mem::Allocator* allocator)
 b8 chdir(String path)
 {
   assert(notnil(path));
-  
+
   const u64 buflen = 4096;
   wchar_t wpath[buflen];
   s32 wpath_len = stringToWideChar(path, wpath, buflen-1);
@@ -1562,7 +1562,7 @@ b8 chdir(String path)
     cleanupWin32ErrorMsg();
     return false;
   }
-  
+
   return true;
 }
 
@@ -1615,12 +1615,12 @@ b8 touchFile(String path)
     return false;
   }
   defer{ if (wpath != win32_str) mem::stl_allocator.free(wpath); };
-  
+
   HANDLE handle = CreateFileW(wpath, FILE_READ_ATTRIBUTES,
     FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
     OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_POSIX_SEMANTICS,
     NULL);
-  
+
   if (handle == INVALID_HANDLE_VALUE)
   {
     ERROR("failed to touch file at path '", path, "': ",
@@ -1629,12 +1629,12 @@ b8 touchFile(String path)
     return false;
   }
   defer{ CloseHandle(handle); };
-  
+
   FILETIME file_time;
   SYSTEMTIME system_time;
   GetSystemTime(&system_time);
   SystemTimeToFileTime(&system_time, &file_time);
-  
+
   if (SetFileTime(handle, NULL, NULL, &file_time) == 0)
   {
     ERROR("failed to touch file at path '", path, "': ",
@@ -1642,7 +1642,7 @@ b8 touchFile(String path)
     cleanupWin32ErrorMsg();
     return false;
   }
-  
+
   return true;
 }
 

@@ -12,7 +12,7 @@ $ require "common"
 #include "iro/Logger.h"
 #include "iro/time/Time.h"
 
-static Logger logger = 
+static Logger logger =
   Logger::create("rendersys"_str, Logger::Verbosity::Info);
 
 /* ----------------------------------------------------------------------------
@@ -198,8 +198,9 @@ b8 RenderSys::update(const UpdateParams& params)
   renderer.pushUseProgram(renderer.stars_program);
   gfx::Buffer empty_buffer{ .ibo = 0, .vao = 0 };
   renderer.pushBindBuffer(background_buffer);
-  f32 time = TimeSpan::fromNanoseconds(
-    iro::TimePoint::monotonic().ns).toSeconds();
+  iro::TimePoint time_point = iro::TimePoint::monotonic();
+  f64 time = TimeSpan::fromSeconds(time_point.s).toSeconds()
+    + TimeSpan::fromNanoseconds(time_point.ns).toSeconds();
   renderer.pushUniformFloat("u_time"_str, time);
   vec2f viewport_size = params.viewport.max - params.viewport.min;
   renderer.pushUniformVec2("u_resolution"_str, viewport_size);

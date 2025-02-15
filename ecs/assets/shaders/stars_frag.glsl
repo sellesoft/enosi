@@ -11,7 +11,7 @@
 
 #define zoom   0.800
 #define tile   0.850
-#define speed  0.001
+#define speed  0.00001
 
 #define brightness 0.0015
 #define distfading 0.730
