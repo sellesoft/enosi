@@ -4,7 +4,6 @@ $ local cmn = require "common"
 
 @@lpp.import "Engine.lh"
 @@lpp.import "window/Window.lh"
-@@lpp.import "window/Window.events.lh"
 
 @@lpp.import "asset/AssetMgr.lh"
 @@lpp.import "graphics/CompiledTexture.lh"
@@ -21,7 +20,7 @@ namespace gfx
 extern b8 rendererPlatformInit(Window* window);
 extern b8 rendererPlatformSwapBuffers(Window* window);
 
-static Logger logger = 
+static Logger logger =
   Logger::create("gfx"_str, Logger::Verbosity::Info);
 
 /* ----------------------------------------------------------------------------
@@ -55,7 +54,7 @@ b8 Renderer::init(Engine& engine)
 
   if (!rendererPlatformInit(&engine.window))
     return false;
-    
+
   int opengl_version = gladLoaderLoadGL();
   if (!opengl_version)
     return ERROR("failed to load OpenGL\n");
@@ -65,8 +64,8 @@ b8 Renderer::init(Engine& engine)
   glDebugMessageCallback(glMessageCallback, 0);
 #endif
 
-  INFO("loaded OpenGL ", 
-    GLAD_VERSION_MAJOR(opengl_version), '.', 
+  INFO("loaded OpenGL ",
+    GLAD_VERSION_MAJOR(opengl_version), '.',
     GLAD_VERSION_MINOR(opengl_version), "\n");
 
   glEnable(GL_BLEND);
@@ -83,15 +82,13 @@ b8 Renderer::init(Engine& engine)
 
   if (!drawcmds.init(16))
     return ERROR("failed to initialize draw cmd array\n");
-  
-  engine.subscribeToBroadcast<WindowResized>(this, &Renderer::onWindowResized);
 
   this->engine = &engine;
 
   frame = 0;
 
   INFO("done!\n");
-  
+
   return true;
 }
 
@@ -100,6 +97,9 @@ b8 Renderer::init(Engine& engine)
 b8 Renderer::update()
 {
   TRACE("Renderer::update\n");
+
+  glViewport(0, 0, engine->window.size.x, engine->window.size.y);
+  glScissor(0, 0, engine->window.size.x, engine->window.size.y);
 
   glClearColor(0.f, 0.f, 0.f, 1.f);
   glClear(GL_COLOR_BUFFER_BIT);
@@ -129,10 +129,10 @@ b8 Renderer::update()
     case DrawCmd::Kind::Draw:
       TRACE("drawing\n");
       glDrawRangeElementsBaseVertex(
-        GL_TRIANGLES, 
-        0, 
+        GL_TRIANGLES,
+        0,
         // kind scuffed
-        last_buff->num_indexes, 
+        last_buff->num_indexes,
         cmd.draw.index_count,
         GL_UNSIGNED_INT,
         (void*)(base_offset + cmd.draw.index_start),
@@ -147,15 +147,23 @@ b8 Renderer::update()
         cmd.set_scissor.size.y);
       break;
 
+    case DrawCmd::Kind::SetViewport:
+      glViewport(
+        cmd.set_viewport.pos.x,
+        cmd.set_viewport.pos.y,
+        cmd.set_viewport.size.x,
+        cmd.set_viewport.size.y);
+      break;
+
     case DrawCmd::Kind::BindTexture:
       TRACE("binding texture ", cmd.bind_texture.id, "\n");
       glBindTexture(GL_TEXTURE_2D, cmd.bind_texture.id);
       break;
-    
+
     case DrawCmd::Kind::PushUniformVec2:
       {
         TRACE("pushing vec2 uniform ", cmd.push_uniform.name, "\n");
-        u32 loc = 
+        u32 loc =
           glGetUniformLocation(
             last_program,
             (char*)cmd.push_uniform.name.ptr);
@@ -166,7 +174,7 @@ b8 Renderer::update()
     case DrawCmd::Kind::PushUniformFloat:
       {
         TRACE("pushing float uniform ", cmd.push_uniform.name, "\n");
-        u32 loc = 
+        u32 loc =
           glGetUniformLocation(
             last_program,
             (char*)cmd.push_uniform.name.ptr);
@@ -177,7 +185,7 @@ b8 Renderer::update()
     case DrawCmd::Kind::PushUniformBool:
       {
         TRACE("pushing bool uniform ", cmd.push_uniform.name, "\n");
-        u32 loc = 
+        u32 loc =
           glGetUniformLocation(
             last_program,
             (char*)cmd.push_uniform.name.ptr);
@@ -188,14 +196,14 @@ b8 Renderer::update()
     case DrawCmd::Kind::PushUniformMat3x2:
       {
         TRACE("pushing mat3x2 uniform ", cmd.push_uniform.name, "\n");
-        u32 loc = 
+        u32 loc =
           glGetUniformLocation(
             last_program,
             (char*)cmd.push_uniform.name.ptr);
 
         auto& m = cmd.push_uniform.m;
 
-        f32 extended[3*3] = 
+        f32 extended[3*3] =
         {
           m.get(0,0), m.get(0,1), 0.f,
           m.get(1,0), m.get(1,1), 0.f,
@@ -222,7 +230,7 @@ b8 Renderer::update()
 
   TRACE("clearing drawcmds\n");
   drawcmds.clear();
-  
+
   glFlush();
 
   TRACE("swapping buffers\n");
@@ -244,7 +252,7 @@ static b8 compileShader(String path, int kind, u32* out_shader_id)
   defer { file.close(); };
 
   u64 filesize = file.getInfo().byte_size;
-    
+
   io::Memory buffer;
   buffer.open();
   defer { buffer.close(); };
@@ -264,7 +272,7 @@ static b8 compileShader(String path, int kind, u32* out_shader_id)
   {
     u8 buffer[512];
     glGetShaderInfoLog(id, 512, nullptr, (char*)buffer);
-    return ERROR("failed to compile shader ", path, ":\n", 
+    return ERROR("failed to compile shader ", path, ":\n",
         (char*)buffer, "\n");
   }
 
@@ -282,7 +290,7 @@ b8 Renderer::compileShaders()
   {
     u32 vertex_shader;
     if (!compileShader(
-        "assets/shaders/vertex.glsl"_str, 
+        "assets/shaders/vertex.glsl"_str,
         GL_VERTEX_SHADER,
         &vertex_shader))
     return false;
@@ -364,7 +372,7 @@ b8 Renderer::loadTexture(CompiledTexture* texture)
   const CompiledTextureData* data = texture->data;
   assert(data);
 
-  texture->gfx_texture = 
+  texture->gfx_texture =
     gfx::Texture::create(
       data->width,
       data->height,
@@ -390,13 +398,13 @@ void Renderer::pushBindBuffer(Buffer* buffer)
 /* ----------------------------------------------------------------------------
  */
 void Renderer::pushDraw(
-  u64 index_start, 
-  u64 index_count, 
+  u64 index_start,
+  u64 index_count,
   u64 vertex_start)
 {
   DrawCmd cmd;
   cmd.kind = DrawCmd::Kind::Draw;
-  cmd.draw = 
+  cmd.draw =
   {
     .index_start = index_start,
     .index_count = index_count,
@@ -413,6 +421,17 @@ void Renderer::pushSetScissor(vec2i pos, vec2i size)
   cmd.kind = DrawCmd::Kind::SetScissor;
   cmd.set_scissor.pos = pos;
   cmd.set_scissor.size = size;
+  drawcmds.push(cmd);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::pushSetViewport(vec2i pos, vec2i size)
+{
+  DrawCmd cmd;
+  cmd.kind = DrawCmd::Kind::SetViewport;
+  cmd.set_viewport.pos = pos;
+  cmd.set_viewport.size = size;
   drawcmds.push(cmd);
 }
 
@@ -479,13 +498,5 @@ void Renderer::pushUseProgram(u32 program)
   cmd.use_program = program;
   drawcmds.push(cmd);
 }
-
-/* ----------------------------------------------------------------------------
- */
-void Renderer::onWindowResized(WindowResized& event)
-{
-  glViewport(0, 0, event.size.x, event.size.y);
-}
-
 
 }

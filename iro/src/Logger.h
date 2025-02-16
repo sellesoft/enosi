@@ -1,15 +1,15 @@
 /*
  *  Logging api.
  *
- *  We handle logging by creating a 'Logger' for various things (usually 
- *  individual objects that need to report things, like a parser) which is 
- *  named 'logger'. The macros just below here are used to guard calling the 
- *  log function based on the logger's verbosity. 
+ *  We handle logging by creating a 'Logger' for various things (usually
+ *  individual objects that need to report things, like a parser) which is
+ *  named 'logger'. The macros just below here are used to guard calling the
+ *  log function based on the logger's verbosity.
  *
  *  TODOs
  *
  *    Add a message length limit and word wrapping.
- *    And maybe be a little fancy and wrap to the same indentation as the 
+ *    And maybe be a little fancy and wrap to the same indentation as the
  *    current line and stsuff yeah.
  */
 
@@ -46,7 +46,7 @@ namespace iro
 {
 
 /* ============================================================================
- *  Central log object that keeps track of destinations, which are io 
+ *  Central log object that keeps track of destinations, which are io
  *  targets that have some settings to customize their output.
  */
 struct Log
@@ -63,15 +63,15 @@ struct Log
       ShowCategoryName,
       // Show the verbosity level before the message.
       ShowVerbosity,
-      // Pad the verbosity level to the right so that messages printed at 
+      // Pad the verbosity level to the right so that messages printed at
       // different levels stay aligned.
       PadVerbosity,
       // Allow color.
       AllowColor,
-      // Track the longest category name and indent all other names so that 
+      // Track the longest category name and indent all other names so that
       // they stay aligned.
       TrackLongestName,
-      // If a logger logs a message that spans multiple lines, prefix each 
+      // If a logger logs a message that spans multiple lines, prefix each
       // line with the enabled information above.
       PrefixNewlines,
     };
@@ -98,8 +98,8 @@ DefineFlagsOrOp(Log::Dest::Flags, Log::Dest::Flag);
 extern Log log;
 
 
-// Goofy color formatting via types. This allows using 
-// color::<color name> to start a colored region which may be 
+// Goofy color formatting via types. This allows using
+// color::<color name> to start a colored region which may be
 // reset by color::reset.
 //
 // All colors can also wrap another formattable thing such that
@@ -159,7 +159,7 @@ template<typename T>
 T& sanitizeColored(T& x, Log::Dest& dest) { return x; }
 
 template<typename T>
-Colored<T>& sanitizeColored(Colored<T>& x, Log::Dest& dest) 
+Colored<T>& sanitizeColored(Colored<T>& x, Log::Dest& dest)
 {
   if (!dest.flags.test(Log::Dest::Flag::AllowColor))
     x.enabled = false;
@@ -214,14 +214,14 @@ s64 format(io::IO* out, color::Colored<T>& x)
   if (!x.enabled)
     return io::format(out, x.x);
 
-  return io::formatv(out, 
+  return io::formatv(out,
       getColor(x.color), x.x, getColor(color::Color::Reset));
 }
 }
 
 /* ============================================================================
- *  A logger, which is a named thing that logs stuff to the log. Each logger 
- *  has its own verbosity setting so we can be selective about what we want to 
+ *  A logger, which is a named thing that logs stuff to the log. Each logger
+ *  has its own verbosity setting so we can be selective about what we want to
  *  see in a log.
  */
 struct Logger
@@ -258,7 +258,7 @@ struct Logger
     Logger& logger;
     Verbosity v;
 
-    Intercept(Log::Dest& dest, Logger& logger, Verbosity v) : 
+    Intercept(Log::Dest& dest, Logger& logger, Verbosity v) :
       dest(dest), logger(logger), v(v) {}
 
     s64 write(Bytes slice) override
@@ -301,7 +301,7 @@ struct Logger
     {
       for (Log::Dest& destination : iro::log.destinations)
       {
-        io::formatv(destination.io, 
+        io::formatv(destination.io,
             color::sanitizeColored(args, destination)...);
       }
     }
@@ -317,11 +317,13 @@ struct Logger
         else
         {
           writePrefix(v, destination);
-          io::formatv(destination.io, 
+          io::formatv(destination.io,
               color::sanitizeColored(args, destination)...);
         }
       }
     }
+
+    assert(v != Verbosity::Fatal);
   }
 
   template<io::Formattable... T>

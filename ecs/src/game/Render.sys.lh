@@ -10,9 +10,9 @@ $ require "common"
 #include "math/Rect.h"
 #include "math/mat.h"
 
-namespace gfx 
-{ 
-  struct Buffer; 
+namespace gfx
+{
+  struct Buffer;
   struct Renderer;
 }
 
@@ -32,7 +32,7 @@ struct RenderSys
     u32 quad_count;
     const gfx::CompiledTexture* texture;
   };
-  
+
   b8 init(gfx::Renderer& renderer, AssetMgr& assetmgr);
 
   struct UpdateParams

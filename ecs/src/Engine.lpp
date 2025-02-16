@@ -27,7 +27,7 @@ using namespace iro;
 @@lpp.import "asset/SourceDataFile.lh"
 @@lpp.import "asset/Packing.lh"
 
-static Logger logger = 
+static Logger logger =
   Logger::create("ecs.eng"_str, Logger::Verbosity::Info);
 
 namespace ui
@@ -37,7 +37,7 @@ namespace ui
 {
   Item root
   | size: 500 500
-  | padding: 5 
+  | padding: 5
   | font: "gohu"
   | font_height: 11
   | background_color: 0x08141eff
@@ -66,12 +66,12 @@ namespace ui
 
     Text ("bah bah bah");
 
-    CollapsingHeader 
+    CollapsingHeader
     | size: 100% auto
     | header_height: 15
     | content_background_color: 0x34aeaeff
     | border: 0 3 0 3
-    | padding: 5 5 5 5 
+    | padding: 5 5 5 5
     ("header")
     {
       Item bg
@@ -95,7 +95,7 @@ namespace ui
 ui::Demo demo;
 
 /* ----------------------------------------------------------------------------
- */ 
+ */
 b8 Engine::init()
 {
   INFO("initializing engine...\n");
@@ -106,8 +106,8 @@ $ local initSystem = function(act, name)
       INFO("initializing $(name)\n");
       auto start = TimePoint::now();
       if (!$(act))
-        return ERROR("failed to initialize $(name)\n");
-      INFO("finished initializing $(name) in ", 
+        return FATAL("failed to initialize $(name)\n");
+      INFO("finished initializing $(name) in ",
            WithUnits(TimePoint::now() - start), "\n");
     }
 $ end
@@ -155,7 +155,7 @@ $ end
     return ERROR("failed to create hot reloader\n");
 #endif
 
-  INFO("done initializing in ", 
+  INFO("done initializing in ",
     WithUnits(TimePoint::now() - start_time), "\n");
 
   CodepointRange ascii =
@@ -214,7 +214,7 @@ $ end
 }
 
 /* ----------------------------------------------------------------------------
- */ 
+ */
 b8 Engine::checkReload()
 {
 #if ECS_HOT_RELOAD
@@ -240,7 +240,7 @@ b8 Engine::checkReload()
     { false, nullptr },
   };
 
-  auto lake = 
+  auto lake =
     Process::spawn(
       "/home/sushi/src/enosi/bin/lake"_str,
       Slice<String>::from(args, 2),
@@ -268,7 +268,7 @@ b8 Engine::checkReload()
 }
 
 /* ----------------------------------------------------------------------------
- */ 
+ */
 b8 Engine::update()
 {
   auto start = TimePoint::now();
@@ -291,7 +291,7 @@ b8 Engine::update()
   gamemgr.update();
 
   // inspector->fps->dirty = true;
-  // 
+  //
   // io::StaticBuffer<255> fps;
   // io::format(&fps, 1.f / (TimePoint::now() - start).toSeconds());
   // inspector->fps->set(fps.asStr());

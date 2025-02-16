@@ -50,7 +50,7 @@ struct Renderer
   Buffer* createBuffer();
   void    destroyBuffer(Buffer* buffer);
 
-  // Loads a texture into opengl and sets the proper reference to it 
+  // Loads a texture into opengl and sets the proper reference to it
   // on the given texture.
   b8 loadTexture(CompiledTexture* texture);
 
@@ -63,11 +63,12 @@ struct Renderer
   void pushUniformBool(String name, b8 b);
   void pushUniformMat3x2(String name, const mat3x2& m);
   void pushUseProgram(u32 program);
-  
+  void pushSetViewport(vec2i pos, vec2i size);
+
   Renderer() {}
 
   // NOTE(sushi) explicitly deleting the copy constructor of Renderer
-  //             to prevent accidental copies since operating on a copy 
+  //             to prevent accidental copies since operating on a copy
   //             of it has potential to cause really really awesome bugs
   //             that are hard to find.
   Renderer(const Renderer& rhs) = delete;

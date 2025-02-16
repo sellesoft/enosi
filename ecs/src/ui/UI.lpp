@@ -17,7 +17,7 @@ using namespace iro;
 namespace ui
 {
 
-static Logger logger = 
+static Logger logger =
   Logger::create("ui"_str, Logger::Verbosity::Info);
 
 /* ----------------------------------------------------------------------------
@@ -43,7 +43,7 @@ Item* UI::make<Item>(String id)
     mem::stl_allocator.free(item);
     return nullptr;
   }
-    
+
   return item;
 }
 
@@ -75,12 +75,12 @@ b8 UI::init(Engine& engine)
     return ERROR("failed to init index sorted free drawcmds array\n");
   if (!fontlib.init())
     return ERROR("failed to init font library\n");
-  
+
   buffer = renderer.createBuffer();
   if (!buffer)
     return ERROR("failed to create gfx::Buffer\n");
   if (!buffer->init(
-        sizeof(gfx::Vertex) * 0xffffff, 
+        sizeof(gfx::Vertex) * 0xffffff,
         sizeof(gfx::Index) * 0xffffff))
     return ERROR("failed to init gfx::Buffer\n");
 
@@ -110,7 +110,7 @@ b8 UI::init(Engine& engine)
   engine.subscribeToBroadcast<WindowResized>(this, &UI::onWindowResized);
   engine.subscribeToBroadcast<PostReload>(this, &UI::onPostReload);
 
-  // Store a reference to the engine incase widgets need to access 
+  // Store a reference to the engine incase widgets need to access
   // information from it.
   eng = &engine;
 
@@ -130,7 +130,7 @@ b8 UI::update(Engine& engine)
   if (item_stack.head->data != root)
     return ERROR("items left on stack!\n");
 
-  // TODO(sushi) only do this if the mouse moves by subscribing to the 
+  // TODO(sushi) only do this if the mouse moves by subscribing to the
   //             MouseMoved event, maybe. A lot of other stuff will
   //             also make this need to be retriggered as well.
   findHoveredItem(item_tree.root);
@@ -149,7 +149,7 @@ b8 UI::update(Engine& engine)
   mat3x2 proj, view;
   mat3x2::calcScreenMatrices(engine.window.size, &proj, &view);
 
-  mat3x2 model = 
+  mat3x2 model =
     mat3x2::createTransform(
       vec2f(0.f, 0.f),
       0.f);
@@ -158,7 +158,8 @@ b8 UI::update(Engine& engine)
   renderer.pushUniformMat3x2("view"_str, view);
   renderer.pushUniformMat3x2("model"_str, model);
 
-  renderer.pushSetScissor(vec2i(0,0), vec2i(window.size.x, window.size.y));
+  renderer.pushSetViewport(vec2i(0,0), window.size);
+  renderer.pushSetScissor(vec2i(0,0), window.size);
 
   TRACE("  mapping buffer\n");
   buffer->map();
@@ -168,13 +169,13 @@ b8 UI::update(Engine& engine)
   updateTree(root->node);
 
   temp_alloc.deinit();
-  
+
   TRACE("  unmapping buffer\n");
   buffer->unmap();
 
   // idk
   buffer->num_indexes = buffer->index_size / sizeof(gfx::Index);
-  
+
   if (scrolling_item)
   {
     INFO(scrolling_item->scroll, "\n");
@@ -193,13 +194,13 @@ b8 UI::update(Engine& engine)
         &handle_pos,
         &handle_size);
 
-      f32 mlx = 
+      f32 mlx =
         input.mouse.window.x - scrolling_item->pos_screen.x;
 
-      f32 mte = 
+      f32 mte =
         max(0.f, min(mlx - scrollbar_offset.x, bar_size.x - handle_size.x));
 
-      f32 new_scroll = 
+      f32 new_scroll =
         scrolling_item->max_scroll.x * mte / (bar_size.x - handle_size.x);
 
       if (new_scroll != scrolling_item->scroll.x)
@@ -220,21 +221,21 @@ b8 UI::update(Engine& engine)
         &handle_pos,
         &handle_size);
 
-      vec2f content_start = 
+      vec2f content_start =
         scrolling_item->adjustCursorStart(this, vec2f(0,0));
 
-      // Find where the cursor is vertically relative to the top edge of the 
+      // Find where the cursor is vertically relative to the top edge of the
       // scroll bar.
-      f32 mly = 
-        input.mouse.window.y - 
+      f32 mly =
+        input.mouse.window.y -
         (scrolling_item->pos_screen.y + content_start.y);
 
       // Find where the top edge of the handle should be based on the position
       // of the mouse, clamped to the top and bottom edges of the bar.
-      f32 mte = 
+      f32 mte =
         max(0.f, min(mly - scrollbar_offset.y, bar_size.y - handle_size.y));
 
-      f32 new_scroll = 
+      f32 new_scroll =
         scrolling_item->max_scroll.y * mte / (bar_size.y - handle_size.y);
 
       if (new_scroll != scrolling_item->scroll.y)
@@ -243,8 +244,8 @@ b8 UI::update(Engine& engine)
         scrolling_item->scroll.y = new_scroll;
       }
 
-      scrolling_item->scroll.y = 
-        min(0.f, 
+      scrolling_item->scroll.y =
+        min(0.f,
             max(scrolling_item->scroll.y, scrolling_item->max_scroll.y));
     }
   }
@@ -255,8 +256,8 @@ b8 UI::update(Engine& engine)
 /* ----------------------------------------------------------------------------
  */
 static ItemNode* findStaticSizedParent(
-    UI* ui, 
-    ItemNode* node, 
+    UI* ui,
+    ItemNode* node,
     ItemNode* child)
 {
   if (node == ui->root->node)
@@ -303,13 +304,13 @@ void UI::updateTree(ItemNode* node)
   @@parent.style:lookup(overflow, margin, border)
 
   // TODO(sushi) doing these look ups every frame for every item kinda
-  //             sucks. Maybe try storing a map from item to cached 
-  //             information about it that we need here? Sorta defeats the 
+  //             sucks. Maybe try storing a map from item to cached
+  //             information about it that we need here? Sorta defeats the
   //             purpose of the style map stuff though.
   @@style:lookup(margin, border)
-  
+
 $ local tryUpdate = function(reason, cond)
-  if (item->update_triggers.test(UpdateReason::$(reason)) && 
+  if (item->update_triggers.test(UpdateReason::$(reason)) &&
       ($(cond or "true")))
     item->update(this, UpdateReason::$(reason));
 $ end
@@ -322,7 +323,7 @@ $ end
     @tryUpdate(MouseHover)
     @tryUpdate(MousePressed, input.anyMouseButtonPressed())
   }
-  
+
   if (item->isHovered(this, Item::HoverKind::Area))
   {
     // Allow other mouse inputs if the item is hovered at all.
@@ -337,19 +338,19 @@ $ end
   {
     item->dirty = false;
     ItemNode* sspar = findStaticSizedParent(this, node, nullptr);
-    
-    // TODO(sushi) store a temp allocator here and pass it along with a 
-    //             void* to eval and gen functions to allow items 
-    //             caching information calculated in evaluate to be 
+
+    // TODO(sushi) store a temp allocator here and pass it along with a
+    //             void* to eval and gen functions to allow items
+    //             caching information calculated in evaluate to be
     //             reused in generate.
-    //             Also try to apply this idea to base item evaluation in 
+    //             Also try to apply this idea to base item evaluation in
     //             general.. surely there's some data cached on Item that
-    //             doesn't need to be and could instead be put in temp 
+    //             doesn't need to be and could instead be put in temp
     //             memory to be read here and in generate.
-    // TODO(sushi) try working out a way to tell widgets what exactly 
+    // TODO(sushi) try working out a way to tell widgets what exactly
     //             changed when they are marked dirty so that they can
     //             decide if they actually need to do work.
-    // TODO(sushi) don't reevalute an item's branch when it is statically 
+    // TODO(sushi) don't reevalute an item's branch when it is statically
     //             sized and all that happened to it is it moved.
 
     evalItemBranch(sspar, nullptr);
@@ -363,51 +364,51 @@ $ end
 
   if (parent && @parent.style.overflow != @Item.overflow.visible)
   {
-    vec2f cpos = 
-      item->pos_screen + 
+    vec2f cpos =
+      item->pos_screen +
       @style.margin.top_left;
     vec2f csiz = @item.getMarginedArea;
 
-    vec2f ppos = 
-      parent->pos_screen + 
+    vec2f ppos =
+      parent->pos_screen +
       parent->calcContentStart(
         @parent.style.margin,
         @parent.style.border);
 
     ppos = max(ppos, parent->visible_start);
 
-    vec2f psiz = 
+    vec2f psiz =
       parent->calcContentArea(
         @parent.style.margin,
         @parent.style.border,
         parent->visible_size);
-  
+
     vec2f pext = ppos + psiz;
 
-    scoff = 
+    scoff =
       max(
-        vec2f(0,0), 
+        vec2f(0,0),
         max(
           ppos,
           min(
             cpos,
             pext)));
-    vec2f br = 
+    vec2f br =
       max(
         ppos,
         min(
           cpos + csiz,
           pext));
     scext = max(vec2f(0,0), br - scoff);
-    item->visible_start = 
+    item->visible_start =
       max(
         vec2f(0,0),
         max(
           ppos,
           min(
-            cpos, 
+            cpos,
             pext)));
-    br = 
+    br =
       max(
         ppos,
         min(
@@ -419,11 +420,11 @@ $ end
   else
   {
     scoff = max(vec2f(0,0), item->pos_screen);
-    scext = 
+    scext =
       max(
-        vec2f(0,0), 
+        vec2f(0,0),
         min(
-          item->pos_screen + item->size, 
+          item->pos_screen + item->size,
           vec2f(window.size)));
     item->visible_start = item->pos_screen;
     item->visible_size = item->size;
@@ -436,11 +437,11 @@ $ end
     "\n    adj: ", vec2i(scoff.x, window.size.y - (scoff.y+scext.y)),
     "\n");
 
-  // TODO(sushi) we can maybe pull some of these conditions into the 
+  // TODO(sushi) we can maybe pull some of these conditions into the
   //             calculations above to stop doing work much earlier.
-  b8 item_in_view = 
+  b8 item_in_view =
     scoff.x < window.size.x && scoff.y < window.size.y &&
-    scext.x != 0.f          && scext.y != 0.f          && 
+    scext.x != 0.f          && scext.y != 0.f          &&
     scoff.x + scext.x > 0.f && scoff.y + scext.y > 0.f;
 
   auto emitDrawCmd = [&](DrawCmd* drawcmd)
@@ -518,7 +519,7 @@ $ end
     // Draw scrollbars and border when appropriate.
     if (item->builtin.scrollbars && item->max_scroll != vec2f(0.f,0.f))
       emitDrawCmd(item->builtin.scrollbars);
-  
+
     if (item->builtin.borders)
       emitDrawCmd(item->builtin.borders);
   }
@@ -530,7 +531,7 @@ $ end
   {
     vec2f bar_pos, bar_size;
     vec2f handle_pos, handle_size;
-    
+
     if (item->max_scroll.y != 0.f)
     {
       item->calcVerticalScrollBar(
@@ -602,8 +603,8 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
     display,
     alignment)
 
-  // TODO(sushi) someway to reuse this information as the parent 
-  //             will have already been passed at this point so 
+  // TODO(sushi) someway to reuse this information as the parent
+  //             will have already been passed at this point so
   //             we're doing double lookups here.
   @@parent.style:lookup(
     sizing,
@@ -620,12 +621,12 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
 
   if (!hauto)
   {
-    if (@style.sizing.test(flex) && 
-        parent_flex && 
-        parent_flex->is_container && 
+    if (@style.sizing.test(flex) &&
+        parent_flex &&
+        parent_flex->is_container &&
         !parent_flex->disp_horizontal)
     {
-      item->size.y = 
+      item->size.y =
         @style.size.y / parent_flex->ratio_sum * parent_flex->effective_size;
 
       if (parent_flex->n_ceils)
@@ -644,10 +645,10 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
         ERROR("percent_y is set but height (", @style.size.height, ") is "
               "negative\n");
       else if (@parent.style.sizing.test(percent_y))
-        item->size.y = @style.size.height/100.f * 
+        item->size.y = @style.size.height/100.f *
                        @parent.getPaddedHeight;
       else if (@parent.style.size.height >= 0.f)
-        item->size.y = @style.size.height/100.f * 
+        item->size.y = @style.size.height/100.f *
                        @parent.getPaddedStyleHeight;
       else
       {
@@ -657,10 +658,10 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
       }
     }
     else
-      item->size.y = 
-        @style.size.y + 
-        @style.margin.top + 
-        @style.margin.bottom + 
+      item->size.y =
+        @style.size.y +
+        @style.margin.top +
+        @style.margin.bottom +
         @style.border.top +
         @style.border.bottom;
   }
@@ -674,7 +675,7 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
         parent_flex->is_container &&
         parent_flex->disp_horizontal)
     {
-      item->size.x = 
+      item->size.x =
         @style.size.x / parent_flex->ratio_sum * parent_flex->effective_size;
 
       if (parent_flex->n_ceils)
@@ -704,7 +705,7 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
       }
     }
     else
-      item->size.x = 
+      item->size.x =
         @style.size.x +
         @style.margin.left +
         @style.margin.right +
@@ -720,8 +721,8 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
     b8 is_horizontal = @style.display.test(horizontal);
 
     flex.is_container = true;
-    flex.effective_size = 
-      (is_horizontal? 
+    flex.effective_size =
+      (is_horizontal?
         @item.getPaddedWidth :
         @item.getPaddedHeight);
     flex.ratio_sum = 0.f;
@@ -751,7 +752,7 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
 
       if (@child.style.sizing.test(flex))
       {
-        flex.ratio_sum += 
+        flex.ratio_sum +=
           (is_horizontal? @child.style.size.width : @child.style.size.height);
       }
       else
@@ -764,7 +765,7 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
           // to tell the main child eval loop later that it has already been
           // evaluated and we do so by storing the child in already_evaluated.
           evalItemBranch(cnode, &flex);
-          flex.effective_size -= 
+          flex.effective_size -=
             (is_horizontal? child->size.x : child->size.y);
           already_evaluated.push(child);
         }
@@ -772,12 +773,12 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
         {
           if (@child.style.sizing.test(percent_x))
           {
-            flex.effective_size -= 
+            flex.effective_size -=
               @child.style.size.width / 100.f * item->size.x;
           }
           else
           {
-            flex.effective_size -= 
+            flex.effective_size -=
               @child.style.size.x +
               @child.style.margin.left +
               @child.style.margin.right;
@@ -787,13 +788,13 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
         {
           if (@child.style.sizing.test(percent_y))
           {
-            flex.effective_size -= 
+            flex.effective_size -=
               @child.style.size.height / 100.f * item->size.y;
           }
           else
           {
-            flex.effective_size -= 
-              @child.style.size.y + 
+            flex.effective_size -=
+              @child.style.size.y +
               @child.style.margin.top +
               @child.style.margin.bottom;
           }
@@ -802,7 +803,7 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
     }
   }
 
-  Item::AdjustedSize adjusted_size = 
+  Item::AdjustedSize adjusted_size =
     item->adjustItemSize(
       this,
       wauto,
@@ -820,9 +821,9 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
   vec2f max_extent = {};
   if (item->shouldPlaceChildren())
   {
-    vec2f cursor = 
-      @style.margin.top_left + 
-      @style.padding.top_left + 
+    vec2f cursor =
+      @style.margin.top_left +
+      @style.padding.top_left +
       @style.border.top_left;
 
     // Allow widgets to adjust where child placement should begin, eg. in the
@@ -834,13 +835,13 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
 
     cursor = floor(cursor);
 
-    ItemNode* it = 
-      (@style.display.test(reverse)? 
+    ItemNode* it =
+      (@style.display.test(reverse)?
         node->last_child :
         node->first_child);
 
     u32 aeidx = 0;
-    while (it) 
+    while (it)
     {
       Item* child = it->data;
 
@@ -858,8 +859,8 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
       if (@child.style.display.test(hidden))
       {
         assert(it != it->next);
-        it = 
-          (@style.display.test(reverse)? 
+        it =
+          (@style.display.test(reverse)?
             it->prev :
             it->next);
         continue;
@@ -885,7 +886,7 @@ $   local style = child.style
 
     case @schema.anchor.top_right:
       if (!wauto)
-        child->pos_local.x = 
+        child->pos_local.x =
           @item.getPaddedWidth - child->size.x - @style.pos.x;
       else
         ERROR("item's anchor was specified as top_right but the item's width "
@@ -895,13 +896,13 @@ $   local style = child.style
 
     case @schema.anchor.bottom_right:
       if (!wauto)
-        child->pos_local.x = 
+        child->pos_local.x =
           @item.getPaddedWidth - child->size.x - @style.pos.x;
       else
         ERROR("item's anchor was specified as bottom_right but the item's "
               "width is set to auto\n");
       if (!hauto)
-        child->pos_local.y = 
+        child->pos_local.y =
           @item.getPaddedHeight - child->size.y - @style.pos.y;
       else
         ERROR("item's anchor was specified as bottom_right but the item's "
@@ -928,7 +929,7 @@ $ end
           if (!hauto)
           {
             child->pos_local.y = cursor.y +
-              @child.style.alignment.y * 
+              @child.style.alignment.y *
               (@item.getPaddedHeight - child->size.y);
           }
           else
@@ -942,7 +943,7 @@ $ end
           if (!wauto)
           {
             child->pos_local.x = cursor.x +
-              @child.style.alignment.x * 
+              @child.style.alignment.x *
               (@item.getPaddedWidth - child->size.x);
           }
           else
@@ -962,7 +963,7 @@ $ end
         break;
 
       case @schema.positioning.relative:
-        child->pos_local = 
+        child->pos_local =
           @child.style.margin.top_left +
           @style.border.top_left;
 
@@ -989,14 +990,14 @@ $ end
       if (hauto)
         item->size.y = max(item->size.y, child->pos_local.y + child->size.y);
 
-      max_extent = 
+      max_extent =
         max(
-          max_extent, 
+          max_extent,
           child->pos_local + child->size - item->scroll);
 
       assert(it != it->next);
-      it = 
-        (@style.display.test(reverse)? 
+      it =
+        (@style.display.test(reverse)?
           it->prev :
           it->next);
     }
@@ -1004,7 +1005,7 @@ $ end
 
   if (wauto)
   {
-    item->size.x += 
+    item->size.x +=
       @style.padding.right +
       @style.margin.right +
       @style.border.right;
@@ -1017,17 +1018,17 @@ $ end
       @style.margin.bottom +
       @style.border.bottom;
   }
-  
-  item->max_scroll = 
+
+  item->max_scroll =
     min(vec2f(0,0),
-      item->size - max_extent - 
+      item->size - max_extent -
       @item.style.padding.bottom_right -
       @item.style.border.bottom_right -
       @item.style.margin.bottom_right);
 
-  // item->max_scroll.x = 
+  // item->max_scroll.x =
   //   min(0.f, item->size.x - max_extent.x - @item.style.padding.right);
-  // item->max_scroll.y = 
+  // item->max_scroll.y =
   //   min(0.f, item->size.y - max_extent.y - @item.style.padding.bottom);
 
   item->size = max(item->size, item->getMinSize(this));
@@ -1046,7 +1047,7 @@ void UI::genItemBranch(ItemNode* node)
   $ local item = ui.createItemContext("Item", "item")
 
   @@item.style:lookup(
-    display, 
+    display,
     overflow,
     margin,
     padding,
@@ -1070,19 +1071,19 @@ void UI::genItemBranch(ItemNode* node)
   }
 
   // NOTE(sushi) the below logic is forced upon all Items because the base
-  //             Item schema provides properties for them. I intend for these 
-  //             things to be usable on all items regardless of what widget 
+  //             Item schema provides properties for them. I intend for these
+  //             things to be usable on all items regardless of what widget
   //             they are. However this sorta sucks cause it means that all
   //             Items must have the builtin drawcmds stored on them regardless
   //             if they use them or not. I have an idea for rewriting UI to
   //             be 'component' based rather than inheritance in which these
   //             things would only exist for the Item when actually used,
   //             but that introduces a lot of complications and I'm hesitant
-  //             to experiment with a whole new setup for UI so soon after 
-  //             getting it working properly again. For now I'm going to 
-  //             continue designing UI to be completely callback based and 
+  //             to experiment with a whole new setup for UI so soon after
+  //             getting it working properly again. For now I'm going to
+  //             continue designing UI to be completely callback based and
   //             while keeping in mind what problems making it component based
-  //             could solve while also trying to determine what new 
+  //             could solve while also trying to determine what new
   //             problems it could introduce.
 
   // TODO(sushi) move the following logic into Item::generate and just call it
@@ -1100,13 +1101,13 @@ void UI::genItemBranch(ItemNode* node)
 
     vec2i sum = {};
 
-    sum += 
+    sum +=
       gfx::putFilledRect(
         vp,
         ip,
         sum,
-        item->pos_screen + 
-        @item.style.margin.top_left + 
+        item->pos_screen +
+        @item.style.margin.top_left +
         @item.style.padding.top_left,
         @item.getBorderedArea,
         @item.style.background_color);
@@ -1132,18 +1133,18 @@ void UI::genItemBranch(ItemNode* node)
         ip,
         sum,
         @item.style.border,
-        item->pos_screen + 
+        item->pos_screen +
         @item.style.margin.top_left +
         @item.style.border.top_left,
         @item.getBorderedArea,
         @item.style.border_color);
-    
+
     item->builtin.borders->counts_used = sum;
   }
 
-  // If overflow is set to scroll and this item contains children that 
+  // If overflow is set to scroll and this item contains children that
   // overflow, draw the scroll bars.
-  if (@item.style.overflow == @Item.overflow.scroll && 
+  if (@item.style.overflow == @Item.overflow.scroll &&
       (item->max_scroll.x != 0.f || item->max_scroll.y != 0.f))
   {
     if (item->builtin.scrollbars == nullptr)
@@ -1173,7 +1174,7 @@ void UI::genItemBranch(ItemNode* node)
         &bar_pos, &bar_size,
         &handle_pos, &handle_size);
 
-      sum += 
+      sum +=
         gfx::putFilledRect(
           vp,
           ip,
@@ -1182,7 +1183,7 @@ void UI::genItemBranch(ItemNode* node)
           bar_size,
           @item.style.scrollbar_color);
 
-      sum += 
+      sum +=
         gfx::putFilledRect(
           vp,
           ip,
@@ -1199,7 +1200,7 @@ void UI::genItemBranch(ItemNode* node)
         &bar_pos, &bar_size,
         &handle_pos, &handle_size);
 
-      sum += 
+      sum +=
         gfx::putFilledRect(
           vp,
           ip,
@@ -1208,7 +1209,7 @@ void UI::genItemBranch(ItemNode* node)
           bar_size,
           @item.style.scrollbar_color);
 
-      sum += 
+      sum +=
         gfx::putFilledRect(
           vp,
           ip,

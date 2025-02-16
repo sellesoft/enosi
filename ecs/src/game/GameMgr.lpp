@@ -14,7 +14,7 @@ $ local cmn = require "common"
 
 using namespace iro;
 
-static Logger logger = 
+static Logger logger =
   Logger::create("gamemgr"_str, Logger::Verbosity::Info);
 
 b8 GameMgr::init(Engine* eng)
@@ -25,20 +25,20 @@ b8 GameMgr::init(Engine* eng)
   engine = eng;
 
   if (!entmgr.init())
-    return ERROR("failed to initialize entity mgr\n");
+    return FATAL("failed to initialize entity mgr\n");
 
   if (!rendersys.init(engine->renderer, engine->assetmgr))
-    return ERROR("failed to initialize render sys\n");
+    return FATAL("failed to initialize render sys\n");
 
   using namespace fs;
 
-  // auto testent = 
+  // auto testent =
   //   entmgr.createEntityFromResource("assets/entities/Test.ent"_str);
 
   // mindsys.attach(testent);
   // eye.attach(testent);
 
-  auto test_map = 
+  auto test_map =
     File::from("assets/maps/Test.map"_str, OpenFlag::Read);
   defer { test_map.close(); };
 
@@ -49,7 +49,7 @@ b8 GameMgr::init(Engine* eng)
   SourceDataParser parser;
   if (!parser.init(&test_map_source_data_file, &test_map, "Test.map"_str))
     return ERROR("failed to init source data parser\n");
-  
+
   if (!parser.parse())
     return ERROR("failed to parse test map source data\n");
 
@@ -58,7 +58,7 @@ b8 GameMgr::init(Engine* eng)
   packSourceDataIntoType(
     *test_map_source_data_file.returned_data,
     map_def);
-  
+
   if(!map.init(*map_def, *this))
   {
     return ERROR("failed to initialize the map '", map_def->name, "'\n");
@@ -83,24 +83,16 @@ b8 GameMgr::update()
   if (!eye.update(*this))
     return false;
 
-  RenderSys::UpdateParams render_params = 
+  RenderSys::UpdateParams render_params1 =
   {
-    .viewport = {{0.f,0.f},engine->window.size},
+    .viewport = { .size = engine->window.size },
     .renderer = engine->renderer,
     .entmgr = &entmgr,
     .map = &map,
   };
-
-  eye.getViewMat(&render_params.view);
-
-  if (!rendersys.update(render_params))
+  eye.getViewMat(&render_params1.view);
+  if (!rendersys.update(render_params1))
     return false;
-
-  vec2f screen_pos = engine->input.mouse.window;
-  vec2f screen_size = engine->window.size;
-
-  // vec2f mouse_world = eye.screenToWorld(screen_pos, screen_size);
-  // INFO(floor(mouse_world), "\n");
 
   return true;
 }

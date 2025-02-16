@@ -1,6 +1,6 @@
 /*
  *  A command that alters the state of the renderer.
- */ 
+ */
 
 $ require "common"
 
@@ -21,6 +21,7 @@ struct DrawCmd
     BindBuffer,
     Draw,
     SetScissor,
+    SetViewport,
     BindTexture,
     PushUniformVec2,
     PushUniformFloat,
@@ -35,21 +36,27 @@ struct DrawCmd
   {
     Buffer* bind_buffer;
 
-    struct 
+    struct
     {
       u64 index_start;
       u64 index_count;
       u64 vertex_start;
     } draw;
 
-    struct 
+    struct
     {
       vec2i pos;
       vec2i size;
     } set_scissor;
 
+    struct
+    {
+      vec2i pos;
+      vec2i size;
+    } set_viewport;
+
     gfx::Texture bind_texture;
-    
+
     struct
     {
       String name;

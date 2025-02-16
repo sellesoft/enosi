@@ -96,19 +96,6 @@ static void drawBatches(
   gfx::Renderer& renderer = params.renderer;
   renderer.pushBindBuffer(sys.quads_buffer);
 
-  auto proj = mat3x2::identity();
-  vec2f viewport_size = params.viewport.max - params.viewport.min;
-  proj.set(0, 0, EyeSys::pixels_per_meter * 2.f / viewport_size.x);
-  proj.set(1, 1, EyeSys::pixels_per_meter * 2.f / viewport_size.y);
-  renderer.pushUniformMat3x2("proj"_str, proj);
-
-  renderer.pushUniformMat3x2("view"_str, params.view);
-
-  mat3x2 tm = mat3x2::createTransform(params.viewport.min, 0.0f);
-  renderer.pushUniformMat3x2("model"_str, tm);
-
-  renderer.pushUniformBool("has_texture"_str, true);
-
   u32 index_offset = 0;
   for (u32 i = 0; i < sys.batch_count; i++)
   {
@@ -121,8 +108,6 @@ static void drawBatches(
 
   sys.quads_buffer->num_vertexes = 4*sys.quad_count;
   sys.quads_buffer->num_indexes = 6*sys.quad_count;
-
-  renderer.pushUniformBool("has_texture"_str, false);
 
   sys.batches[0].quad_count = 0;
   sys.batches[0].texture = sys.null_texture.getData();
@@ -164,10 +149,10 @@ static void drawQuad(
   }
 
   auto vp = (gfx::Vertex*)sys.quads_buffer->mapped.vp + 4*sys.quad_count;
-  vp[0] = gfx::Vertex{ pos,              vec2f(0,1), color.rgba };
-  vp[1] = gfx::Vertex{ pos + vec2f(1,0), vec2f(1,1), color.rgba };
-  vp[2] = gfx::Vertex{ pos + vec2f(1,1), vec2f(1,0), color.rgba };
-  vp[3] = gfx::Vertex{ pos + vec2f(0,1), vec2f(0,0), color.rgba };
+  vp[0] = gfx::Vertex{ pos + vec2f(-0.5f,-0.5f), vec2f(0,1), color.rgba };
+  vp[1] = gfx::Vertex{ pos + vec2f( 0.5f,-0.5f), vec2f(1,1), color.rgba };
+  vp[2] = gfx::Vertex{ pos + vec2f( 0.5f, 0.5f), vec2f(1,0), color.rgba };
+  vp[3] = gfx::Vertex{ pos + vec2f(-0.5f, 0.5f), vec2f(0,0), color.rgba };
 
   sys.batches[sys.batch_count-1].quad_count++;
   sys.quad_count++;
@@ -190,28 +175,52 @@ b8 RenderSys::update(const UpdateParams& params)
   // Alternatively, we could use instancing.
   // Alternatively, we could build a sprite sheet so we don't need
   // to change the texture (this is probably the better option).
+  TRACE("render.sys update\n");
+
   gfx::Renderer& renderer = params.renderer;
 
+  renderer.pushSetViewport(params.viewport.pos, params.viewport.size);
+  renderer.pushSetScissor(params.viewport.pos, params.viewport.size);
 
   ///////////////////////////////////////////////
   // 1. Draw Background
-  renderer.pushUseProgram(renderer.stars_program);
-  gfx::Buffer empty_buffer{ .ibo = 0, .vao = 0 };
-  renderer.pushBindBuffer(background_buffer);
-  iro::TimePoint time_point = iro::TimePoint::monotonic();
-  f64 time = TimeSpan::fromSeconds(time_point.s).toSeconds()
-    + TimeSpan::fromNanoseconds(time_point.ns).toSeconds();
-  renderer.pushUniformFloat("u_time"_str, time);
-  vec2f viewport_size = params.viewport.max - params.viewport.min;
-  renderer.pushUniformVec2("u_resolution"_str, viewport_size);
-  renderer.pushDraw(0, 6, 0);
+  {
+    TRACE("render.sys draw background\n");
 
+    renderer.pushUseProgram(renderer.stars_program);
+
+    renderer.pushBindBuffer(background_buffer);
+
+    iro::TimePoint time_point = iro::TimePoint::monotonic();
+    f64 time = TimeSpan::fromSeconds(time_point.s).toSeconds()
+      + TimeSpan::fromNanoseconds(time_point.ns).toSeconds();
+    renderer.pushUniformFloat("u_time"_str, time);
+
+    renderer.pushUniformVec2("u_resolution"_str,
+      vec2f(params.viewport.w, params.viewport.h));
+
+    renderer.pushDraw(0, 6, 0);
+  }
 
   ///////////////////////////////////////////////
   // 2. Draw Map Tiles
   // TODO(delle) only update changed tiles after init
+  TRACE("render.sys draw map tiles\n");
+
   renderer.pushUseProgram(renderer.shader_program);
   quads_buffer->map();
+
+  auto proj = mat3x2::identity();
+  proj.set(0, 0, EyeSys::pixels_per_meter * 2.f / (f32)params.viewport.w);
+  proj.set(1, 1, EyeSys::pixels_per_meter * 2.f / (f32)params.viewport.h);
+  renderer.pushUniformMat3x2("proj"_str, proj);
+
+  renderer.pushUniformMat3x2("view"_str, params.view);
+
+  mat3x2 tm = mat3x2::createTransform({0.0f,0.0f}, 0.0f);
+  renderer.pushUniformMat3x2("model"_str, tm);
+
+  renderer.pushUniformBool("has_texture"_str, true);
 
   if (params.map)
   {
@@ -239,9 +248,10 @@ b8 RenderSys::update(const UpdateParams& params)
     }
   }
 
-
   ///////////////////////////////////////////////
   // 3. Draw Sprite Components
+  TRACE("render.sys draw sprite components\n");
+
   if (params.entmgr && params.map)
   {
     Map&          map    = *params.map;
@@ -267,7 +277,6 @@ b8 RenderSys::update(const UpdateParams& params)
   {
     drawBatches(*this, params);
   }
-
 
   return true;
 }
