@@ -11,6 +11,18 @@ $ local ui = require "ui.UI"
 
 @@lpp.import "ui/UI.lh"
 @@lpp.import "asset/SourceDataFileHandle.lh"
+@@lpp.import "game/Render.sys.lh"
+@@lpp.import "game/EntityMgr.lh"
+@@lpp.import "game/Eye.sys.lh"
+@@lpp.import "graphics/Framebuffer.lh"
+@@lpp.import "graphics/Texture.lh"
+
+struct AssetMgr;
+
+namespace gfx
+{
+struct Renderer;
+}
 
 namespace ui
 {
@@ -28,10 +40,25 @@ struct
 { 
   SourceDataFileHandle h_selected_map = {};
 
-  static MapEditor* create(UI& ui);
+  gfx::Framebuffer framebuffer;
+  gfx::Texture texture;
+
+  gfx::Renderer* renderer;
+
+  DrawCmd* map_render;
+
+  EyeSys eye;
+
+  static MapEditor* create(UI& ui, gfx::Renderer* renderer);
   void destroy();
 
   void selectMap(SourceDataFileHandle& h_map);
+
+  void renderMap(AssetMgr& assetmgr);
+
+  void update(UI* ui, UpdateReason reason) override;
+  void reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post) override;
+  void generate(UI* ui) override;
 })
 
 }

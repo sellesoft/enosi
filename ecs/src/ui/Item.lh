@@ -42,7 +42,7 @@ enum class UpdateReason
   MouseDown,
   MouseScroll,
 
-  // Last callback ever invoked on an Item.
+  // Last update callback ever invoked on an Item.
   Fin,
 };
 typedef Flags<UpdateReason> UpdateReasonFlags;

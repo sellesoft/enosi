@@ -10,6 +10,9 @@ $ local ui = require "ui.UI"
 @@lpp.import "ui/Item.lh"
 @@lpp.import "ui/DrawCmd.lh"
 
+@@lpp.import "graphics/CompiledTexture.lh"
+@@lpp.import "graphics/Buffer.lh"
+
 #include "iro/containers/List.h"
 #include "iro/containers/Pool.h"
 #include "iro/containers/LinkedPool.h"
@@ -55,7 +58,7 @@ struct UI
   Array<DrawCmd*> free_drawcmds_vertex_sorted;
   Array<DrawCmd*> free_drawcmds_index_sorted;
 
-  gfx::Buffer* buffer;
+  gfx::Buffer buffer;
   u64 vertex_next;
   u64 index_next;
 
@@ -64,6 +67,8 @@ struct UI
   vec2f scrollbar_offset;
   Item* scrolling_item;
   b8 horizontal_scroll;
+
+  gfx::Texture white_texture;
 
   mem::LenientBump temp_alloc;
 

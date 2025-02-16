@@ -5,6 +5,7 @@
 $ require "common"
 
 @@lpp.import "graphics/CompiledTexture.lh"
+@@lpp.import "graphics/Buffer.lh"
 
 #include "iro/Common.h"
 #include "math/Rect.h"
@@ -27,6 +28,7 @@ struct RenderSys
 {
   static constexpr u32 MAX_QUADS = 8192;
   static constexpr u32 MAX_BATCHES = 256;
+
   struct QuadBatch
   {
     u32 quad_count;
@@ -34,6 +36,7 @@ struct RenderSys
   };
 
   b8 init(gfx::Renderer& renderer, AssetMgr& assetmgr);
+  void deinit(gfx::Renderer& renderer);
 
   struct UpdateParams
   {
@@ -48,10 +51,10 @@ struct RenderSys
 
   gfx::CompiledTextureRef null_texture;
 
-  gfx::Buffer* quads_buffer;
+  gfx::Buffer quads_buffer;
+  gfx::Buffer background_buffer;
 
   QuadBatch batches[MAX_BATCHES];
   u32 batch_count;
   u32 quad_count;
-  gfx::Buffer* background_buffer;
 };

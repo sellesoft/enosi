@@ -16,7 +16,12 @@ $ local buffer = require "string.buffer"
  */
 struct EntityMgr
 {
-  typedef IndexedPool<Entity, 4096> EntityPool;
+  enum
+  {
+    c_max_entities = 4096,
+  };
+
+  typedef IndexedPool<Entity, c_max_entities> EntityPool;
 
   EntityPool ent_pool;
 

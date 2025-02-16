@@ -74,15 +74,12 @@ b8 UI::init(Engine& engine)
   if (!free_drawcmds_index_sorted.init())
     return ERROR("failed to init index sorted free drawcmds array\n");
 
-  buffer = renderer.createBuffer();
-  if (!buffer)
-    return ERROR("failed to create gfx::Buffer\n");
-  if (!buffer->init(
+  if (!buffer.init(
         sizeof(gfx::Vertex) * 0xffffff,
         sizeof(gfx::Index) * 0xffffff))
     return ERROR("failed to init gfx::Buffer\n");
 
-  buffer->setGfxAttributes();
+  buffer.setGfxAttributes();
 
   // NOTE(sushi) I do not like making root manually here but in order
   //             to not have to put a branch in make just to handle this
@@ -108,7 +105,24 @@ b8 UI::init(Engine& engine)
   engine.subscribeToBroadcast<WindowResized>(this, &UI::onWindowResized);
   engine.subscribeToBroadcast<PostReload>(this, &UI::onPostReload);
 
-  // Store a reference to the engine incase widgets need to access
+  u8 white_pixels[16] = 
+  { 
+    0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,
+  };
+
+  white_texture = 
+    gfx::Texture::create(
+      4, 4,
+      gfx::ImageFormat::BW,
+      gfx::ImageAddressMode::ClampToWhite,
+      gfx::ImageFilter::Nearest,
+      gfx::ImageKind::TwoD,
+      white_pixels);
+  
+  // Store a reference to the engine in case widgets need to access
   // information from it.
   eng = &engine;
 
@@ -133,7 +147,6 @@ b8 UI::update(Engine& engine)
   //             also make this need to be retriggered as well.
   findHoveredItem(item_tree.root);
 
-  TRACE("  binding buffer ", buffer, "\n");
   renderer.pushBindBuffer(buffer);
 
   // renderer.pushUniformVec2(
@@ -160,7 +173,7 @@ b8 UI::update(Engine& engine)
   renderer.pushSetScissor(vec2i(0,0), window.size);
 
   TRACE("  mapping buffer\n");
-  buffer->map();
+  buffer.map();
 
   temp_alloc.init();
 
@@ -169,10 +182,10 @@ b8 UI::update(Engine& engine)
   temp_alloc.deinit();
 
   TRACE("  unmapping buffer\n");
-  buffer->unmap();
+  buffer.unmap();
 
   // idk
-  buffer->num_indexes = buffer->index_size / sizeof(gfx::Index);
+  buffer.num_indexes = buffer.index_size / sizeof(gfx::Index);
 
   if (scrolling_item)
   {
@@ -447,13 +460,12 @@ $ end
     if (notnil(drawcmd->tex))
     {
       TRACE("  drawcmd has tex ", drawcmd->tex.id, "\n");
-      renderer.pushUniformBool("has_texture"_str, true);
       renderer.pushBindTexture(drawcmd->tex);
     }
     else
     {
       TRACE("  drawcmd has no tex\n");
-      renderer.pushUniformBool("has_texture"_str, false);
+      renderer.pushBindTexture(white_texture);
     }
 
     if (drawcmd->counts_used.y == 0)
@@ -472,7 +484,6 @@ $ end
 
   auto emitDrawCmds = [&](DrawCmdList& drawcmds)
   {
-
     TRACE("pushing draw cmds \n");
 
     for (DrawCmd* drawcmd : drawcmds)

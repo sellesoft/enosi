@@ -95,6 +95,7 @@ CompiledTexture* CompiledTexture::load(
     ERROR("failed to open compiled texture data from '", data_path, "'\n");
     return nullptr;
   }
+  defer { compiled_data_file.close(); };
 
   u64 file_size = compiled_data_file.getInfo().byte_size;
   texture->data = 

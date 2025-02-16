@@ -112,12 +112,39 @@ $ local initSystem = function(act, name)
     }
 $ end
 
+  @initSystem(source_data_file_reg.init(),        source data file reg);
   @initSystem(eventbus.broadcast.init(),          broadcast event bus);
   @initSystem(input.init(*this),                  input);
   @initSystem(Window::initializeBackend(),        window backend);
   @initSystem(window.init("ecs"_str,input),       window);
   @initSystem(renderer.init(*this),               renderer);
   @initSystem(assetmgr.init(&mem::stl_allocator), asset mgr);
+  
+  //TODO(delle) update the bump allocators to have a reset() and clear()
+  mem::LenientBump texture_compile_allocator;
+  if (!texture_compile_allocator.init())
+    return ERROR("failed to initialize texture compile allocator\n");
+
+  gfx::CompiledTexture::CompileParams white_texture_params =
+  {
+    .name         = "white"_str,
+    .data_path    = "data/textures/white.texture"_str,
+    .width        = 4,
+    .height       = 4,
+    .format       = gfx::ImageFormat::BW,
+    .kind         = gfx::ImageKind::TwoD,
+    .filter       = gfx::ImageFilter::Nearest,
+    .address_mode = gfx::ImageAddressMode::ClampToWhite,
+    .allocator    = &texture_compile_allocator,
+    .assetmgr     = &assetmgr,
+  };
+
+  u8 pixels[4] = { 0xff, 0xff, 0xff, 0xff, };
+
+  gfx::CompiledTexture::compileFromMemory(pixels, white_texture_params);
+  gfx::CompiledTexture::load("white"_str, assetmgr, renderer);
+
+  texture_compile_allocator.deinit();
 
   io::StaticBuffer<511> texture_data_path_buffer;
   auto png_glob = fs::Globber::create("assets/textures/*.png"_str);
@@ -140,6 +167,7 @@ $ end
         .allocator    = &mem::stl_allocator,
         .assetmgr     = &assetmgr,
       };
+
       gfx::CompiledTexture::compilePNG(params);
       return true;
     });
@@ -147,7 +175,6 @@ $ end
 
   @initSystem(ui.init(*this),              ui);
   @initSystem(gamemgr.init(this),          gamemgr);
-  @initSystem(source_data_file_reg.init(), source data file reg);
 
 #if ECS_HOT_RELOAD
   reloader = hr::createReloader();
@@ -175,31 +202,6 @@ $ end
   };
 
   gfx::Font::compileBDF(params);
-
-  //TODO(delle) update the bump allocators to have a reset() and clear()
-  mem::LenientBump texture_compile_allocator;
-  if (!texture_compile_allocator.init())
-    return ERROR("failed to initialize texture compile allocator\n");
-
-  gfx::CompiledTexture::CompileParams white_texture_params =
-  {
-    .name         = "white"_str,
-    .data_path    = "data/textures/white.texture"_str,
-    .width        = 4,
-    .height       = 4,
-    .format       = gfx::ImageFormat::BW,
-    .kind         = gfx::ImageKind::TwoD,
-    .filter       = gfx::ImageFilter::Nearest,
-    .address_mode = gfx::ImageAddressMode::ClampToWhite,
-    .allocator    = &texture_compile_allocator,
-    .assetmgr     = &assetmgr,
-  };
-
-  u8 pixels[4] = { 0xff, 0xff, 0xff, 0xff, };
-
-  gfx::CompiledTexture::compileFromMemory(pixels, white_texture_params);
-
-  texture_compile_allocator.deinit();
 
   // demo.place(ui);
 
@@ -284,10 +286,10 @@ b8 Engine::update()
   if (!input.update(*this))
     return ERROR("failed to update input\n");
 
+  gamemgr.update();
+
   if (!ui.update(*this))
     return ERROR("failed to update ui\n");
-
-  gamemgr.update();
 
   // inspector->fps->dirty = true;
   //
@@ -295,7 +297,7 @@ b8 Engine::update()
   // io::format(&fps, 1.f / (TimePoint::now() - start).toSeconds());
   // inspector->fps->set(fps.asStr());
 
-  // ui.root->dirty = true;
+  ui.root->dirty = true;
 
   return true;
 }

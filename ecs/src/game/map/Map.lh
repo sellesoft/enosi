@@ -12,6 +12,10 @@ struct GameMgr;
 struct MapTileDef;
 struct MapLayerDef;
 struct MapDef;
+struct AssetMgr;
+struct EntityMgr;
+struct EyeSys;
+struct MindSys;
 
 /* ============================================================================
  */
@@ -20,7 +24,13 @@ struct Tile
   const MapTileDef* def = nullptr;
   gfx::CompiledTextureRef r_texture;
 
-  b8 init(const MapTileDef& def, u32 layer_idx, GameMgr& gamemgr);
+  b8 init(
+    const MapTileDef& def, 
+    u32 layer_idx, 
+    AssetMgr& assetmgr,
+    EntityMgr& entmgr,
+    gfx::Renderer& renderer);
+
   void deinit();
 };
 
@@ -32,7 +42,13 @@ struct Layer
 
   Array<Tile> tiles;
 
-  b8 init(const MapLayerDef& def, u32 layer_idx, GameMgr& gamemgr);
+  b8 init(
+    const MapLayerDef& def, 
+    u32 layer_idx, 
+    AssetMgr& assetmgr,
+    EntityMgr& entmgr,
+    gfx::Renderer& renderer);
+
   void deinit();
 };
 
@@ -44,6 +60,19 @@ struct Map
 
   Array<Layer> layers;
 
-  b8 init(const MapDef& def, GameMgr& gamemgr);
+  struct InitParams
+  {
+    AssetMgr&      assetmgr;
+    EntityMgr&     entmgr;
+    gfx::Renderer& renderer;
+
+    // Optional for attaching to a player character.
+    // TODO(sushi) I feel like this would be better handled outside of 
+    //             map init.
+    EyeSys*  eye;
+    MindSys* mind;
+  };
+
+  b8 init(const MapDef& def, InitParams& params);
   void deinit();
 };

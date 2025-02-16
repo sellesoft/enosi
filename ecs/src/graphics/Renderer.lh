@@ -35,7 +35,6 @@ struct Renderer
   u32 shader_program;
   u32 stars_program;
 
-  SLinkedPool<Buffer> buffers;
   Array<DrawCmd> drawcmds;
 
   Engine* engine;
@@ -47,17 +46,15 @@ struct Renderer
 
   b8 compileShaders();
 
-  Buffer* createBuffer();
-  void    destroyBuffer(Buffer* buffer);
-
   // Loads a texture into opengl and sets the proper reference to it
   // on the given texture.
   b8 loadTexture(CompiledTexture* texture);
 
-  void pushBindBuffer(Buffer* buffer);
+  void pushBindBuffer(Buffer buffer);
   void pushDraw(u64 index_start, u64 index_count, u64 vertex_start);
   void pushSetScissor(vec2i pos, vec2i size);
-  void pushBindTexture(gfx::Texture texture);
+  void pushBindTexture(Texture texture);
+  void pushBindFramebuffer(Framebuffer framebuffer);
   void pushUniformVec2(String name, vec2f v);
   void pushUniformFloat(String name, f32 f);
   void pushUniformBool(String name, b8 b);

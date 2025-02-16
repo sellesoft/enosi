@@ -38,31 +38,32 @@ b8 GameMgr::init(Engine* eng)
   // mindsys.attach(testent);
   // eye.attach(testent);
 
-  auto test_map =
-    File::from("assets/maps/Test.map"_str, OpenFlag::Read);
-  defer { test_map.close(); };
+  SourceDataFileHandle h_test_map = 
+    eng->source_data_file_reg.loadFromDisk("assets/maps/Test.map"_str);
 
-  SourceDataFile test_map_source_data_file;
-  if (!test_map_source_data_file.init())
-    return ERROR("failed to init test map source data file\n");
+  if (!h_test_map.isValid())
+    return ERROR("failed to load test map\n");
 
-  SourceDataParser parser;
-  if (!parser.init(&test_map_source_data_file, &test_map, "Test.map"_str))
-    return ERROR("failed to init source data parser\n");
-
-  if (!parser.parse())
-    return ERROR("failed to parse test map source data\n");
-
-  auto map_def = mem::stl_allocator.construct<MapDef>();
+  auto* map_def = mem::stl_allocator.construct<MapDef>();
 
   packSourceDataIntoType(
-    *test_map_source_data_file.returned_data,
+    *h_test_map.getFile()->returned_data,
     map_def);
 
-  if(!map.init(*map_def, *this))
+  Map::InitParams map_params = 
   {
+    .assetmgr = engine->assetmgr,
+    .entmgr   = entmgr,
+    .renderer = engine->renderer,
+    .eye      = &eye,
+    .mind     = &mindsys,
+  };
+
+  if(!map.init(*map_def, map_params))
     return ERROR("failed to initialize the map '", map_def->name, "'\n");
-  }
+
+  map_editor = ui::MapEditor::create(eng->ui, &eng->renderer);
+  map_editor->selectMap(h_test_map);
 
   return true;
 }
@@ -93,6 +94,10 @@ b8 GameMgr::update()
   eye.getViewMat(&render_params1.view);
   if (!rendersys.update(render_params1))
     return false;
+
+  map_editor->renderMap(engine->assetmgr);
+  engine->renderer.pushSetViewport(
+      {0,0},{engine->window.size.x,engine->window.size.y});
 
   return true;
 }

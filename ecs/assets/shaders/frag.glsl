@@ -3,7 +3,7 @@
 layout (location = 0) in vec4 in_col;
 layout (location = 1) in vec2 in_uv;
 
-out vec4 color;
+layout (location = 0) out vec4 color;
 
 uniform sampler2D tex;
 

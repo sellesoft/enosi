@@ -16,7 +16,12 @@ $ local cmn = require "common"
 
 /* ----------------------------------------------------------------------------
  */
-b8 Tile::init(const MapTileDef& def, u32 layer_idx, GameMgr& gamemgr)
+b8 Tile::init(
+    const MapTileDef& def, 
+    u32               layer_idx, 
+    AssetMgr&         assetmgr,
+    EntityMgr&        entmgr,
+    gfx::Renderer&    renderer)
 {
   TRACE("initializing tile at (",def.pos.x,",",def.pos.y,",",layer_idx,")\n");
   if (r_texture.isValid())
@@ -29,14 +34,14 @@ b8 Tile::init(const MapTileDef& def, u32 layer_idx, GameMgr& gamemgr)
   {
     r_texture.track(gfx::CompiledTexture::load(
       def.texture,
-      gamemgr.engine->assetmgr,
-      gamemgr.engine->renderer));
+      assetmgr,
+      renderer));
   }
 
   for (const SourceData* ent_data : def.entities)
   {
-    auto entid = loadEntity(*ent_data, gamemgr.entmgr);
-    auto* ent = gamemgr.entmgr.getEntity(entid);
+    auto entid = loadEntity(*ent_data, entmgr);
+    auto* ent = entmgr.getEntity(entid);
     auto* transform = ent->tryComp<Transform>();
     transform->pos = def.pos;
     transform->placement_layer = layer_idx;
@@ -47,7 +52,12 @@ b8 Tile::init(const MapTileDef& def, u32 layer_idx, GameMgr& gamemgr)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Layer::init(const MapLayerDef& def, u32 layer_idx, GameMgr& gamemgr)
+b8 Layer::init(
+    const MapLayerDef& def, 
+    u32                layer_idx, 
+    AssetMgr&          assetmgr,
+    EntityMgr&         entmgr,
+    gfx::Renderer&     renderer)
 {
   TRACE("initializing layer at (",def.pos.x,",",def.pos.y,",",layer_idx,")\n");
   assert(isnil(tiles));
@@ -64,7 +74,12 @@ b8 Layer::init(const MapLayerDef& def, u32 layer_idx, GameMgr& gamemgr)
     Tile* block = 
       tiles.arr + block_def.pos.x + block_def.pos.y * def.size.x;
 
-    if (!block->init(block_def, layer_idx, gamemgr))
+    if (!block->init(
+          block_def, 
+          layer_idx, 
+          assetmgr,
+          entmgr,
+          renderer))
       return false;
   }
 
@@ -73,12 +88,17 @@ b8 Layer::init(const MapLayerDef& def, u32 layer_idx, GameMgr& gamemgr)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Map::init(const MapDef& def, GameMgr& gamemgr)
+b8 Map::init(const MapDef& def, InitParams& params)
 {
   INFO("initializing map '",def.name,"'\n");
   assert(isnil(layers));
 
   this->def = &def;
+
+  AssetMgr&      assetmgr = params.assetmgr;
+  EntityMgr&     entmgr   = params.entmgr;
+  ComponentMgr&  cmpmgr   = entmgr.cmpmgr;
+  gfx::Renderer& renderer = params.renderer;
 
   if (!layers.init())
     return ERROR("failed to initialize layer array\n");
@@ -90,30 +110,33 @@ b8 Map::init(const MapDef& def, GameMgr& gamemgr)
     MapLayerDef* layer_def = def.layers.arr + i;
     Layer* layer = layers.arr + i;
     
-    if (!layer->init(*layer_def, i, gamemgr))
+    if (!layer->init(*layer_def, i, assetmgr, entmgr, renderer))
       return false;
   }
 
-  EntityMgr& entmgr = gamemgr.entmgr;
-  ComponentMgr& cmpmgr = entmgr.cmpmgr;
-
   // Iterate over PlayerSpawners 
-  for (PlayerSpawner& spawner : cmpmgr.iterate<PlayerSpawner>())
+  if (params.mind && params.eye)
   {
-    auto player_entid = 
-      entmgr.createEntityFromResource("assets/entities/Test.ent"_str);
+    MindSys& mind = *params.mind;
+    EyeSys&  eye  = *params.eye;
 
-    gamemgr.mindsys.attach(player_entid);
-    gamemgr.eye.attach(player_entid);
+    for (PlayerSpawner& spawner : cmpmgr.iterate<PlayerSpawner>())
+    {
+      auto player_entid = 
+        entmgr.createEntityFromResource("assets/entities/Test.ent"_str);
 
-    auto player_ent = entmgr.getEntity(player_entid);
-    auto* player_transform = player_ent->tryComp<Transform>();
-  
-    auto spawner_ent = entmgr.getEntity(spawner.owner);
-    auto* spawner_transform = spawner_ent->tryComp<Transform>();
+      mind.attach(player_entid);
+      eye.attach(player_entid);
 
-    player_transform->pos = spawner_transform->pos;
-    player_transform->placement_layer = spawner_transform->placement_layer;
+      auto player_ent = entmgr.getEntity(player_entid);
+      auto* player_transform = player_ent->tryComp<Transform>();
+
+      auto spawner_ent = entmgr.getEntity(spawner.owner);
+      auto* spawner_transform = spawner_ent->tryComp<Transform>();
+
+      player_transform->pos = spawner_transform->pos;
+      player_transform->placement_layer = spawner_transform->placement_layer;
+    }
   }
 
   return true;

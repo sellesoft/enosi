@@ -58,6 +58,7 @@ struct ComponentMgr
   struct CompPools* pools;
 
   b8 init();
+  void deinit();
 
   template<typename T>
   T* allocateComponent();

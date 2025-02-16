@@ -20,18 +20,15 @@ static Logger logger =
 b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
 {
   //allocate quad buffers
-  quads_buffer = renderer.createBuffer();
-  if (!quads_buffer)
-    return ERROR("failed to create the quads buffer\n");
-  if (!quads_buffer->init(
+  if (!quads_buffer.init(
         MAX_QUADS*4*sizeof(gfx::Vertex),
         MAX_QUADS*6*sizeof(gfx::Index)))
     return ERROR("failed to init the quads buffer\n");
-  quads_buffer->setGfxAttributes();
+  quads_buffer.setGfxAttributes();
 
   //init quad indexes
-  quads_buffer->map();
-  auto ip = (gfx::Index*)quads_buffer->mapped.ip;
+  quads_buffer.map();
+  auto ip = (gfx::Index*)quads_buffer.mapped.ip;
   for (int i = 0, j = 0; i < 6*MAX_QUADS; j++, i += 6)
   {
     ip[i+0] = 4*j + 0;
@@ -41,7 +38,7 @@ b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
     ip[i+4] = 4*j + 2;
     ip[i+5] = 4*j + 3;
   }
-  quads_buffer->unmap();
+  quads_buffer.unmap();
 
   //load the null texture
   null_texture.trackNoRef(
@@ -60,28 +57,31 @@ b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
   quad_count = 0;
 
   //allocate background buffers
-  background_buffer = renderer.createBuffer();
-  if (!background_buffer)
-    return ERROR("failed to create the background buffer\n");
-  if (!background_buffer->init(
+  if (!background_buffer.init(
         4*sizeof(gfx::Vertex),
         6*sizeof(gfx::Index)))
     return ERROR("failed to init the background buffer\n");
-  background_buffer->setGfxAttributes();
+  background_buffer.setGfxAttributes();
 
   //init background vertexes/indexes
-  background_buffer->map();
-  auto vp = (gfx::Vertex*)background_buffer->mapped.vp;
+  background_buffer.map();
+  auto vp = (gfx::Vertex*)background_buffer.mapped.vp;
   vp[0] = gfx::Vertex{ vec2f(0,0), vec2f(0,1), 0xFFFFFFFF };
   vp[1] = gfx::Vertex{ vec2f(1,0), vec2f(1,1), 0xFFFFFFFF };
   vp[2] = gfx::Vertex{ vec2f(1,1), vec2f(1,0), 0xFFFFFFFF };
   vp[3] = gfx::Vertex{ vec2f(0,1), vec2f(0,0), 0xFFFFFFFF };
-  ip = (gfx::Index*)background_buffer->mapped.ip;
+  ip = (gfx::Index*)background_buffer.mapped.ip;
   ip[0] = 0; ip[1] = 1; ip[2] = 2;
   ip[3] = 0; ip[4] = 2; ip[5] = 3;
-  background_buffer->unmap();
+  background_buffer.unmap();
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void RenderSys::deinit(gfx::Renderer& renderer)
+{
 }
 
 /* ----------------------------------------------------------------------------
@@ -106,8 +106,8 @@ static void drawBatches(
   }
   assert(index_offset == 6*sys.quad_count);
 
-  sys.quads_buffer->num_vertexes = 4*sys.quad_count;
-  sys.quads_buffer->num_indexes = 6*sys.quad_count;
+  sys.quads_buffer.num_vertexes = 4*sys.quad_count;
+  sys.quads_buffer.num_indexes = 6*sys.quad_count;
 
   sys.batches[0].quad_count = 0;
   sys.batches[0].texture = sys.null_texture.getData();
@@ -124,8 +124,7 @@ static void drawQuad(
   const gfx::CompiledTexture* texture,
   Color color)
 {
-  assert(sys.quads_buffer != nullptr);
-  assert(sys.quads_buffer->mapped.vp != nullptr);
+  assert(sys.quads_buffer.mapped.vp != nullptr);
 
   if (texture != sys.batches[sys.batch_count-1].texture)
   {
@@ -133,10 +132,10 @@ static void drawQuad(
     {
       if (sys.batch_count >= RenderSys::MAX_BATCHES)
       {
-        sys.quads_buffer->unmap();
+        sys.quads_buffer.unmap();
         drawBatches(sys, params);
-        sys.quads_buffer->map(); // TODO(delle) investigate if this stalls
-        assert(sys.quads_buffer->mapped.vp != nullptr);
+        sys.quads_buffer.map(); // TODO(delle) investigate if this stalls
+        assert(sys.quads_buffer.mapped.vp != nullptr);
       }
       else
       {
@@ -148,7 +147,7 @@ static void drawQuad(
     sys.batches[sys.batch_count-1].texture = texture;
   }
 
-  auto vp = (gfx::Vertex*)sys.quads_buffer->mapped.vp + 4*sys.quad_count;
+  auto vp = (gfx::Vertex*)sys.quads_buffer.mapped.vp + 4*sys.quad_count;
   vp[0] = gfx::Vertex{ pos + vec2f(-0.5f,-0.5f), vec2f(0,1), color.rgba };
   vp[1] = gfx::Vertex{ pos + vec2f( 0.5f,-0.5f), vec2f(1,1), color.rgba };
   vp[2] = gfx::Vertex{ pos + vec2f( 0.5f, 0.5f), vec2f(1,0), color.rgba };
@@ -159,10 +158,10 @@ static void drawQuad(
 
   if (sys.quad_count >= RenderSys::MAX_QUADS)
   {
-    sys.quads_buffer->unmap();
+    sys.quads_buffer.unmap();
     drawBatches(sys, params);
-    sys.quads_buffer->map(); // TODO(delle) investigate if this stalls
-    assert(sys.quads_buffer->mapped.vp != nullptr);
+    sys.quads_buffer.map(); // TODO(delle) investigate if this stalls
+    assert(sys.quads_buffer.mapped.vp != nullptr);
   }
 }
 
@@ -208,7 +207,7 @@ b8 RenderSys::update(const UpdateParams& params)
   TRACE("render.sys draw map tiles\n");
 
   renderer.pushUseProgram(renderer.shader_program);
-  quads_buffer->map();
+  quads_buffer.map();
 
   auto proj = mat3x2::identity();
   proj.set(0, 0, EyeSys::pixels_per_meter * 2.f / (f32)params.viewport.w);
@@ -272,7 +271,7 @@ b8 RenderSys::update(const UpdateParams& params)
     }
   }
 
-  quads_buffer->unmap();
+  quads_buffer.unmap();
   if (batch_count > 0)
   {
     drawBatches(*this, params);

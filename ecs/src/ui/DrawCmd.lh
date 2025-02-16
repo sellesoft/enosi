@@ -8,6 +8,7 @@ $ local reflect = require "reflect.Reflector"
 
 @lpp.import "graphics/Geo.lh"
 @lpp.import "graphics/Texture.lh"
+@lpp.import "graphics/Framebuffer.lh"
 
 using namespace iro;
 

@@ -41,6 +41,13 @@ $ end
     return true;
   }
 
+  void deinit()
+  {
+$ for comp in Comp.components.list:each() do
+    $(comp.name)_pool.deinit();
+$ end
+  }
+
   template<typename T>
   T* allocateComponent();
 };
@@ -77,5 +84,13 @@ b8 ComponentMgr::init()
     return false;
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void ComponentMgr::deinit()
+{
+  pools->deinit();
+  mem::stl_allocator.deconstruct(pools);
 }
 

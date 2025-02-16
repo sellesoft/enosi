@@ -7,13 +7,15 @@
 namespace gfx
 {
 
+struct Texture;
+
 /* ============================================================================
  */
 struct Framebuffer
 {
   u32 id;
 
-  static Framebuffer create();
+  static Framebuffer create(Texture texture);
   void destroy();
 };
 

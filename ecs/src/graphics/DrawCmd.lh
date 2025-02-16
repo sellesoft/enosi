@@ -7,6 +7,7 @@ $ require "common"
 #include "math/vec.h"
 
 @@lpp.import "graphics/Texture.lh"
+@@lpp.import "graphics/Framebuffer.lh"
 
 namespace gfx
 {
@@ -23,6 +24,7 @@ struct DrawCmd
     SetScissor,
     SetViewport,
     BindTexture,
+    BindFramebuffer,
     PushUniformVec2,
     PushUniformFloat,
     PushUniformBool,
@@ -34,7 +36,7 @@ struct DrawCmd
 
   union
   {
-    Buffer* bind_buffer;
+    Buffer bind_buffer;
 
     struct
     {
@@ -55,7 +57,9 @@ struct DrawCmd
       vec2i size;
     } set_viewport;
 
-    gfx::Texture bind_texture;
+    Texture bind_texture;
+
+    Framebuffer bind_framebuffer;
 
     struct
     {

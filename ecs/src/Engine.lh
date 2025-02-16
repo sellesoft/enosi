@@ -28,6 +28,8 @@ namespace hr
 struct Reloader;
 }
 
+/* ============================================================================
+ */
 struct Engine
 {
   struct
@@ -51,6 +53,8 @@ struct Engine
   hr::Reloader* reloader;
 
   ui::Inspector* inspector;
+
+  ui::MapEditor* map_editor;
 
   GameMgr gamemgr;
 

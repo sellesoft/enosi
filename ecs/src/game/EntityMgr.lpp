@@ -31,7 +31,17 @@ b8 EntityMgr::init()
  */
 void EntityMgr::deinit()
 {
+  for (u32 i = 0; i < c_max_entities; ++i)
+  {
+    EntityPool::Slot* slot = &ent_pool.pool[i];
+    if (slot->isUsed())
+    {
+      slot->elem.deinit();
+    }
+  }
+
   ent_pool.deinit();
+  cmpmgr.deinit();
   // TODO(sushi) actual clean up 
 }
 

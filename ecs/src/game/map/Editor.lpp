@@ -3,8 +3,15 @@ $ local ui = require "ui.UI"
 
 @@lpp.import "Editor.lh"
 
+@@lpp.import "Engine.lh"
+@@lpp.import "game/map/Map.lh"
+@@lpp.import "game/map/Map.schema.lh"
+@@lpp.import "asset/Packing.lh"
+
 namespace ui
 {
+
+@defFileLogger(map.editor, Info)
 
 /* ----------------------------------------------------------------------------
  */
@@ -22,9 +29,37 @@ MapEditor* UI::make(String id)
 
 /* ----------------------------------------------------------------------------
  */
-MapEditor* MapEditor::create(UI& ui)
+MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
 {
-  
+  auto* editor = ui.make<MapEditor>("game.map.editor"_str);
+  if (editor == nullptr)
+    return nullptr;
+
+$ local this = ui.createItemContext("MapEditor", "editor")
+
+  @this.style.set.size({100,100});
+  @this.style.set.border({2,2,2,2});
+
+  editor->renderer = renderer;
+  editor->update_triggers.set(UpdateReason::Start);
+
+  editor->texture = 
+    gfx::Texture::create(
+      100,
+      100,
+      gfx::ImageFormat::RGBA,
+      gfx::ImageAddressMode::ClampToBlack,
+      gfx::ImageFilter::Nearest,
+      gfx::ImageKind::TwoD,
+      nullptr);
+
+  editor->framebuffer = gfx::Framebuffer::create(editor->texture);
+
+  editor->map_render = ui.drawcmds.add();
+  editor->map_render->alloc(&ui, gfx::putFilledRectCounts());
+  editor->map_render->tex = editor->texture;
+
+  return editor;
 }
 
 /* ----------------------------------------------------------------------------
@@ -40,6 +75,101 @@ void MapEditor::destroy()
 void MapEditor::selectMap(SourceDataFileHandle& h_map)
 {
   h_selected_map = h_map;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void MapEditor::update(UI* ui, UpdateReason reason)
+{
+
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void MapEditor::renderMap(AssetMgr& assetmgr)
+{
+  if (!h_selected_map.isValid())
+    return;
+
+  // TODO(sushi) don't do all of this every frame
+  renderer->pushBindFramebuffer(framebuffer);
+
+  EntityMgr entmgr = {};
+  if (!entmgr.init())
+  {
+    ERROR("failed to init entmgr\n");
+    return;
+  }
+  defer { entmgr.deinit(); };
+
+  RenderSys rendersys = {};
+  if (!rendersys.init(*renderer, assetmgr))
+  {
+    ERROR("failed to init rendersys\n");
+    return;
+  }
+  defer { rendersys.deinit(*renderer); };
+
+  MapDef mapdef = {};
+  packSourceDataIntoType(
+    *h_selected_map.getFile()->returned_data,
+    &mapdef);
+
+  Map::InitParams map_params = 
+  {
+    .assetmgr = assetmgr,
+    .entmgr   = entmgr,
+    .renderer = *renderer,
+  };
+
+  Map map;
+  map.init(mapdef, map_params);
+
+  RenderSys::UpdateParams params = 
+  {
+    .viewport = 
+    {
+      { s32(pos_screen.x), s32(pos_screen.y) },
+      { s32(size.x), s32(size.y) },
+    },
+    .renderer = *renderer,
+    .map = &map,
+  };
+
+  eye.getViewMat(&params.view);
+
+  rendersys.update(params);
+
+  renderer->pushBindFramebuffer({0});
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void MapEditor::reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post)
+{
+  pre.push(map_render);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void MapEditor::generate(UI* ui)
+{
+  auto [vp, ip] = map_render->getPtrs(ui);
+
+  map_render->counts_used = {};
+
+  map_render->counts_used += 
+    gfx::putFilledRect(
+        vp,
+        ip,
+        map_render->counts_used,
+        pos_screen,
+        size,
+        {0.f, 0.f},
+        {1.f, 0.f},
+        {1.f, 1.f},
+        {0.f, 1.f},
+        {255,255,255,255});
 }
 
 }
