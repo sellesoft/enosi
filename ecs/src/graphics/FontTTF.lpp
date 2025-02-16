@@ -5,14 +5,17 @@ $ local List = require "List"
 #include "iro/fs/File.h"
 #include "iro/Platform.h"
 
-@@lpp.import "asset/Font.lh"
+@@lpp.import "graphics/Font.lh"
+
 @@lpp.import "asset/AssetMgr.lh"
 
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "external/stb_truetype.h"
 
-static Logger logger = 
-  Logger::create("font.ttf"_str, Logger::Verbosity::Info);
+namespace gfx
+{
+
+@defFileLogger(font.ttf, Info)
 
 typedef io::StaticBuffer<512> PathBuffer;
 
@@ -243,4 +246,6 @@ $ end
     return ERROR("failed to compile font texture\n");
 
   return true;
+}
+
 }

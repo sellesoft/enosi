@@ -1,7 +1,7 @@
 $ require "common"
 
 @@lpp.import "asset/AssetMgr.lh"
-@@lpp.import "asset/Font.lh"
+@@lpp.import "graphics/Font.lh"
 @@lpp.import "graphics/CompiledTexture.lh"
 
 #include "iro/fs/Path.h"

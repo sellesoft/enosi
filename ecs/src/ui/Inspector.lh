@@ -76,7 +76,7 @@ struct
   void* current_state;
   u64   current_type;
   void* current_addr;
-  FontRef r_font;
+  gfx::FontRef r_font;
 
   AddressSet addresses;
   mem::LenientBump states;

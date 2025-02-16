@@ -6,13 +6,16 @@ $ local cmn = require "common"
 #include "iro/fs/File.h"
 #include "iro/Platform.h"
 
-@@lpp.import "asset/Font.lh"
+@@lpp.import "graphics/Font.lh"
+
 @@lpp.import "asset/AssetMgr.lh"
 
-static Logger logger = 
-  Logger::create("font"_str, Logger::Verbosity::Debug);
+@defFileLogger(font, Debug)
 
 typedef io::StaticBuffer<512> PathBuffer;
+
+namespace gfx
+{
 
 /* ----------------------------------------------------------------------------
  */
@@ -203,4 +206,4 @@ b8 FontData::serialize(io::IO* out)
   return true;
 }
 
-
+}

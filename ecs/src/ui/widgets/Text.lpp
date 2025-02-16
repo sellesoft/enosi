@@ -34,7 +34,7 @@ void TextRenderer::findTextBreaks()
   String last_space_or_tab = scan;
 
   // Cache off space width since its used in a couple places.
-  PackedChar space_char;
+  gfx::PackedChar space_char;
   font->getPackedChar(&space_char, ' ');
   f32 space_width = space_char.xadvance;
 
@@ -68,7 +68,7 @@ void TextRenderer::findTextBreaks()
 
     default:
       {
-        PackedChar c;
+        gfx::PackedChar c;
         font->getPackedChar(&c, cp.codepoint);
         width_since_last_word += c.xadvance;
         offset.x += c.xadvance;
@@ -101,7 +101,7 @@ void TextRenderer::findTextBreaks()
           }
         }
         {
-          PackedChar pc;
+          gfx::PackedChar pc;
           font->getPackedChar(&pc, cp.codepoint);
           offset.x = pc.xadvance;
         }
@@ -149,7 +149,7 @@ void TextRenderer::draw(
   dc->tex = font->r_texture.getData()->gfx_texture;
   
   vec2f cursor = pos;
-  FontData* font_data = font->data;
+  gfx::FontData* font_data = font->data;
 
   for (s32 breakidx = 0; breakidx < breaks.len - 1; ++breakidx)
   {
@@ -160,7 +160,7 @@ void TextRenderer::draw(
          charidx < next_break.offset - this_break.offset; 
          ++charidx)
     {
-      PackedChar pc;
+      gfx::PackedChar pc;
       font->getPackedChar(&pc, *(text.ptr + this_break.offset + charidx));
 
       auto uv0 = 
@@ -233,7 +233,7 @@ void TextState::checkFont(String name, UI* ui)
 
     DEBUG("item specifies font ", name, "\n");
 
-    font.track(Font::load(name, ui->eng->assetmgr, ui->eng->renderer));
+    font.track(gfx::Font::load(name, ui->eng->assetmgr, ui->eng->renderer));
 
     if (!font.isValid())
     {

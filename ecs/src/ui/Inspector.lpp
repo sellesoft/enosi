@@ -711,7 +711,7 @@ InspectorEngineTree* InspectorEngineTree::create(UI& ui, Engine* engine)
     $(p.decls.map["struct Engine"].decl_idx));
 
   tree->r_font.track(
-    Font::load("gohu"_str, ui.eng->assetmgr, ui.eng->renderer));  
+    gfx::Font::load("gohu"_str, ui.eng->assetmgr, ui.eng->renderer));  
 
   auto test = tree->r_font.copy();
   test.release();

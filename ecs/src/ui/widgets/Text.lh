@@ -6,7 +6,7 @@ $ local cmn = require "common"
 $ local ui = require "ui.UI"
 
 @@lpp.import "ui/Item.lh"
-@@lpp.import "asset/Font.lh"
+@@lpp.import "graphics/Font.lh"
 
 #include "iro/containers/SmallArray.h"
 #include "iro/Pair.h"
@@ -38,7 +38,7 @@ struct TextRenderer
   vec2f size;
   TextBreaks breaks;
 
-  Font* font;
+  gfx::Font* font;
   f32 font_height;
   f32 tab_spaces;
   f32 max_width;
@@ -47,7 +47,7 @@ struct TextRenderer
 
   void init(
       String text,
-      Font* font,
+      gfx::Font* font,
       f32 font_height,
       f32 tab_spaces,
       f32 max_width,
@@ -84,7 +84,7 @@ struct TextRenderer
 struct TextState
 {
   // The loaded font for this text.
-  FontRef font;
+  gfx::FontRef font;
 
   // The name of the loaded font so we may reload it if the user changes
   // it.

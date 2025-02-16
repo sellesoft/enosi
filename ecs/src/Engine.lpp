@@ -11,7 +11,7 @@ using namespace iro;
 // Introduce events and the event bus definitions.
 @@lpp.import "event/BroadcastEventBus.lh"
 
-@@lpp.import "asset/Font.lh"
+@@lpp.import "graphics/Font.lh"
 
 @@lpp.import "ui/widgets/Text.lh"
 @@lpp.import "ui/widgets/Button.lh"
@@ -164,7 +164,7 @@ $ end
     .num_codepoints = 94,
   };
 
-  Font::CompileParams params =
+  gfx::Font::CompileParams params =
   {
     .name       = "gohu"_str,
     .asset_path = "assets/fonts/gohu.bdf"_str,
@@ -174,7 +174,7 @@ $ end
     .assetmgr   = &assetmgr,
   };
 
-  Font::compileBDF(params);
+  gfx::Font::compileBDF(params);
 
   //TODO(delle) update the bump allocators to have a reset() and clear()
   mem::LenientBump texture_compile_allocator;
@@ -198,7 +198,6 @@ $ end
   u8 pixels[4] = { 0xff, 0xff, 0xff, 0xff, };
 
   gfx::CompiledTexture::compileFromMemory(pixels, white_texture_params);
-
 
   texture_compile_allocator.deinit();
 

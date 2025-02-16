@@ -9,7 +9,6 @@ $ local ui = require "ui.UI"
 
 @@lpp.import "ui/Item.lh"
 @@lpp.import "ui/DrawCmd.lh"
-@@lpp.import "ui/FontLib.lh"
 
 #include "iro/containers/List.h"
 #include "iro/containers/Pool.h"
@@ -59,8 +58,6 @@ struct UI
   gfx::Buffer* buffer;
   u64 vertex_next;
   u64 index_next;
-
-  FontLib fontlib;
 
   Engine* eng;
 

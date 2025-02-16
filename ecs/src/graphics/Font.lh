@@ -14,12 +14,16 @@ $ local SourceData = require "asset.SourceData"
 using namespace iro;
 
 @@lpp.import "asset/Asset.lh"
-@@lpp.import "asset/Font.schema.lh"
+
+@@lpp.import "graphics/Font.schema.lh"
 @@lpp.import "graphics/CompiledTexture.lh"
 
 struct AssetMgr;
 
-namespace gfx { struct Renderer; }
+namespace gfx 
+{ 
+
+struct Renderer; 
 
 /* ==========================================================================
  *  This mirrors stbtt_aligned_quad
@@ -147,3 +151,4 @@ struct Font : public Asset
   static b8 compileBDF(CompileParams& params);
 };
 
+}
