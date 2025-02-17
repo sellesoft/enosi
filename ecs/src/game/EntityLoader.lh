@@ -9,15 +9,29 @@ struct SourceDataFile;
 struct SourceData;
 struct EntityMgr;
 struct ComponentMgr;
+struct AssetMgr;
+
+namespace gfx
+{
+struct Renderer;
+}
 
 /* ----------------------------------------------------------------------------
  *  Load an Entity or Entities from a given SourceData file.
  *
  *  TODO(sushi) handle loading an array of entities.
  */
-EntityId loadEntity(const SourceDataFile& sfile, EntityMgr& entmgr);
+EntityId loadEntity(
+  const SourceDataFile& sfile, 
+  EntityMgr& entmgr, 
+  AssetMgr& assetmgr,
+  gfx::Renderer& renderer);
 
 /* ----------------------------------------------------------------------------
  *  Load an Entity from some SourceData.
  */
-EntityId loadEntity(const SourceData& data, EntityMgr& entmgr);
+EntityId loadEntity(
+  const SourceData& data, 
+  EntityMgr& entmgr, 
+  AssetMgr& assetmgr,
+  gfx::Renderer& renderer);

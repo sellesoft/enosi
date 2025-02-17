@@ -116,7 +116,10 @@ b8 Renderer::update()
     case DrawCmd::Kind::BindBuffer:
       if (cmd.bind_buffer.vbo != last_buff.vbo)
       {
-        TRACE("binding buffer\n");
+        TRACE("binding buffer ", 
+              cmd.bind_buffer.vbo, " ", 
+              cmd.bind_buffer.ibo, " ", 
+              cmd.bind_buffer.vao, "\n");
         last_buff = cmd.bind_buffer;
         glBindVertexArray(cmd.bind_buffer.vao);
         glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, cmd.bind_buffer.ibo);

@@ -40,7 +40,7 @@ b8 Tile::init(
 
   for (const SourceData* ent_data : def.entities)
   {
-    auto entid = loadEntity(*ent_data, entmgr);
+    auto entid = loadEntity(*ent_data, entmgr, assetmgr, renderer);
     auto* ent = entmgr.getEntity(entid);
     auto* transform = ent->tryComp<Transform>();
     transform->pos = def.pos;
@@ -90,7 +90,7 @@ b8 Layer::init(
  */
 b8 Map::init(const MapDef& def, InitParams& params)
 {
-  INFO("initializing map '",def.name,"'\n");
+  // INFO("initializing map '",def.name,"'\n");
   assert(isnil(layers));
 
   this->def = &def;
@@ -123,7 +123,10 @@ b8 Map::init(const MapDef& def, InitParams& params)
     for (PlayerSpawner& spawner : cmpmgr.iterate<PlayerSpawner>())
     {
       auto player_entid = 
-        entmgr.createEntityFromResource("assets/entities/Test.ent"_str);
+        entmgr.createEntityFromSourceData(
+          "assets/entities/Test.ent"_str,
+          assetmgr,
+          renderer);
 
       mind.attach(player_entid);
       eye.attach(player_entid);

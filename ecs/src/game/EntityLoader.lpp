@@ -9,6 +9,7 @@ $ local List = require "List"
 @@lpp.import "game/Component.lh"
 @@lpp.import "asset/SourceDataFile.lh"
 @@lpp.import "asset/Packing.lh"
+@@lpp.import "graphics/Renderer.lh"
 
 #include "iro/Common.h"
 #include "iro/Unicode.h"
@@ -32,7 +33,9 @@ b8 loadComponentType(
     const SourceData& data, 
     EntityId ent,
     EntityMgr& entmgr,
-    ComponentMgr& cmpmgr);
+    ComponentMgr& cmpmgr,
+    AssetMgr& assetmgr,
+    gfx::Renderer& renderer);
 
 $ for comp in Comp.components.list:each() do
 /* ----------------------------------------------------------------------------
@@ -42,7 +45,9 @@ b8 loadComponentType<$(comp.name)>(
     const SourceData& data, 
     EntityId ent,
     EntityMgr& entmgr,
-    ComponentMgr& cmpmgr)
+    ComponentMgr& cmpmgr,
+    AssetMgr& assetmgr,
+    gfx::Renderer& renderer)
 {
   using TComp = $(comp.name);
 
@@ -51,7 +56,7 @@ b8 loadComponentType<$(comp.name)>(
   if (comp == nullptr)
     return ERROR("failed to allocate $(comp.name) component\n");
 
-  if (!packSourceDataIntoType(data, comp))
+  if (!packSourceDataIntoType(data, comp, assetmgr, renderer))
     return false;
 
   entmgr.addComp(ent, comp);
@@ -66,13 +71,22 @@ b8 loadComponent(
     const SourceData& data, 
     EntityId ent,
     EntityMgr& entmgr,
-    ComponentMgr& cmpmgr)
+    ComponentMgr& cmpmgr,
+    AssetMgr& assetmgr,
+    gfx::Renderer& renderer)
 {
   switch (data.getAsObject()->type.hash())
   {
 $ for comp in Comp.components.list:each() do
   case "$(comp.name)"_hashed:
-    return loadComponentType<$(comp.name)>(data, ent, entmgr, cmpmgr);
+    return 
+      loadComponentType<$(comp.name)>(
+        data, 
+        ent, 
+        entmgr, 
+        cmpmgr, 
+        assetmgr,
+        renderer);
 $ end
   default: 
     return ERROR("no component named ", data.getAsObject()->type, "\n");
@@ -81,7 +95,11 @@ $ end
 
 /* ----------------------------------------------------------------------------
  */
-EntityId loadEntity(const SourceData& data, EntityMgr& entmgr)
+EntityId loadEntity(
+    const SourceData& data, 
+    EntityMgr& entmgr,
+    AssetMgr& assetmgr,
+    gfx::Renderer& renderer)
 {
   ComponentMgr& cmpmgr = entmgr.cmpmgr;
 
@@ -132,7 +150,13 @@ $ end
   {
     @failIf(!component->isObject(), "expected object data for component\n");
 
-    @failIf(!loadComponent(*component, entid, entmgr, cmpmgr), 
+    @failIf(!loadComponent(
+        *component, 
+        entid, 
+        entmgr, 
+        cmpmgr, 
+        assetmgr,
+        renderer), 
       "failed to load component\n");
   }
 
@@ -150,10 +174,14 @@ $ end
 
 /* ----------------------------------------------------------------------------
  */
-EntityId loadEntity(const SourceDataFile& sfile, EntityMgr& entmgr)
+EntityId loadEntity(
+    const SourceDataFile& sfile, 
+    EntityMgr& entmgr,
+    AssetMgr& assetmgr,
+    gfx::Renderer& renderer)
 {
   ComponentMgr& cmpmgr = entmgr.cmpmgr;
 
-  return loadEntity(*sfile.returned_data, entmgr);
+  return loadEntity(*sfile.returned_data, entmgr, assetmgr, renderer);
 
 }

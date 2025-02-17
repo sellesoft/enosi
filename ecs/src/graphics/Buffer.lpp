@@ -34,6 +34,15 @@ b8 Buffer::init(u64 vsize, u64 isize)
 
 /* ----------------------------------------------------------------------------
  */
+void Buffer::deinit()
+{
+  glDeleteBuffers(1, &vbo);
+  glDeleteBuffers(1, &ibo);
+  glDeleteVertexArrays(1, &vao);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 static void setAttrib(
     u32 bufferidx, 
     u32 idx, 

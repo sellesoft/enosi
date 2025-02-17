@@ -1,4 +1,5 @@
 import gdb
+import gdb.printing
 pp = gdb.printing.RegexpCollectionPrettyPrinter("lpp")
 
 class lake(gdb.Command):

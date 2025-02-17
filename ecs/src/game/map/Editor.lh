@@ -48,6 +48,8 @@ struct
   DrawCmd* map_render;
 
   EyeSys eye;
+  RenderSys rendersys;
+  EntityMgr entmgr;
 
   static MapEditor* create(UI& ui, gfx::Renderer* renderer);
   void destroy();

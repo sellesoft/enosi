@@ -9,6 +9,8 @@
 @@lpp.import "asset/Asset.lh"
 @@lpp.import "graphics/Texture.lh"
 
+struct AssetMgr;
+
 namespace gfx
 {
 

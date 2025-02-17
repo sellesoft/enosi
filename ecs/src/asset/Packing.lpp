@@ -15,6 +15,10 @@ using namespace iro;
 
 @@lpp.import "asset/Packing.lh"
 @@lpp.import "asset/SourceData.lh"
+@@lpp.import "asset/AssetMgr.lh"
+@@lpp.import "graphics/CompiledTexture.lh"
+
+struct Renderer;
 
 $$$
 local imported = cmn.buffer.new()
@@ -41,7 +45,11 @@ b8 packSourceDataIntoEnum(const SourceData& data, T* out);
 /* ----------------------------------------------------------------------------
  */
 template<typename T>
-b8 packArray(const SourceDataObject& data, Array<T>* out)
+b8 packArray(
+    const SourceDataObject& data, 
+    Array<T>* out, 
+    AssetMgr& assetmgr,
+    gfx::Renderer& renderer)
 {
   for (const SourceData* child : data.children)
   {
@@ -49,7 +57,7 @@ b8 packArray(const SourceDataObject& data, Array<T>* out)
       return ERROR("arrays cannot contain named elements\n");
     
     T* elem = out->push();
-    packSourceDataIntoType<T>(*child, elem);
+    packSourceDataIntoType<T>(*child, elem, assetmgr, renderer);
   }
 
   return true;
@@ -60,7 +68,9 @@ b8 packArray(const SourceDataObject& data, Array<T>* out)
 template<>
 b8 packArray<const SourceData*>(
     const SourceDataObject& data, 
-    Array<const SourceData*>* out)
+    Array<const SourceData*>* out,
+    AssetMgr& assetmgr,
+    gfx::Renderer& renderer)
 {
   for (const SourceData* child : data.children)
   {
@@ -134,6 +144,34 @@ b8 packVec2(const SourceData& data, T* out)
   return true;
 }
 
+/* ----------------------------------------------------------------------------
+ */
+b8 packCompiledTexture(
+    const SourceData& data, 
+    gfx::CompiledTexture** out, 
+    AssetMgr& assetmgr,
+    gfx::Renderer& renderer)
+{
+  if (data.kind != SourceData::Kind::Value)
+    return ERROR("expected a string value to pack gfx::CompiledTexture*");
+
+  auto* val = data.getAsValue();
+  
+  if (val->kind != SourceDataValue::Kind::String)
+    return ERROR("expected a string value to pack gfx::CompiledTexture*");
+
+  *out = 
+    gfx::CompiledTexture::load(
+      val->val,
+      assetmgr,
+      renderer);
+
+  if (*out == nullptr)
+    return ERROR("failed to load compiled texture with name ", val->val, "\n");
+
+  return true;
+}
+
 $ -- * ------------------------------------------------------------------------
 
 $ local putEnumPacker = function(name, decl)
@@ -168,7 +206,11 @@ $   prereqs:push(decl.template_args[1]:getDecl())
     out->$(field.name).init();
     if (!child->isObject())
       return ERROR("expected an object for array field $(field.name)\n");
-    if (!packArray(*child->getAsObject(), &out->$(field.name)))
+    if (!packArray(
+          *child->getAsObject(), 
+          &out->$(field.name), 
+          assetmgr,
+          renderer))
       return ERROR("failed to pack array data for field $(field.name)\n");
 $ end
 
@@ -190,7 +232,11 @@ $ -- * ------------------------------------------------------------------------
 
 $ local putStructPackCase = function(declname, field, prereqs)
 $   prereqs:push(field.type:getDecl())
-    if (!packSourceDataIntoType(*child, &out->$(field.name)))
+    if (!packSourceDataIntoType(
+          *child, 
+          &out->$(field.name), 
+          assetmgr,
+          renderer))
       return ERROR("failed to pack struct data for field $(field.name)\n");
 $ end
 
@@ -206,7 +252,20 @@ $ -- * ------------------------------------------------------------------------
 $ local putEnumPackCase = function(declname, field, prereqs)
 $   prereqs:push(field.type:getDecl())
     if (!packSourceDataIntoEnum(*child, &out->$(field.name)))
-      return ERROR("failed to pack $(declname) data for field $(field.name)");
+      return ERROR(
+        "failed to pack $(declname) data for field $(field.name)\n");
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local putCompiledTexturePackCase = function(declname, field, prereqs)
+    if (!packCompiledTexture(
+        *child, 
+        &out->$(field.name), 
+        assetmgr,
+        renderer))
+      return ERROR(
+        "failed to pack $(declname) data for field $(field.name)\n");
 $ end
 
 $ -- * ------------------------------------------------------------------------
@@ -237,6 +296,11 @@ $       return (putStructPackCase(declname, field, prereqs))
 $     elseif decl:is(ast.Enum) then
 $       return (putEnumPackCase(declname, field, prereqs))
 $     end
+$   elseif type:is(ast.PointerType) then
+$     type = type.subtype
+$     if type.name == "gfx::CompiledTexture" then
+$       return (putCompiledTexturePackCase(declname, field, prereqs))
+$     end
 $   end
 $ end
 
@@ -246,7 +310,9 @@ $ local putStructPacker = function(name, decl, prereqs)
 template<>
 b8 packSourceDataIntoType<$(name)>(
     const SourceData& data, 
-    $(name)* out)
+    $(name)* out,
+    AssetMgr& assetmgr,
+    gfx::Renderer& renderer)
 {
   if (!data.isObject())
     return ERROR("expected an object to pack into $(name)\n");

@@ -10,9 +10,15 @@ $ local Comp = require "game.Component"
 #include "Color.h"
 #include "math/vec.h"
 
+namespace gfx
+{
+struct CompiledTexture;
+}
+
 @Comp.def(Sprite,
 {
   vec2f size;
   Color color;
+  gfx::CompiledTexture* texture;
 })
 

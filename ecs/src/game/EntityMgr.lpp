@@ -31,15 +31,7 @@ b8 EntityMgr::init()
  */
 void EntityMgr::deinit()
 {
-  for (u32 i = 0; i < c_max_entities; ++i)
-  {
-    EntityPool::Slot* slot = &ent_pool.pool[i];
-    if (slot->isUsed())
-    {
-      slot->elem.deinit();
-    }
-  }
-
+  destroyAllEntities();
   ent_pool.deinit();
   cmpmgr.deinit();
   // TODO(sushi) actual clean up 
@@ -62,7 +54,10 @@ EntityId EntityMgr::createEntity(String name)
 
 /* ----------------------------------------------------------------------------
  */
-EntityId EntityMgr::createEntityFromResource(String path)
+EntityId EntityMgr::createEntityFromSourceData(
+    String path, 
+    AssetMgr& assetmgr,
+    gfx::Renderer& renderer)
 {
   using namespace fs;
 
@@ -93,7 +88,7 @@ EntityId EntityMgr::createEntityFromResource(String path)
   if (!parser.parse())
     return nil;
 
-  return loadEntity(sfile, *this);
+  return loadEntity(sfile, *this, assetmgr, renderer);
 }
 
 /* ----------------------------------------------------------------------------
@@ -114,6 +109,22 @@ void EntityMgr::destroyEntity(EntityId id)
   ent->deinit();
 
   ent_pool.remove(ent);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void EntityMgr::destroyAllEntities()
+{
+  for (u32 i = 0; i < c_max_entities; ++i)
+  {
+    EntityPool::Slot* slot = &ent_pool.pool[i];
+    if (slot->isUsed())
+    {
+      Entity* ent = &slot->elem;
+      ent->deinit();
+      ent_pool.remove(ent);
+    }
+  }
 }
 
 /* ----------------------------------------------------------------------------

@@ -48,7 +48,9 @@ b8 GameMgr::init(Engine* eng)
 
   packSourceDataIntoType(
     *h_test_map.getFile()->returned_data,
-    map_def);
+    map_def,
+    eng->assetmgr,
+    eng->renderer);
 
   Map::InitParams map_params = 
   {
@@ -62,8 +64,8 @@ b8 GameMgr::init(Engine* eng)
   if(!map.init(*map_def, map_params))
     return ERROR("failed to initialize the map '", map_def->name, "'\n");
 
-  map_editor = ui::MapEditor::create(eng->ui, &eng->renderer);
-  map_editor->selectMap(h_test_map);
+  // map_editor = ui::MapEditor::create(eng->ui, &eng->renderer);
+  // map_editor->selectMap(h_test_map);
 
   return true;
 }
@@ -95,9 +97,9 @@ b8 GameMgr::update()
   if (!rendersys.update(render_params1))
     return false;
 
-  map_editor->renderMap(engine->assetmgr);
-  engine->renderer.pushSetViewport(
-      {0,0},{engine->window.size.x,engine->window.size.y});
+  // map_editor->renderMap(engine->assetmgr);
+  // engine->renderer.pushSetViewport(
+  //     {0,0},{engine->window.size.x,engine->window.size.y});
 
   return true;
 }

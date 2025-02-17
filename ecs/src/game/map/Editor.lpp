@@ -37,7 +37,7 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
 
 $ local this = ui.createItemContext("MapEditor", "editor")
 
-  @this.style.set.size({100,100});
+  @this.style.set.size({600,400});
   @this.style.set.border({2,2,2,2});
 
   editor->renderer = renderer;
@@ -45,8 +45,8 @@ $ local this = ui.createItemContext("MapEditor", "editor")
 
   editor->texture = 
     gfx::Texture::create(
-      100,
-      100,
+      600,
+      400,
       gfx::ImageFormat::RGBA,
       gfx::ImageAddressMode::ClampToBlack,
       gfx::ImageFilter::Nearest,
@@ -58,6 +58,18 @@ $ local this = ui.createItemContext("MapEditor", "editor")
   editor->map_render = ui.drawcmds.add();
   editor->map_render->alloc(&ui, gfx::putFilledRectCounts());
   editor->map_render->tex = editor->texture;
+
+  if (!editor->entmgr.init())
+  {
+    ERROR("failed to init entmgr\n");
+    return nullptr;
+  }
+
+  if (!editor->rendersys.init(*renderer, ui.eng->assetmgr))
+  {
+    ERROR("failed to init rendersys\n");
+    return nullptr;
+  }
 
   return editor;
 }
@@ -91,29 +103,20 @@ void MapEditor::renderMap(AssetMgr& assetmgr)
   if (!h_selected_map.isValid())
     return;
 
+  entmgr.destroyAllEntities();
+
   // TODO(sushi) don't do all of this every frame
   renderer->pushBindFramebuffer(framebuffer);
 
-  EntityMgr entmgr = {};
-  if (!entmgr.init())
-  {
-    ERROR("failed to init entmgr\n");
-    return;
-  }
-  defer { entmgr.deinit(); };
-
-  RenderSys rendersys = {};
-  if (!rendersys.init(*renderer, assetmgr))
-  {
-    ERROR("failed to init rendersys\n");
-    return;
-  }
-  defer { rendersys.deinit(*renderer); };
+  eye.zoom = 2.f;
+  // eye.rotation = 0.5f;
 
   MapDef mapdef = {};
   packSourceDataIntoType(
     *h_selected_map.getFile()->returned_data,
-    &mapdef);
+    &mapdef,
+    assetmgr,
+    *renderer);
 
   Map::InitParams map_params = 
   {
@@ -165,10 +168,10 @@ void MapEditor::generate(UI* ui)
         map_render->counts_used,
         pos_screen,
         size,
-        {0.f, 0.f},
-        {1.f, 0.f},
-        {1.f, 1.f},
         {0.f, 1.f},
+        {1.f, 1.f},
+        {1.f, 0.f},
+        {0.f, 0.f},
         {255,255,255,255});
 }
 

@@ -24,7 +24,8 @@ void EyeSys::getViewMat(mat3x2* view) const
   *view = 
     mat3x2::createInverseTransform(
       pos,
-      rotation);
+      rotation,
+      {zoom,zoom});
 }
 
 /* ----------------------------------------------------------------------------
@@ -36,7 +37,7 @@ vec2f EyeSys::screenToWorld(vec2f sp, vec2f ss) const
 
   vec2f world_pos = {};
 
-  f32 scale = pixels_per_meter;
+  f32 scale = pixels_per_meter * zoom;
 
   sp.x -= ss.x / 2.f;
   sp.y -= ss.y / 2.f;

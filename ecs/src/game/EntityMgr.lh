@@ -12,6 +12,13 @@ $ local buffer = require "string.buffer"
 @@lpp.import "Component.lh"
 @@lpp.import "ComponentMgr.lh"
 
+struct AssetMgr;
+
+namespace gfx
+{
+struct Renderer;
+}
+
 /* ============================================================================
  */
 struct EntityMgr
@@ -31,9 +38,14 @@ struct EntityMgr
   void deinit();
 
   EntityId createEntity(String name);
-  EntityId createEntityFromResource(String path);
+
+  EntityId createEntityFromSourceData(
+    String path, 
+    AssetMgr& assetmgr,
+    gfx::Renderer& renderer);
 
   void destroyEntity(EntityId id);
+  void destroyAllEntities();
 
   Entity* getEntity(EntityId id) const;
 

@@ -3,6 +3,17 @@ $ local Schema = require "asset.Schema"
 
 @@lpp.import "asset/SourceData.lh"
 
+struct AssetMgr;
+
+namespace gfx
+{
+struct Renderer;
+}
+
 template<typename T>
-b8 packSourceDataIntoType(const SourceData& data, T* out);
+b8 packSourceDataIntoType(
+  const SourceData& data, 
+  T* out, 
+  AssetMgr& assetmgr,
+  gfx::Renderer& renderer);
 

@@ -227,7 +227,12 @@ return Map
               name = "Spawner",
               components = 
               {
-                PlayerSpawner {}
+                PlayerSpawner {},
+                Sprite
+                {
+                  size = { x = 100, y = 100 },
+                  texture = "white",
+                }
               }
             }
           }

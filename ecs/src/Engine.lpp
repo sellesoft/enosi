@@ -139,7 +139,13 @@ $ end
     .assetmgr     = &assetmgr,
   };
 
-  u8 pixels[4] = { 0xff, 0xff, 0xff, 0xff, };
+  u8 pixels[16] = 
+  { 
+    0xff, 0xff, 0xff, 0xff, 
+    0xff, 0xff, 0xff, 0xff, 
+    0xff, 0xff, 0xff, 0xff, 
+    0xff, 0xff, 0xff, 0xff, 
+  };
 
   gfx::CompiledTexture::compileFromMemory(pixels, white_texture_params);
   gfx::CompiledTexture::load("white"_str, assetmgr, renderer);
