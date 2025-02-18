@@ -2,12 +2,12 @@ return Map
 {
   name = "Test",
   size = { x = 6, y = 6 },
-  layers = 
+  layers =
   {
     {
       size = { x = 5, y = 5 },
-      pos = { x = 1, y = 0 },
-      tiles = 
+      pos = { x = -2, y = -6 },
+      tiles =
       {
         {
           kind = "Wall",
@@ -137,9 +137,9 @@ return Map
       }
     },
     {
-      size = { x = 4, y = 4 },
+      size = { x = 10, y = 10 },
       pos = { x = 0, y = 2 },
-      tiles = 
+      tiles =
       {
         {
           kind = "Wall",
@@ -159,6 +159,36 @@ return Map
         {
           kind = "Wall",
           pos = { x = 3, y = 0 },
+          texture = "wall_horizontal_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 4, y = 0 },
+          texture = "wall_horizontal_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 5, y = 0 },
+          texture = "wall_horizontal_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 6, y = 0 },
+          texture = "wall_horizontal_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 7, y = 0 },
+          texture = "wall_horizontal_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 8, y = 0 },
+          texture = "wall_horizontal_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 9, y = 0 },
           texture = "wall_botright_corner_olive"
         },
         {
@@ -168,7 +198,7 @@ return Map
         },
         {
           kind = "Wall",
-          pos = { x = 3, y = 1 },
+          pos = { x = 9, y = 1 },
           texture = "wall_vertical_olive"
         },
         {
@@ -178,33 +208,123 @@ return Map
         },
         {
           kind = "Wall",
-          pos = { x = 3, y = 2 },
+          pos = { x = 9, y = 2 },
           texture = "wall_vertical_olive"
         },
         {
           kind = "Wall",
           pos = { x = 0, y = 3 },
+          texture = "wall_vertical_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 9, y = 3 },
+          texture = "wall_vertical_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 0, y = 4 },
+          texture = "wall_vertical_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 9, y = 4 },
+          texture = "wall_vertical_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 0, y = 5 },
+          texture = "wall_vertical_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 9, y = 5 },
+          texture = "wall_vertical_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 0, y = 6 },
+          texture = "wall_vertical_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 9, y = 6 },
+          texture = "wall_vertical_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 0, y = 7 },
+          texture = "wall_vertical_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 9, y = 7 },
+          texture = "wall_vertical_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 0, y = 8 },
+          texture = "wall_vertical_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 9, y = 8 },
+          texture = "wall_vertical_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 0, y = 9 },
           texture = "wall_topleft_corner_olive"
         },
         {
           kind = "Wall",
-          pos = { x = 1, y = 3 },
+          pos = { x = 1, y = 9 },
           texture = "wall_horizontal_olive"
         },
         {
           kind = "Wall",
-          pos = { x = 2, y = 3 },
+          pos = { x = 2, y = 9 },
           texture = "wall_horizontal_olive"
         },
         {
           kind = "Wall",
-          pos = { x = 3, y = 3 },
+          pos = { x = 3, y = 9 },
+          texture = "wall_horizontal_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 4, y = 9 },
+          texture = "wall_horizontal_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 5, y = 9 },
+          texture = "wall_horizontal_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 6, y = 9 },
+          texture = "wall_horizontal_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 7, y = 9 },
+          texture = "wall_horizontal_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 8, y = 9 },
+          texture = "wall_horizontal_olive"
+        },
+        {
+          kind = "Wall",
+          pos = { x = 9, y = 9 },
           texture = "wall_topright_corner_olive"
         },
         {
           kind = "Floor",
           pos = { x = 1, y = 1 },
-          texture = "floor_tiles_darkgray"
+          texture = "floor_tiles_darkgray",
         },
         {
           kind = "Floor",
@@ -213,29 +333,524 @@ return Map
         },
         {
           kind = "Floor",
-          pos = { x = 1, y = 2 },
+          pos = { x = 3, y = 1 },
           texture = "floor_tiles_darkgray"
         },
-        { 
-          kind = "Floor", 
+        {
+          kind = "Floor",
+          pos = { x = 4, y = 1 },
+          texture = "floor_tiles_darkgray"
+        },
+        {
+          kind = "Floor",
+          pos = { x = 5, y = 1 },
+          texture = "floor_tiles_darkgray"
+        },
+        {
+          kind = "Floor",
+          pos = { x = 6, y = 1 },
+          texture = "floor_tiles_darkgray"
+        },
+        {
+          kind = "Floor",
+          pos = { x = 7, y = 1 },
+          texture = "floor_tiles_darkgray"
+        },
+        {
+          kind = "Floor",
+          pos = { x = 8, y = 1 },
+          texture = "floor_tiles_darkgray"
+        },
+        {
+          kind = "Floor",
+          pos = { x = 1, y = 2 },
+          texture = "floor_tiles_darkgray",
+          entities =
+          {
+            Entity
+            {
+              name = "Table",
+              components =
+              {
+                Sprite
+                {
+                  texture = "work_table_vertical_bot_cap_glass",
+                },
+              },
+            },
+          },
+        },
+        {
+          kind = "Floor",
           pos = { x = 2, y = 2 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 3, y = 2 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 4, y = 2 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 5, y = 2 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 6, y = 2 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 7, y = 2 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 8, y = 2 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 1, y = 3 },
+          texture = "floor_tiles_darkgray",
+          entities =
+          {
+            Entity
+            {
+              name = "Table",
+              components =
+              {
+                Sprite
+                {
+                  texture = "work_table_vertical_glass",
+                },
+              },
+            },
+          },
+        },
+        {
+          kind = "Floor",
+          pos = { x = 2, y = 3 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 3, y = 3 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 4, y = 3 },
+          texture = "floor_tiles_darkgray",
+          entities =
+          {
+            Entity
+            {
+              name = "Table",
+              components =
+              {
+                Sprite
+                {
+                  texture = "work_table_botleft_corner_steel",
+                },
+              },
+            },
+          },
+        },
+        {
+          kind = "Floor",
+          pos = { x = 5, y = 3 },
+          texture = "floor_tiles_darkgray",
+          entities =
+          {
+            Entity
+            {
+              name = "Table",
+              components =
+              {
+                Sprite
+                {
+                  texture = "work_table_botright_corner_steel",
+                },
+              },
+            },
+          },
+        },
+        {
+          kind = "Floor",
+          pos = { x = 6, y = 3 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 7, y = 3 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 8, y = 3 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 1, y = 4 },
+          texture = "floor_tiles_darkgray",
+          entities =
+          {
+            Entity
+            {
+              name = "Table",
+              components =
+              {
+                Sprite
+                {
+                  texture = "work_table_vertical_glass",
+                },
+              },
+            },
+          },
+        },
+        {
+          kind = "Floor",
+          pos = { x = 2, y = 4 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 3, y = 4 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 4, y = 4 },
+          texture = "floor_tiles_darkgray",
+          entities =
+          {
+            Entity
+            {
+              name = "Table",
+              components =
+              {
+                Sprite
+                {
+                  texture = "work_table_topleft_corner_steel",
+                },
+              },
+            },
+          },
+        },
+        {
+          kind = "Floor",
+          pos = { x = 5, y = 4 },
+          texture = "floor_tiles_darkgray",
+          entities =
+          {
+            Entity
+            {
+              name = "Table",
+              components =
+              {
+                Sprite
+                {
+                  texture = "work_table_topright_corner_steel",
+                },
+              },
+            },
+          },
+        },
+        {
+          kind = "Floor",
+          pos = { x = 6, y = 4 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 7, y = 4 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 8, y = 4 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 1, y = 5 },
+          texture = "floor_tiles_darkgray",
+          entities =
+          {
+            Entity
+            {
+              name = "Table",
+              components =
+              {
+                Sprite
+                {
+                  texture = "work_table_vertical_glass",
+                },
+              },
+            },
+          },
+        },
+        {
+          kind = "Floor",
+          pos = { x = 2, y = 5 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 3, y = 5 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 4, y = 5 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 5, y = 5 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 6, y = 5 },
           texture = "floor_tiles_darkgray",
           entities =
           {
             Entity
             {
               name = "Spawner",
-              components = 
+              components =
               {
                 PlayerSpawner {},
                 Sprite
                 {
-                  size = { x = 100, y = 100 },
-                  texture = "white",
-                }
-              }
-            }
-          }
+                  texture = "dev_spawner",
+                },
+              },
+            },
+          },
+        },
+        {
+          kind = "Floor",
+          pos = { x = 7, y = 5 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 8, y = 5 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 1, y = 6 },
+          texture = "floor_tiles_darkgray",
+          entities =
+          {
+            Entity
+            {
+              name = "Table",
+              components =
+              {
+                Sprite
+                {
+                  texture = "work_table_vertical_glass",
+                },
+              },
+            },
+          },
+        },
+        {
+          kind = "Floor",
+          pos = { x = 2, y = 6 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 3, y = 6 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 4, y = 6 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 5, y = 6 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 6, y = 6 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 7, y = 6 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 8, y = 6 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 1, y = 7 },
+          texture = "floor_tiles_darkgray",
+          entities =
+          {
+            Entity
+            {
+              name = "Table",
+              components =
+              {
+                Sprite
+                {
+                  texture = "work_table_vertical_top_cap_glass",
+                },
+              },
+            },
+          },
+        },
+        {
+          kind = "Floor",
+          pos = { x = 2, y = 7 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 3, y = 7 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 4, y = 7 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 5, y = 7 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 6, y = 7 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 7, y = 7 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 8, y = 7 },
+          texture = "floor_tiles_darkgray",
+          entities =
+          {
+            Entity
+            {
+              name = "Table",
+              components =
+              {
+                Sprite
+                {
+                  texture = "work_table_vertical_bot_cap_steel",
+                },
+              },
+            },
+          },
+        },
+        {
+          kind = "Floor",
+          pos = { x = 1, y = 8 },
+          texture = "floor_tiles_darkgray",
+          entities =
+          {
+            Entity
+            {
+              name = "Locker",
+              components =
+              {
+                Sprite
+                {
+                  texture = "locker_lightgray",
+                },
+              },
+            },
+          },
+        },
+        {
+          kind = "Floor",
+          pos = { x = 2, y = 8 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 3, y = 8 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 4, y = 8 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 5, y = 8 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 6, y = 8 },
+          texture = "floor_tiles_darkgray",
+        },
+        {
+          kind = "Floor",
+          pos = { x = 7, y = 8 },
+          texture = "floor_tiles_darkgray",
+          entities =
+          {
+            Entity
+            {
+              name = "Table",
+              components =
+              {
+                Sprite
+                {
+                  texture = "work_table_horizontal_left_cap_steel",
+                },
+              },
+            },
+          },
+        },
+        {
+          kind = "Floor",
+          pos = { x = 8, y = 8 },
+          texture = "floor_tiles_darkgray",
+          entities =
+          {
+            Entity
+            {
+              name = "Table",
+              components =
+              {
+                Sprite
+                {
+                  texture = "work_table_topright_corner_steel",
+                },
+              },
+            },
+          },
         },
       }
     }
