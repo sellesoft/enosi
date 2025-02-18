@@ -63,13 +63,22 @@ struct mat3x2
       f32   rotation,
       vec2f scale = {1.f,1.f})
   {
-    f32 s = sin(rotation);
-    f32 c = cos(rotation);
+    f32 s = sinf(rotation);
+    f32 c = cosf(rotation);
 
     return
     {
        c / scale.x, s / scale.x, -(pos.x * c + pos.y * s) / scale.x,
       -s / scale.x, c / scale.y,  (pos.x * s - pos.y * c) / scale.y,
+    };
+  }
+
+  vec2f transformVec(const vec2f& v) const
+  {
+    return 
+    {
+      get(0, 0) * v.x + get(1, 0) * v.y + get(2, 0),
+      get(0, 1) * v.x + get(1, 1) * v.y + get(2, 1),
     };
   }
 };

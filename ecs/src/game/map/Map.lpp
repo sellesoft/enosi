@@ -11,6 +11,7 @@ $ local cmn = require "common"
 @@lpp.import "game/Transform.comp.lh"
 
 #include "iro/Logger.h"
+#include "math/util.h"
 
 @cmn.defFileLogger(game.map, Info)
 
@@ -143,4 +144,40 @@ b8 Map::init(const MapDef& def, InitParams& params)
   }
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Map::deinit()
+{
+  
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Map::getTileAndLayerAtPos(Layer** out_layer, Tile** out_tile, vec2f pos)
+{
+  for (Layer& layer : layers)
+  {
+    vec2f layer_pos = layer.def->pos;
+    vec2f layer_size = layer.def->size;
+
+    if (math::pointInRect<f32>(pos, layer.def->pos, layer.def->size))
+    {
+      for (Tile& tile : layer.tiles)
+      {
+        vec2f tile_pos = tile.def->pos;
+
+        if (math::pointInRect<f32>(pos, layer_pos + tile.def->pos, {1,1}))
+        {
+          if (out_layer)
+            *out_layer = &layer;
+          if (out_tile)
+            *out_tile = &tile;
+          return true;
+        }
+      }
+    }
+  }
+  return false;
 }

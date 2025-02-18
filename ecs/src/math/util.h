@@ -12,9 +12,19 @@
 namespace math
 {
 
+const f32 pi = 3.14159265359f;
+
 /* ----------------------------------------------------------------------------
  */
-inline b8 pointInRect(vec2i p, vec2i rect_pos, vec2i rect_dim)
+inline f32 degreesToRadians(f32 deg)
+{
+  return deg * pi / 180.f;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
+inline b8 pointInRect(vec2<T> p, vec2<T> rect_pos, vec2<T> rect_dim)
 {
   return 
     p.x >= rect_pos.x && 

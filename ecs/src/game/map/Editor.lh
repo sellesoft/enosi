@@ -10,6 +10,7 @@ $ local ui = require "ui.UI"
 #include "iro/Unicode.h"
 
 @@lpp.import "ui/UI.lh"
+@@lpp.import "ui/widgets/Text.lh"
 @@lpp.import "asset/SourceDataFileHandle.lh"
 @@lpp.import "game/Render.sys.lh"
 @@lpp.import "game/EntityMgr.lh"
@@ -47,9 +48,22 @@ struct
 
   DrawCmd* map_render;
 
-  EyeSys eye;
+  EyeSys    eye;
   RenderSys rendersys;
   EntityMgr entmgr;
+
+  Text* world_pos;
+
+  enum class ControlState
+  {
+    None,
+    Dragging,
+  };
+
+  ControlState control_state;
+
+  vec2f drag_start_eye;
+  vec2f drag_start_viewport;
 
   static MapEditor* create(UI& ui, gfx::Renderer* renderer);
   void destroy();

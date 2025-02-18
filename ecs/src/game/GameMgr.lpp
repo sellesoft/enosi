@@ -1,4 +1,5 @@
 $ local cmn = require "common"
+$ local ui = require "ui.UI"
 
 @@lpp.import "Engine.lh"
 @@lpp.import "game/GameMgr.lh"
@@ -11,6 +12,7 @@ $ local cmn = require "common"
 @@lpp.import "asset/SourceDataParser.lh"
 
 #include "iro/Logger.h"
+#include "iro/Platform.h"
 
 using namespace iro;
 
@@ -64,8 +66,8 @@ b8 GameMgr::init(Engine* eng)
   if(!map.init(*map_def, map_params))
     return ERROR("failed to initialize the map '", map_def->name, "'\n");
 
-  // map_editor = ui::MapEditor::create(eng->ui, &eng->renderer);
-  // map_editor->selectMap(h_test_map);
+  map_editor = ui::MapEditor::create(eng->ui, &eng->renderer);
+  map_editor->selectMap(h_test_map);
 
   return true;
 }
@@ -97,9 +99,19 @@ b8 GameMgr::update()
   if (!rendersys.update(render_params1))
     return false;
 
-  // map_editor->renderMap(engine->assetmgr);
-  // engine->renderer.pushSetViewport(
-  //     {0,0},{engine->window.size.x,engine->window.size.y});
+  map_editor->renderMap(engine->assetmgr);
+  engine->renderer.pushSetViewport(
+      {0,0},{engine->window.size.x,engine->window.size.y});
+
+  $ local map_editor = ui.createItemContext("MapEditor", "map_editor")
+  if (engine->input.wasKeyPressed(Key::M))
+  {
+    @@map_editor.style:lookup(display)
+    if (@map_editor.style.display.test(hidden))
+      @map_editor.style.set.display(horizontal);
+    else
+      @map_editor.style.set.display(hidden);
+  }
 
   return true;
 }
