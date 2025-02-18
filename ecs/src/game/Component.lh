@@ -20,6 +20,9 @@ struct Component
 {
   u64 kind = 0;
   EntityId owner = nil;
+  // TODO(sushi) this kiiinda sucks, we really need to make an intrisic pool
+  //             so that we stop having to do this where its not needed.
+  void* node = nullptr;
   
   static u64 getKind(const Component* cmp) { return cmp->kind; }
 

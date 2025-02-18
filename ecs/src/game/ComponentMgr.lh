@@ -2,6 +2,8 @@
  *  Manager of Component allocation and such.
  */
 
+struct Component;
+
 template<typename T>
 u64 getComponentKind();
 
@@ -10,7 +12,7 @@ u64 getComponentKind();
 template<typename T>
 struct ComponentIterState
 {
-  typedef SLinkedPool<T>::Node Node;
+  typedef DLinkedPool<T>::Node Node;
 
   Node* node;
 
@@ -41,7 +43,7 @@ struct ComponentIterState
 template<typename T>
 struct ComponentIter
 {
-  typedef SLinkedPool<T>::Node Node;
+  typedef DLinkedPool<T>::Node Node;
   Node* start;
 
   ComponentIterState<T> begin() { return ComponentIterState<T>{start}; }
@@ -62,6 +64,8 @@ struct ComponentMgr
 
   template<typename T>
   T* allocateComponent();
+
+  void deallocateComponent(Component* cmp);
 
   template<typename T>
   ComponentIter<T> iterate();

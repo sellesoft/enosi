@@ -26,6 +26,13 @@ b8 Entity::init(String name)
 void Entity::deinit()
 {
   mem::stl_allocator.free(name.ptr);
+
+  for (Component& comp : components)
+  {
+    comp.kind = 0;
+    comp.owner = nil;
+  }
+    
   components.deinit();
 }
 

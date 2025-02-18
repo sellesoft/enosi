@@ -29,7 +29,7 @@ struct CompPools
 {
 
 $ for comp in Comp.components.list:each() do
-  SLinkedPool<$(comp.name)> $(comp.name)_pool;
+  DLinkedPool<$(comp.name)> $(comp.name)_pool;
 $ end
 
   b8 init()
@@ -44,6 +44,11 @@ $ end
   void deinit()
   {
 $ for comp in Comp.components.list:each() do
+    for (Component& comp : $(comp.name)_pool)
+    {
+      comp.kind = 0;
+      comp.owner = nil;
+    }
     $(comp.name)_pool.deinit();
 $ end
   }
@@ -59,10 +64,13 @@ $ for comp,i in Comp.components.list:eachWithIndex() do
 template<>
 $(comp.name)* ComponentMgr::allocateComponent<$(comp.name)>()
 {
-  auto* cmp = pools->$(comp.name)_pool.push()->data;
+  auto* node = pools->$(comp.name)_pool.pushHead();
+  auto* cmp = node->data;
+  cmp->node = node;
   cmp->init();
   return cmp;
 }
+
 
 /* ----------------------------------------------------------------------------
  */
@@ -73,6 +81,22 @@ ComponentIter<$(comp.name)> ComponentMgr::iterate<$(comp.name)>()
 }
 
 $ end
+
+
+/* ----------------------------------------------------------------------------
+ */
+void ComponentMgr::deallocateComponent(Component* cmp)
+{
+  switch (cmp->kind)
+  {
+$ for comp,i in Comp.components.list:eachWithIndex() do
+  case $(i):
+    pools->$(comp.name)_pool.remove(
+      (DLinkedPool<$(comp.name)>::Node*)cmp->node);
+    break;
+$ end
+  }
+}
 
 /* ----------------------------------------------------------------------------
  */
