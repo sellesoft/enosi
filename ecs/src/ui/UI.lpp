@@ -308,7 +308,10 @@ void UI::updateTree(ItemNode* node)
   $ local item = ui.createItemContext("Item", "item")
   $ local style = item.style
 
-  @@item.style:lookup(overflow)
+  @@item.style:lookup(overflow, display)
+
+  if (@item.style.display.test(hidden))
+    return;
 
   $ local parent = ui.createItemContext("Item", "parent", true)
 
