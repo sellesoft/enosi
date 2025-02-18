@@ -5,6 +5,8 @@ $ require "common"
 @@lpp.import "game/GameMgr.lh"
 @@lpp.import "game/Transform.comp.lh"
 
+@defFileLogger(eye, Info)
+
 /* ----------------------------------------------------------------------------
  */
 b8 EyeSys::update(GameMgr& gamemgr)
@@ -32,18 +34,25 @@ void EyeSys::getViewMat(mat3x2* view) const
  */
 vec2f EyeSys::screenToWorld(vec2f sp, vec2f ss) const
 {
-  f32 c = cos(rotation);
-  f32 s = sin(rotation);
+  vec2f wp = sp - ss / 2.f;
+  wp.x /= pixels_per_meter;
+  wp.y /= -f32(pixels_per_meter);
 
-  vec2f world_pos = {};
+  auto tm = mat3x2::createTransform(pos, rotation, {zoom,zoom});
+  return tm.transformVec(wp);
+}
 
-  f32 scale = pixels_per_meter * zoom;
+/* ----------------------------------------------------------------------------
+ */
+vec2f EyeSys::worldToScreen(vec2f wp, vec2f ss) const
+{
+  auto tm = mat3x2::createInverseTransform(pos, rotation, {zoom, zoom});
+  vec2f sp = tm.transformVec(wp);
 
-  sp.x -= ss.x / 2.f;
-  sp.y -= ss.y / 2.f;
+  sp.x *=  pixels_per_meter;
+  sp.y *= -f32(pixels_per_meter);
 
-  world_pos.x = pos.x + (sp.x) / scale;
-  world_pos.y = pos.y - (sp.y) / scale;
+  sp += ss / 2.f;
 
-  return world_pos;
+  return sp;
 }

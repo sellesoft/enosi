@@ -25,5 +25,6 @@ struct EyeSys
   void getViewMat(mat3x2* view) const;
 
   vec2f screenToWorld(vec2f screen_pos, vec2f screen_size) const;
+  vec2f worldToScreen(vec2f world_pos, vec2f screen_size) const;
 };
 
