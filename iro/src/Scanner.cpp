@@ -1,6 +1,6 @@
 #include "Scanner.h"
 
-#include "ctype.h" 
+#include "ctype.h"
 
 #include "Logger.h"
 
@@ -20,7 +20,7 @@ b8 Scanner::init(io::IO* in)
 
   if (!cache.open(chunk_size))
     return ERROR("failed to init cache\n");
-  
+
   readStreamIfNeeded(false, false);
   decodeCurrent();
 
@@ -54,7 +54,7 @@ void Scanner::advance(b8 contiguous)
 }
 
 /* --------------------------------------------------------------------------
- *  Inefficient peek. Everytime this is called the next codepoint is 
+ *  Inefficient peek. Everytime this is called the next codepoint is
  *  decoded!
  */
 u32 Scanner::peek()
@@ -114,9 +114,11 @@ b8 Scanner::atDigit() const
  */
 String Scanner::scanNumber()
 {
-  if (atDigit())
+  if (atDigit() || at('-'))
   {
     u64 start = cache_offset;
+    if (at('-'))
+      advance(true);
     while (atDigit())
       advance(true);
     if (at('.'))
@@ -262,9 +264,9 @@ void Scanner::scan(io::IO* out)
 
 /* --------------------------------------------------------------------------
  */
-b8 Scanner::decodeCurrent() 
+b8 Scanner::decodeCurrent()
 {
-  current_codepoint = 
+  current_codepoint =
     utf8::decodeCharacter(
       cache.ptr + cache_offset,
       cache.len - cache_offset);
@@ -272,7 +274,7 @@ b8 Scanner::decodeCurrent()
 }
 
 /* --------------------------------------------------------------------------
- *  Make sure that we have enough bytes to fully decode the next unicode 
+ *  Make sure that we have enough bytes to fully decode the next unicode
  *  character.
  */
 void Scanner::ensureHaveEnoughToDecode()

@@ -59,7 +59,7 @@ void SourceDataParser::deinit()
 struct Token
 {
 $$$
-  local tkinds = 
+  local tkinds =
   {
     "Invalid",
 
@@ -155,7 +155,7 @@ b8 SourceDataParser::parseReturn()
 {
   PARSER_STAGE;
   SourceData* data = file->addReturnData();
-  
+
   if (!parsePossiblyTypedData(data))
     return false;
 
@@ -208,7 +208,7 @@ b8 SourceDataParser::parseObjectData(SourceDataObject* obj)
     auto tok = nextToken();
     if (tok.kind == TK::RBrace)
       break;
-  
+
     auto data = file->allocateSourceData();
 
     if (!parseNamedOrPossiblyTypedData(tok, data))
@@ -275,7 +275,7 @@ b8 SourceDataParser::parseNamedOrPossiblyTypedData(Token tok, SourceData* data)
         }
         break;
 
-      default: 
+      default:
         return errorAt(tok, "expected named or typed data\n");
       }
     }
@@ -356,7 +356,7 @@ Token SourceDataParser::nextToken()
       out.raw = id.allocateCopy(&file->string_cache);
     }
   }
-  else if (scanner.atDigit())
+  else if (scanner.atDigit() || scanner.at('-'))
   {
     out.kind = TK::Number;
     out.raw = scanner.scanNumber().allocateCopy(&file->string_cache);
@@ -371,7 +371,7 @@ Token SourceDataParser::nextToken()
     switch (scanner.current())
     {
 $$$
-local map = 
+local map =
 {
   LBrace = "{",
   RBrace = "}",
@@ -380,7 +380,7 @@ local map =
 }
 $$$
 $ for k,v in pairs(map) do
-    case '$(v)': out.kind = TK::$(k); scanner.advance(); break;  
+    case '$(v)': out.kind = TK::$(k); scanner.advance(); break;
 $ end
     }
   }
