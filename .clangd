@@ -29,7 +29,9 @@ Diagnostics:
         'misc-const-correctness',
         'readability-math-missing-parentheses',
         'bugprone-easily-swappable-parameters',
-        'misc-no-recursion'
+        'misc-no-recursion',
+        'readability-uppercase-literal-suffix',
+        'modernize-use-std-numbers'
       ]
     FastCheckFilter: None
 

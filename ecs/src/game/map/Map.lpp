@@ -20,11 +20,12 @@ $ local cmn = require "common"
 b8 Tile::init(
     const MapTileDef& def, 
     u32               layer_idx, 
+    vec2f             pos,
     AssetMgr&         assetmgr,
     EntityMgr&        entmgr,
     gfx::Renderer&    renderer)
 {
-  TRACE("initializing tile at (",def.pos.x,",",def.pos.y,",",layer_idx,")\n");
+  TRACE("initializing tile at (",layer_idx,")\n");
 
   this->def = &def;
   
@@ -33,7 +34,7 @@ b8 Tile::init(
     auto entid = loadEntity(*ent_data, entmgr, assetmgr, renderer);
     auto* ent = entmgr.getEntity(entid);
     auto* transform = ent->tryComp<Transform>();
-    transform->pos = def.pos;
+    transform->pos = pos;
     transform->placement_layer = layer_idx;
   }
 
@@ -66,14 +67,20 @@ b8 Layer::init(
 
   tiles.resize(def.size.x * def.size.y);
 
-  for (const MapTileDef& block_def : def.tiles)
-  {
-    Tile* block = 
-      tiles.arr + block_def.pos.x + block_def.pos.y * def.size.x;
+  if (tiles.len() != def.tiles.len())
+    return ERROR("missing tiles in def of layer ", layer_idx, ". Expected ", 
+                 tiles.len(), " tiles but was only provided ", def.tiles.len(),
+                 "\n");
 
-    if (!block->init(
-          block_def, 
-          layer_idx, 
+  for (u32 tile_idx = 0; tile_idx < tiles.len(); ++tile_idx)
+  {
+    Tile* tile = tiles.arr + tile_idx;
+    MapTileDef* tile_def = def.tiles.arr + tile_idx;
+
+    if (!tile->init(
+          *tile_def,
+          layer_idx,
+          getTilePos(*tile),
           assetmgr,
           entmgr,
           renderer))
@@ -91,6 +98,14 @@ void Layer::deinit()
     tile.deinit();
 
   tiles.destroy();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+vec2f Layer::getTilePos(const Tile& tile) const
+{
+  u32 tile_idx = getTileIndex(tile);
+  return { f32(tile_idx % def->size.y), f32(tile_idx / def->size.y) };
 }
 
 /* ----------------------------------------------------------------------------
@@ -164,29 +179,43 @@ void Map::deinit()
 
 /* ----------------------------------------------------------------------------
  */
-b8 Map::getTileAndLayerAtPos(Layer** out_layer, Tile** out_tile, vec2f pos)
+b8 Map::getTileAndLayerAtPos(
+    Layer** out_layer, 
+    Tile**  out_tile,  
+    vec2f   pos)
 {
-  for (Layer& layer : layers)
+  for (s32 layer_idx = layers.len()-1; layer_idx >= 0; --layer_idx)
   {
-    vec2f layer_pos = layer.def->pos;
-    vec2f layer_size = layer.def->size;
-
-    if (math::pointInRect<f32>(pos, layer.def->pos, layer.def->size))
+    Layer* layer = &layers[layer_idx];
+    vec2f layer_pos = layer->def->pos;
+    vec2f layer_size = layer->def->size;
+    if (math::pointInRect<f32>(pos, layer_pos, layer_size))
     {
-      for (Tile& tile : layer.tiles)
+      for (s32 tile_idx = layer->tiles.len()-1; tile_idx >= 0; --tile_idx)
       {
-        vec2f tile_pos = tile.def->pos;
+        Tile* tile = &layer->tiles[tile_idx];
+        vec2f tile_pos = layer->getTilePos(*tile);
 
-        if (math::pointInRect<f32>(pos, layer_pos + tile.def->pos, {1,1}))
+        if (math::pointInRect<f32>(
+              pos, 
+              layer_pos + tile_pos - vec2f(0.5f,0.5f), 
+              {1,1}))
         {
           if (out_layer)
-            *out_layer = &layer;
+            *out_layer = layer;
           if (out_tile)
-            *out_tile = &tile;
+            *out_tile = tile;
           return true;
         }
       }
     }
   }
   return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+vec2f Map::getTilePos(const Layer& layer, const Tile& tile) const
+{
+  return layer.def->pos + layer.getTilePos(tile);
 }

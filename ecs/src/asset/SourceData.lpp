@@ -64,7 +64,7 @@ void SourceData::dump(io::IO* out, u32 depth) const
 
       for (const SourceData* child : obj->children)
       {
-        child->dump(depth + 1);
+        child->dump(out, depth + 1);
         io::format(out, ",\n");
       }
 
@@ -80,4 +80,5 @@ void SourceData::dump(io::IO* out, u32 depth) const
 void SourceData::dump(u32 depth) const
 {
   dump(&fs::stdout, depth);
+  io::format(&fs::stdout, '\n');
 }

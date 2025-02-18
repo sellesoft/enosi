@@ -31,7 +31,6 @@ enum class TileKind
 struct MapTileDef
 {
   TileKind kind;
-  vec2i pos;
   gfx::CompiledTexture* texture;
   Array<const SourceData*> entities;
 };

@@ -26,6 +26,7 @@ struct Tile
   b8 init(
     const MapTileDef& def, 
     u32 layer_idx, 
+    vec2f pos,
     AssetMgr& assetmgr,
     EntityMgr& entmgr,
     gfx::Renderer& renderer);
@@ -49,6 +50,17 @@ struct Layer
     gfx::Renderer& renderer);
 
   void deinit();
+
+  u32 getTileIndex(const Tile& tile) const
+  {
+    assert(&tile >= tiles.arr && &tile < tiles.arr + tiles.len());
+    return &tile - tiles.arr;
+  }
+
+
+  // Returns the coordinate of a Tile from this Layer in Layer space.
+  // Asserts if the given Tile does not belong to this Layer.
+  vec2f getTilePos(const Tile& tile) const;
 };
 
 /* ============================================================================
@@ -75,7 +87,18 @@ struct Map
   b8 init(const MapDef& def, InitParams& params);
   void deinit();
 
+  u32 getLayerIndex(const Layer& layer) const
+  {
+    assert(&layer >= layers.arr && &layer < layers.arr + layers.len());
+    return &layer - layers.arr;
+  }
+
   // Outputs a Tile as well as the Layer it belongs to at the given pos.
   // Returns false if no tile was at the given pos.
   b8 getTileAndLayerAtPos(Layer** out_layer, Tile** out_tile, vec2f pos);
+
+
+  // Returns the coordinates of a Tile from the given Layer in world space.
+  // Asserts if the Tile does not belong to the given Layer.
+  vec2f getTilePos(const Layer& layer, const Tile& tile) const;
 };

@@ -105,7 +105,7 @@ void MapEditor::update(UI* ui, UpdateReason reason)
 {
   InputMgr& input = ui->eng->input;
 
-  vec2f mvp = input.mouse.screen - pos_screen;
+  vec2f mvp = input.mouse.window - pos_screen;
   vec2f mw = eye.screenToWorld(mvp, size);
 
   switch (control_state)
@@ -116,6 +116,29 @@ void MapEditor::update(UI* ui, UpdateReason reason)
       drag_start_viewport = mvp;
       drag_start_eye = eye.pos;
       control_state = ControlState::Dragging;
+
+      Tile* tile;
+      Layer* layer;
+      if (map.getTileAndLayerAtPos(&layer, &tile, mw))
+      {
+        u32 layer_idx = layer - map.layers.arr;
+        u32 tile_idx = tile - layer->tiles.arr;
+
+        INFO(
+          "selected layer ", layer_idx, " ",
+          "and tile ", tile_idx, "\n");
+
+        SourceData* map_data = h_selected_map.getFile()->returned_data;
+        SourceDataObject* map_obj = map_data->getAsObject();
+        SourceData* layers_data = map_obj->findChildByName("layers"_str);
+        SourceDataObject* layers_obj = layers_data->getAsObject();
+        SourceData* layer_data = layers_obj->children[layer_idx];
+        SourceDataObject* layer_obj = layer_data->getAsObject();
+        SourceData* tiles_data = layer_obj->findChildByName("tiles"_str);
+        SourceDataObject* tiles_obj = tiles_data->getAsObject();
+        SourceData* tile_data = tiles_obj->children[tile_idx];
+        tile_data->dump();
+      }
     }
     break;
 
@@ -147,7 +170,13 @@ void MapEditor::update(UI* ui, UpdateReason reason)
   }
 
   io::StaticBuffer<512> text;
-  io::formatv(&text, eye.pos, " ", eye.rotation, " ", eye.zoom);
+  io::formatv(&text, 
+    eye.pos, " ", 
+    eye.rotation, " ", 
+    eye.zoom, " ", 
+    mw, " ", 
+    mvp, " ", 
+    pos_screen);
 
   world_pos->set(text.asStr());
 }
@@ -193,6 +222,7 @@ void MapEditor::renderMap(AssetMgr& assetmgr)
     },
     .renderer = *renderer,
     .map = &map,
+    .entmgr = &entmgr,
   };
 
   eye.getViewMat(&params.view);

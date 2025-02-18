@@ -44,15 +44,15 @@ struct SourceDataObject
 
   const SourceData* findChildByName(String name) const;
   SourceData* findChildByName(String name) 
-    { return (SourceData*)findChildByName(name); }
+  { 
+    return (SourceData*)
+      ((const SourceDataObject*)this)->findChildByName(name); 
+  }
 };
 
 struct SourceData
 {
   String name;
-
-  typedef AVL<u64, [](const u64* x) { return *x; }> Test;
-  Test x;
 
   enum class Kind
   {
