@@ -25,20 +25,9 @@ b8 Tile::init(
     gfx::Renderer&    renderer)
 {
   TRACE("initializing tile at (",def.pos.x,",",def.pos.y,",",layer_idx,")\n");
-  if (r_texture.isValid())
-    return ERROR("duplicate tiles at (",def.pos.x,",",def.pos.y,",",
-      layer_idx,")\n");
 
   this->def = &def;
   
-  if (notnil(def.texture))
-  {
-    r_texture.track(gfx::CompiledTexture::load(
-      def.texture,
-      assetmgr,
-      renderer));
-  }
-
   for (const SourceData* ent_data : def.entities)
   {
     auto entid = loadEntity(*ent_data, entmgr, assetmgr, renderer);
@@ -49,6 +38,13 @@ b8 Tile::init(
   }
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Tile::deinit()
+{
+
 }
 
 /* ----------------------------------------------------------------------------
@@ -85,6 +81,16 @@ b8 Layer::init(
   }
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Layer::deinit()
+{
+  for (Tile& tile : tiles)
+    tile.deinit();
+
+  tiles.destroy();
 }
 
 /* ----------------------------------------------------------------------------
@@ -150,7 +156,10 @@ b8 Map::init(const MapDef& def, InitParams& params)
  */
 void Map::deinit()
 {
-  
+  for (Layer& layer : layers)
+    layer.deinit();
+
+  layers.destroy();
 }
 
 /* ----------------------------------------------------------------------------

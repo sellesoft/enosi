@@ -17,3 +17,5 @@ b8 packSourceDataIntoType(
   AssetMgr& assetmgr,
   gfx::Renderer& renderer);
 
+template<typename T>
+b8 destroyPackedData(T* data);

@@ -85,6 +85,27 @@ b8 packArray<const SourceData*>(
 
 /* ----------------------------------------------------------------------------
  */
+template<typename T>
+b8 destroyArray(Array<T>* data)
+{
+  for (T& v : *data)
+    destroyPackedData(&v);
+
+  data->destroy();
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 destroyArray<const SourceData*>(Array<const SourceData*>* data)
+{
+  data->destroy();
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 packString(const SourceData& data, String* out)
 {
   if (data.kind != SourceData::Kind::Value)
@@ -94,7 +115,15 @@ b8 packString(const SourceData& data, String* out)
   if (val->kind != SourceDataValue::Kind::String)
     return ERROR("expected a string\n");
 
-  *out = val->val;
+  *out = val->val.allocateCopy();
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 destroyString(String* s)
+{
+  mem::stl_allocator.free(s->ptr);
   return true;
 }
 
@@ -382,9 +411,96 @@ $     placed_packers[decl.name] = true
 $   end
 $ end
 
+$ -- * ------------------------------------------------------------------------
 
+$ local putStringDestroyCase = function(declname, field, prereqs)
+  if (!destroyString(&data->$(field.name)))
+    return false;
+$ end
 
+$ -- * ------------------------------------------------------------------------
 
+$ local putArrayDestroyCase = function(declname, field, prereqs)
+  if (!destroyArray(&data->$(field.name)))
+    return false;
+$ end
 
+$ -- * ------------------------------------------------------------------------
 
+$ local putStructDestroyCase = function(declname, field, prereqs)
+  if (!destroyPackedData(&data->$(field.name)))
+    return false;
+$ end
 
+$ -- * ------------------------------------------------------------------------
+
+$ local putDestroyCase = function(declname, field, prereqs)
+$   local type = field.type
+$   if type.name == "String" then
+$     return (putStringDestroyCase(declname, field, prereqs))
+$   end
+$   
+$   type = type:getDesugared()
+$
+$   if type:is(ast.TagType) then
+$     local decl = type:getDecl()
+$     if decl:is(ast.TemplateSpecialization) then
+$       if decl.specialized_name == "Array" then
+$         return (putArrayDestroyCase(declname, field, decl, prereqs))
+$       end
+$     elseif decl:is(ast.Struct) then
+$       return (putStructDestroyCase(declname, field, prereqs))
+$     end
+$   end
+$ end
+
+$ local putStructDestroyer = function(name, decl, prereqs)
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 destroyPackedData<$(name)>($(name)* data)
+{
+$ for field in decl:eachFieldWithIndex() do
+$   putDestroyCase(decl.name, field, prereqs)
+$ end
+  
+  return true;
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local placed_destroyers = 
+$ {
+$   String = true
+$ }
+$ local function putDestroyer(name, decl, prereqs)
+$   if not decl or placed_destroyers[name] then return end
+$   placed_destroyers[name] = true
+$   if decl:is(ast.Struct) then
+$     for field in decl:eachFieldWithIndex() do
+$       putDestroyer(field.type.name, field.type:getDecl(), prereqs)
+$     end
+$     putStructDestroyer(name, decl, prereqs)
+$   elseif decl:is(ast.TemplateSpecialization) then
+$     if decl.specialized_name == "Array" then
+$       local elem_type = decl.template_args[1]
+$       if not elem_type:is(ast.PointerType) then
+$         local elem_decl = decl.template_args[1]:getDecl()
+$         putDestroyer(elem_decl.name, elem_decl, prereqs)
+$       end
+$     end
+$   end
+$ end
+
+$ for decl in p.decls.list:each() do
+$   local name = decl.name
+$     :gsub("struct ", "")
+$     :gsub("union ", "")
+$     :gsub("enum ", "")
+$   local prereqs = List{}
+$   if decl.decl:is(ast.Record) then
+$     putDestroyer(name, decl.decl, prereqs)
+$     placed_destroyers[decl.name] = true
+$   end
+$ end

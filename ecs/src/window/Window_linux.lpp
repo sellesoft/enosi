@@ -103,7 +103,7 @@ b8 Window::init(String title, InputMgr& inputmgr)
   for (s32 i = 0; i < n_monitors; ++i)
   {
     XRRMonitorInfo monitor = monitors[i];
-    if (math::pointInRect(
+    if (math::pointInRect<s32>(
           {root_x, root_y}, 
           {monitor.x, monitor.y},
           {monitor.width, monitor.height}))

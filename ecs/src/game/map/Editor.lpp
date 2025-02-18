@@ -160,11 +160,15 @@ void MapEditor::renderMap(AssetMgr& assetmgr)
     return;
 
   entmgr.destroyAllEntities();
+  if (notnil(map.layers))
+  {
+    map.deinit();
+    destroyPackedData(&mapdef);
+  }
 
   // TODO(sushi) don't do all of this every frame
   renderer->pushBindFramebuffer(framebuffer);
 
-  MapDef mapdef = {};
   packSourceDataIntoType(
     *h_selected_map.getFile()->returned_data,
     &mapdef,
@@ -178,7 +182,6 @@ void MapEditor::renderMap(AssetMgr& assetmgr)
     .renderer = *renderer,
   };
 
-  Map map;
   map.init(mapdef, map_params);
 
   RenderSys::UpdateParams params = 

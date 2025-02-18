@@ -22,7 +22,6 @@ struct MindSys;
 struct Tile
 {
   const MapTileDef* def = nullptr;
-  gfx::CompiledTextureRef r_texture;
 
   b8 init(
     const MapTileDef& def, 

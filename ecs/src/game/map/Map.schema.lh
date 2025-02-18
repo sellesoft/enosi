@@ -12,6 +12,11 @@ using namespace iro;
 
 struct SourceData;
 
+namespace gfx
+{
+  struct CompiledTexture;
+}
+
 /* ============================================================================
  */
 enum class TileKind
@@ -27,7 +32,7 @@ struct MapTileDef
 {
   TileKind kind;
   vec2i pos;
-  String texture;
+  gfx::CompiledTexture* texture;
   Array<const SourceData*> entities;
 };
 
