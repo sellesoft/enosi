@@ -150,10 +150,10 @@ static void drawQuad(
   }
 
   auto vp = (gfx::Vertex*)sys.quads_buffer.mapped.vp + 4*sys.quad_count;
-  vp[0] = gfx::Vertex{ pos + vec2f(-0.5f,-0.5f), vec2f(0,1), color.rgba };
-  vp[1] = gfx::Vertex{ pos + vec2f( 0.5f,-0.5f), vec2f(1,1), color.rgba };
-  vp[2] = gfx::Vertex{ pos + vec2f( 0.5f, 0.5f), vec2f(1,0), color.rgba };
-  vp[3] = gfx::Vertex{ pos + vec2f(-0.5f, 0.5f), vec2f(0,0), color.rgba };
+  vp[0] = gfx::Vertex{ pos + vec2f(-0.f,-0.f), vec2f(0,1), color.rgba };
+  vp[1] = gfx::Vertex{ pos + vec2f( 1.f,-0.f), vec2f(1,1), color.rgba };
+  vp[2] = gfx::Vertex{ pos + vec2f( 1.f, 1.f), vec2f(1,0), color.rgba };
+  vp[3] = gfx::Vertex{ pos + vec2f(-0.f, 1.f), vec2f(0,0), color.rgba };
 
   sys.batches[sys.batch_count-1].quad_count++;
   sys.quad_count++;

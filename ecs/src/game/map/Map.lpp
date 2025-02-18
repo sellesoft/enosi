@@ -198,7 +198,7 @@ b8 Map::getTileAndLayerAtPos(
 
         if (math::pointInRect<f32>(
               pos, 
-              layer_pos + tile_pos - vec2f(0.5f,0.5f), 
+              layer_pos + tile_pos, 
               {1,1}))
         {
           if (out_layer)
