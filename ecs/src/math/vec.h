@@ -220,6 +220,14 @@ struct vec2
   }
 };
 
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
+vec2<T> operator * (const T& lhs, const vec2<T>& rhs)
+{
+  return vec2<T>(lhs * rhs.x, lhs * rhs.y);
+}
+
 typedef vec2<s32> vec2i;
 typedef vec2<f32> vec2f;
 
