@@ -288,8 +288,6 @@ b8 RenderSys::update(const UpdateParams& params)
             layer.def->size,
             {255,0,0,255});
 
-        INFO(layer.def->pos, " ", debug_counts, "\n");
-
         debug_buffer.unmap();
       }
 
