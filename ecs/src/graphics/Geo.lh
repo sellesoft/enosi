@@ -333,7 +333,7 @@ $$$
 
       List(indicies):eachWithIndex(function(idx, i)
 $$$
-        ip[$(i-1)] = $(idx);
+        ip[$(i-1)] = offsets.x + $(idx);
 $$$
       end)
 
