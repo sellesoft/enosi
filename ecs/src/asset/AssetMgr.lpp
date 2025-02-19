@@ -57,7 +57,8 @@ Asset* AssetMgr::allocateAsset(u64 size, String name)
 
   auto* asset = (Asset*)allocator->allocate(size);
   mem::zero(asset, size);
-
+  
+  asset->hash = name_hash;
   map.insert(asset);
 
   return asset;

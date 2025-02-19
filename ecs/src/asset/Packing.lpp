@@ -201,6 +201,14 @@ b8 packCompiledTexture(
   return true;
 }
 
+/* ----------------------------------------------------------------------------
+ */
+b8 destroyCompiledTexture(gfx::CompiledTexture** data)
+{
+  // (*data)->gfx_texture.destroy();
+  return true;
+}
+
 $ -- * ------------------------------------------------------------------------
 
 $ local putEnumPacker = function(name, decl)
@@ -427,6 +435,13 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
+$ local putCompiledTextureDestroyCase = function(declname, field, prereqs)
+  if (!destroyCompiledTexture(&data->$(field.name)))
+    return false;
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
 $ local putStructDestroyCase = function(declname, field, prereqs)
   if (!destroyPackedData(&data->$(field.name)))
     return false;
@@ -450,6 +465,11 @@ $         return (putArrayDestroyCase(declname, field, decl, prereqs))
 $       end
 $     elseif decl:is(ast.Struct) then
 $       return (putStructDestroyCase(declname, field, prereqs))
+$     end
+$   elseif type:is(ast.PointerType) then
+$     type = type.subtype
+$     if type.name == "gfx::CompiledTexture" then
+$       return (putCompiledTextureDestroyCase(declname, field, prereqs))
 $     end
 $   end
 $ end
