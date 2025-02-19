@@ -119,4 +119,11 @@ Texture Texture::create(
   return out;
 }
 
+/* ----------------------------------------------------------------------------
+ */
+void Texture::destroy()
+{
+  glDeleteTextures(1, &id);
+}
+
 }
