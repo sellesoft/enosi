@@ -12,6 +12,8 @@ using namespace iro;
 
 struct SourceData;
 
+/* ============================================================================
+ */
 struct SourceDataValue
 {
   enum class Kind
@@ -25,6 +27,8 @@ struct SourceDataValue
   String val = nil;
 };
 
+/* ============================================================================
+ */
 struct SourceDataObject
 {
   String type = nil;
@@ -50,6 +54,8 @@ struct SourceDataObject
   }
 };
 
+/* ============================================================================
+ */
 struct SourceData
 {
   String name;
@@ -114,6 +120,12 @@ struct SourceData
   }
 
   SourceData() : kind(Kind::Invalid), data({}) {}
+
+  void destroy()
+  {
+    if (isObject())
+      getAsObject()->deinit();
+  }
 
   void dump(u32 depth = 0) const;
   void dump(io::IO* out, u32 depth = 0) const;
