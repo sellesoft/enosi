@@ -75,6 +75,31 @@ b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
   ip[3] = 0; ip[4] = 2; ip[5] = 3;
   background_buffer.unmap();
 
+  // Init debug buffer.
+  // TODO(sushi) make optional
+  if (!debug_buffer.init(
+        MAX_QUADS*4*sizeof(gfx::Vertex),
+        MAX_QUADS*6*sizeof(gfx::Index)))
+    return ERROR("failed to init debug buffer\n");
+  debug_buffer.setGfxAttributes();
+
+  u8 white_pixels[16] = 
+  { 
+    0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,
+  };
+
+  white_texture = 
+    gfx::Texture::create(
+      4, 4,
+      gfx::ImageFormat::BW,
+      gfx::ImageAddressMode::ClampToWhite,
+      gfx::ImageFilter::Nearest,
+      gfx::ImageKind::TwoD,
+      white_pixels);
+
   return true;
 }
 
@@ -183,6 +208,8 @@ b8 RenderSys::update(const UpdateParams& params)
   renderer.pushSetViewport(params.viewport.pos, params.viewport.size);
   renderer.pushSetScissor(params.viewport.pos, params.viewport.size);
 
+  debug_counts = {};
+
   ///////////////////////////////////////////////
   // 1. Draw Background
   {
@@ -244,6 +271,28 @@ b8 RenderSys::update(const UpdateParams& params)
         drawQuad(*this, params, pos, tile.def->texture, tint);
       }
 
+      if (params.debug)
+      {
+        quads_buffer.unmap();
+        defer { quads_buffer.map(); };
+
+        debug_buffer.map();
+
+        debug_counts += 
+          gfx::putBorders(
+            (gfx::Vertex*)debug_buffer.mapped.vp,
+            (gfx::Index*)debug_buffer.mapped.ip,
+            debug_counts,
+            {0.25f, 0.25f, 0.25f, 0.25f},
+            layer.def->pos,
+            layer.def->size,
+            {255,0,0,255});
+
+        INFO(layer.def->pos, " ", debug_counts, "\n");
+
+        debug_buffer.unmap();
+      }
+
       layer_idx++;
     }
   }
@@ -283,6 +332,21 @@ b8 RenderSys::update(const UpdateParams& params)
   if (batch_count > 0)
   {
     drawBatches(*this, params);
+  }
+
+  if (params.debug)
+  {
+    gfx::Renderer& renderer = params.renderer;
+
+    if (debug_counts.x != 0)
+    {
+      debug_buffer.num_vertexes = debug_counts.x;
+      debug_buffer.num_indexes = debug_counts.y;
+
+      renderer.pushBindTexture(white_texture);
+      renderer.pushBindBuffer(debug_buffer);
+      renderer.pushDraw(0, debug_counts.y, 0);
+    }
   }
 
   return true;

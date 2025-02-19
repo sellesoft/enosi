@@ -98,6 +98,31 @@ void MapEditor::selectMap(SourceDataFileHandle& h_map)
 }
 
 /* ----------------------------------------------------------------------------
+ */
+void MapEditor::generate(UI* ui)
+{
+  // Draw rendered map quad.
+  {
+    auto [vp, ip] = map_render->getPtrs(ui);
+
+    map_render->counts_used = {};
+
+    map_render->counts_used += 
+      gfx::putFilledRect(
+        vp,
+        ip,
+        map_render->counts_used,
+        pos_screen,
+        size,
+        {0.f, 1.f},
+        {1.f, 1.f},
+        {1.f, 0.f},
+        {0.f, 0.f},
+        {255,255,255,255});
+  }
+}
+
+/* ----------------------------------------------------------------------------
  *  TODO(sushi) map rendering needs to be moved back into here so that it 
  *              doesnt render before we adjust position.
  */
@@ -171,12 +196,12 @@ void MapEditor::update(UI* ui, UpdateReason reason)
 
   io::StaticBuffer<512> text;
   io::formatv(&text, 
-    eye.pos, " ", 
+    eye.pos,      " ", 
     eye.rotation, " ", 
-    eye.zoom, " ", 
-    mw, " ", 
-    mvp, " ", 
-    pos_screen);
+    eye.zoom,     " ", 
+    mw,           " ", 
+    mvp,          " ",
+    eye.worldToScreen(mw, size));
 
   world_pos->set(text.asStr());
 }
@@ -223,6 +248,7 @@ void MapEditor::renderMap(AssetMgr& assetmgr)
     .renderer = *renderer,
     .map = &map,
     .entmgr = &entmgr,
+    .debug = true,
   };
 
   eye.getViewMat(&params.view);
@@ -237,28 +263,6 @@ void MapEditor::renderMap(AssetMgr& assetmgr)
 void MapEditor::reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post)
 {
   pre.push(map_render);
-}
-
-/* ----------------------------------------------------------------------------
- */
-void MapEditor::generate(UI* ui)
-{
-  auto [vp, ip] = map_render->getPtrs(ui);
-
-  map_render->counts_used = {};
-
-  map_render->counts_used += 
-    gfx::putFilledRect(
-        vp,
-        ip,
-        map_render->counts_used,
-        pos_screen,
-        size,
-        {0.f, 1.f},
-        {1.f, 1.f},
-        {1.f, 0.f},
-        {0.f, 0.f},
-        {255,255,255,255});
 }
 
 }

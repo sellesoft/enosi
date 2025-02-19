@@ -28,6 +28,7 @@ struct RenderSys
 {
   static constexpr u32 MAX_QUADS = 8192;
   static constexpr u32 MAX_BATCHES = 256;
+  static constexpr u32 MAX_DEBUG = 8192;
 
   struct QuadBatch
   {
@@ -45,16 +46,25 @@ struct RenderSys
     gfx::Renderer& renderer;
     EntityMgr*     entmgr;
     Map*           map;
+
+    b8 debug = false;
   };
 
   b8 update(const UpdateParams& params);
 
   gfx::CompiledTextureRef null_texture;
 
+  // TODO(sushi) move this somewhere central so it may be shared with UI
+  //             as it defines the same thing.
+  gfx::Texture white_texture;
+
   gfx::Buffer quads_buffer;
   gfx::Buffer background_buffer;
+  gfx::Buffer debug_buffer;
 
   QuadBatch batches[MAX_BATCHES];
   u32 batch_count;
   u32 quad_count;
+
+  vec2i debug_counts = {};
 };

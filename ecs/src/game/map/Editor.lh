@@ -76,9 +76,9 @@ struct
 
   void renderMap(AssetMgr& assetmgr);
 
+  void generate(UI* ui) override;
   void update(UI* ui, UpdateReason reason) override;
   void reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post) override;
-  void generate(UI* ui) override;
 })
 
 }
