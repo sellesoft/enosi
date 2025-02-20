@@ -46,7 +46,7 @@ b8 packSourceDataIntoEnum(const SourceData& data, T* out);
  */
 template<typename T>
 b8 packArray(
-    const SourceDataObject& data, 
+    const SourceData& data, 
     Array<T>* out, 
     AssetMgr& assetmgr,
     gfx::Renderer& renderer)
@@ -67,7 +67,7 @@ b8 packArray(
  */
 template<>
 b8 packArray<const SourceData*>(
-    const SourceDataObject& data, 
+    const SourceData& data, 
     Array<const SourceData*>* out,
     AssetMgr& assetmgr,
     gfx::Renderer& renderer)
@@ -108,14 +108,10 @@ b8 destroyArray<const SourceData*>(Array<const SourceData*>* data)
  */
 b8 packString(const SourceData& data, String* out)
 {
-  if (data.kind != SourceData::Kind::Value)
+  if (!data.hasStringValue())
     return ERROR("expected a string\n");
 
-  auto* val = data.getAsValue();
-  if (val->kind != SourceDataValue::Kind::String)
-    return ERROR("expected a string\n");
-
-  *out = val->val.allocateCopy();
+  *out = data.val.str.allocateCopy();
   return true;
 }
 
@@ -132,14 +128,10 @@ b8 destroyString(String* s)
 template<typename T>
 b8 packNumber(const SourceData& data, T* out)
 {
-  if (data.kind != SourceData::Kind::Value)
-    return ERROR("expected a string\n");
-
-  auto* val = data.getAsValue();
-  if (val->kind != SourceDataValue::Kind::Number)
+  if (!data.hasNumberValue())
     return ERROR("expected a number\n");
 
-  *out = strtof((char*)val->val.ptr, nullptr);
+  *out = strtof((char*)data.val.str.ptr, nullptr);
   return true;
 }
 
@@ -148,22 +140,23 @@ b8 packNumber(const SourceData& data, T* out)
 template<typename T>
 b8 packVec2(const SourceData& data, T* out)
 {
-  if (data.kind != SourceData::Kind::Object)
+  // TODO(sushi) nameless initialization
+
+  if (!data.hasChildren())
     return ERROR("expected an object to pack vec2\n");
 
-  auto* obj = data.getAsObject();
-  for (const SourceData* child : obj->children)
+  for (const SourceData* child : data.children)
   {
-    if (!child->isValue())
-      return ERROR("vec2 members can only be values\n");
+    if (!child->hasNumberValue())
+      return ERROR("vec2 members can only be numbers\n");
 
     switch (child->name.hash())
     {
     case "x"_hashed:
-      out->x = strtof((char*)child->getAsValue()->val.ptr, nullptr);
+      out->x = strtof((char*)child->val.str.ptr, nullptr);
       break;
     case "y"_hashed:
-      out->y = strtof((char*)child->getAsValue()->val.ptr, nullptr);
+      out->y = strtof((char*)child->val.str.ptr, nullptr);
       break;
     default:
       return ERROR("no member named ", child->name, " in vec2\n");
@@ -181,22 +174,18 @@ b8 packCompiledTexture(
     AssetMgr& assetmgr,
     gfx::Renderer& renderer)
 {
-  if (data.kind != SourceData::Kind::Value)
-    return ERROR("expected a string value to pack gfx::CompiledTexture*");
-
-  auto* val = data.getAsValue();
-  
-  if (val->kind != SourceDataValue::Kind::String)
+  if (!data.hasStringValue())
     return ERROR("expected a string value to pack gfx::CompiledTexture*");
 
   *out = 
     gfx::CompiledTexture::load(
-      val->val,
+      data.val.str,
       assetmgr,
       renderer);
 
   if (*out == nullptr)
-    return ERROR("failed to load compiled texture with name ", val->val, "\n");
+    return ERROR("failed to load compiled texture with name ", 
+                 data.val.str, "\n");
 
   return true;
 }
@@ -217,19 +206,17 @@ $ local putEnumPacker = function(name, decl)
 template<>
 b8 packSourceDataIntoEnum(const SourceData& data, $(name)* out)
 {
-  if (!data.isValue())
-    return ERROR("expected a value for enum data\n");
+  if (!data.hasStringValue())
+    return ERROR("expected a string for $(name) enum data\n");
 
-  auto* val = data.getAsValue();
-
-  switch (val->val.hash())
+  switch (data.val.str.hash())
   {
 $ for elem in decl.elems:each() do
   case "$(elem)"_hashed: *out = $(name)::$(elem); break;
 $ end
 
   default:
-    return ERROR("no element ", val->val, " in enum $(name)\n");
+    return ERROR("no element ", data.val.str, " in enum $(name)\n");
   }
 
   return true;
@@ -241,10 +228,10 @@ $ -- * ------------------------------------------------------------------------
 $ local putArrayPackCase = function(declname, field, decl, prereqs)
 $   prereqs:push(decl.template_args[1]:getDecl())
     out->$(field.name).init();
-    if (!child->isObject())
+    if (!child->hasChildren())
       return ERROR("expected an object for array field $(field.name)\n");
     if (!packArray(
-          *child->getAsObject(), 
+          *child,
           &out->$(field.name), 
           assetmgr,
           renderer))
@@ -351,16 +338,14 @@ b8 packSourceDataIntoType<$(name)>(
     AssetMgr& assetmgr,
     gfx::Renderer& renderer)
 {
-  if (!data.isObject())
+  if (isnil(data.children))
     return ERROR("expected an object to pack into $(name)\n");
 
-  const SourceDataObject* obj = data.getAsObject();
-  
   // TODO(sushi) handle defaulted stuff.
-  if (obj->children.isEmpty())
+  if (data.children.isEmpty())
     return true;
 
-  for (const SourceData* child : obj->children)
+  for (const SourceData* child : data.children)
   {
     switch (child->name.hash())
     {

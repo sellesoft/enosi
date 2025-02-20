@@ -8,6 +8,7 @@
 #undef stderr
 #include "stdlib.h"
 #include "string.h"
+#include "ctype.h"
 
 namespace iro::utf8
 {
@@ -414,7 +415,7 @@ b8 String::startsWith(String s) const
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 b8 String::endsWith(String s) const 
 {
@@ -423,6 +424,19 @@ b8 String::endsWith(String s) const
   for (s32 i = len-1; i >= 0; ++i)
   {
     if (ptr[i] != s.ptr[i])
+      return false;
+  }
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 String::isNumeric() const
+{
+  for (s32 i = 0; i < len; ++i)
+  {
+    // TODO(sushi) make unicode proper
+    if (!isdigit(ptr[i]))
       return false;
   }
   return true;

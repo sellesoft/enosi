@@ -31,10 +31,10 @@ $ end)
 template<typename T>
 b8 loadComponentType(
     const SourceData& data, 
-    EntityId ent,
-    EntityMgr& entmgr,
-    ComponentMgr& cmpmgr,
-    AssetMgr& assetmgr,
+    EntityId       ent,
+    EntityMgr&     entmgr,
+    ComponentMgr&  cmpmgr,
+    AssetMgr&      assetmgr,
     gfx::Renderer& renderer);
 
 $ for comp in Comp.components.list:each() do
@@ -43,10 +43,10 @@ $ for comp in Comp.components.list:each() do
 template<>
 b8 loadComponentType<$(comp.name)>(
     const SourceData& data, 
-    EntityId ent,
-    EntityMgr& entmgr,
-    ComponentMgr& cmpmgr,
-    AssetMgr& assetmgr,
+    EntityId       ent,
+    EntityMgr&     entmgr,
+    ComponentMgr&  cmpmgr,
+    AssetMgr&      assetmgr,
     gfx::Renderer& renderer)
 {
   using TComp = $(comp.name);
@@ -69,13 +69,13 @@ $ end
  */
 b8 loadComponent(
     const SourceData& data, 
-    EntityId ent,
-    EntityMgr& entmgr,
-    ComponentMgr& cmpmgr,
-    AssetMgr& assetmgr,
+    EntityId       ent,
+    EntityMgr&     entmgr,
+    ComponentMgr&  cmpmgr,
+    AssetMgr&      assetmgr,
     gfx::Renderer& renderer)
 {
-  switch (data.getAsObject()->type.hash())
+  switch (data.type.hash())
   {
 $ for comp in Comp.components.list:each() do
   case "$(comp.name)"_hashed:
@@ -89,7 +89,7 @@ $ for comp in Comp.components.list:each() do
         renderer);
 $ end
   default: 
-    return ERROR("no component named ", data.getAsObject()->type, "\n");
+    return ERROR("no component named ", data.type, "\n");
   }
 }
 
@@ -121,34 +121,29 @@ $   end
   }
 $ end
 
-  @failIf(!data.isObject(), "expected object data to define entity\n");
+  @failIf(!data.hasObjectData(), "expected object data to define entity\n");
 
-  const SourceDataObject* entobj = data.getAsObject();
-
-  const SourceData* name = entobj->findChildByName("name"_str);
+  const SourceData* name = data.findChildByName("name"_str);
 
   @failIf(name == nullptr, "all entities must be assigned a name\n");
-  @failIf(!name->isValue(), "expected a value for name of entity\n");
+  @failIf(!name->hasStringValue(), "expected a value for name of entity\n");
 
-  const SourceDataValue* name_val = name->getAsValue();
-
-  EntityId entid = entmgr.createEntity(name_val->val);
+  EntityId entid = entmgr.createEntity(name->val.str);
 
   @failIf(isnil(entid), "failed to create entity\n");
 
-  const SourceData* component_data = entobj->findChildByName("components"_str);
+  const SourceData* component_data = data.findChildByName("components"_str);
   
   @failIf(component_data == nullptr, 
     "all entities must have a 'components' array");
 
-  @failIf(!component_data->isObject(), 
+  @failIf(!component_data->hasObjectData(),
     "expected an array for 'components' field");
 
-  const SourceDataObject* component_arr = component_data->getAsObject();
-
-  for (const SourceData* component : component_arr->children)
+  for (const SourceData* component : component_data->children)
   {
-    @failIf(!component->isObject(), "expected object data for component\n");
+    @failIf(!component->hasObjectData(), 
+      "expected object data for component\n");
 
     @failIf(!loadComponent(
         *component, 

@@ -176,14 +176,13 @@ b8 SourceDataParser::parsePossiblyTypedData(SourceData* data)
   {
   case TK::Identifier:
     {
-      auto obj = data->setAsObject();
-      obj->type = tok.raw;
+      data->type = tok.raw;
 
       tok = nextToken();
       if (tok.kind != TK::LBrace)
         return errorAt(tok, "expected object data after typename\n");
 
-      if (!parseObjectData(obj))
+      if (!parseObjectData(data))
         return false;
     }
     break;
@@ -198,10 +197,12 @@ b8 SourceDataParser::parsePossiblyTypedData(SourceData* data)
 
 /* ----------------------------------------------------------------------------
  */
-b8 SourceDataParser::parseObjectData(SourceDataObject* obj)
+b8 SourceDataParser::parseObjectData(SourceData* obj)
 {
   PARSER_STAGE;
   SourceData* first = nullptr;
+
+  obj->children.init();
 
   for (;;)
   {
@@ -209,7 +210,7 @@ b8 SourceDataParser::parseObjectData(SourceDataObject* obj)
     if (tok.kind == TK::RBrace)
       break;
 
-    auto data = file->allocateSourceData();
+    auto* data = file->allocateSourceData();
 
     if (!parseNamedOrPossiblyTypedData(tok, data))
       return false;
@@ -222,7 +223,7 @@ b8 SourceDataParser::parseObjectData(SourceDataObject* obj)
     {
       if (isnil(first->name) != isnil(data->name))
         return errorAt(tok, "named and unnamed source data cannot be mixed in "
-                     "objects\n");
+                            "objects\n");
     }
 
     obj->children.push(data);
@@ -267,10 +268,9 @@ b8 SourceDataParser::parseNamedOrPossiblyTypedData(Token tok, SourceData* data)
 
       case TK::LBrace:
         {
-          auto obj = data->setAsObject();
-          obj->type = id.raw;
+          data->type = id.raw;
 
-          if (!parseObjectData(obj))
+          if (!parseObjectData(data))
             return false;
         }
         break;
@@ -297,24 +297,18 @@ b8 SourceDataParser::parseValueOrUntypedObject(Token tok, SourceData* data)
   switch (tok.kind)
   {
   case TK::LBrace:
-    {
-      auto obj = data->setAsObject();
-
-      if (!parseObjectData(obj))
-        return false;
-    }
+    if (!parseObjectData(data))
+      return false;
     break;
 
   case TK::Number:
+    data->val.kind = SourceData::Value::Kind::Number;
+    data->val.str = tok.raw;
+    break;
+
   case TK::String:
-    {
-      auto val = data->setAsValue();
-      val->val = tok.raw;
-      if (tok.kind == TK::Number)
-        val->kind = SourceDataValue::Kind::Number;
-      else
-        val->kind = SourceDataValue::Kind::String;
-    }
+    data->val.kind = SourceData::Value::Kind::String;
+    data->val.str = tok.raw;
     break;
 
   default:

@@ -40,7 +40,7 @@ private:
   b8 parseReturn();
   b8 parseAuxData(Token tok);
   b8 parsePossiblyTypedData(SourceData* data);
-  b8 parseObjectData(SourceDataObject* obj);
+  b8 parseObjectData(SourceData* data);
   b8 parseNamedOrPossiblyTypedData(SourceData* data);
   b8 parseNamedOrPossiblyTypedData(Token tok, SourceData* data);
   b8 parseValueOrUntypedObject(Token tok, SourceData* data);

@@ -154,14 +154,10 @@ void MapEditor::update(UI* ui, UpdateReason reason)
           "and tile ", tile_idx, "\n");
 
         SourceData* map_data = h_selected_map.getFile()->returned_data;
-        SourceDataObject* map_obj = map_data->getAsObject();
-        SourceData* layers_data = map_obj->findChildByName("layers"_str);
-        SourceDataObject* layers_obj = layers_data->getAsObject();
-        SourceData* layer_data = layers_obj->children[layer_idx];
-        SourceDataObject* layer_obj = layer_data->getAsObject();
-        SourceData* tiles_data = layer_obj->findChildByName("tiles"_str);
-        SourceDataObject* tiles_obj = tiles_data->getAsObject();
-        SourceData* tile_data = tiles_obj->children[tile_idx];
+        SourceData* layers_data = map_data->findChildByName("layers"_str);
+        SourceData* layer_data = layers_data->children[layer_idx];
+        SourceData* tiles_data = layer_data->findChildByName("tiles"_str);
+        SourceData* tile_data = tiles_data->children[tile_idx];
         tile_data->dump();
       }
     }

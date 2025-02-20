@@ -156,6 +156,8 @@ struct String
 
   b8 startsWith(u8 c) const { return ptr[0] == c; }
 
+  b8 isNumeric() const;
+
   struct pos
   {
     u64 x;

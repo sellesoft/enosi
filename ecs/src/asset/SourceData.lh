@@ -10,131 +10,89 @@
 
 using namespace iro;
 
-struct SourceData;
-
-/* ============================================================================
- */
-struct SourceDataValue
-{
-  enum class Kind
-  {
-    String,
-    Number,
-  };
-
-  Kind kind;
-
-  String val = nil;
-};
-
-/* ============================================================================
- */
-struct SourceDataObject
-{
-  String type = nil;
-  Array<SourceData*> children;
-
-  b8 init()
-  {
-    if (!children.init())
-      return false;
-    return true;
-  }
-
-  void deinit()
-  {
-    children.destroy();
-  }
-
-  const SourceData* findChildByName(String name) const;
-  SourceData* findChildByName(String name) 
-  { 
-    return (SourceData*)
-      ((const SourceDataObject*)this)->findChildByName(name); 
-  }
-};
-
 /* ============================================================================
  */
 struct SourceData
 {
+  // TODO(sushi) maybe attach a source location to these
+  //             so we can give exact locations when needed?
+  //             Or set up SourceDataFile to be able to take 
+  //             some SourceData and translate it into a source loc.
+
   String name;
 
-  enum class Kind
+  struct Value
   {
-    Invalid,
-    Value,
-    Object,
+    enum class Kind : u8
+    {
+      String,
+      Number,
+    };
+
+    String str = nil;
+    Kind kind = Kind::String;
   };
 
-  Kind kind;
+  Value val = {};
+  String type = nil;
+  Array<SourceData*> children = nil;
 
-  b8 isValue() const { return kind == Kind::Value; }
-  b8 isObject() const { return kind == Kind::Object; }
+  SourceData() {}
 
-  SourceDataValue* getAsValue()
+  /* --------------------------------------------------------------------------
+   */
+  b8 hasStringValue() const
   {
-    assert(isValue());
-    return &data.value;
+    return notnil(val.str) && val.kind == Value::Kind::String;
   }
 
-  const SourceDataValue* getAsValue() const
+  /* --------------------------------------------------------------------------
+   */
+  b8 hasNumberValue() const
   {
-    assert(isValue());
-    return &data.value;
+    return notnil(val.str) && val.kind == Value::Kind::Number;
   }
 
-  SourceDataObject* getAsObject()
+  /* --------------------------------------------------------------------------
+   */
+  b8 hasObjectData() const
   {
-    assert(isObject());
-    return &data.object;
+    return notnil(children);
   }
 
-  const SourceDataObject* getAsObject() const
+  /* --------------------------------------------------------------------------
+   */
+  b8 hasChildren() const
   {
-    assert(isObject());
-    return &data.object;
+    return hasObjectData() && children.len() != 0;
   }
 
-  SourceDataValue* setAsValue()
-  {
-    if (isValue())
-      return &data.value;
-
-    if (isObject())
-      data.object.deinit();
-
-    kind = Kind::Value;
-    return new (&data.value) SourceDataValue;
-  }
-
-  SourceDataObject* setAsObject()
-  {
-    if (isObject())
-      return &data.object;
-
-    kind = Kind::Object;
-    new (&data.object) SourceDataObject;
-    data.object.init();
-    return &data.object;
-  }
-
-  SourceData() : kind(Kind::Invalid), data({}) {}
-
+  /* --------------------------------------------------------------------------
+   */
   void destroy()
   {
-    if (isObject())
-      getAsObject()->deinit();
+    children.destroy();
   }
+
+  /* --------------------------------------------------------------------------
+   */
+  const SourceData* findChildByName(String name) const
+  {
+    for (const SourceData* child : children)
+    {
+      if (child->name == name)
+        return child;
+    }
+    return nullptr;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  SourceData* findChildByName(String name)
+  {
+    return (SourceData*)((const SourceData*)this)->findChildByName(name);
+  } 
 
   void dump(u32 depth = 0) const;
   void dump(io::IO* out, u32 depth = 0) const;
-
-private:
-
-  union
-  {
-    SourceDataValue value;
-    SourceDataObject object;
-  } data;
 };
