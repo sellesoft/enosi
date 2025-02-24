@@ -11,7 +11,7 @@ local writeSeparator = function()
  - ========================================================================= -
 
 ]]
-end 
+end
 
 local getResponse = function()
   io.write "> "
@@ -35,7 +35,7 @@ local function flattenList(l)
   local function recur(l)
     for elem in l:each() do
       if List == Type.of(elem) then
-        recur(elem)     
+        recur(elem)
       else
         o:push(elem)
       end
@@ -60,8 +60,8 @@ end
 
 
 -- NOTE(sushi) disabling for now as I don't really think this is important
---             anymore and we also already download stuff in the platform 
---             wrapper script anyways and I don't feel like moving this 
+--             anymore and we also already download stuff in the platform
+--             wrapper script anyways and I don't feel like moving this
 --             out to there.
 -- TODO(sushi) decide if we should completely remove this or reuse it later.
 if false then
@@ -70,13 +70,13 @@ io.write
 [[
 Throughout this script we will try to download things.
 
-Respond 'n' if this is not okay with you or if this is impossible in your 
+Respond 'n' if this is not okay with you or if this is impossible in your
 situation.
 
-By default, the script will stop before each download to show you what is 
-being downloaded, why, and the link it will be downloaded from. We also 
+By default, the script will stop before each download to show you what is
+being downloaded, why, and the link it will be downloaded from. We also
 ask you if you are okay with downloading the thing, allowing you to stop
-the script if you don't trust something. 
+the script if you don't trust something.
 
 Everything downloaded will be placed in ./tmp and this directory will
 be deleted after the script terminates (whether the reason be success or not).
@@ -93,7 +93,7 @@ Otherwise to run normally, use 'y'.
 end
 
 -- local response = getResponse()
--- 
+--
 -- local mode = "normal"
 -- if response == "a" then
 --   mode = "ignore"
@@ -101,7 +101,7 @@ end
 --   io.write "Goodbye!\n"
 --   os.exit(0)
 -- end
- 
+
 local mode = "ignore"
 
 local platform = arg[1]
@@ -124,7 +124,7 @@ local tryDownload = function(name, link, reason)
     writeSeparator()
     io.write(
       "I would like to download ", name, "\n",
-      "  This will be downloaded from:\n", 
+      "  This will be downloaded from:\n",
       "    ", link, "\n",
       "  I need this for: \n",
       "    ", reason, "\n\n",
@@ -147,7 +147,7 @@ local tryDownload = function(name, link, reason)
   end
 end
 
-local lfs_link = 
+local lfs_link =
   "https://github.com/lunarmodules/luafilesystem/archive/refs/tags/"..
   "v1_8_0.tar.gz"
 
@@ -159,7 +159,7 @@ end
 
 io.write("Compiling lfs...\n")
 
-local lfscmd = 
+local lfscmd =
    "cd tmp/luafilesystem-1_8_0 && "..
    "clang -shared src/lfs.c "..
    "-o ../lfs.so "..
@@ -181,6 +181,50 @@ end
 package.cpath = package.cpath..";./tmp/?.so"
 
 local lfs = require "lfs"
+
+-- * --------------------------------------------------------------------------
+
+local shaderc_dir_attr, shaderc_dir_attr_err = lfs.attributes("shaderc")
+
+if not shaderc_dir_attr then
+  local shaderc_link =
+    "https://storage.googleapis.com/shaderc/badges/build_link_"
+  if platform == "linux" then
+    shaderc_link = shaderc_link.."linux_clang_release.html"
+  elseif platform == "windows" then
+    shaderc_link = shaderc_link.."windows_vs2019_release.html"
+  else
+    error "unhandled platform for shaderc download"
+  end
+
+  tryDownload("shaderc", shaderc_link, "compiling shaders at runtime")
+
+  local shaderc_html_file = io.open("tmp/shaderc.download", "r")
+  if not shaderc_html_file then
+    error "failed to open shaderc html file"
+  end
+
+  local shaderc_html_contents = shaderc_html_file:read("*a")
+  shaderc_html_file:close()
+  shaderc_link = string.match(shaderc_html_contents, 'url=(.-)"');
+  if not shaderc_link or shaderc_link == "" then
+    error "failed to parse shaderc html file"
+  end
+
+  if 0 ~= exec("curl -o tmp/shaderc.zip -L ",shaderc_link) then
+    error("failed to download 'shaderc' from "..shaderc_link.."!")
+  end
+
+  if 0 ~= exec("tar -xf tmp/shaderc.zip -C tmp") then
+    error "failed to extract shaderc!"
+  end
+
+  if 0 ~= exec("cp -r tmp/install shaderc") then
+    error "failed to extract shaderc!"
+  end
+end
+
+-- * --------------------------------------------------------------------------
 
 local cd = function(path)
   io.write("\n--> cd ", path, "\n\n")
@@ -249,7 +293,7 @@ local function compileObj(src_to_obj, cmd)
     local args = flattenList(cmd:complete(v[1], v[2]))
 
 	if not v[1]:find("%.lua") then
-		table.insert(compile_commands, 
+		table.insert(compile_commands,
 		{
 		  directory = cwd,
 		  arguments = args,
@@ -282,7 +326,7 @@ do
   {
     {"IRO_CLANG", "1"},
   }
-	
+
   if platform == "linux" then
     cpp_params.defines:push { "IRO_LINUX", "1" }
   else
@@ -335,7 +379,7 @@ end
 
 writeSeparator()
 
-do 
+do
   io.write("Building lake...\n")
 
   cd "../lake"
@@ -399,7 +443,7 @@ do
     {
       "luajit"
     }
-  end 
+  end
   exe_params.debug_info = true
   exe_params.address_sanitizer = address_sanitizer
 
@@ -441,7 +485,7 @@ do
 end
 
 -- * --------------------------------------------------------------------------
-do 
+do
   io.write "Building elua...\n"
 
   cd "elua"
@@ -497,7 +541,7 @@ do
     {
       "luajit"
     }
-  end 
+  end
   exe_params.address_sanitizer = address_sanitizer
 
   local exe_cmd = build_cmds.Exe.new(exe_params)

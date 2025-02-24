@@ -40,7 +40,7 @@ b8 GameMgr::init(Engine* eng)
   // mindsys.attach(testent);
   // eye.attach(testent);
 
-  SourceDataFileHandle h_test_map = 
+  SourceDataFileHandle h_test_map =
     eng->source_data_file_reg.loadFromDisk("assets/maps/Test.map"_str);
 
   if (!h_test_map.isValid())
@@ -54,7 +54,7 @@ b8 GameMgr::init(Engine* eng)
     eng->assetmgr,
     eng->renderer);
 
-  Map::InitParams map_params = 
+  Map::InitParams map_params =
   {
     .assetmgr = engine->assetmgr,
     .entmgr   = entmgr,
@@ -66,7 +66,7 @@ b8 GameMgr::init(Engine* eng)
   if(!map.init(*map_def, map_params))
     return ERROR("failed to initialize the map '", map_def->name, "'\n");
 
-  map_editor = ui::MapEditor::create(eng->ui, &eng->renderer);
+  map_editor = ui::MapEditor::create(eng->ui, eng->renderer);
   map_editor->selectMap(h_test_map);
 
   return true;

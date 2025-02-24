@@ -32,3 +32,5 @@ bin/
 CppProperties.json
 *.rdbg
 tree-sitter-lpp/
+shaderc/
+build.log

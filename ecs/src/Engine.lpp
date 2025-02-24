@@ -112,14 +112,14 @@ $ local initSystem = function(act, name)
     }
 $ end
 
-  @initSystem(source_data_file_reg.init(),        source data file reg);
-  @initSystem(eventbus.broadcast.init(),          broadcast event bus);
-  @initSystem(input.init(*this),                  input);
-  @initSystem(Window::initializeBackend(),        window backend);
-  @initSystem(window.init("ecs"_str,input),       window);
-  @initSystem(renderer.init(*this),               renderer);
-  @initSystem(assetmgr.init(&mem::stl_allocator), asset mgr);
-  
+  @initSystem(source_data_file_reg.init(),              source data file reg);
+  @initSystem(eventbus.broadcast.init(),                broadcast event bus);
+  @initSystem(input.init(*this),                        input);
+  @initSystem(Window::initializeBackend(),              window backend);
+  @initSystem(window.init("ecs"_str,input),             window);
+  @initSystem(renderer.init(*this, mem::stl_allocator), renderer);
+  @initSystem(assetmgr.init(&mem::stl_allocator),       asset mgr);
+
   //TODO(delle) update the bump allocators to have a reset() and clear()
   mem::LenientBump texture_compile_allocator;
   if (!texture_compile_allocator.init())
@@ -139,12 +139,12 @@ $ end
     .assetmgr     = &assetmgr,
   };
 
-  u8 pixels[16] = 
-  { 
-    0xff, 0xff, 0xff, 0xff, 
-    0xff, 0xff, 0xff, 0xff, 
-    0xff, 0xff, 0xff, 0xff, 
-    0xff, 0xff, 0xff, 0xff, 
+  u8 pixels[16] =
+  {
+    0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,
   };
 
   gfx::CompiledTexture::compileFromMemory(pixels, white_texture_params);

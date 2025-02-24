@@ -11,42 +11,45 @@ if ($installationPath -and (test-path "$installationPath\Common7\Tools\vsdevcmd.
   }
 }
 
-echo "making sure luajit submodule is initialized..."
-
-git submodule update --init luajit
-if ($LASTEXITCODE -ne 0) 
+if (!(Test-Path bin/luajit.exe))
 {
-	echo "initializing luajit submodule failed!"
-	Exit 1
+  echo "making sure luajit submodule is initialized..."
+
+  git submodule update --init luajit
+  if ($LASTEXITCODE -ne 0)
+  {
+  	echo "initializing luajit submodule failed!"
+  	Exit 1
+  }
+
+  echo "building luajit..."
+
+  cd luajit/src/src
+
+  cmd.exe /c "msvcbuild.bat"
+
+  cd ../../../
+
+  md bin -ea 0 | Out-Null
+
+  md luajit/build/lib -ea 0 | Out-Null
+  md luajit/build/include/luajit -ea 0 | Out-Null
+  md luajit/build/obj -ea 0 | Out-Null
+
+  # Put libs, headers, and binaries in standard locations.
+  cp luajit/src/src/luajit.lib -Destination luajit/build/lib
+  cp luajit/src/src/lua51.lib -Destination luajit/build/lib
+
+  cp luajit/src/src/lua.h     -Destination luajit/build/include/luajit/lua.h
+  cp luajit/src/src/lualib.h  -Destination luajit/build/include/luajit/lualib.h
+  cp luajit/src/src/lauxlib.h -Destination luajit/build/include/luajit/lauxlib.h
+  cp luajit/src/src/luajit.h  -Destination luajit/build/include/luajit/luajit.h
+  cp luajit/src/src/luaconf.h -Destination luajit/build/include/luajit/luaconf.h
+
+  # 'Install' luajit to our standard bin folder.
+  cp luajit/src/src/luajit.exe -Destination bin
+  cp luajit/src/src/lua51.dll -Destination bin
 }
-
-echo "building luajit..."
-
-cd luajit/src/src
-
-cmd.exe /c "msvcbuild.bat"
-
-cd ../../../
-
-md bin -ea 0 | Out-Null
-
-md luajit/build/lib -ea 0 | Out-Null
-md luajit/build/include/luajit -ea 0 | Out-Null
-md luajit/build/obj -ea 0 | Out-Null
-
-# Put libs, headers, and binaries in standard locations.
-cp luajit/src/src/luajit.lib -Destination luajit/build/lib
-cp luajit/src/src/lua51.lib -Destination luajit/build/lib
-
-cp luajit/src/src/lua.h     -Destination luajit/build/include/luajit/lua.h
-cp luajit/src/src/lualib.h  -Destination luajit/build/include/luajit/lualib.h
-cp luajit/src/src/lauxlib.h -Destination luajit/build/include/luajit/lauxlib.h
-cp luajit/src/src/luajit.h  -Destination luajit/build/include/luajit/luajit.h
-cp luajit/src/src/luaconf.h -Destination luajit/build/include/luajit/luaconf.h
-
-# 'Install' luajit to our standard bin folder.
-cp luajit/src/src/luajit.exe -Destination bin
-cp luajit/src/src/lua51.dll -Destination bin
 
 if (!(Test-Path bin/client.exe))
 {

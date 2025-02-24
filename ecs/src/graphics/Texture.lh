@@ -1,5 +1,5 @@
 /*
- *  Representation of a Texture on the GPU. This likely should only be used 
+ *  Representation of a Texture on the GPU. This likely should only be used
  *  when a reference to a Texture needs to be kept around, eg. to render to
  *  one using a Framebuffer.
  */
@@ -17,13 +17,23 @@ $ require "common"
 namespace gfx
 {
 
+struct Renderer;
+
 /* ============================================================================
  */
 struct Texture
 {
-  u32 id;
+  Renderer* renderer;
+
+  u32 width;
+  u32 height;
+
+  void* handle;
+  void* memory_handle;
+  void* view_handle;
 
   static Texture create(
+    Renderer&        renderer,
     u32              width,
     u32              height,
     ImageFormat      format,
@@ -37,4 +47,4 @@ struct Texture
 
 }
 
-DefineNilValue(gfx::Texture, { 0 }, { return x.id == 0; });
+DefineNilValue(gfx::Texture, { 0 }, { return x.handle == nullptr; });

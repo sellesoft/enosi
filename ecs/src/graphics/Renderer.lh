@@ -13,9 +13,9 @@ using namespace iro;
 #include "math/vec.h"
 #include "math/mat.h"
 
-@@lpp.import "Geo.lh"
 @@lpp.import "Buffer.lh"
 @@lpp.import "DrawCmd.lh"
+@@lpp.import "Framebuffer.lh"
 
 struct Engine;
 struct Window;
@@ -30,6 +30,10 @@ struct CompiledTexture;
  */
 struct Renderer
 {
+  Engine* engine;
+  mem::Allocator* allocator;
+  void* internal;
+
   u64 frame;
 
   u32 shader_program;
@@ -37,14 +41,13 @@ struct Renderer
 
   Array<DrawCmd> drawcmds;
 
-  Engine* engine;
-
-  b8   init(Engine& engine);
+  b8   init(Engine& engine, mem::Allocator& allocator);
   void deinit();
-
-  b8 update();
+  b8   update();
 
   b8 compileShaders();
+  b8 updateSwapchain();
+  b8 updateFramebuffers();
 
   // Loads a texture into opengl and sets the proper reference to it
   // on the given texture.
@@ -54,7 +57,10 @@ struct Renderer
   void pushDraw(u64 index_start, u64 index_count, u64 vertex_start);
   void pushSetScissor(vec2i pos, vec2i size);
   void pushBindTexture(Texture texture);
+
+  // send {} to use the default framebuffer
   void pushBindFramebuffer(Framebuffer framebuffer);
+
   void pushUniformVec2(String name, vec2f v);
   void pushUniformFloat(String name, f32 f);
   void pushUniformBool(String name, b8 b);

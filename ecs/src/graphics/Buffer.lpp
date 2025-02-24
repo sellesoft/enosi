@@ -1,6 +1,7 @@
 $ require "common"
 
 @@lpp.import "Buffer.lh"
+@@lpp.import "Geo.lh"
 @@lpp.import "Renderer.lh"
 
 #include "graphics/glad/gl.h"
@@ -13,6 +14,7 @@ namespace gfx
  */
 b8 Buffer::init(u64 vsize, u64 isize)
 {
+$ if ECS_OPENGL then
   glGenBuffers(1, &vbo);
   glGenBuffers(1, &ibo);
   glGenVertexArrays(1, &vao);
@@ -29,6 +31,12 @@ b8 Buffer::init(u64 vsize, u64 isize)
   glNamedBufferStorage(vbo, vertex_size, nullptr, GL_MAP_WRITE_BIT);
   glNamedBufferStorage(ibo, index_size, nullptr, GL_MAP_WRITE_BIT);
 
+$ elseif ECS_VULKAN then -- if ECS_OPENGL
+
+$ else -- elseif ECS_VULKAN
+#error "unhandled graphics backend"
+$ end -- else
+
   return true;
 }
 
@@ -36,59 +44,83 @@ b8 Buffer::init(u64 vsize, u64 isize)
  */
 void Buffer::deinit()
 {
+$ if ECS_OPENGL then
   glDeleteBuffers(1, &vbo);
   glDeleteBuffers(1, &ibo);
   glDeleteVertexArrays(1, &vao);
+$ elseif ECS_VULKAN then -- if ECS_OPENGL
+
+$ else -- elseif ECS_VULKAN
+#error "unhandled graphics backend"
+$ end -- else
 }
 
 /* ----------------------------------------------------------------------------
  */
 static void setAttrib(
-    u32 bufferidx, 
-    u32 idx, 
-    u32 len, 
-    u32 type, 
+    u32 bufferidx,
+    u32 idx,
+    u32 len,
+    u32 type,
     b8 normalized,
     u64 stride,
     u64 offset)
 {
+$ if ECS_OPENGL then
   glBindBuffer(GL_ARRAY_BUFFER, bufferidx);
   u8* baseOffset = 0;
   glVertexAttribPointer(
-    idx, 
-    len, 
-    type, 
-    normalized, 
-    stride, 
+    idx,
+    len,
+    type,
+    normalized,
+    stride,
     (void*)(baseOffset+offset));
   glEnableVertexAttribArray(idx);
   glBindBuffer(GL_ARRAY_BUFFER, 0);
+$ elseif ECS_VULKAN then -- if ECS_OPENGL
+
+$ else -- elseif ECS_VULKAN
+#error "unhandled graphics backend"
+$ end -- else
 }
 
 /* ----------------------------------------------------------------------------
  */
 void Buffer::setF32AttribF32(
-    u32 idx, 
-    u32 len, 
-    b8 normalized, 
+    u32 idx,
+    u32 len,
+    b8 normalized,
     u64 stride,
     u64 offset)
 {
+$ if ECS_OPENGL then
   glBindVertexArray(vao);
   setAttrib(vbo, idx, len, GL_FLOAT, normalized, stride, offset);
+$ elseif ECS_VULKAN then -- if ECS_OPENGL
+
+$ else -- elseif ECS_VULKAN
+#error "unhandled graphics backend"
+$ end -- else
 }
 
 /* ----------------------------------------------------------------------------
  */
 void Buffer::setF32AttribU8(
-    u32 idx, 
-    u32 len, 
-    b8 normalized, 
+    u32 idx,
+    u32 len,
+    b8 normalized,
     u64 stride,
     u64 offset)
 {
+$ if ECS_OPENGL then
   glBindVertexArray(vao);
   setAttrib(vbo, idx, len, GL_UNSIGNED_BYTE, normalized, stride, offset);
+$ elseif ECS_VULKAN then -- if ECS_OPENGL
+
+$ else -- elseif ECS_VULKAN
+#error "unhandled graphics backend"
+$ end -- else
 }
 
 /* ----------------------------------------------------------------------------
@@ -108,10 +140,16 @@ void Buffer::setGfxAttributes()
 void Buffer::map()
 {
   assert(!mapped.vp && !mapped.ip && "buffer is already mapped");
-  
+
+$ if ECS_OPENGL then
   glBindVertexArray(vao);
   mapped.vp = glMapNamedBuffer(vbo, GL_WRITE_ONLY);
   mapped.ip = glMapNamedBuffer(ibo, GL_WRITE_ONLY);
+$ elseif ECS_VULKAN then -- if ECS_OPENGL
+
+$ else -- elseif ECS_VULKAN
+#error "unhandled graphics backend"
+$ end -- else
 }
 
 /* ----------------------------------------------------------------------------
@@ -120,8 +158,14 @@ void Buffer::unmap()
 {
   assert(mapped.vp && mapped.ip && "buffer is not mapped");
 
+$ if ECS_OPENGL then
   assert(glUnmapNamedBuffer(vbo));
   assert(glUnmapNamedBuffer(ibo));
+$ elseif ECS_VULKAN then -- if ECS_OPENGL
+
+$ else -- elseif ECS_VULKAN
+#error "unhandled graphics backend"
+$ end -- else
 
   mapped.vp = mapped.ip = nullptr;
 }

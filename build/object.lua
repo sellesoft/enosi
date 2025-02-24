@@ -1,4 +1,4 @@
---- 
+---
 --- Internal representations of 'build objects', which are anything that is
 --- built and/or used to build other build objects.
 ---
@@ -10,7 +10,7 @@ local helpers = require "build.helpers"
 local buffer = require "string.buffer"
 local flair = require "build.flair"
 
-local build = 
+local build =
 {
   sys = require "build.sys",
   cmd = require "build.commands",
@@ -180,7 +180,7 @@ object.CppObj = CppObj
 
 -- * --------------------------------------------------------------------------
 
----@param src string 
+---@param src string
 ---@return object.CppObj
 CppObj.new = function(src)
   local o = {}
@@ -191,7 +191,7 @@ end
 -- * --------------------------------------------------------------------------
 
 CppObj.declareTask = function(self)
-  self.task = 
+  self.task =
     lake.task(self:getOutputPath())
       :workingDirectory(self.proj.root)
 end
@@ -226,12 +226,12 @@ CppObj.defineTask = function(self, cmd)
     :dependsOn(cpp_task)
     :workingDirectory(self.proj.root)
   dep_task
-    -- NOTE(sushi) the dep file needs to wait for prerequisite projects 
+    -- NOTE(sushi) the dep file needs to wait for prerequisite projects
     --             to finish because we may depend on their headers that
     --             are moved to build/include, and so if we run the dep
-    --             task too early, clang won't give us a correct path 
+    --             task too early, clang won't give us a correct path
     --             to the headers.
-    -- TODO(sushi) ideally this is handled automatically, but that only 
+    -- TODO(sushi) ideally this is handled automatically, but that only
     --             works if in declareTask we also report secondary outputs
     --             which we should probably be doing.
     :dependsOn(cpp_task, self.proj.tasks.wait_for_deps)
@@ -257,8 +257,8 @@ CppObj.defineTask = function(self, cmd)
       end
 
       for f in output:gmatch("%S+") do
-        if f:sub(-1) ~= ":" and 
-           f ~= "\\" 
+        if f:sub(-1) ~= ":" and
+           f ~= "\\"
         then
           local fullpath = f
           fullpath = fullpath:gsub("\\", "/")
@@ -294,7 +294,7 @@ end
 -- * --------------------------------------------------------------------------
 
 LuaObj.declareTask = function(self)
-  self.task = 
+  self.task =
     lake.task(self:getOutputPath())
       :workingDirectory(self.proj.root)
 end
@@ -339,7 +339,7 @@ end
 -- * --------------------------------------------------------------------------
 
 LppObj.declareTask = function(self)
-  self.task = 
+  self.task =
     lake.task(self:getOutputPath())
       :workingDirectory(self.proj.root)
 
@@ -356,7 +356,7 @@ LppObj.getTargetName = function(self)
   else
     return self.src..".cpp.obj"
   end
-end   
+end
 
 -- * --------------------------------------------------------------------------
 
@@ -364,7 +364,7 @@ end
 LppObj.defineTask = function(self, cmd)
   local out = self.task.name
   lake.mkdir(helpers.getPathDirname(out), { make_parents = true })
-  
+
   local lfile = self.proj.root.."/"..self.src
   local cfile = self.proj:getBuildDir().."/"..self.src..".cpp"
   local ofile = self.proj:getBuildDir().."/"..self:getTargetName()
@@ -387,10 +387,10 @@ LppObj.defineTask = function(self, cmd)
     :workingDirectory(self.proj.root)
 
   tryLoadDepFile(dfile, cpp_task)
-  
+
   setFileExistanceAndModTimeCondition(cpp_task)
   setFileExistanceAndModTimeCondition(obj_task)
-  
+
   cpp_task:recipe(function()
     runAndReportResult(lpp_cmd, lfile, cfile)
   end)
@@ -433,7 +433,7 @@ end
 -- * --------------------------------------------------------------------------
 
 Exe.declareTask = function(self)
-  self.task = 
+  self.task =
     lake.task(self:getOutputPath())
       :workingDirectory(self.proj.root)
 end
@@ -479,13 +479,31 @@ local defineLinkerTask = function(self, is_shared, lib_filter)
 
   if sys.cfg.mode == "debug" then
     -- TODO(sushi) would rather do this elsewhere.
-    --             On Windows this outputs the pdb for 
+    --             On Windows this outputs the pdb for
     --             the linked thing.
     params.debug_info = true
 	  if sys.cfg.asan and not self.proj.no_asan then
 		  params.address_sanitizer = true
 		end
-  end 
+  end
+
+  local disabled_linker_warnings = sys.cfg.cpp.disabled_linker_warnings
+  if disabled_linker_warnings and (#disabled_linker_warnings > 0) then
+    local disabled_warnings = buffer.new()
+
+    if sys.os == "windows" then
+      disabled_warnings:put("-Wl,-IGNORE:")
+    else
+      disabled_warnings:put("-Wl,--warn-suppress=")
+    end
+
+    for warning in List(disabled_linker_warnings):each() do
+      disabled_warnings:put(warning)
+      disabled_warnings:put(",")
+    end
+
+    params.disabled_warnings = disabled_warnings:get(#disabled_warnings - 1)
+  end
 
   local cmd = build.cmd.Exe.new(params)
 
@@ -534,7 +552,7 @@ end
 -- * --------------------------------------------------------------------------
 
 StaticLib.getTargetName = function(self)
-  local name = self.name 
+  local name = self.name
 
   local dir, base = name:match "(.*)/(.*)"
   if not dir then
@@ -580,7 +598,7 @@ SharedLib.getTargetName = function(self)
   if not dir then
     base = self.name
   end
-    
+
   if sys.os == "linux" then
     if dir then
       return dir.."/lib"..base..".so"
@@ -601,7 +619,7 @@ end
 -- * --------------------------------------------------------------------------
 
 SharedLib.declareTask = function(self)
-  self.task = 
+  self.task =
     lake.task(self:getOutputPath())
       :workingDirectory(self.proj.root)
 end
@@ -615,8 +633,8 @@ end
 -- * --------------------------------------------------------------------------
 
 --- A special build object that specifies a makefile that needs to be run.
---- This should only be used for compiling external libraries that use 
---- make for compilation. 
+--- This should only be used for compiling external libraries that use
+--- make for compilation.
 ---@class object.Makefile : object.BuildObject
 local Makefile = BuildObject:derive()
 object.Makefile = Makefile
@@ -643,7 +661,7 @@ end
 -- * --------------------------------------------------------------------------
 
 Makefile.declareTask = function(self)
-  self.task = 
+  self.task =
     lake.task("make "..self.proj.name)
       :cond(self.cond)
       :workingDirectory(self.proj.root.."/"..self.root)
@@ -654,7 +672,7 @@ end
 Makefile.defineTask = function(self)
   self.task
     :recipe(function()
-      local result = lake.cmd({"make", "-j"}, 
+      local result = lake.cmd({"make", "-j"},
       {
         onRead = io.write
       })
@@ -704,7 +722,7 @@ end
 
 CMake.declareTask = function(self)
   local output_path = self.proj.root.."/"..self.output
-  self.task = 
+  self.task =
     lake.task("cmake "..self.output)
       :workingDirectory(output_path)
       :cond(function()
@@ -716,7 +734,7 @@ end
 
 CMake.defineTask = function(self)
   ensureDirExists(self.output)
-  
+
   ---@type cmd.CMake.Params | {}
   local params = {}
 

@@ -1,17 +1,27 @@
 $ local cmn = require "common"
 
-@@lpp.import "graphics/Renderer.lh"
-
-@@lpp.import "Engine.lh"
-@@lpp.import "window/Window.lh"
+$ if IRO_LINUX then
+@lpp.import "../window/Window_linux.lh"
+$ elseif IRO_WIN32 then --if IRO_LINUX
+@lpp.import "../window/Window_win32.lh"
+#undef ERROR
+#undef min
+#undef max
+$ else -- elseif IRO_WIN32
+#error "unhandled platform"
+$ end -- if IRO_LINUX
 
 @@lpp.import "asset/AssetMgr.lh"
+@@lpp.import "Engine.lh"
 @@lpp.import "graphics/CompiledTexture.lh"
+@@lpp.import "graphics/Renderer.lh"
+@@lpp.import "graphics/RendererInternal.lh"
+@@lpp.import "window/Window.lh"
 
-#include "iro/Logger.h"
 #include "iro/fs/File.h"
+#include "iro/Logger.h"
 
-#include "graphics/glad/gl.h"
+#include <string.h>
 
 namespace gfx
 {
@@ -25,6 +35,7 @@ static Logger logger =
 
 /* ----------------------------------------------------------------------------
  */
+$ if ECS_OPENGL then
 static void GLAPIENTRY glMessageCallback(
     GLenum source,
     GLenum type,
@@ -45,13 +56,56 @@ static void GLAPIENTRY glMessageCallback(
     // INFO(message, "\n");
   }
 }
+$ elseif ECS_VULKAN then -- if ECS_OPENGL
+static VKAPI_ATTR VkBool32 VKAPI_CALL vkDebugCallback(
+  VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+  VkDebugUtilsMessageTypeFlagsEXT type,
+  const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
+  void* user_data)
+{
+  switch(severity){
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+      TRACE(callback_data->pMessage, "\n");
+      break;
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
+      INFO(callback_data->pMessage, "\n");
+      break;
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+      WARN(callback_data->pMessage, "\n");
+      break;
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
+      ERROR(callback_data->pMessage, "\n");
+      break;
+  }
+  return VK_FALSE;
+}
+$ else -- elseif ECS_VULKAN
+#error "unhandled graphics backend"
+$ end -- if ECS_OPENGL
 
 /* ----------------------------------------------------------------------------
  */
-b8 Renderer::init(Engine& engine)
+b8 Renderer::init(Engine& engine, mem::Allocator& allocator)
 {
-  INFO("initializing\n");
+  INFO("Renderer::init\n");
 
+  this->engine = &engine;
+  this->allocator = &allocator;
+
+  this->internal = allocator.allocate(sizeof(RendererInternal));
+  mem::zero(this->internal, sizeof(RendererInternal));
+
+  this->frame = 0;
+
+  if (!this->drawcmds.init(16))
+    return ERROR("failed to initialize draw cmd array\n");
+
+  mem::LenientBump temp_allocator;
+  if (!temp_allocator.init())
+    return ERROR("failed to initialize the renderer's temp allocator\n");
+  defer { temp_allocator.deinit(); };
+
+$ if ECS_OPENGL then
   if (!rendererPlatformInit(&engine.window))
     return false;
 
@@ -59,10 +113,10 @@ b8 Renderer::init(Engine& engine)
   if (!opengl_version)
     return ERROR("failed to load OpenGL\n");
 
-#if ECS_DEBUG
+$ if ECS_DEBUG then
   glEnable(GL_DEBUG_OUTPUT);
   glDebugMessageCallback(glMessageCallback, 0);
-#endif
+$ end -- if ECS_DEBUG
 
   INFO("loaded OpenGL ",
     GLAD_VERSION_MAJOR(opengl_version), '.',
@@ -73,19 +127,686 @@ b8 Renderer::init(Engine& engine)
 
   glEnable(GL_SCISSOR_TEST);
   glScissor(0, 0, engine.window.size.x, engine.window.size.y);
+$ elseif ECS_VULKAN then -- if ECS_OPENGL
+  TRACE("creating the vulkan allocator\n");
+  {
+    auto alloc_func = [](void* user_data, size_t size,
+      size_t alignment, VkSystemAllocationScope scope) -> void*
+    {
+      Renderer* renderer = (Renderer*)user_data;
+      size_t aligned_size = (size+alignment-1) & ~(alignment-1);
+      void* result = renderer->allocator->allocate(aligned_size);
+      if (result == nullptr)
+      {
+        ERROR("failed to alloc memory for vulkan\n");
+        return nullptr;
+      }
+      assert((size_t)result % alignment == 0); //invalid alignment
+      return result;
+    };
+
+    auto realloc_func = [](void* user_data, void* ptr, size_t size,
+      size_t alignment, VkSystemAllocationScope scope) -> void*
+    {
+      Renderer* renderer = (Renderer*)user_data;
+      size_t aligned_size = (size+alignment-1) & ~(alignment-1);
+      void* result = renderer->allocator->reallocate(ptr, aligned_size);
+      if (result == nullptr)
+      {
+        ERROR("failed to realloc memory for vulkan\n");
+        return nullptr;
+      }
+      assert((size_t)result % alignment == 0); //invalid alignment
+      return result;
+    };
+
+    auto free_func = [](void* user_data, void* ptr)
+    {
+      Renderer* renderer = (Renderer*)user_data;
+      renderer->allocator->free(ptr);
+    };
+
+    _RI->allocator.pUserData = this;
+    _RI->allocator.pfnAllocation = alloc_func;
+    _RI->allocator.pfnReallocation = realloc_func;
+    _RI->allocator.pfnFree = free_func;
+
+    //TODO(caj) internal allocation tracking
+    //_RI->allocator.pfnInternalAllocation = ;
+    //_RI->allocator.pfnInternalFree = ;
+  }
+
+  TRACE("creating the vulkan instance\n");
+  {
+$ if ECS_DEBUG then
+    constexpr const char* validation_layers[] =
+    {
+      "VK_LAYER_KHRONOS_validation",
+    };
+    constexpr u32 validation_layer_count =
+      sizeof(validation_layers) / sizeof(validation_layers[0]);
+
+    u32 layer_count = 0;
+    vkEnumerateInstanceLayerProperties(&layer_count, nullptr);
+    auto layer_properties =
+      temp_allocator.allocateType<VkLayerProperties>(layer_count);
+    if (layer_properties == nullptr)
+      return FATAL("failed to alloc memory for vulkan layer properties\n");
+    VkResult vk_result = vkEnumerateInstanceLayerProperties(&layer_count,
+      layer_properties);
+    if (vk_result != VK_SUCCESS)
+      return FATAL("failed to enumerate all vulkan instance"
+        " layer properties\n");
+
+    for (u32 i = 0; i < validation_layer_count; i++)
+    {
+      b8 layer_found = false;
+      for (u32 j = 0; j < layer_count; j++)
+      {
+        if (!strcmp(validation_layers[i], layer_properties[j].layerName))
+        {
+          layer_found = true;
+          break;
+        }
+      }
+      if (!layer_found)
+        return FATAL("a required vulkan validation layer '",
+          validation_layers[i], "' was requested but not available"
+          " on the device\n");
+    }
+
+    VkValidationFeatureEnableEXT validation_features[] =
+    {
+      VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
+      VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
+      VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT,
+      VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT,
+      VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT,
+    };
+    constexpr u32 validation_features_count =
+      sizeof(validation_features) / sizeof(validation_features[0]);
+
+    VkValidationFeaturesEXT validation_features_ext =
+    {
+      .sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
+      .enabledValidationFeatureCount = validation_features_count,
+      .pEnabledValidationFeatures = validation_features,
+      .disabledValidationFeatureCount = 0,
+      .pDisabledValidationFeatures = nullptr,
+    };
+
+    VkDebugUtilsMessageSeverityFlagsEXT callback_severities = (
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
+      | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT
+      | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
+      | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT);
+
+    VkDebugUtilsMessageTypeFlagsEXT callback_types = (
+        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
+      | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
+      | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT);
+
+    VkDebugUtilsMessengerCreateInfoEXT debug_create_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+      .pNext = &validation_features_ext,
+      .messageSeverity = callback_severities,
+      .messageType = callback_types,
+      .pfnUserCallback = vkDebugCallback,
+    };
+$ end -- if ECS_DEBUG
+
+    VkApplicationInfo app_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+      .pApplicationName = "ecs",
+      .applicationVersion = VK_MAKE_VERSION(1,0,0),
+      .pEngineName = "ecs",
+      .engineVersion = VK_MAKE_VERSION(1,0,0),
+      .apiVersion = VK_API_VERSION_1_4,
+    };
+
+    const char* enabled_extensions[] =
+    {
+      VK_KHR_SURFACE_EXTENSION_NAME,
+$ if IRO_LINUX then
+      VK_KHR_XLIB_SURFACE_EXTENSION_NAME,
+$ elseif IRO_WIN32 then --if IRO_LINUX
+      VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
+$ else -- elseif IRO_WIN32
+#error "unhandled platform"
+$ end -- if IRO_LINUX
+$ if ECS_DEBUG then
+      VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+$ end -- if ECS_DEBUG
+    };
+    constexpr u32 enabled_extension_count =
+      sizeof(enabled_extensions) / sizeof(enabled_extensions[0]);
+
+    VkInstanceCreateInfo create_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+$ if ECS_DEBUG then
+      .pNext = &debug_create_info,
+$ end -- if ECS_DEBUG
+      .pApplicationInfo = &app_info,
+$ if ECS_DEBUG then
+      .enabledLayerCount = validation_layer_count,
+      .ppEnabledLayerNames = validation_layers,
+$ end -- if ECS_DEBUG
+      .enabledExtensionCount = enabled_extension_count,
+      .ppEnabledExtensionNames = enabled_extensions,
+    };
+
+    VkResult vk_result2 = vkCreateInstance(&create_info,
+      &_RI->allocator, &_RI->instance);
+    if (vk_result2 != VK_SUCCESS)
+      return FATAL("failed to create the vulkan instance\n");
+  }
+
+$ if ECS_DEBUG then
+  TRACE("creating the vulkan debug messenger and utils\n");
+  {
+    VkDebugUtilsMessageSeverityFlagsEXT callback_severities = (
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
+      | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT
+      | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
+      | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT);
+
+    VkDebugUtilsMessageTypeFlagsEXT callback_types = (
+        VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
+      | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
+      | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT);
+
+    VkDebugUtilsMessengerCreateInfoEXT create_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+      .messageSeverity = callback_severities,
+      .messageType = callback_types,
+      .pfnUserCallback = vkDebugCallback,
+    };
+
+    auto vkCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT)
+      vkGetInstanceProcAddr(_RI->instance, "vkCreateDebugUtilsMessengerEXT");
+    if (vkCreateDebugUtilsMessengerEXT == nullptr)
+      return FATAL("failed to retrieve the"
+        " vkCreateDebugUtilsMessengerEXT proc\n");
+
+    VkResult vk_result = vkCreateDebugUtilsMessengerEXT(_RI->instance,
+      &create_info, &_RI->allocator, &_RI->debug_messenger);
+    if (vk_result != VK_SUCCESS)
+      return FATAL("failed to create the vulkan debug messenger\n");
+
+    _RI->func_vkCmdBeginDebugUtilsLabelEXT =
+      (PFN_vkCmdBeginDebugUtilsLabelEXT)vkGetInstanceProcAddr(
+        _RI->instance, "vkCmdBeginDebugUtilsLabelEXT");
+    _RI->func_vkCmdEndDebugUtilsLabelEXT =
+      (PFN_vkCmdEndDebugUtilsLabelEXT)vkGetInstanceProcAddr(
+        _RI->instance, "vkCmdEndDebugUtilsLabelEXT");
+    _RI->func_vkCmdInsertDebugUtilsLabelEXT =
+      (PFN_vkCmdInsertDebugUtilsLabelEXT)vkGetInstanceProcAddr(
+        _RI->instance, "vkCmdInsertDebugUtilsLabelEXT");
+    _RI->func_vkSetDebugUtilsObjectNameEXT =
+      (PFN_vkSetDebugUtilsObjectNameEXT)vkGetInstanceProcAddr(
+        _RI->instance, "vkSetDebugUtilsObjectNameEXT");
+  }
+$ end -- if ECS_DEBUG
+
+  TRACE("creating the vulkan surface\n");
+  {
+$ if IRO_LINUX then
+    VkXlibSurfaceCreateInfoKHR create_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
+      .spy = x11.display,
+      .window = x11.root,
+    };
+    VkResult vk_result = vkCreateXlibSurfaceKHR(_RI->instance, &create_info,
+      &_RI->allocator, &_RI->surface);
+    if (vk_result != VK_SUCCESS)
+      return FATAL("failed to create the x11 vulkan surface\n");
+$ elseif IRO_WIN32 then --if IRO_LINUX
+    VkWin32SurfaceCreateInfoKHR create_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
+      .hinstance = win32.h_console_instance,
+      .hwnd = (HWND)engine.window.handle,
+    };
+    VkResult vk_result = vkCreateWin32SurfaceKHR(_RI->instance, &create_info,
+      &_RI->allocator, &_RI->surface);
+    if (vk_result != VK_SUCCESS)
+      return FATAL("failed to create the win32 vulkan surface\n");
+$ else -- elseif IRO_WIN32
+#error "unhandled platform"
+$ end -- if IRO_LINUX
+  }
+
+  const char* required_device_extensions[] =
+  {
+    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+    VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME,
+  };
+  constexpr u32 required_device_extension_count =
+    sizeof(required_device_extensions)
+    / sizeof(required_device_extensions[0]);
+
+  TRACE("creating the vulkan physical device\n");
+  {
+    u32 device_count = 0;
+    vkEnumeratePhysicalDevices(_RI->instance, &device_count, nullptr);
+    auto devices =
+      temp_allocator.allocateType<VkPhysicalDevice>(device_count);
+    if (devices == nullptr)
+      return FATAL("failed to alloc memory for vulkan physical devices\n");
+    VkResult vk_result = vkEnumeratePhysicalDevices(_RI->instance,
+      &device_count, devices);
+    if (vk_result != VK_SUCCESS)
+      return FATAL("failed to enumerate all vulkan physical devices\n");
+
+    for (u32 i = 0; i < device_count; i++)
+    {
+      u32 family_count = 0;
+      vkGetPhysicalDeviceQueueFamilyProperties(
+        devices[i], &family_count, nullptr);
+      auto families =
+        temp_allocator.allocateType<VkQueueFamilyProperties>(family_count);
+      if (families == nullptr)
+        return FATAL("failed to alloc memory for vulkan queue families\n");
+      vkGetPhysicalDeviceQueueFamilyProperties(
+        devices[i], &family_count,families);
+
+      b8 found_graphics_family = false;
+      b8 found_present_family = false;
+      for (u32 j = 0; j < family_count; j++)
+      {
+        if (   (families[j].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+            && (families[j].queueFlags & VK_QUEUE_COMPUTE_BIT))
+        {
+          _RI->physical_device_graphics_and_compute_queue_family = j;
+          found_graphics_family = true;
+        }
+
+        VkBool32 present_support = false;
+        VkResult vk_result3 = vkGetPhysicalDeviceSurfaceSupportKHR(devices[i],
+          j, _RI->surface, &present_support);
+        if (vk_result3 != VK_SUCCESS)
+          return FATAL("failed to get vulkan physical device"
+            " surface support\n");
+        if (present_support == VK_TRUE)
+        {
+          _RI->physical_device_present_queue_family = j;
+          found_present_family = true;
+        }
+
+        if (found_graphics_family && found_present_family)
+          break;
+      }
+      if (!found_graphics_family || !found_present_family)
+        continue; //next physical device
+
+      u32 device_extension_count;
+      vkEnumerateDeviceExtensionProperties(devices[i],
+        nullptr, &device_extension_count, nullptr);
+      auto device_extensions = (VkExtensionProperties*)temp_allocator.allocate(
+        device_extension_count * sizeof(VkExtensionProperties));
+      if (device_extensions == nullptr)
+        return FATAL("failed to alloc memory for vulkan physical device"
+          " extensions\n");
+      VkResult vk_result4 = vkEnumerateDeviceExtensionProperties(devices[i],
+        nullptr, &device_extension_count, device_extensions);
+      if (vk_result4 != VK_SUCCESS)
+        return FATAL("failed to enumerate all vulkan physical device"
+          " extensions\n");
+
+      u32 extensions_supported = 0;
+      for (u32 j = 0; j < device_extension_count; j++)
+      {
+        for (u32 k = 0; k < required_device_extension_count; k++)
+        {
+          if (!strcmp(device_extensions[j].extensionName,
+                      required_device_extensions[k]))
+          {
+            extensions_supported++;
+            break;
+          }
+        }
+        if (extensions_supported == required_device_extension_count)
+          break;
+      }
+      if (extensions_supported != required_device_extension_count)
+        continue; //next physical device
+
+      u32 format_count = 0;
+      u32 present_mode_count = 0;
+      vkGetPhysicalDeviceSurfaceFormatsKHR(devices[i], _RI->surface,
+        &format_count, nullptr);
+      vkGetPhysicalDeviceSurfacePresentModesKHR(devices[i], _RI->surface,
+        &present_mode_count, nullptr);
+      if (format_count == 0 || present_mode_count == 0)
+        continue; //next physical device
+
+      _RI->physical_device = devices[i];
+      vkGetPhysicalDeviceProperties(devices[i],
+        &_RI->physical_device_properties);
+      vkGetPhysicalDeviceFeatures(devices[i],
+        &_RI->physical_device_features);
+
+      break; //found suitable physical device
+    }
+
+    if (_RI->physical_device == VK_NULL_HANDLE)
+      return FATAL("failed to find a suitable vulkan physical device\n");
+  }
+
+  TRACE("creating the vulkan logical device\n");
+  {
+    f32 queue_priority = 1.0f;
+    u32 queue_create_info_count = 1;
+    VkDeviceQueueCreateInfo queue_create_infos[2];
+    queue_create_infos[0].queueFamilyIndex =
+      _RI->physical_device_graphics_and_compute_queue_family;
+    queue_create_infos[0].queueCount = 1;
+    queue_create_infos[0].pQueuePriorities = &queue_priority;
+
+    if (   _RI->physical_device_graphics_and_compute_queue_family
+        != _RI->physical_device_present_queue_family)
+    {
+      queue_create_info_count = 2;
+      queue_create_infos[1].queueFamilyIndex =
+        _RI->physical_device_present_queue_family;
+      queue_create_infos[1].queueCount = 1;
+      queue_create_infos[1].pQueuePriorities = &queue_priority;
+    }
+
+    if (_RI->physical_device_features.samplerAnisotropy)
+    {
+      _RI->physical_device_enabled_features.samplerAnisotropy = VK_TRUE;
+      _RI->physical_device_enabled_features.sampleRateShading = VK_TRUE;
+    }
+
+    if (_RI->physical_device_features.fillModeNonSolid)
+    {
+      _RI->physical_device_enabled_features.fillModeNonSolid = VK_TRUE;
+      if (_RI->physical_device_features.wideLines)
+        _RI->physical_device_enabled_features.wideLines = VK_TRUE;
+    }
+
+    if (_RI->physical_device_features.geometryShader)
+      _RI->physical_device_enabled_features.geometryShader = VK_TRUE;
+
+    VkDeviceCreateInfo create_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+      .queueCreateInfoCount = queue_create_info_count,
+      .pQueueCreateInfos = queue_create_infos,
+      .enabledExtensionCount = required_device_extension_count,
+      .ppEnabledExtensionNames = required_device_extensions,
+      .pEnabledFeatures = &_RI->physical_device_enabled_features,
+    };
+
+    VkResult vk_result = vkCreateDevice(_RI->physical_device, &create_info,
+      &_RI->allocator, &_RI->device);
+    if (vk_result != VK_SUCCESS)
+      return FATAL("failed to create the vulkan device\n");
+
+    vkGetDeviceQueue(_RI->device,
+      _RI->physical_device_graphics_and_compute_queue_family,
+      0, &_RI->graphics_queue);
+    vkGetDeviceQueue(_RI->device,
+      _RI->physical_device_present_queue_family,
+      0, &_RI->present_queue);
+  }
+
+  TRACE("creating the vulkan command pool\n");
+  {
+    VkCommandPoolCreateInfo create_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+      .queueFamilyIndex =
+        _RI->physical_device_graphics_and_compute_queue_family,
+    };
+
+    VkResult vk_result = vkCreateCommandPool(_RI->device,
+      &create_info, &_RI->allocator, &_RI->command_pool);
+    if (vk_result != VK_SUCCESS)
+      return FATAL("failed to create the vulkan command pool\n");
+  }
+
+  TRACE("creating the vulkan descriptor pools\n");
+  {
+    VkDescriptorPoolSize pool_sizes[] =
+    {
+      { VK_DESCRIPTOR_TYPE_SAMPLER,                1000 },
+      { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
+      { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,          1000 },
+      { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,          1000 },
+      { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER,   1000 },
+      { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER,   1000 },
+      { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,         1000 },
+      { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,         1000 },
+      { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
+      { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
+      { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT,       1000 }
+    };
+
+    VkDescriptorPoolCreateInfo create_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+      .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+      .maxSets = 1000 * (sizeof(pool_sizes) / sizeof(pool_sizes[0])),
+      .poolSizeCount = sizeof(pool_sizes) / sizeof(pool_sizes[0]),
+      .pPoolSizes = pool_sizes,
+    };
+
+    VkResult vk_result = vkCreateDescriptorPool(_RI->device,
+      &create_info, &_RI->allocator, &_RI->descriptor_pool);
+    if (vk_result != VK_SUCCESS)
+      return FATAL("failed to create the vulkan descriptor pools\n");
+  }
+
+  TRACE("creating the vulkan swapchain\n");
+  {
+    if (!updateSwapchain())
+      return false;
+  }
+
+  TRACE("creating the default vulkan renderpass\n");
+  {
+    VkAttachmentDescription attachment_desc =
+    {
+      .format = _RI->surface_format.format,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+      .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+      .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+    };
+
+    VkAttachmentReference attachment_ref =
+    {
+      .attachment = 0,
+      .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    };
+
+    VkSubpassDescription subpass =
+    {
+      .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+      .colorAttachmentCount = 1,
+      .pColorAttachments = &attachment_ref,
+    };
+
+    VkSubpassDependency dependency =
+    {
+      .srcSubpass = VK_SUBPASS_EXTERNAL,
+      .dstSubpass = 0,
+      .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+        | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+      .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+        | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+      .srcAccessMask = 0,
+      .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
+        | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+      .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
+    };
+
+    VkRenderPassCreateInfo renderpass_create_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+      .attachmentCount = 1,
+      .pAttachments = &attachment_desc,
+      .subpassCount = 1,
+      .pSubpasses = &subpass,
+      .dependencyCount = 1,
+      .pDependencies = &dependency,
+    };
+
+    VkResult vk_result1 = vkCreateRenderPass(_RI->device,
+      &renderpass_create_info, &_RI->allocator, &_RI->default_renderpass);
+    if (vk_result1 != VK_SUCCESS)
+      return FATAL("failed to create the default vulkan renderpass\n");
+    debugSetObjectName(VK_OBJECT_TYPE_RENDER_PASS,
+        _RI->default_renderpass, "<default renderpass>");
+  }
+
+  TRACE("creating the default framebuffers\n");
+  {
+    vkGetSwapchainImagesKHR(_RI->device, _RI->swapchain,
+      &_RI->swapchain_image_count, nullptr);
+    if (_RI->swapchain_image_count > 4)
+      return FATAL("vulkan swapchain image count is >4;"
+        " bump the code limit\n");
+    vkGetSwapchainImagesKHR(_RI->device, _RI->swapchain,
+      &_RI->swapchain_image_count, _RI->default_framebuffer_images);
+
+    for (u32 i = 0; i < _RI->swapchain_image_count; i++)
+    {
+      VkImageViewCreateInfo image_view_create_info =
+      {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = _RI->default_framebuffer_images[i],
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = _RI->surface_format.format,
+        .subresourceRange =
+        {
+          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+          .baseMipLevel = 0,
+          .levelCount = 1,
+          .baseArrayLayer = 0,
+          .layerCount = 1,
+        },
+      };
+
+      VkResult vk_result1 = vkCreateImageView(_RI->device,
+        &image_view_create_info, &_RI->allocator,
+        &_RI->default_framebuffer_image_views[i]);
+      if (vk_result1 != VK_SUCCESS)
+        return FATAL("failed to bind the default vulkan framebuffer ", i,
+          " image view\n");
+      debugSetObjectName(VK_OBJECT_TYPE_IMAGE_VIEW,
+        _RI->default_framebuffer_image_views[i],
+        "<default framebuffer ", i, " image view>");
+
+      VkFramebufferCreateInfo framebuffer_create_info =
+      {
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = _RI->default_renderpass,
+        .attachmentCount = 1,
+        .pAttachments = &_RI->default_framebuffer_image_views[i],
+        .width = _RI->surface_extent.width,
+        .height = _RI->surface_extent.height,
+        .layers = 1,
+      };
+
+      VkResult vk_result2 = vkCreateFramebuffer(_RI->device,
+        &framebuffer_create_info, &_RI->allocator,
+        &_RI->default_framebuffers[i]);
+      if (vk_result2 != VK_SUCCESS)
+        return FATAL("failed to create the default vulkan"
+          " framebuffer ", i, "\n");
+      debugSetObjectName(VK_OBJECT_TYPE_FRAMEBUFFER,
+        _RI->default_framebuffers[i],
+        "<default framebuffer ", i, ">");
+    }
+  }
+
+  TRACE("creating the vulkan sync objects\n");
+  {
+    VkSemaphoreCreateInfo semaphore_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+    };
+
+    VkResult vk_result = vkCreateSemaphore(_RI->device,
+      &semaphore_info, &_RI->allocator, &_RI->image_acquired_semaphore);
+    if (vk_result != VK_SUCCESS)
+      return FATAL("failed to create the vulkan image acquired semaphore\n");
+    debugSetObjectName(VK_OBJECT_TYPE_SEMAPHORE,
+        _RI->default_renderpass, "<image acquired semaphore>");
+
+    VkResult vk_result2 = vkCreateSemaphore(_RI->device,
+      &semaphore_info, &_RI->allocator, &_RI->render_complete_semaphore);
+    if (vk_result2 != VK_SUCCESS)
+      return FATAL("failed to create the vulkan render complete semaphore\n");
+    debugSetObjectName(VK_OBJECT_TYPE_SEMAPHORE,
+        _RI->default_renderpass, "<render complete semaphore>");
+  }
+
+  TRACE("creating the vulkan pipeline cache\n");
+  {
+    using namespace fs;
+    auto file = File::from("data/pipelines.cache"_str, OpenFlag::Read);
+    if (notnil(file))
+    {
+      defer { file.close(); };
+
+      io::Memory buffer;
+      buffer.open();
+      defer { buffer.close(); };
+
+      u64 filesize = file.getInfo().byte_size;
+      if (filesize == buffer.consume(&file, filesize))
+      {
+        VkPipelineCacheCreateInfo create_info =
+        {
+          .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+          .initialDataSize = (size_t)filesize,
+          .pInitialData = buffer.ptr,
+        };
+
+        VkResult vk_result = vkCreatePipelineCache(_RI->device,
+          &create_info, &_RI->allocator, &_RI->pipeline_cache);
+        if (vk_result != VK_SUCCESS)
+          return FATAL("failed to create the vulkan pipeline cache\n");
+      }
+    }
+  }
+
+  TRACE("creating the vulkan shader compiler\n");
+  {
+    _RI->shader_compiler = shaderc_compiler_initialize();
+    if (_RI->shader_compiler == nullptr)
+      return FATAL("failes to create the vulkan shader compiler\n");
+
+    _RI->shader_compile_options = shaderc_compile_options_initialize();
+    if (_RI->shader_compile_options == nullptr)
+      return FATAL("failes to create the vulkan shader compile options\n");
+
+$ if not ECS_DEBUG then
+    shaderc_compile_options_set_optimization_level(
+      _RI->shader_compile_options, shaderc_optimization_level_performance);
+$ end -- if not ECS_DEBUG
+  }
+$ else -- elseif ECS_VULKAN
+#error "unhandled graphics backend"
+$ end -- if ECS_OPENGL
 
   if (!compileShaders())
     return false;
 
-  if (!drawcmds.init(16))
-    return ERROR("failed to initialize draw cmd array\n");
-
-  this->engine = &engine;
-
-  frame = 0;
-
   INFO("done!\n");
-
   return true;
 }
 
@@ -94,6 +815,8 @@ b8 Renderer::init(Engine& engine)
 b8 Renderer::update()
 {
   TRACE("Renderer::update\n");
+
+$ if ECS_OPENGL then
 
   glViewport(0, 0, engine->window.size.x, engine->window.size.y);
   glScissor(0, 0, engine->window.size.x, engine->window.size.y);
@@ -116,9 +839,9 @@ b8 Renderer::update()
     case DrawCmd::Kind::BindBuffer:
       if (cmd.bind_buffer.vbo != last_buff.vbo)
       {
-        TRACE("binding buffer ", 
-              cmd.bind_buffer.vbo, " ", 
-              cmd.bind_buffer.ibo, " ", 
+        TRACE("binding buffer ",
+              cmd.bind_buffer.vbo, " ",
+              cmd.bind_buffer.ibo, " ",
               cmd.bind_buffer.vao, "\n");
         last_buff = cmd.bind_buffer;
         glBindVertexArray(cmd.bind_buffer.vao);
@@ -156,14 +879,18 @@ b8 Renderer::update()
       break;
 
     case DrawCmd::Kind::BindTexture:
-      TRACE("binding texture ", cmd.bind_texture.id, "\n");
-      glBindTexture(GL_TEXTURE_2D, cmd.bind_texture.id);
-      break;
+    {
+      GLuint handle = (GLuint)(u64)cmd.bind_texture.handle;
+      TRACE("binding texture ", handle, "\n");
+      glBindTexture(GL_TEXTURE_2D, handle);
+    }break;
 
     case DrawCmd::Kind::BindFramebuffer:
-      TRACE("binding framebuffer ", cmd.bind_framebuffer.id, "\n");
-      glBindFramebuffer(GL_FRAMEBUFFER, cmd.bind_framebuffer.id);
-      break;
+    {
+      GLuint handle = (GLuint)(u64)cmd.bind_framebuffer.handle;
+      TRACE("binding framebuffer ", handle, "\n");
+      glBindFramebuffer(GL_FRAMEBUFFER, handle);
+    }break;
 
     case DrawCmd::Kind::PushUniformVec2:
       {
@@ -241,7 +968,14 @@ b8 Renderer::update()
   TRACE("swapping buffers\n");
   rendererPlatformSwapBuffers(&engine->window);
 
-  frame += 1;
+$ elseif ECS_VULKAN then -- if ECS_OPENGL
+  _RI->default_framebuffer_index =
+    (_RI->default_framebuffer_index + 1) % _RI->swapchain_image_count;
+$ else -- elseif ECS_VULKAN
+#error "unhandled graphics backend"
+$ end -- if ECS_OPENGL
+
+  frame++;
 
   return true;
 };
@@ -265,6 +999,8 @@ static b8 compileShader(String path, int kind, u32* out_shader_id)
   if (filesize != buffer.consume(&file, filesize))
     return ERROR("failed to read entire shader '", path, "'\n");
 
+$ if ECS_OPENGL then
+
   u32 id = *out_shader_id = glCreateShader(kind);
 
   glShaderSource(id, 1, &(char*&)buffer.ptr, nullptr);
@@ -281,6 +1017,13 @@ static b8 compileShader(String path, int kind, u32* out_shader_id)
         (char*)buffer, "\n");
   }
 
+$ elseif ECS_VULKAN then -- if ECS_OPENGL
+
+$ else -- elseif ECS_VULKAN
+#error "unhandled graphics backend"
+$ end -- if ECS_OPENGL
+
+
   return true;
 }
 
@@ -291,6 +1034,8 @@ b8 Renderer::compileShaders()
   // TODO shader asse/compilation API
   // TODO(sushi) use the rsrcmgr here
   INFO("compiling shaders\n");
+
+$ if ECS_OPENGL then
 
   {
     u32 vertex_shader;
@@ -356,6 +1101,243 @@ b8 Renderer::compileShaders()
     }
   }
 
+$ elseif ECS_VULKAN then -- if ECS_OPENGL
+
+$ else -- elseif ECS_VULKAN
+#error "unhandled graphics backend"
+$ end -- if ECS_OPENGL
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Renderer::updateSwapchain()
+{
+$ if ECS_VULKAN then
+  VkSwapchainKHR old_swapchain = _RI->swapchain;
+
+  VkSurfaceCapabilitiesKHR capabilities;
+  vkGetPhysicalDeviceSurfaceCapabilitiesKHR(_RI->physical_device,
+    _RI->surface, &capabilities);
+
+  u32 format_count = 0;
+  vkGetPhysicalDeviceSurfaceFormatsKHR(_RI->physical_device,
+    _RI->surface, &format_count, nullptr);
+  assert(format_count != 0 && "surface should not have been selected");
+  auto formats = allocator->allocateType<VkSurfaceFormatKHR>(format_count);
+  if (formats == nullptr)
+    return FATAL("failed to alloc memory for vulkan surface formats\n");
+  vkGetPhysicalDeviceSurfaceFormatsKHR(_RI->physical_device,
+    _RI->surface, &format_count, formats);
+
+  _RI->surface_format = formats[0];
+  for (u32 i = 0; i < format_count; i++)
+  {
+    if (   formats[i].format == VK_FORMAT_B8G8R8A8_SRGB
+        && formats[i].colorSpace == VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT)
+    {
+      _RI->surface_format = formats[i];
+      break;
+    }
+  }
+
+  u32 present_mode_count = 0;
+  vkGetPhysicalDeviceSurfacePresentModesKHR(_RI->physical_device,
+    _RI->surface, &present_mode_count, nullptr);
+  assert(present_mode_count != 0 && "surface should not have been selected");
+  auto present_modes =
+    allocator->allocateType<VkPresentModeKHR>(present_mode_count);
+  if (present_modes == nullptr)
+    return FATAL("failed to alloc memory for vulkan surface present modes\n");
+  vkGetPhysicalDeviceSurfacePresentModesKHR(_RI->physical_device,
+    _RI->surface, &present_mode_count, present_modes);
+
+  b8 immediate = false;
+  b8 fifo_relaxed = false;
+  b8 mailbox = false;
+  for (u32 i = 0; i < present_mode_count; i++)
+  {
+    switch (present_modes[i])
+    {
+      case VK_PRESENT_MODE_IMMEDIATE_KHR:
+        immediate = true;
+        break;
+      case VK_PRESENT_MODE_MAILBOX_KHR:
+        mailbox = true;
+        break;
+      case VK_PRESENT_MODE_FIFO_RELAXED_KHR:
+        fifo_relaxed = true;
+        break;
+    }
+  }
+
+  //TODO(caj) user settings for present mode selection
+  if (mailbox)
+  {
+    _RI->swapchain_min_image_count = 2;
+    _RI->surface_present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
+  }
+  else if (immediate)
+  {
+    _RI->swapchain_min_image_count = 1;
+    _RI->surface_present_mode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+  }
+  else if (fifo_relaxed)
+  {
+    _RI->swapchain_min_image_count = 2;
+    _RI->surface_present_mode = VK_PRESENT_MODE_FIFO_RELAXED_KHR;
+  }
+  else
+  {
+    _RI->swapchain_min_image_count = 2;
+    _RI->surface_present_mode = VK_PRESENT_MODE_FIFO_KHR;
+  }
+  _RI->swapchain_min_image_count = max(capabilities.minImageCount,
+    min(capabilities.maxImageCount, _RI->swapchain_min_image_count));
+
+  if (capabilities.currentExtent.width != 0xFFFFFFFF)
+  {
+    _RI->surface_extent = capabilities.currentExtent;
+  }
+  else
+  {
+    //TODO(caj) user settings for resolution selection
+    _RI->surface_extent.width = max(capabilities.minImageExtent.width,
+      min(capabilities.maxImageExtent.width,
+        (u32)this->engine->window.size.x));
+    _RI->surface_extent.height = max(capabilities.minImageExtent.height,
+      min(capabilities.maxImageExtent.height,
+        (u32)this->engine->window.size.y));
+  }
+
+  u32 queue_family_indices[2] =
+  {
+    _RI->physical_device_graphics_and_compute_queue_family,
+    _RI->physical_device_present_queue_family,
+  };
+
+  VkSwapchainCreateInfoKHR create_info =
+  {
+    .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+    .surface = _RI->surface,
+    .minImageCount = _RI->swapchain_min_image_count,
+    .imageFormat = _RI->surface_format.format,
+    .imageColorSpace = _RI->surface_format.colorSpace,
+    .imageExtent = _RI->surface_extent,
+    .imageArrayLayers = 1,
+    .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+    .preTransform = capabilities.currentTransform,
+    .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+    .presentMode = _RI->surface_present_mode,
+    .clipped = VK_TRUE,
+    .oldSwapchain = old_swapchain,
+  };
+  if (   _RI->physical_device_graphics_and_compute_queue_family
+      != _RI->physical_device_present_queue_family)
+  {
+    create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+    create_info.queueFamilyIndexCount = 2;
+    create_info.pQueueFamilyIndices = queue_family_indices;
+  }
+  else
+  {
+    create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    create_info.queueFamilyIndexCount = 0;
+    create_info.pQueueFamilyIndices = nullptr;
+  }
+
+  VkResult vk_result = vkCreateSwapchainKHR(_RI->device,
+    &create_info, &_RI->allocator, &_RI->swapchain);
+  if (vk_result != VK_SUCCESS)
+    return FATAL("failed to create the win32 vulkan swapchain\n");
+
+  vkDestroySwapchainKHR(_RI->device, old_swapchain, &_RI->allocator);
+
+$ end -- if ECS_VULKAN
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Renderer::updateFramebuffers()
+{
+$ if ECS_VULKAN then
+  u32 old_image_count = _RI->swapchain_image_count;
+
+  vkGetSwapchainImagesKHR(_RI->device, _RI->swapchain,
+    &_RI->swapchain_image_count, nullptr);
+  if (_RI->swapchain_image_count > 4)
+    return FATAL("vulkan swapchain image count is >4; bump the code limit\n");
+  vkGetSwapchainImagesKHR(_RI->device, _RI->swapchain,
+    &_RI->swapchain_image_count, _RI->default_framebuffer_images);
+
+  for (u32 i = 0; i < _RI->swapchain_image_count; i++)
+  {
+    vkDestroyImageView(_RI->device,
+      _RI->default_framebuffer_image_views[i], &_RI->allocator);
+
+    VkImageViewCreateInfo image_view_create_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .image = _RI->default_framebuffer_images[i],
+      .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .format = _RI->surface_format.format,
+      .subresourceRange =
+      {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel = 0,
+        .levelCount = 1,
+        .baseArrayLayer = 0,
+        .layerCount = 1,
+      },
+    };
+
+    VkResult vk_result1 = vkCreateImageView(_RI->device,
+      &image_view_create_info, &_RI->allocator,
+      &_RI->default_framebuffer_image_views[i]);
+    if (vk_result1 != VK_SUCCESS)
+      return FATAL("failed to bind the default vulkan framebuffer ", i,
+        " image view\n");
+    debugSetObjectName(VK_OBJECT_TYPE_IMAGE_VIEW,
+      _RI->default_framebuffer_image_views[i],
+      "<default framebuffer ", i, " image view>");
+
+    vkDestroyFramebuffer(_RI->device,
+      _RI->default_framebuffers[i], &_RI->allocator);
+
+    VkFramebufferCreateInfo framebuffer_create_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+      .renderPass = _RI->default_renderpass,
+      .attachmentCount = 1,
+      .pAttachments = &_RI->default_framebuffer_image_views[i],
+      .width = _RI->surface_extent.width,
+      .height = _RI->surface_extent.height,
+      .layers = 1,
+    };
+
+    VkResult vk_result2 = vkCreateFramebuffer(_RI->device,
+      &framebuffer_create_info, &_RI->allocator,
+      &_RI->default_framebuffers[i]);
+    if (vk_result2 != VK_SUCCESS)
+      return FATAL("failed to create the default vulkan"
+        " framebuffer ", i, "\n");
+    debugSetObjectName(VK_OBJECT_TYPE_FRAMEBUFFER,
+      _RI->default_framebuffers[i],
+      "<default framebuffer ", i, ">");
+  }
+
+  for (u32 i = _RI->swapchain_image_count; i < old_image_count; i++)
+  {
+    vkDestroyImageView(_RI->device,
+      _RI->default_framebuffer_image_views[i], &_RI->allocator);
+    vkDestroyFramebuffer(_RI->device,
+      _RI->default_framebuffers[i], &_RI->allocator);
+  }
+$ end -- if ECS_VULKAN
+
   return true;
 }
 
@@ -363,7 +1345,7 @@ b8 Renderer::compileShaders()
  */
 b8 Renderer::loadTexture(CompiledTexture* texture)
 {
-  if (texture->gfx_texture.id != 0)
+  if (texture->gfx_texture.handle != nullptr)
     return ERROR("call to loadTexture with a texture that has already "
                  "been assigned a gfx::Texture\n");
 
@@ -372,6 +1354,7 @@ b8 Renderer::loadTexture(CompiledTexture* texture)
 
   texture->gfx_texture =
     gfx::Texture::create(
+      *this,
       data->width,
       data->height,
       data->format,
@@ -505,6 +1488,23 @@ void Renderer::pushUseProgram(u32 program)
   cmd.kind = DrawCmd::Kind::UseProgram;
   cmd.use_program = program;
   drawcmds.push(cmd);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::onWindowResized(WindowResized& event)
+{
+$ if ECS_VULKAN then
+  vkDeviceWaitIdle(_RI->device);
+
+  TRACE("recreating the vulkan swapchain\n");
+  updateSwapchain();
+
+  TRACE("recreating the default vulkan framebuffers\n");
+  updateFramebuffers();
+
+  _RI->default_framebuffer_index = 0;
+$ end -- if ECS_VULKAN
 }
 
 }

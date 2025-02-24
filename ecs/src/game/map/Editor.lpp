@@ -32,7 +32,7 @@ MapEditor* UI::make(String id)
 
 /* ----------------------------------------------------------------------------
  */
-MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
+MapEditor* MapEditor::create(UI& ui, gfx::Renderer& renderer)
 {
   auto* editor = ui.begin<MapEditor>("game.map.editor"_str);
   if (editor == nullptr)
@@ -44,11 +44,12 @@ $ local this = ui.createItemContext("MapEditor", "editor")
   @this.style.set.border({2,2,2,2});
   @this.style.set.display(hidden);
 
-  editor->renderer = renderer;
+  editor->renderer = &renderer;
   editor->update_triggers.set(UpdateReason::MouseHover);
 
-  editor->texture = 
+  editor->texture =
     gfx::Texture::create(
+      renderer,
       600,
       400,
       gfx::ImageFormat::RGBA,
@@ -57,7 +58,8 @@ $ local this = ui.createItemContext("MapEditor", "editor")
       gfx::ImageKind::TwoD,
       nullptr);
 
-  editor->framebuffer = gfx::Framebuffer::create(editor->texture);
+  editor->framebuffer = gfx::Framebuffer::create(renderer,
+    editor->texture, {0.0f, 0.0f, 0.0f, 1.0f});
 
   editor->map_render = ui.drawcmds.add();
   editor->map_render->alloc(&ui, gfx::putFilledRectCounts());
@@ -69,7 +71,7 @@ $ local this = ui.createItemContext("MapEditor", "editor")
     return nullptr;
   }
 
-  if (!editor->rendersys.init(*renderer, ui.eng->assetmgr))
+  if (!editor->rendersys.init(renderer, ui.eng->assetmgr))
   {
     ERROR("failed to init rendersys\n");
     return nullptr;
@@ -107,7 +109,7 @@ void MapEditor::generate(UI* ui)
 
     map_render->counts_used = {};
 
-    map_render->counts_used += 
+    map_render->counts_used +=
       gfx::putFilledRect(
         vp,
         ip,
@@ -123,7 +125,7 @@ void MapEditor::generate(UI* ui)
 }
 
 /* ----------------------------------------------------------------------------
- *  TODO(sushi) map rendering needs to be moved back into here so that it 
+ *  TODO(sushi) map rendering needs to be moved back into here so that it
  *              doesnt render before we adjust position.
  */
 void MapEditor::update(UI* ui, UpdateReason reason)
@@ -165,7 +167,7 @@ void MapEditor::update(UI* ui, UpdateReason reason)
 
   case ControlState::Dragging:
     {
-      eye.pos = 
+      eye.pos =
         drag_start_eye + eye.screenToWorld(drag_start_viewport, size) - mw;
       if (input.wasMouseButtonReleased(MouseButton::Left))
         control_state = ControlState::None;
@@ -181,7 +183,7 @@ void MapEditor::update(UI* ui, UpdateReason reason)
     }
     else
     {
-      // TODO(sushi) figure out why adjusting the eye pos on zoom to zoom 
+      // TODO(sushi) figure out why adjusting the eye pos on zoom to zoom
       //             towards the mouse is not working.
       // vec2f old_mw = eye.screenToWorld(mvp, size);
       eye.zoom -= eye.zoom / 10.f * input.scroll;
@@ -191,11 +193,11 @@ void MapEditor::update(UI* ui, UpdateReason reason)
   }
 
   io::StaticBuffer<512> text;
-  io::formatv(&text, 
-    eye.pos,      " ", 
-    eye.rotation, " ", 
-    eye.zoom,     " ", 
-    mw,           " ", 
+  io::formatv(&text,
+    eye.pos,      " ",
+    eye.rotation, " ",
+    eye.zoom,     " ",
+    mw,           " ",
     mvp,          " ",
     eye.worldToScreen(mw, size));
 
@@ -225,7 +227,7 @@ void MapEditor::renderMap(AssetMgr& assetmgr)
     assetmgr,
     *renderer);
 
-  Map::InitParams map_params = 
+  Map::InitParams map_params =
   {
     .assetmgr = assetmgr,
     .entmgr   = entmgr,
@@ -234,16 +236,16 @@ void MapEditor::renderMap(AssetMgr& assetmgr)
 
   map.init(mapdef, map_params);
 
-  RenderSys::UpdateParams params = 
+  RenderSys::UpdateParams params =
   {
-    .viewport = 
+    .viewport =
     {
       { s32(pos_screen.x), s32(pos_screen.y) },
       { s32(size.x), s32(size.y) },
     },
     .renderer = *renderer,
-    .map = &map,
     .entmgr = &entmgr,
+    .map = &map,
     .debug = true,
   };
 

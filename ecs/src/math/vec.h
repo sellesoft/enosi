@@ -29,13 +29,13 @@ struct vec2
 
   vec2() { x = 0; y = 0; }
   vec2(T x, T y) { this->x = x; this->y = y; }
-  
+
   template<typename X>
   vec2(const vec2<X>& in) { x = in.x; y = in.y; }
 
   /* --------------------------------------------------------------------------
    */
-  inline vec2 operator+ (const vec2& rhs) const 
+  inline vec2 operator+ (const vec2& rhs) const
   {
     return { x + rhs.x, y + rhs.y };
   }
@@ -187,7 +187,7 @@ struct vec2
       return min * normalized();
     else if (m > max)
       return max * normalized();
-    else 
+    else
       return *this;
   }
 
@@ -229,6 +229,7 @@ vec2<T> operator * (const T& lhs, const vec2<T>& rhs)
 }
 
 typedef vec2<s32> vec2i;
+typedef vec2<u32> vec2u;
 typedef vec2<f32> vec2f;
 
 namespace iro::io
@@ -279,14 +280,14 @@ struct vec4
   };
 
   vec4() { x = 0; y = 0; z = 0; w = 0; }
-  vec4(T x, T y, T z, T w) 
-  { 
-    this->x = x; 
-    this->y = y; 
+  vec4(T x, T y, T z, T w)
+  {
+    this->x = x;
+    this->y = y;
     this->z = z;
     this->w = w;
   }
-  
+
   template<typename X>
   vec4(const vec4<X>& in) { x = in.x; y = in.y; z = in.z; w = in.w; }
 
@@ -389,7 +390,7 @@ struct vec4
 
   /* --------------------------------------------------------------------------
    */
-  inline vec4& set(f32 x, f32 y, f32 z, f32 w) 
+  inline vec4& set(f32 x, f32 y, f32 z, f32 w)
   {
     *this = { x, y, z, w };
     return *this;
@@ -406,10 +407,10 @@ struct vec4
    */
   inline T dot(const vec4& rhs) const
   {
-    return 
-      x * rhs.x + 
-      y * rhs.y + 
-      z * rhs.z + 
+    return
+      x * rhs.x +
+      y * rhs.y +
+      z * rhs.z +
       w * rhs.w;
   }
 
@@ -422,6 +423,7 @@ struct vec4
 };
 
 typedef vec4<s32> vec4i;
+typedef vec4<u32> vec4u;
 typedef vec4<f32> vec4f;
 
 namespace iro::io

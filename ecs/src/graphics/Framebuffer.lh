@@ -3,19 +3,31 @@
  */
 
 #include "iro/Common.h"
+#include "math/vec.h"
 
 namespace gfx
 {
 
+struct Renderer;
 struct Texture;
 
 /* ============================================================================
  */
 struct Framebuffer
 {
-  u32 id;
+  Renderer* renderer;
 
-  static Framebuffer create(Texture texture);
+  void* handle;
+  void* renderpass_handle;
+
+  Texture* texture;
+  vec4f clear_color;
+
+  static Framebuffer create(
+    Renderer& renderer,
+    Texture& texture,
+    vec4f clear_color);
+
   void destroy();
 };
 
