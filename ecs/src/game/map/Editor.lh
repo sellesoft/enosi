@@ -40,7 +40,7 @@ schema
   text_color = inherit;
 },
 struct
-{ 
+{
   SourceDataFileHandle h_selected_map = {};
 
   gfx::Framebuffer framebuffer;
@@ -69,7 +69,7 @@ struct
   vec2f drag_start_eye;
   vec2f drag_start_viewport;
 
-  static MapEditor* create(UI& ui, gfx::Renderer* renderer);
+  static MapEditor* create(UI& ui, gfx::Renderer& renderer);
   void destroy();
 
   void selectMap(SourceDataFileHandle& h_map);

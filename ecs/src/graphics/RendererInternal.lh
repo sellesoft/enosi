@@ -1,0 +1,175 @@
+/*
+ *  Renderer info relevant to the backend.
+ */
+
+$ require "common"
+
+$ if ECS_OPENGL then
+#include "graphics/glad/gl.h"
+$ elseif ECS_VULKAN then -- if ECS_OPENGL
+$ if IRO_LINUX then
+#define VK_USE_PLATFORM_XLIB_KHR
+$ elseif IRO_WIN32 then --if IRO_LINUX
+#define VK_USE_PLATFORM_WIN32_KHR
+$ else -- elseif IRO_WIN32
+#error "unhandled platform"
+$ end -- if IRO_LINUX
+#include "vulkan/vulkan.h"
+#include "shaderc/shaderc.h"
+$ else -- elseif ECS_VULKAN
+#error "unhandled graphics backend"
+$ end -- if ECS_OPENGL
+
+/* ----------------------------------------------------------------------------
+ */
+struct RendererInternal{
+$ if ECS_OPENGL then
+  u32 dummy;
+$ elseif ECS_VULKAN then -- if ECS_OPENGL
+  VkAllocationCallbacks allocator;
+  VkInstance instance;
+  u32 physical_device_graphics_and_compute_queue_family;
+  u32 physical_device_present_queue_family;
+  VkPhysicalDevice physical_device;
+  VkPhysicalDeviceProperties physical_device_properties;
+  VkPhysicalDeviceFeatures physical_device_features;
+  VkPhysicalDeviceFeatures physical_device_enabled_features;
+  VkDevice device;
+  VkQueue graphics_queue;
+  VkQueue present_queue;
+  VkCommandPool command_pool;
+  VkDescriptorPool descriptor_pool;
+  VkSurfaceKHR surface;
+  VkSurfaceFormatKHR surface_format;
+  VkPresentModeKHR surface_present_mode;
+  VkExtent2D surface_extent;
+  VkSwapchainKHR swapchain;
+  u32 swapchain_min_image_count;
+  u32 swapchain_image_count;
+  VkRenderPass default_renderpass;
+  VkImage default_framebuffer_images[4];
+  VkDeviceMemory default_framebuffer_image_memories[4];
+  VkImageView default_framebuffer_image_views[4];
+  VkFramebuffer default_framebuffers[4];
+  u32 default_framebuffer_index;
+  VkSemaphore image_acquired_semaphore;
+  VkSemaphore render_complete_semaphore;
+  VkPipelineCache pipeline_cache;
+  shaderc_compiler_t shader_compiler;
+  shaderc_compile_options_t shader_compile_options;
+$ if ECS_DEBUG then
+  VkDebugUtilsMessengerEXT debug_messenger;
+  PFN_vkCmdBeginDebugUtilsLabelEXT func_vkCmdBeginDebugUtilsLabelEXT;
+  PFN_vkCmdEndDebugUtilsLabelEXT func_vkCmdEndDebugUtilsLabelEXT;
+  PFN_vkCmdInsertDebugUtilsLabelEXT func_vkCmdInsertDebugUtilsLabelEXT;
+  PFN_vkSetDebugUtilsObjectNameEXT func_vkSetDebugUtilsObjectNameEXT;
+$ end -- if ECS_DEBUG
+$ end -- if ECS_OPENGL
+};
+
+#define _RI ((RendererInternal*)internal)
+
+/* ----------------------------------------------------------------------------
+ */
+$ if ECS_DEBUG and ECS_VULKAN then
+static inline void _debugBeginLabel(
+  RendererInternal* internal,
+  VkCommandBuffer command_buffer,
+  vec4f color,
+  io::Formattable auto... args)
+{
+  if (_RI->func_vkCmdBeginDebugUtilsLabelEXT == nullptr)
+    return;
+
+  io::StaticBuffer<64> name = {};
+  io::formatv(&name, args...);
+
+  VkDebugUtilsLabelEXT label =
+  {
+    .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+    .pLabelName = (const char*)name.buffer,
+    .color =
+    {
+      color.x,
+      color.y,
+      color.z,
+      color.w,
+    },
+  };
+  _RI->func_vkCmdBeginDebugUtilsLabelEXT(command_buffer, &label);
+}
+#define debugBeginLabel(command_buffer, color, ...) \
+  _debugBeginLabel(_RI, command_buffer, color, __VA_ARGS__)
+
+static inline void _debugEndLabel(
+  RendererInternal* internal,
+  VkCommandBuffer command_buffer)
+{
+  if (_RI->func_vkCmdEndDebugUtilsLabelEXT == nullptr)
+    return;
+
+  _RI->func_vkCmdEndDebugUtilsLabelEXT(command_buffer);
+}
+#define debugEndLabel(command_buffer) \
+  _debugEndLabel(_RI, command_buffer)
+
+static inline void _debugInsertLabel(
+  RendererInternal* internal,
+  VkCommandBuffer command_buffer,
+  vec4f color,
+  io::Formattable auto... args)
+{
+  if (_RI->func_vkCmdInsertDebugUtilsLabelEXT == nullptr)
+    return;
+
+  io::StaticBuffer<64> name = {};
+  io::formatv(&name, args...);
+
+  VkDebugUtilsLabelEXT label =
+  {
+    .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+    .pLabelName = (const char*)name.buffer,
+    .color =
+    {
+      color.x,
+      color.y,
+      color.z,
+      color.w,
+    },
+  };
+  _RI->func_vkCmdInsertDebugUtilsLabelEXT(command_buffer, &label);
+}
+#define debugInsertLabel(command_buffer, color, ...) \
+  _debugInsertLabel(_RI, command_buffer, color, __VA_ARGS__)
+
+static inline void _debugSetObjectName(
+  RendererInternal* internal,
+  VkObjectType type,
+  void* handle,
+  io::Formattable auto... args)
+{
+  if (_RI->func_vkSetDebugUtilsObjectNameEXT == nullptr)
+    return;
+  if (handle == 0)
+    return;
+
+  io::StaticBuffer<64> name = {};
+  io::formatv(&name, args...);
+
+  VkDebugUtilsObjectNameInfoEXT name_info =
+  {
+    .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+    .objectType = type,
+    .objectHandle = (u64)handle,
+    .pObjectName = (const char*)name.buffer,
+  };
+  _RI->func_vkSetDebugUtilsObjectNameEXT(internal->device, &name_info);
+}
+#define debugSetObjectName(type, handle, ...) \
+  _debugSetObjectName(_RI, type, handle, __VA_ARGS__)
+$ else -- if ECS_DEBUG and ECS_VULKAN
+#define debugBeginLabel(command_buffer, color, ...)
+#define debugEndLabel(command_buffer)
+#define debugInsertLabel(command_buffer, color, ...)
+#define debugSetObjectName(type, handle, ...)
+$ end -- if ECS_DEBUG and ECS_VULKAN

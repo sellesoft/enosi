@@ -105,23 +105,24 @@ b8 UI::init(Engine& engine)
   engine.subscribeToBroadcast<WindowResized>(this, &UI::onWindowResized);
   engine.subscribeToBroadcast<PostReload>(this, &UI::onPostReload);
 
-  u8 white_pixels[16] = 
-  { 
+  u8 white_pixels[16] =
+  {
     0xff, 0xff, 0xff, 0xff,
     0xff, 0xff, 0xff, 0xff,
     0xff, 0xff, 0xff, 0xff,
     0xff, 0xff, 0xff, 0xff,
   };
 
-  white_texture = 
+  white_texture =
     gfx::Texture::create(
+      renderer,
       4, 4,
       gfx::ImageFormat::BW,
       gfx::ImageAddressMode::ClampToWhite,
       gfx::ImageFilter::Nearest,
       gfx::ImageKind::TwoD,
       white_pixels);
-  
+
   // Store a reference to the engine in case widgets need to access
   // information from it.
   eng = &engine;
@@ -462,7 +463,7 @@ $ end
   {
     if (notnil(drawcmd->tex))
     {
-      TRACE("  drawcmd has tex ", drawcmd->tex.id, "\n");
+      TRACE("  drawcmd has tex ", drawcmd->tex.handle, "\n");
       renderer.pushBindTexture(drawcmd->tex);
     }
     else

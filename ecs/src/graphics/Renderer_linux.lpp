@@ -1,6 +1,6 @@
 $ local cmn = require "common"
 
-$ if IRO_LINUX then
+$ if IRO_LINUX and ECS_OPENGL then
 
 @lpp.import "graphics/Renderer.lh"
 @lpp.import "window/Window.lh"
@@ -23,15 +23,15 @@ $ if IRO_LINUX then
 namespace gfx
 {
 
-static Logger logger = 
+static Logger logger =
   Logger::create("gfx.linux"_str, Logger::Verbosity::Info);
 
 /* ----------------------------------------------------------------------------
  */
 static void glxDebugCallback(
-    void* ret, 
+    void* ret,
     const char* name,
-    GLADapiproc apiproc, 
+    GLADapiproc apiproc,
     s32 len_args,
     ...)
 {
@@ -60,12 +60,12 @@ b8 rendererPlatformInit(Window* window)
   gladInstallGLXDebug();
   // gladSetGLXPostCallback(glxDebugCallback);
 #endif
-  
-  INFO("loaded GLX ", 
-      GLAD_VERSION_MAJOR(backend_version), 
+
+  INFO("loaded GLX ",
+      GLAD_VERSION_MAJOR(backend_version),
       ".", GLAD_VERSION_MINOR(backend_version), "\n");
 
-  int attributes_config[] = 
+  int attributes_config[] =
   {
     GLX_X_RENDERABLE, GL_TRUE,
 	  GLX_DOUBLEBUFFER, GL_TRUE,
@@ -77,15 +77,15 @@ b8 rendererPlatformInit(Window* window)
 	  GLX_ALPHA_SIZE,   8,
 	  GLX_DEPTH_SIZE,   24,
 	  GLX_STENCIL_SIZE, 8,
-	  0, //terminate  
+	  0, //terminate
   };
 
   int framebuffer_configs_count;
-  GLXFBConfig* framebuffer_configs = 
+  GLXFBConfig* framebuffer_configs =
     glXChooseFBConfig(
-      x11.display, 
-      x11.screen, 
-      attributes_config, 
+      x11.display,
+      x11.screen,
+      attributes_config,
       &framebuffer_configs_count);
 
   if (!framebuffer_configs || framebuffer_configs_count <= 0)
@@ -100,11 +100,11 @@ b8 rendererPlatformInit(Window* window)
   XVisualInfo* best_visual = nullptr;
   for (int i = 1; i < framebuffer_configs_count; ++i)
   {
-    if (XVisualInfo* visual = 
+    if (XVisualInfo* visual =
           glXGetVisualFromFBConfig(x11.display, framebuffer_configs[i]))
     {
       glXGetFBConfigAttrib(
-        x11.display, 
+        x11.display,
         framebuffer_configs[i],
         GLX_SAMPLES,
         &samples);
@@ -134,9 +134,9 @@ b8 rendererPlatformInit(Window* window)
     return ERROR("cannot find an appropriate visual for the given attributes");
 
   // Create the colormap.
-  Colormap cm = 
+  Colormap cm =
     XCreateColormap(
-      x11.display, 
+      x11.display,
       (X11Window)window->handle,
       best_visual->visual,
       AllocNone);
@@ -147,7 +147,7 @@ b8 rendererPlatformInit(Window* window)
   };
 
   // Create the context.
-  GLXContext context = 
+  GLXContext context =
     glXCreateContextAttribsARB(
       x11.display,
       best_fbcfg,
@@ -161,7 +161,7 @@ b8 rendererPlatformInit(Window* window)
   XFree(best_visual);
 
   if (!glXMakeCurrent(
-        x11.display, 
+        x11.display,
         (X11Window)window->handle,
         context))
     return ERROR("failed to create glx context\n");
@@ -179,4 +179,4 @@ b8 rendererPlatformSwapBuffers(Window* window)
 
 }
 
-$ end -- if IRO_LINUX
+$ end -- if IRO_LINUX and ECS_OPENGL

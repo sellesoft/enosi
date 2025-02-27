@@ -1,6 +1,6 @@
 $ local cmn = require "common"
 
-$ if IRO_WIN32 then
+$ if IRO_WIN32 and ECS_OPENGL then
 
 #define GLAD_GL_IMPLEMENTATION
 #define GLAD_WGL_IMPLEMENTATION
@@ -25,7 +25,7 @@ b8 rendererPlatformInit(Window* window)
   HDC   prev_hdc = wglGetCurrentDC();
   HGLRC prev_rc  = wglGetCurrentContext();
 
-  PIXELFORMATDESCRIPTOR dummy_pfd = 
+  PIXELFORMATDESCRIPTOR dummy_pfd =
   {
     sizeof(PIXELFORMATDESCRIPTOR),
     1,
@@ -47,7 +47,7 @@ b8 rendererPlatformInit(Window* window)
     0, 0, 0,
   };
 
-  int dummy_format = 
+  int dummy_format =
     ChoosePixelFormat(win32.dummy_window_device_handle, &dummy_pfd);
   if (dummy_format == 0)
     return ERROR_WIN32("failed to choose a dummy pixel format");
@@ -56,7 +56,7 @@ b8 rendererPlatformInit(Window* window)
       win32.dummy_window_device_handle, dummy_format, &dummy_pfd))
     return ERROR_WIN32("failed to set dummy pixel format");
 
-  HGLRC h_wgl_dummy_context = 
+  HGLRC h_wgl_dummy_context =
     wglCreateContext(win32.dummy_window_device_handle);
   if (!h_wgl_dummy_context)
     return ERROR_WIN32("failed to create wgl context");
@@ -73,7 +73,7 @@ b8 rendererPlatformInit(Window* window)
 
 #if ECS_DEBUG
   gladInstallWGLDebug();
-#endif 
+#endif
 
   // Delete dummy context.
   wglMakeCurrent(prev_hdc, prev_rc);
@@ -86,7 +86,7 @@ b8 rendererPlatformInit(Window* window)
   int format;
   UINT format_count = 0;
   PIXELFORMATDESCRIPTOR pfd;
-  const int format_attr[] = 
+  const int format_attr[] =
   {
     WGL_DRAW_TO_WINDOW_ARB, GL_TRUE,
     WGL_SUPPORT_OPENGL_ARB, GL_TRUE,
@@ -99,11 +99,11 @@ b8 rendererPlatformInit(Window* window)
   };
 
   if (!wglChoosePixelFormatARB(
-        h_context, 
-        format_attr, 
-        0, 
-        1, 
-        &format, 
+        h_context,
+        format_attr,
+        0,
+        1,
+        &format,
         &format_count))
     return ERROR_WIN32("failed to choose pixel format");
 
@@ -117,7 +117,7 @@ b8 rendererPlatformInit(Window* window)
     return ERROR_WIN32("failed to set pixel format");
 
   // Create and enable the actual render context.
-  int context_attr[] = 
+  int context_attr[] =
   {
     WGL_CONTEXT_MAJOR_VERSION_ARB, 4,
     WGL_CONTEXT_MINOR_VERSION_ARB, 6,
@@ -132,7 +132,7 @@ b8 rendererPlatformInit(Window* window)
     0,
   };
 
-  void* opengl_context = 
+  void* opengl_context =
     wglCreateContextAttribsARB(h_context, 0, context_attr);
   if (opengl_context == nullptr)
     return ERROR_WIN32("failed to create wgl opengl context");
@@ -153,4 +153,4 @@ b8 rendererPlatformSwapBuffers(Window* window)
 
 }
 
-$ end -- if IRO_WIN32
+$ end -- if IRO_WIN32 and ECS_OPENGL

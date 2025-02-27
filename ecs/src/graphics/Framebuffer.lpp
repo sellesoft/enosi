@@ -1,29 +1,140 @@
 $ require "common"
 
 @@lpp.import "graphics/Framebuffer.lh"
+@@lpp.import "graphics/Renderer.lh"
+@@lpp.import "graphics/RendererInternal.lh"
 @@lpp.import "graphics/Texture.lh"
 
-#include "graphics/glad/gl.h"
+#include "iro/Logger.h"
+
+@defFileLogger(framebuffer, Info)
 
 namespace gfx
 {
 
 /* ----------------------------------------------------------------------------
  */
-Framebuffer Framebuffer::create(Texture texture)
+Framebuffer Framebuffer::create(
+  Renderer& renderer,
+  Texture& texture,
+  vec4f clear_color)
 {
-  Framebuffer out = {};
+  void* internal = renderer.internal;
 
-  glGenFramebuffers(1, &out.id);
+  if (texture.handle == nullptr)
+  {
+    FATAL("null texture passed into Framebuffer::create()");
+    return {};
+  }
 
-  glBindFramebuffer(GL_FRAMEBUFFER, out.id);
+  Framebuffer out = {
+    .renderer = &renderer,
+    .texture = &texture,
+    .clear_color = clear_color,
+  };
 
-  glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, texture.id, 0);
+$ if ECS_OPENGL then
+  GLuint handle;
+  glGenFramebuffers(1, &handle);
+
+  glBindFramebuffer(GL_FRAMEBUFFER, handle);
+
+  glFramebufferTexture(GL_FRAMEBUFFER,
+    GL_COLOR_ATTACHMENT0, (GLuint)(u64)texture.handle, 0);
 
   GLenum draw_buffers[1] = {GL_COLOR_ATTACHMENT0};
   glDrawBuffers(1, draw_buffers);
 
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+  out.handle = (void*)(u64)handle;
+$ elseif ECS_VULKAN then -- if ECS_OPENGL
+  VkAttachmentDescription attachment_desc =
+  {
+    .format = _RI->surface_format.format,
+    .samples = VK_SAMPLE_COUNT_1_BIT,
+    .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+    .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+    .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+    .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+    .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+    .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+  };
+
+  VkAttachmentReference attachment_ref =
+  {
+    .attachment = 0,
+    .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+  };
+
+  VkSubpassDescription subpass =
+  {
+    .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+    .colorAttachmentCount = 1,
+    .pColorAttachments = &attachment_ref,
+  };
+
+  VkSubpassDependency dependency =
+  {
+    .srcSubpass = VK_SUBPASS_EXTERNAL,
+    .dstSubpass = 0,
+    .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+      | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+    .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+      | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
+    .srcAccessMask = 0,
+    .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
+      | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+    .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
+  };
+
+  VkRenderPassCreateInfo renderpass_create_info =
+  {
+    .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+    .attachmentCount = 1,
+    .pAttachments = &attachment_desc,
+    .subpassCount = 1,
+    .pSubpasses = &subpass,
+    .dependencyCount = 1,
+    .pDependencies = &dependency,
+  };
+
+  VkRenderPass renderpass;
+  VkResult vk_result1 = vkCreateRenderPass(_RI->device,
+    &renderpass_create_info, &_RI->allocator, &renderpass);
+  if (vk_result1 != VK_SUCCESS)
+  {
+    FATAL("failed to create vulkan renderpass");
+    return {};
+  }
+
+  VkImageView image_view = (VkImageView)texture.view_handle;
+
+  VkFramebufferCreateInfo framebuffer_create_info =
+  {
+    .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+    .renderPass = renderpass,
+    .attachmentCount = 1,
+    .pAttachments = &image_view,
+    .width = texture.width,
+    .height = texture.height,
+    .layers = 1,
+  };
+
+  VkFramebuffer framebuffer;
+  VkResult vk_result2 = vkCreateFramebuffer(_RI->device,
+    &framebuffer_create_info, &_RI->allocator, &framebuffer);
+  if (vk_result2 != VK_SUCCESS)
+  {
+    FATAL("failed to create vulkan framebuffer");
+    return {};
+  }
+
+  out.handle = (void*)framebuffer;
+  out.renderpass_handle = (void*)renderpass;
+$ else -- elseif ECS_VULKAN
+#error "unhandled graphics backend"
+$ end -- else
 
   return out;
 }
@@ -32,7 +143,19 @@ Framebuffer Framebuffer::create(Texture texture)
  */
 void Framebuffer::destroy()
 {
-  glDeleteFramebuffers(1, &id); 
+  void* internal = renderer->internal;
+
+$ if ECS_OPENGL then
+  GLuint handle = (GLuint)(u64)handle;
+  glDeleteFramebuffers(1, &handle);
+$ elseif ECS_VULKAN then -- if ECS_OPENGL
+  vkDestroyRenderPass(_RI->device,
+    (VkRenderPass)renderpass_handle, &_RI->allocator);
+  vkDestroyFramebuffer(_RI->device,
+    (VkFramebuffer)handle, &_RI->allocator);
+$ else -- elseif ECS_VULKAN
+#error "unhandled graphics backend"
+$ end -- else
 }
 
 }

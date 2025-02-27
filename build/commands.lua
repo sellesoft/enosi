@@ -1,4 +1,4 @@
---- 
+---
 --- Collection of commands that are used to build build objects.
 ---
 --- Some Cmds take a table of parameters on creation and create an object
@@ -7,11 +7,11 @@
 --- out with variable args like input and output files later.
 ---
 --- This file is intended to be completely independent of the build system
---- as a whole, eg. it should never depend on any of its state. Do not 
+--- as a whole, eg. it should never depend on any of its state. Do not
 --- require "build.sys" here, nor require anything else that might.
 ---
 --- The reason being that this file is also used by the repo initialization
---- script, where the build system is not active yet because lake will have 
+--- script, where the build system is not active yet because lake will have
 --- yet to be built.
 ---
 
@@ -58,7 +58,7 @@ cmd.CppObj = Type.make()
 --- Compile with position independent code.
 ---@field pic boolean
 --- Compile with address sanitizer enabled.
---- NOTE that if this is enabled for an object file, it must be enabled 
+--- NOTE that if this is enabled for an object file, it must be enabled
 ---      when linking it as well!
 ---@field address_sanitizer boolean
 --- Compile with a statically linked msvcrt.
@@ -177,7 +177,7 @@ cmd.LuaObj.new = function(params)
   params.debug_info = params.debug_info or true
 
   o.partial = helpers.listBuilder(
-    "luajit", 
+    "luajit",
     "-b",
     params.debug_info and "-g")
 
@@ -194,7 +194,7 @@ end
 --- Generate an obj file from an lpp file.
 --- Note that this goes through two compilations, the first turning the lpp
 --- file into a cpp file and the second turning that into an obj file, so make
---- sure both commands are run. This command's 'complete' function returns 
+--- sure both commands are run. This command's 'complete' function returns
 --- both the lpp and cpp commands.
 ---@class cmd.LppObj
 ---@field partial List
@@ -214,7 +214,7 @@ cmd.LppObj = Type.make()
 ---@field requires List
 --- Paths to be appended to package.cpath (eg. where to find shared libs).
 ---@field cpaths List
---- CppObj.Params that will be used to build an obj from the resulting cpp 
+--- CppObj.Params that will be used to build an obj from the resulting cpp
 --- file.
 ---@field cpp cmd.CppObj.Params
 
@@ -237,10 +237,10 @@ cmd.LppObj.new = function(params)
 
   local cpaths = List{}
   for cpath in List(params.cpaths):each() do
-	  cpaths:push "-C"
+    cpaths:push "-C"
     cpaths:push(cpath)
   end
-    
+
   o.partial = helpers.listBuilder(
     params.lpp,
     cargs,
@@ -268,7 +268,7 @@ end
 ---@param metafile string?
 ---@return List, List
 cmd.LppObj.complete = function(self, input, cppout, objout, depfile, metafile)
-  return 
+  return
     helpers.listBuilder(
       self.partial,
       input,
@@ -325,23 +325,23 @@ end
 cmd.Exe = Type:make()
 
 --- NOTE that this command applies to both executable files and shared library
---- files since the command is practically the same. I probably should have 
+--- files since the command is practically the same. I probably should have
 --- called this command Linker, but since this was written during a time where
 --- I wanted there to be a command for every type of build object, it got named
 --- something less clear instead.
---- 
+---
 -- TODO(sushi) rename this to Linker.
 ---
 ---@class cmd.Exe.Params
 --- The linker to use.
 ---@field linker string
---- Libraries to link against. Currently these are wrapped in a group on 
+--- Libraries to link against. Currently these are wrapped in a group on
 --- Linux as I am too lazy to figure out what the proper linking order is
---- for LLVM. This will probably be fixed once I need to get LLVM building on 
+--- for LLVM. This will probably be fixed once I need to get LLVM building on
 --- Windows.
 ---@field shared_libs List
---- Static libs to link against. This is primarily useful when a library 
---- outputs both static and shared libs under the same name and the 
+--- Static libs to link against. This is primarily useful when a library
+--- outputs both static and shared libs under the same name and the
 --- static lib is preferred.
 ---@field static_libs List
 --- List of directories to search for libs in.
@@ -352,11 +352,13 @@ cmd.Exe = Type:make()
 --- it intends to output a pdb.
 ---@field debug_info boolean
 --- Link with address sanitizer enabled.
---- NOTE that if this is enabled, it must be enabled when compiling linked 
+--- NOTE that if this is enabled, it must be enabled when compiling linked
 ---      object files as well!
 ---@field address_sanitizer boolean
 --- Link with a static msvcrt.
 ---@field static_msvcrt boolean
+--- Warnings to disable.
+---@field disabled_warnings string
 
 ---@param params cmd.Exe.Params
 ---@return cmd.Exe
@@ -364,18 +366,18 @@ cmd.Exe.new = function(params)
   local o = {}
   o.linker = params.linker
 
-  if "ld" == params.linker 
-	   or "lld" == params.linker
-     or "mold" == params.linker 
+  if "ld" == params.linker
+     or "lld" == params.linker
+     or "mold" == params.linker
   then
-    -- TODO(sushi) it sucks that we operate the linker through clang here, but 
+    -- TODO(sushi) it sucks that we operate the linker through clang here, but
     --             since I'm using nix to manage my build environment on Linux
-    --             right now I've found it very difficult figuring out how to 
+    --             right now I've found it very difficult figuring out how to
     --             properly construct the arguments for directly calling ld.
-    --             At some point I would really like to drop nix for this 
+    --             At some point I would really like to drop nix for this
     --             reason as well as it just making it difficult to understand
     --             my build environment in general. Ideally we would setup the
-    --             init scripts to setup the build environments manually, but 
+    --             init scripts to setup the build environments manually, but
     --             properly getting external dependencies tracked and setup
     --             seems like it could be a nightmare.
     o.partial = helpers.listBuilder(
@@ -398,17 +400,18 @@ cmd.Exe.new = function(params)
       end),
       "-Wl,--end-group",
       "-Wl,-E",
-      params.static_msvcrt and "-fms-runtime-lib=static")
-      -- Tell the exe's dynamic linker to check the directory its in 
+      params.static_msvcrt and "-fms-runtime-lib=static",
+      params.disabled_warnings or "")
+      -- Tell the exe's dynamic linker to check the directory its in
       -- for shared libraries.
-      -- NOTE(sushi) this is disabled for now as I'm not actually using it 
-      --             yet and it causes an issue in enosi's init script 
+      -- NOTE(sushi) this is disabled for now as I'm not actually using it
+      --             yet and it causes an issue in enosi's init script
       --             since I'm using lua's os.execute which runs a command
       --             through the shell. This causes $ORIGIN to be expanded
       --             to whatever it is set to. When we come back to this we
       --             should probably just pull out iro's platform process
       --             stuff into some C code we can compile and dynamically
-      --             load into the init script as its probably safer and 
+      --             load into the init script as its probably safer and
       --             more portable.
       --"-Wl,-rpath,$ORIGIN")
   else
@@ -455,7 +458,7 @@ cmd.Makefile = Type.make()
 
 ---@param params cmd.Makefile.Params
 cmd.Makefile.new = function(params)
-  return helpers.listBuilder("make", "-j") 
+  return helpers.listBuilder("make", "-j")
 end
 
 ---@class cmd.CMake
@@ -473,7 +476,7 @@ cmd.CMake.new = function(params)
   return helpers.listBuilder(
     "cmake",
     "-G",
-    params.generator or 
+    params.generator or
       error("no generator specified"),
     params.config_dir,
     params.args
