@@ -55,7 +55,7 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
   DrawCmd* map_render = ui.drawcmds.add();
   map_render->tex = 
     gfx::Texture::create(
-      renderer,
+      *renderer,
       600,
       400,
       gfx::ImageFormat::RGBA,
@@ -67,7 +67,11 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
 
   editor->map_render = map_render;
 
-  editor->framebuffer = gfx::Framebuffer::create(map_render->tex);
+  editor->framebuffer = 
+    gfx::Framebuffer::create(
+      *renderer,
+      map_render->tex,
+      {0,0,0,255});
 
   if (!editor->entmgr.init())
   {
@@ -75,7 +79,7 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
     return nullptr;
   }
 
-  if (!editor->rendersys.init(renderer, ui.eng->assetmgr))
+  if (!editor->rendersys.init(*renderer, ui.eng->assetmgr))
   {
     ERROR("failed to init rendersys\n");
     return nullptr;

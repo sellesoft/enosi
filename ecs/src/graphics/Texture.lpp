@@ -25,9 +25,10 @@ Texture Texture::create(
     ImageKind        kind,
     void*            pixels)
 {
+$ if ECS_OPENGL then
   Texture out = {};
   
-  glGenTextures(1, &out.id);
+  glGenTextures(1, (u32*)&out.handle);
 
   out.recreate(
     width,
@@ -37,15 +38,18 @@ Texture Texture::create(
     filter,
     kind,
     pixels);
-  
+
   return out;
+
+$ elseif ECS_VULKAN then
+$ end
 }
 
 /* ----------------------------------------------------------------------------
  */
 void Texture::destroy()
 {
-  glDeleteTextures(1, &id);
+  glDeleteTextures(1, (u32*)&handle);
 }
 
 /* ----------------------------------------------------------------------------
@@ -59,7 +63,9 @@ void Texture::recreate(
     ImageKind        kind,
     void*            pixels)
 {
-  glBindTexture(GL_TEXTURE_2D, id);
+
+$ if ECS_OPENGL then
+  glBindTexture(GL_TEXTURE_2D, *(u32*)&handle);
 
   if (width % 4 != 0)
   {
@@ -146,6 +152,9 @@ void Texture::recreate(
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, GL_RED);
   }
+$ elseif ECS_VULKAN then
+
+$ end
 }
 
 }

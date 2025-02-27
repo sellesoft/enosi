@@ -24,10 +24,10 @@ template<typename T>
 struct ExpandableContainerTrait {};
 
 #define DefineExpandableContainerT(T, F) \
-  template<typename X> \
-  struct ExpandableContainerTrait<T<X>> \
+  template<typename A> \
+  struct ExpandableContainerTrait<T<A>> \
   { \
-    inline static b8 add(T<X>* self, X& value) F \
+    inline static b8 add(T<A>* self, A& value) F \
   } \
 
 template<typename T, typename V>
@@ -65,10 +65,10 @@ template<typename T>
 struct ReducibleContainerTrait {};
 
 #define DefineReducibleContainerT(T, F) \
-  template<typename X> \
-  struct ReducibleContainerTrait<T<X>> \
+  template<typename A> \
+  struct ReducibleContainerTrait<T<A>> \
   { \
-    inline static b8 remove(T<X>* self, X* x) F \
+    inline static b8 remove(T<A>* self, A* x) F \
   } 
 
 template<typename T, typename V>
@@ -95,10 +95,10 @@ template<typename T>
 struct IndexableContainerTrait {};
 
 #define DefineIndexableContainerT(T, F) \
-  template<typename X> \
-  struct IndexableContainerTrait<T<X>> \
+  template<typename A> \
+  struct IndexableContainerTrait<T<A>> \
   { \
-    inline static X* index(T<X>* self, u64 idx) F \
+    inline static A* index(T<A>* self, u64 idx) F \
   }
 
 template<typename T, typename V>

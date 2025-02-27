@@ -23,6 +23,8 @@ $ if IRO_LINUX then
 #undef Font
 #undef Time
 #undef KeyCode
+#undef None
+#undef X
 
 struct X11Stuff
 {

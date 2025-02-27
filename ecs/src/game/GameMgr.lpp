@@ -66,7 +66,7 @@ b8 GameMgr::init(Engine* eng)
   if(!map.init(*map_def, map_params))
     return ERROR("failed to initialize the map '", map_def->name, "'\n");
 
-  map_editor = ui::MapEditor::create(eng->ui, eng->renderer);
+  map_editor = ui::MapEditor::create(eng->ui, &eng->renderer);
   map_editor->selectMap(h_test_map);
 
   return true;

@@ -280,17 +280,4 @@ struct MoveTrait<iro::Array<T>>
   }
 };
 
-DefineExpandableContainerT(iro::Array, { self->push(value); return true; });
-DefineReducibleContainerT(iro::Array, { self->remove(x); return true; });
-DefineIndexableContainerT(iro::Array, { return &self->arr[idx]; });
-
-DefineIterableT(iro::Array, { s32 idx = 0; }, 
-    { 
-      if (idx >= self->len())
-        return nullptr;
-      auto* out = &self->arr[idx]; 
-      idx += 1; 
-      return out; 
-    });
-
 #endif
