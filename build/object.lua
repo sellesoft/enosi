@@ -375,6 +375,8 @@ LppObj.defineTask = function(self, cmd)
 
   local lpp_cmd, cpp_cmd = cmd:complete(lfile, cfile, ofile, dfile, mfile)
 
+  sys.trackCompileCommandsCmd(self.proj.root, cfile, cpp_cmd)
+
   local lpp_task = lake.task(lfile)
   local cpp_task = lake.task(cfile)
   local obj_task = lake.task(ofile)
