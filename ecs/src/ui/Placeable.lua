@@ -69,6 +69,10 @@ Placeable.parse = function(self, def, file_offset)
                            widget.name)
         end
 
+        if property.base_property then
+          property = property.base_property
+        end
+
         parser:expectToken ":"
 
         if parser:checkToken "inherit" then

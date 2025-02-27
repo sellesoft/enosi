@@ -1,0 +1,16 @@
+$ local event = require "event.Event"
+$ local reflect = require "reflect.Reflector"
+
+#include "iro/Common.h"
+#include "event/BroadcastEventBus.h"
+
+struct RenderSys;
+
+// Raised before the renderer draws any map tiles.
+@event.broad(PreMapRender, { RenderSys* rendersys; })
+
+// Raised before the renderer draws any sprites.
+@event.broad(PreSpriteRender, { RenderSys* rendersys; })
+
+// Raised before the render sys finishes updating.
+@event.broad(PostRender, { RenderSys* rendersys; })

@@ -38,6 +38,9 @@ struct
 
   TextState header_text;
 
+  static CollapsingHeader* make(UI& ui, String name = nil, String init = nil);
+  static CollapsingHeader* begin(UI& ui, String name = nil, String init = nil);
+
   virtual void  update(UI* ui, UpdateReason reason) override;
   virtual void  evaluate(UI* ui) override;
   virtual vec2f getMinSize(UI* ui) override;

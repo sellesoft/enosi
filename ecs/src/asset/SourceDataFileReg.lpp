@@ -60,6 +60,7 @@ SourceDataFileHandle SourceDataFileReg::loadFromDisk(String path)
 
   slot = pool.add();
 
+  slot->path = fs::Path::from(path);
   slot->path_hash = path_hash;
   slot->header.reg = this;
 
@@ -90,6 +91,16 @@ SourceDataFileHandle SourceDataFileReg::loadFromDisk(String path)
   slot->header.rc.addRef();
 
   return SourceDataFileHandle(&slot->header);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SourceDataFileReg::saveToDisk(const SourceDataFileHandle& h_sdfile)
+{
+  if (!h_sdfile.isValid())
+    return ERROR("SourceDataFileReg::saveToDisk passed a nil handle\n");
+
+  
 }
 
 /* ----------------------------------------------------------------------------

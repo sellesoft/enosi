@@ -5,6 +5,7 @@ local StyleContext = require "ui.StyleContext"
 local ItemContext = require "ui.ItemContext"
 local Placeable = require "ui.Placeable"
 local List = require "List"
+local Style = require "ui.Style"
 local buffer = require "string.buffer"
 
 local ui = {}
@@ -169,6 +170,27 @@ end
 ui.definePlaceable = function(name, def)
   local p = Placeable.new(name, def, lpp.getMacroArgOffset(2))
   return p:makeC()
+end
+
+-- * --------------------------------------------------------------------------
+
+ui.style = function(var, widget, text)
+  local out = cmn.buffer.new()
+  local widget_def = ui.widgets[widget]
+  if not widget_def then
+    error("no widget named "..widget)
+  end
+  local props = Style.parse(widget_def, text)
+  for name,spec in pairs(props) do
+    out:put(
+      Style.setAs(
+        var.."->style",
+        spec.property,
+        spec.value,
+        var),
+      ";\n")
+  end
+  return out:get()
 end
 
 return ui

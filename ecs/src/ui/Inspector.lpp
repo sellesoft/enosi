@@ -11,7 +11,8 @@ $ if false then
 
 $ local buf = buffer.new()
 $ glob"**/*.lh":each(function(path) -- */
-$   if path:find "Window_win32.lh" then
+$   if path:find "Window_win32.lh" or 
+$      path:find "Window_linux.lh" then
 $     return
 $   end
 $   local result = lpp.import(path)
@@ -523,7 +524,7 @@ $       if type:is(ast.ElaboratedType) then
 $          type = type.desugared
 $       end
 $       if type:is(ast.BuiltinType) then
-  BuiltinMemberState<$(field.type.name)> member$(i);
+  BuiltinMemberState<$(type.name)> member$(i);
 $       else
   MemberState member$(i);
 $       end
@@ -675,29 +676,20 @@ b8 AddressSet::getOrCreateState(
 
 /* ----------------------------------------------------------------------------
  */
-template<>
-InspectorEngineTree* UI::make(String id)
+InspectorEngineTree* InspectorEngineTree::create(UI& ui, Engine* engine)
 {
-  auto iet = mem::stl_allocator.construct<InspectorEngineTree>();
-  if (!initItem(id, iet))
+  auto tree = mem::stl_allocator.construct<InspectorEngineTree>();
+  if (!ui.initItem(id, tree))
   {
-    mem::stl_allocator.free(iet);
+    mem::stl_allocator.free(tree);
     return nullptr;
   }
 
-  iet->update_triggers = 
+  tree->update_triggers = 
       UpdateReason::Start 
     | UpdateReason::Fin
     | UpdateReason::MousePressed;
 
-  return iet;
-}
-
-/* ----------------------------------------------------------------------------
- */
-InspectorEngineTree* InspectorEngineTree::create(UI& ui, Engine* engine)
-{
-  auto tree = ui.make<InspectorEngineTree>("Inspector.EngineTree"_str);
   if (tree == nullptr)
     return nullptr;
   if (!tree->states.init())
@@ -712,9 +704,6 @@ InspectorEngineTree* InspectorEngineTree::create(UI& ui, Engine* engine)
 
   tree->r_font.track(
     gfx::Font::load("gohu"_str, ui.eng->assetmgr, ui.eng->renderer));  
-
-  auto test = tree->r_font.copy();
-  test.release();
 
   tree->bg = ui.drawcmds.add();
   tree->bg->alloc(&ui, gfx::putFilledRectCounts());
@@ -894,8 +883,7 @@ $ end
 
 /* ----------------------------------------------------------------------------
  */
-template<>
-Inspector* UI::make(String id)
+Inspector* Inspector::create(UI& ui, Engine* engine)
 {
   auto ins = mem::stl_allocator.construct<Inspector>();
   if (!initItem(id, ins))
@@ -903,30 +891,23 @@ Inspector* UI::make(String id)
     mem::stl_allocator.free(ins);
     return nullptr;
   }
-  return ins;
-}
 
-/* ----------------------------------------------------------------------------
- */
-Inspector* Inspector::create(UI& ui, Engine* engine)
-{
-  auto ins = ui.begin<Inspector>("Inspector"_str);
-$ local this = ui.createItemContext("Inspector", "ins")
-  @this.style.set.background_color(0);
-  @this.style.set.sizing(auto_x | percent_y);
-  @this.style.set.size({0, 100});
-  @this.style.set.border({1,1,1,1});
-  @this.style.set.border_color(0x99bbbbff);
+  @ui.style(ins, Inspector,
+  | background_color: 0x00000000
+  | size: auto 100%
+  | border: 1
+  | border_color: 0x99bbbbff)
 
-  ins->fps = ui.make<Text>("Inspector.fps"_str, ""_str);
+  ins->fps = ui::Text::make(ui, "Inspector.fps"_str, ""_str);
 
   auto tree = ins->tree = InspectorEngineTree::create(ui, engine);
 
 $ local tree = ui.createItemContext("InspectorEngineTree", "tree")
+  
   @tree.style.set.background_color(even_row_color);
   @tree.style.set.padding({5,5,5,5});
 
-  ui.end<Inspector>();
+  ui.endItem();
 
   return ins;
 }

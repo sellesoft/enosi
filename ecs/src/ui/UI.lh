@@ -6,7 +6,6 @@
 $ local cmn = require "common"
 $ local ui = require "ui.UI"
 
-
 @@lpp.import "ui/Item.lh"
 @@lpp.import "ui/DrawCmd.lh"
 
@@ -77,38 +76,25 @@ struct UI
 
   b8 update(Engine& engine);
 
-  b8 initItem(String id, Item* item);
-
-  // TODO(sushi) maybe move away from make/begin being template based as it's
-  //             not really necessary and probably just slows down compile 
-  //             times. It also imposes restrictions on how you can define
-  //             functions for making/beginning widgets.
-
-  // TODO(sushi) someway to reuse styles if we ever need it.
-  template<typename TItem>
-  TItem* make(String id = nil);
-
-  // It's actually wild that this works and I'm not sure how much I like it
-  // but it's nice.
-  template<typename TItem, typename... TArgs>
-  TItem* make(String id, TArgs... args);
-
-  template<typename TItem>
-  TItem* begin(String id = nil) 
+  // Helper for widgets to allocate themselves and initialize base Item 
+  // stuff.
+  template<typename T>
+  T* allocateAndInitItem(String id)
   {
-    TItem* item = make<TItem>(id);
-    item_stack.push(item);
+    auto* item = (T*)mem::stl_allocator.construct<T>();
+
+    if (!item->init(*this, id))
+    {
+      mem::stl_allocator.deconstruct(item);
+      return nullptr;
+    }
+
     return item;
   }
 
-  template<typename TItem, typename... TArgs>
-  TItem* begin(String id, TArgs... args)
-  {
-    TItem* item = make<TItem>(id, args...);
-    item_stack.push(item);
-    return item;
-  }
+  Item* allocateAndInitItem(u64 size, String id);
 
+  void beginItem(Item* item);
   void endItem();
 
   template<typename TItem>
@@ -116,7 +102,7 @@ struct UI
 
 private:
 
-  void updateTree(ItemNode* node);
+  void updateTree(ItemNode* node, const mat3x2& current_transform);
 
   struct FlexContext
   {

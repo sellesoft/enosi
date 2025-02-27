@@ -4,6 +4,7 @@ $ local glob = require "Glob"
 $ local Processor = require "reflect.Processor"
 $ local ast = require "reflect.AST"
 $ local List = require "List"
+$ local util = require "Util"
 
 #include "iro/Logger.h"
 
@@ -38,6 +39,13 @@ local p = Processor.new(tostring(imported))
 p:run()
 $$$
 @imported:get
+
+$ local removeTypeTag = function(name)
+$   return name
+$     :gsub("struct ", "")
+$     :gsub("union ", "")
+$     :gsub("enum ", "")
+$ end
 
 template<typename T>
 b8 packSourceDataIntoEnum(const SourceData& data, T* out);
@@ -194,6 +202,7 @@ b8 packCompiledTexture(
  */
 b8 destroyCompiledTexture(gfx::CompiledTexture** data)
 {
+  *data = nullptr;
   // (*data)->gfx_texture.destroy();
   return true;
 }
@@ -201,10 +210,11 @@ b8 destroyCompiledTexture(gfx::CompiledTexture** data)
 $ -- * ------------------------------------------------------------------------
 
 $ local putEnumPacker = function(name, decl)
+$   local typename = removeTypeTag(decl.name)
 /* ----------------------------------------------------------------------------
  */
 template<>
-b8 packSourceDataIntoEnum(const SourceData& data, $(name)* out)
+b8 packSourceDataIntoEnum(const SourceData& data, $(typename)* out)
 {
   if (!data.hasStringValue())
     return ERROR("expected a string for $(name) enum data\n");
@@ -212,7 +222,7 @@ b8 packSourceDataIntoEnum(const SourceData& data, $(name)* out)
   switch (data.val.str.hash())
   {
 $ for elem in decl.elems:each() do
-  case "$(elem)"_hashed: *out = $(name)::$(elem); break;
+  case "$(elem)"_hashed: *out = $(typename)::$(elem); break;
 $ end
 
   default:
@@ -312,6 +322,8 @@ $       if decl.specialized_name == "Array" then
 $         return (putArrayPackCase(declname, field, decl, prereqs))
 $       elseif decl.specialized_name == "vec2" then
 $         return (putVec2PackCase(declname, field, prereqs))
+$       elseif decl.specialized_name == "Flags" then
+$         -- TODO(sushi) handle Flags
 $       else
 $         error("unhandled specialized template "..decl.specialized_name)
 $       end
@@ -343,7 +355,10 @@ b8 packSourceDataIntoType<$(name)>(
 
   // TODO(sushi) handle defaulted stuff.
   if (data.children.isEmpty())
+  {
+    mem::zero(out, sizeof($(name)));
     return true;
+  }
 
   for (const SourceData* child : data.children)
   {
@@ -372,8 +387,8 @@ $ {
 $   String = true
 $ }
 $ local function putPacker(name, decl, prereqs)
-$   if not decl or placed_packers[name] then return end
-$   placed_packers[name] = true
+$   if not decl or placed_packers[decl.name] then return end
+$   placed_packers[decl.name] = true
 $   if decl:is(ast.Struct) then
 $     for field in decl:eachFieldWithIndex() do
 $       putPacker(field.type.name, field.type:getDecl(), prereqs)
@@ -399,6 +414,7 @@ $     :gsub("union ", "")
 $     :gsub("enum ", "")
 $   local prereqs = List{}
 $   if decl.decl:is(ast.Record) then
+$     -- util.dumpValue(decl.decl)
 $     putPacker(name, decl.decl, prereqs)
 $     placed_packers[decl.name] = true
 $   end
@@ -480,8 +496,8 @@ $ {
 $   String = true
 $ }
 $ local function putDestroyer(name, decl, prereqs)
-$   if not decl or placed_destroyers[name] then return end
-$   placed_destroyers[name] = true
+$   if not decl or placed_destroyers[decl.name] then return end
+$   placed_destroyers[decl.name] = true
 $   if decl:is(ast.Struct) then
 $     for field in decl:eachFieldWithIndex() do
 $       putDestroyer(field.type.name, field.type:getDecl(), prereqs)

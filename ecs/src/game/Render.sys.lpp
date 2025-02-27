@@ -8,6 +8,7 @@ $ require "common"
 @@lpp.import "game/Transform.comp.lh"
 @@lpp.import "graphics/Renderer.lh"
 @@lpp.import "ui/UI.lh"
+@@lpp.import "event/BroadcastEventBus.h"
 
 #include "iro/Logger.h"
 #include "iro/time/Time.h"
@@ -75,13 +76,12 @@ b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
   ip[3] = 0; ip[4] = 2; ip[5] = 3;
   background_buffer.unmap();
 
-  // Init debug buffer.
-  // TODO(sushi) make optional
-  if (!debug_buffer.init(
-        MAX_QUADS*4*sizeof(gfx::Vertex),
-        MAX_QUADS*6*sizeof(gfx::Index)))
-    return ERROR("failed to init debug buffer\n");
-  debug_buffer.setGfxAttributes();
+  // Init external buffer.
+  if (!external_buffer.init(
+        MAX_EXTERNAL*4*sizeof(gfx::Vertex),
+        MAX_EXTERNAL*6*sizeof(gfx::Index)))
+    return ERROR("failed to init external buffer\n");
+  external_buffer.setGfxAttributes();
 
   u8 white_pixels[16] =
   {
@@ -110,18 +110,16 @@ void RenderSys::deinit(gfx::Renderer& renderer)
 {
   quads_buffer.deinit();
   background_buffer.deinit();
+  external_buffer.deinit();
 }
 
 /* ----------------------------------------------------------------------------
  */
-static void drawBatches(
-    RenderSys& sys,
-    const RenderSys::UpdateParams& params)
+static void drawBatches(RenderSys& sys, gfx::Renderer& renderer)
 {
   assert(sys.batch_count <= RenderSys::MAX_BATCHES);
   assert(sys.quad_count <= RenderSys::MAX_QUADS);
 
-  gfx::Renderer& renderer = params.renderer;
   renderer.pushBindBuffer(sys.quads_buffer);
 
   u32 index_offset = 0;
@@ -145,51 +143,50 @@ static void drawBatches(
 
 /* ----------------------------------------------------------------------------
  */
-static void drawQuad(
-  RenderSys& sys,
-  const RenderSys::UpdateParams& params,
+void RenderSys::drawQuad(
   vec2f pos,
   const gfx::CompiledTexture* texture,
-  Color color)
+  Color color,
+  gfx::Renderer& renderer)
 {
-  assert(sys.quads_buffer.mapped.vp != nullptr);
+  assert(quads_buffer.mapped.vp != nullptr);
 
-  if (texture != sys.batches[sys.batch_count-1].texture)
+  if (texture != batches[batch_count-1].texture)
   {
-    if (sys.batches[sys.batch_count-1].quad_count > 0)
+    if (batches[batch_count-1].quad_count > 0)
     {
-      if (sys.batch_count >= RenderSys::MAX_BATCHES)
+      if (batch_count >= RenderSys::MAX_BATCHES)
       {
-        sys.quads_buffer.unmap();
-        drawBatches(sys, params);
-        sys.quads_buffer.map(); // TODO(delle) investigate if this stalls
-        assert(sys.quads_buffer.mapped.vp != nullptr);
+        quads_buffer.unmap();
+        drawBatches(*this, renderer);
+        quads_buffer.map(); // TODO(delle) investigate if this stalls
+        assert(quads_buffer.mapped.vp != nullptr);
       }
       else
       {
-        sys.batch_count++;
+        batch_count++;
       }
     }
 
-    sys.batches[sys.batch_count-1].quad_count = 0;
-    sys.batches[sys.batch_count-1].texture = texture;
+    batches[batch_count-1].quad_count = 0;
+    batches[batch_count-1].texture = texture;
   }
 
-  auto vp = (gfx::Vertex*)sys.quads_buffer.mapped.vp + 4*sys.quad_count;
+  auto vp = (gfx::Vertex*)quads_buffer.mapped.vp + 4*quad_count;
   vp[0] = gfx::Vertex{ pos + vec2f(-0.f,-0.f), vec2f(0,1), color.rgba };
   vp[1] = gfx::Vertex{ pos + vec2f( 1.f,-0.f), vec2f(1,1), color.rgba };
   vp[2] = gfx::Vertex{ pos + vec2f( 1.f, 1.f), vec2f(1,0), color.rgba };
   vp[3] = gfx::Vertex{ pos + vec2f(-0.f, 1.f), vec2f(0,0), color.rgba };
 
-  sys.batches[sys.batch_count-1].quad_count++;
-  sys.quad_count++;
+  batches[batch_count-1].quad_count++;
+  quad_count++;
 
-  if (sys.quad_count >= RenderSys::MAX_QUADS)
+  if (quad_count >= RenderSys::MAX_QUADS)
   {
-    sys.quads_buffer.unmap();
-    drawBatches(sys, params);
-    sys.quads_buffer.map(); // TODO(delle) investigate if this stalls
-    assert(sys.quads_buffer.mapped.vp != nullptr);
+    quads_buffer.unmap();
+    drawBatches(*this, renderer);
+    quads_buffer.map(); // TODO(delle) investigate if this stalls
+    assert(quads_buffer.mapped.vp != nullptr);
   }
 }
 
@@ -209,7 +206,8 @@ b8 RenderSys::update(const UpdateParams& params)
   renderer.pushSetViewport(params.viewport.pos, params.viewport.size);
   renderer.pushSetScissor(params.viewport.pos, params.viewport.size);
 
-  debug_counts = {};
+  external_counts = {};
+  external_buffer.map();
 
   ///////////////////////////////////////////////
   // 1. Draw Background
@@ -251,6 +249,9 @@ b8 RenderSys::update(const UpdateParams& params)
 
   renderer.pushUniformBool("has_texture"_str, true);
 
+  if (params.broadcast)
+    params.broadcast->raise<PreMapRender>({this});
+
   if (params.map)
   {
     Map& map = *params.map;
@@ -269,32 +270,15 @@ b8 RenderSys::update(const UpdateParams& params)
           continue;
 
         vec2f pos = map.getTilePos(layer, tile);
-        drawQuad(*this, params, pos, tile.def->texture, tint);
-      }
-
-      if (params.debug)
-      {
-        quads_buffer.unmap();
-        defer { quads_buffer.map(); };
-
-        debug_buffer.map();
-
-        debug_counts +=
-          gfx::putBorders(
-            (gfx::Vertex*)debug_buffer.mapped.vp,
-            (gfx::Index*)debug_buffer.mapped.ip,
-            debug_counts,
-            {0.25f, 0.25f, 0.25f, 0.25f},
-            layer.def->pos,
-            layer.def->size,
-            {255,0,0,255});
-
-        debug_buffer.unmap();
+        drawQuad(pos, tile.def->texture, tint, renderer);
       }
 
       layer_idx++;
     }
   }
+
+  if (params.broadcast)
+    params.broadcast->raise<PreSpriteRender>({this});
 
   ///////////////////////////////////////////////
   // 3. Draw Sprite Components
@@ -322,30 +306,29 @@ b8 RenderSys::update(const UpdateParams& params)
           texture = null_texture.getData();
           color = 0xff0000ff;
         }
-        drawQuad(*this, params, pos, texture, color);
+        drawQuad(pos, texture, color, renderer);
       }
     }
   }
 
+  if (params.broadcast)
+    params.broadcast->raise<PostRender>({this});
+
+  external_buffer.unmap();
   quads_buffer.unmap();
   if (batch_count > 0)
   {
-    drawBatches(*this, params);
+    drawBatches(*this, renderer);
   }
 
-  if (params.debug)
+  if (external_counts.x != 0)
   {
-    gfx::Renderer& renderer = params.renderer;
+    external_buffer.num_vertexes = external_counts.x;
+    external_buffer.num_indexes = external_counts.y;
 
-    if (debug_counts.x != 0)
-    {
-      debug_buffer.num_vertexes = debug_counts.x;
-      debug_buffer.num_indexes = debug_counts.y;
-
-      renderer.pushBindTexture(white_texture);
-      renderer.pushBindBuffer(debug_buffer);
-      renderer.pushDraw(0, debug_counts.y, 0);
-    }
+    renderer.pushBindTexture(white_texture);
+    renderer.pushBindBuffer(external_buffer);
+    renderer.pushDraw(0, external_counts.y, 0);
   }
 
   return true;

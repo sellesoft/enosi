@@ -11,8 +11,10 @@ $ local ui = require "ui.UI"
 
 @@lpp.import "ui/UI.lh"
 @@lpp.import "ui/widgets/Text.lh"
+@@lpp.import "ui/widgets/Button.lh"
 @@lpp.import "asset/SourceDataFileHandle.lh"
 @@lpp.import "game/Render.sys.lh"
+@@lpp.import "game/Render.events.lh"
 @@lpp.import "game/EntityMgr.lh"
 @@lpp.import "game/Eye.sys.lh"
 @@lpp.import "game/map/Map.lh"
@@ -21,6 +23,7 @@ $ local ui = require "ui.UI"
 @@lpp.import "graphics/Texture.lh"
 
 struct AssetMgr;
+struct BroadcastEventBus;
 
 namespace gfx
 {
@@ -44,11 +47,12 @@ struct
   SourceDataFileHandle h_selected_map = {};
 
   gfx::Framebuffer framebuffer;
-  gfx::Texture texture;
 
   gfx::Renderer* renderer;
 
   DrawCmd* map_render;
+
+  Item* left_panel;
 
   EyeSys    eye;
   RenderSys rendersys;
@@ -69,13 +73,43 @@ struct
   vec2f drag_start_eye;
   vec2f drag_start_viewport;
 
-  static MapEditor* create(UI& ui, gfx::Renderer& renderer);
+  enum class Tool
+  {
+    None,
+    Add,
+    Remove,
+  };
+
+  Tool tool = Tool::None;
+  Text* selected_tool;
+
+  struct
+  {
+    Button* none;
+    Button* add;
+    Button* remove;
+  } select_button;
+
+  Item* add_options;
+
+  // TODO(sushi) remove once we are on Vulkan and can hopefully map 
+  //             buffers while UI is updating. That doesn't work rn for 
+  //             whatever reason so we have to call renderMap in 
+  //             GameMgr::update
+  b8 need_render = false;
+
+  static MapEditor* create(UI& ui, gfx::Renderer* renderer);
   void destroy();
 
   void selectMap(SourceDataFileHandle& h_map);
 
-  void renderMap(AssetMgr& assetmgr);
+  void renderMap(UI& ui);
 
+  void onPreMapRender(PreMapRender& event);
+  void onPreSpriteRender(PreSpriteRender& event);
+  void onPostRender(PostRender& event);
+
+  void evaluate(UI* ui) override;
   void generate(UI* ui) override;
   void update(UI* ui, UpdateReason reason) override;
   void reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post) override;

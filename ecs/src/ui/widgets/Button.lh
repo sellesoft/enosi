@@ -13,6 +13,8 @@ $ local ui = require "ui.UI"
 namespace ui
 {
 
+struct UI;
+
 /* ============================================================================
  */
 enum class ButtonActivation
@@ -36,14 +38,51 @@ schema
 },
 struct
 {
-  struct WorkingData : Item::WorkingData {};
-  
-  typedef void (*Action)(void*, ButtonActivation);
+  typedef void (*Action)(Button*,void*,ButtonActivation);
 
   Action action;
   void* userdata;
 
-  virtual void update(UI* ui, UpdateReason reason) override;
+  static Button* make(UI& ui, void* data, Action action, String name = nil);
+  static Button* begin(UI& ui, void* data, Action action, String name = nil);
+  
+  // Helper for defining an action that takes typed data.
+  // Note that when using this you'll probably have to explicitly declare
+  // the type of the data as a template arg, as clang seems to be unable 
+  // to match it correctly.
+  template<typename TData>
+  static Button* make(
+    UI& ui, 
+    TData* data, 
+    void (*action)(Button*,TData*,ButtonActivation),
+    String name = nil)
+  {
+    union
+    {
+      decltype(action) x;
+      Action y;
+    } in { action };
+
+    return make(ui, (void*)data, in.y, name);
+  }
+
+  template<typename TData>
+  static Button* begin(
+    UI& ui,
+    TData* data,
+    void (*action)(Button*,TData*,ButtonActivation),
+    String name = nil)
+  {
+    union
+    {
+      decltype(action) x;
+      Action y;
+    } in { action };
+
+    return begin(ui, (void*)data, in.y, name);
+  }
+
+  void update(UI* ui, UpdateReason reason) override;
 })
 
 }

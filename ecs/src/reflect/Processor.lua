@@ -104,6 +104,12 @@ end
 Processor.run = function(self)
   local tu = self.clang:getTranslationUnitDecl()
   local iter = tu:getDeclIter()
+  self:processTopLevelDecls(iter)
+end
+
+-- * --------------------------------------------------------------------------
+
+Processor.processTopLevelDecls = function(self, iter)
   while true do
     local cdecl = iter:next()
     if not cdecl then break end
@@ -158,7 +164,17 @@ Processor.processTopLevelDecl = function(self, cdecl)
   --   print(cdecl:name())
   -- end
 
-  return (self:resolveDecl(cdecl))
+  if cdecl:isNamespace() then
+    local name = cdecl:name()
+    if name ~= "std" then
+      local iter = cdecl:getDeclIter()
+      if iter then
+        self:processTopLevelDecls(iter)
+      end
+    end
+  else
+    return (self:resolveDecl(cdecl))
+  end
 end
 
 -- * --------------------------------------------------------------------------

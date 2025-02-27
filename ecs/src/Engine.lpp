@@ -1,5 +1,6 @@
 $ local cmn = require "common"
 $ local ui = require "ui.UI"
+$ local Style = require "ui.Style"
 
 @@lpp.import "Engine.lh"
 
@@ -29,70 +30,6 @@ using namespace iro;
 
 static Logger logger =
   Logger::create("ecs.eng"_str, Logger::Verbosity::Info);
-
-namespace ui
-{
-
-@@ui.definePlaceable(Demo,
-{
-  Item root
-  | size: 500 500
-  | padding: 5
-  | font: "gohu"
-  | font_height: 11
-  | background_color: 0x08141eff
-  {
-    Text hovered_info
-    | wrap: word
-    ("bleh");
-
-    Item header
-    | size: 100% 11
-    | display: flex horizontal
-    | margin: 0 0 0 60
-    {
-      .header_sep
-      | sizing: flex
-      | size: 1 1
-      | alignment: 0.5 0.5
-      | margin: 5;
-
-      Separator | .header_sep;
-
-      Text ("demo");
-
-      Separator | .header_sep;
-    }
-
-    Text ("bah bah bah");
-
-    CollapsingHeader
-    | size: 100% auto
-    | header_height: 15
-    | content_background_color: 0x34aeaeff
-    | border: 0 3 0 3
-    | padding: 5 5 5 5
-    ("header")
-    {
-      Item bg
-      | size: 100% auto
-      | background_color: 0xaa4488ff
-      {
-        CollapsingHeader
-        | size: 100% 100
-        | header_height: 15
-        ("hello")
-        {
-          Text ("goodbye");
-        }
-      }
-    }
-  }
-})
-
-}
-
-ui::Demo demo;
 
 /* ----------------------------------------------------------------------------
  */
@@ -209,8 +146,6 @@ $ end
 
   gfx::Font::compileBDF(params);
 
-  // demo.place(ui);
-
   // inspector = ui::Inspector::create(ui, this);
 
   $ local inspector = ui.createItemContext("Inspector", "inspector")
@@ -303,7 +238,7 @@ b8 Engine::update()
   // io::format(&fps, 1.f / (TimePoint::now() - start).toSeconds());
   // inspector->fps->set(fps.asStr());
 
-  ui.root->dirty = true;
+  // ui.root->dirty = true;
 
   return true;
 }

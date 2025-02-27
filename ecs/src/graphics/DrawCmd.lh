@@ -5,9 +5,11 @@
 $ require "common"
 
 #include "math/vec.h"
+#include "math/mat.h"
 
 @@lpp.import "graphics/Texture.lh"
 @@lpp.import "graphics/Framebuffer.lh"
+@@lpp.import "graphics/Buffer.lh"
 
 namespace gfx
 {

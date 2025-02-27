@@ -19,6 +19,9 @@ namespace ui
 struct
 {
   DrawCmd* dc;
+
+  static Separator* make(UI& ui, String name = nil);
+  
   virtual void generate(UI* ui) override;
   virtual void reportDrawCmds(
     UI* ui, DrawCmdList& pre, DrawCmdList& post) override { pre.push(dc); }

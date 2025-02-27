@@ -16,6 +16,34 @@ namespace ui
 
 /* ----------------------------------------------------------------------------
  */
+b8 Item::init(UI& ui, String name)
+{
+  this->name = name;
+  if (!style.init())
+    return false;
+  node = &ui.item_tree.addLast(ui.item_stack.head->data->node, this);
+  dirty = true;
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Item* Item::make(UI& ui, String name)
+{
+  return ui.allocateAndInitItem<Item>(name);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Item* Item::begin(UI& ui, String name)
+{
+  auto* item = Item::make(ui, name);
+  ui.beginItem(item);
+  return item;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 void Item::generate(UI* ui) {}
 
 /* ----------------------------------------------------------------------------

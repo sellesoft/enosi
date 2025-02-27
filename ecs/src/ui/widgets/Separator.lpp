@@ -16,19 +16,11 @@ namespace ui
 
 /* ----------------------------------------------------------------------------
  */
-template<>
-Separator* UI::make<Separator>(String id)
+Separator* Separator::make(UI& ui, String id)
 {
-  auto* sep = mem::stl_allocator.construct<Separator>();
-  if (!initItem(id, sep))
-  {
-    mem::stl_allocator.free(sep);
-    return nullptr;
-  }
-
-  sep->dc = drawcmds.add();
-  sep->dc->alloc(this, gfx::putFilledRectCounts());
-
+  auto* sep = ui.allocateAndInitItem<Separator>(id);
+  sep->dc = ui.drawcmds.add();
+  sep->dc->alloc(&ui, gfx::putFilledRectCounts());
   return sep;
 }
 

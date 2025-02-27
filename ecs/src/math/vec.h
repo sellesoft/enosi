@@ -250,16 +250,29 @@ inline vec2f floor(const vec2f& x)
   return vec2f(floor(x.x), floor(x.y));
 }
 
+/* ----------------------------------------------------------------------------
+ */
+inline vec2f ceil(const vec2f& x)
+{
+  return vec2f(ceil(x.x), ceil(x.y));
+}
+
+/* ----------------------------------------------------------------------------
+ */
 inline vec2f round(const vec2f& x)
 {
   return vec2f(round(x.x), round(x.y));
 }
 
+/* ----------------------------------------------------------------------------
+ */
 inline vec2f max(const vec2f& x, const vec2f& y)
 {
   return vec2f(max(x.x, y.x), max(x.y, y.y));
 }
 
+/* ----------------------------------------------------------------------------
+ */
 inline vec2f min(const vec2f& x, const vec2f& y)
 {
   return vec2f(min(x.x, y.x), min(x.y, y.y));

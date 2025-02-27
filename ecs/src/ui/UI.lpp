@@ -22,35 +22,16 @@ static Logger logger =
 
 /* ----------------------------------------------------------------------------
  */
-b8 UI::initItem(String id, Item* item)
+void UI::beginItem(Item* item)
 {
-  item->name = id;
-  item->node = &item_tree.addLast(item_stack.head->data->node, item);
-  if (!item->style.init())
-    return false;
-  item->dirty = true;
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-template<>
-Item* UI::make<Item>(String id)
-{
-  Item* item = mem::stl_allocator.construct<Item>();
-  if (!initItem(id, item))
-  {
-    mem::stl_allocator.free(item);
-    return nullptr;
-  }
-
-  return item;
+  item_stack.push(item);
 }
 
 /* ----------------------------------------------------------------------------
  */
 void UI::endItem()
 {
+  assert(item_stack.head->data != root && "attempt to end the root item!");
   item_stack.pop();
 }
 
@@ -178,7 +159,10 @@ b8 UI::update(Engine& engine)
 
   temp_alloc.init();
 
-  updateTree(root->node);
+  auto base_transform = 
+    mat3x2::createTransform({0.f,0.f}, 0.f);
+
+  updateTree(root->node, base_transform);
 
   temp_alloc.deinit();
 
@@ -190,7 +174,6 @@ b8 UI::update(Engine& engine)
 
   if (scrolling_item)
   {
-    INFO(scrolling_item->scroll, "\n");
     if (input.wasMouseButtonReleased(MouseButton::Left))
     {
       scrolling_item = nullptr;
@@ -290,11 +273,11 @@ static ItemNode* findStaticSizedParent(
 
 /* ----------------------------------------------------------------------------
  */
-void UI::updateTree(ItemNode* node)
+void UI::updateTree(ItemNode* node, const mat3x2& current_transform)
 {
   gfx::Renderer& renderer = eng->renderer;
-  Window& window = eng->window;
-  InputMgr& input = eng->input;
+  Window&        window   = eng->window;
+  InputMgr&      input    = eng->input;
 
   Item* item = node->data;
   Item* parent = (node->parent? node->parent->data : nullptr);
@@ -459,6 +442,8 @@ $ end
     scext.x != 0.f          && scext.y != 0.f          &&
     scoff.x + scext.x > 0.f && scoff.y + scext.y > 0.f;
 
+  b8 pushed_transform = false;
+
   auto emitDrawCmd = [&](DrawCmd* drawcmd)
   {
     if (notnil(drawcmd->tex))
@@ -481,9 +466,9 @@ $ end
         "\n    vo: ", drawcmd->vertex_offset, "\n");
 
     renderer.pushDraw(
-        drawcmd->index_offset,
-        drawcmd->counts_used.y,
-        drawcmd->vertex_offset);
+      drawcmd->index_offset,
+      drawcmd->counts_used.y,
+      drawcmd->vertex_offset);
   };
 
   auto emitDrawCmds = [&](DrawCmdList& drawcmds)
@@ -496,7 +481,13 @@ $ end
 
   if (item_in_view)
   {
-     renderer.pushSetScissor(
+    mat3x2 this_transform = 
+      current_transform.mul(
+        mat3x2::createTransform(item->pos_local, 0.f));
+
+    renderer.pushUniformMat3x2("model"_str, this_transform);
+
+    renderer.pushSetScissor(
       vec2i(scoff.x, window.size.y - (scoff.y+scext.y)), scext);
 
     // Emit background if we have one.
@@ -518,7 +509,7 @@ $ end
     if (item->shouldPlaceChildren())
     {
       for (ItemNode* child = node->first_child; child; child = child->next)
-        updateTree(child);
+        updateTree(child, this_transform);
     }
 
     // Children likely changed scissor, so we have to set it back.

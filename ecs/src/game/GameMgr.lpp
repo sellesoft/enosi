@@ -99,9 +99,7 @@ b8 GameMgr::update()
   if (!rendersys.update(render_params1))
     return false;
 
-  map_editor->renderMap(engine->assetmgr);
-  engine->renderer.pushSetViewport(
-      {0,0},{engine->window.size.x,engine->window.size.y});
+  map_editor->renderMap(engine->ui);
 
   $ local map_editor = ui.createItemContext("MapEditor", "map_editor")
   if (engine->input.wasKeyPressed(Key::M))

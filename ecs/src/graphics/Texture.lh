@@ -43,6 +43,18 @@ struct Texture
     void*            pixels);
 
   void destroy();
+
+  // TODO(sushi) once we move to Vulkan figure out if we can just update 
+  //             specific information about the Texture w/o having to store
+  //             all the properties it was originally created with.
+  void recreate(
+    u32              width,
+    u32              height,
+    ImageFormat      format,
+    ImageAddressMode address_mode,
+    ImageFilter      filter,
+    ImageKind        kind,
+    void*            pixels);
 };
 
 }

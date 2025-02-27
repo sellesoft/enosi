@@ -15,19 +15,14 @@ namespace ui
 
 /* ----------------------------------------------------------------------------
  */
-template<>
-Button* UI::make(String id, Button::Action action, void* userdata)
+Button* Button::make(UI& ui, void* data, Action action, String name)
 {
-  auto* button = mem::stl_allocator.construct<Button>();
-
-  if (!initItem(id, button))
-  {
-    mem::stl_allocator.free(button);
+  auto* button = ui.allocateAndInitItem<Button>(name);
+  if (button == nullptr)
     return nullptr;
-  }
 
   button->action = action;
-  button->userdata = userdata;
+  button->userdata = data;
 
   button->update_triggers = 
       UpdateReason::MousePressed
@@ -38,18 +33,11 @@ Button* UI::make(String id, Button::Action action, void* userdata)
 
 /* ----------------------------------------------------------------------------
  */
-template<>
-Button* UI::make(String id, Button::Action action)
+Button* Button::begin(UI& ui, void* data, Action action, String name)
 {
-  return make<Button>(id, action, (void*)nullptr);
-}
-
-/* ----------------------------------------------------------------------------
- */
-template<>
-Button* UI::make(String id)
-{
-  return make<Button>(id, (Button::Action)nullptr, (void*)nullptr);
+  Button* button = make(ui, data, action, name);
+  ui.beginItem(button);
+  return button;
 }
 
 /* ----------------------------------------------------------------------------
@@ -68,14 +56,14 @@ void Button::update(UI* ui, UpdateReason reason)
   case UpdateReason::MousePressed:
     if (@this.style.triggers.test(Pressed))
     {
-      action(userdata, ButtonActivation::Pressed);
+      action(this, userdata, ButtonActivation::Pressed);
     }
     break;
 
   case UpdateReason::MouseReleased:
     if (@this.style.triggers.test(Released))
     {
-      action(userdata, ButtonActivation::Released);
+      action(this, userdata, ButtonActivation::Released);
     }
     break;
   }

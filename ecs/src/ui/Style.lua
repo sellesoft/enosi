@@ -6,6 +6,7 @@
 
 local List = require "List"
 local buffer = require "string.buffer"
+local Parser = require "Parser"
 
 local Style = {}
 
@@ -65,6 +66,96 @@ Style.setAsInherited = function(var, property, itemvar)
 
   buf:put(")")
   return buf:get()
+end
+
+--- Generates a table containing style property keys and their values
+--- from a style string.
+Style.parse = function(widget, text)
+  local style = {}
+  local schema = widget.schema_def
+  local parser = Parser.new(text,0)
+
+  -- Consume possible vertical bar.
+  parser:checkToken "|"
+
+  while true do
+    local propname = parser:expectIdentifier()
+
+    local property = schema:findProperty(propname)
+
+    if not property then
+      parser:errorHere("no property named '",propname,"' in schema of ",
+                       widget.name)
+    end
+
+    if property.base_property then
+      property = property.base_property
+    end
+
+    parser:expectToken ":"
+
+    if parser:checkToken "inherit" then
+      style[propname] = "inherit"
+    else
+      local result
+      if not property.valueParser then
+        if not property.type.valueParser then
+          parser:errorHere("property ", property.name, " does not define ",
+                           "a value parser nor does its underlying type")
+        end
+        
+        result = property.type:valueParser(property, parser)
+      else
+        -- TODO(sushi) loading the lua chunks for parsing these values 
+        --             should only be done once per property.
+        local vparser, err = loadstring(
+          "return function(parser, style)\n"..property.valueParser..
+          "\nend",
+          property.name..":valueParser()")
+
+        if vparser == nil then
+          parser:errorHere("failed to load valueParser for property "..
+                           property.name, ":\n", err)
+        end
+
+        local interface = 
+        {
+          set = setmetatable({},
+          {
+            __index = function(_, key)
+              local prop = schema:findProperty(key)
+              if not prop then
+                parser:errorHere("no property named ",key," in schema ",
+                                 "of widget ",widget.name)
+              end
+              return function(val)
+                style[key] = 
+                {
+                  property=prop,
+                  value=prop.type:set(prop,val)
+                }
+              end
+            end,
+          })
+        }
+
+        local res, err = pcall(vparser(), parser, interface)
+
+        if not res then
+          error(err)
+        end
+
+        result = err
+      end
+
+      style[propname] = {property=property, value=result}
+    end
+    if not parser:checkToken "|" then
+      break
+    end
+  end
+
+  return style
 end
 
 return Style

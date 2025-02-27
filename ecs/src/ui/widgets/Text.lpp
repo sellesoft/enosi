@@ -298,17 +298,13 @@ void TextState::freeRenderer()
 
 /* ----------------------------------------------------------------------------
  */
-template<>
-Text* UI::make(String id, String init)
+Text* Text::make(UI& ui, String id, String init)
 {
-  Text* text = mem::stl_allocator.construct<Text>();
-  if (!initItem(id, text))
-  {
-    mem::stl_allocator.free(text);
+  auto* text = ui.allocateAndInitItem<Text>(id);
+  if (text == nullptr)
     return nullptr;
-  }
 
-  if (!text->state.init(this, init))
+  if (!text->state.init(&ui, init))
   {
     mem::stl_allocator.free(text);
     return nullptr;

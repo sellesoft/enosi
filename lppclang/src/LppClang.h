@@ -321,6 +321,7 @@ LPPCFUNC Type* getTemplateArgType(TemplateArg* arg);
 LPPCFUNC b8 isTemplateArgIntegral(TemplateArg* arg);
 LPPCFUNC s64 getTemplateArgIntegral(TemplateArg* arg);
 
+LPPCFUNC b8 isNamespace(Decl* decl);
 
 // Only works on 'record' types; structs or unions.
 LPPCFUNC b8 isAnonymous(Decl* decl);

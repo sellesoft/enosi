@@ -10,6 +10,7 @@ $ require "common"
 #include "iro/Common.h"
 #include "math/Rect.h"
 #include "math/mat.h"
+#include "Color.h"
 
 namespace gfx
 {
@@ -21,6 +22,7 @@ struct AssetMgr;
 struct GameMgr;
 struct EntityMgr;
 struct Map;
+struct BroadcastEventBus;
 
 /* ============================================================================
  */
@@ -28,7 +30,7 @@ struct RenderSys
 {
   static constexpr u32 MAX_QUADS = 8192;
   static constexpr u32 MAX_BATCHES = 256;
-  static constexpr u32 MAX_DEBUG = 8192;
+  static constexpr u32 MAX_EXTERNAL = 8192;
 
   struct QuadBatch
   {
@@ -47,10 +49,19 @@ struct RenderSys
     EntityMgr*     entmgr;
     Map*           map;
 
+    // Optional for emitting events at different stages of rendering.
+    BroadcastEventBus* broadcast;
+
     b8 debug = false;
   };
 
   b8 update(const UpdateParams& params);
+
+  void drawQuad(
+    vec2f pos, 
+    const gfx::CompiledTexture* texture, 
+    Color color,
+    gfx::Renderer& renderer);
 
   gfx::CompiledTextureRef null_texture;
 
@@ -60,11 +71,12 @@ struct RenderSys
 
   gfx::Buffer quads_buffer;
   gfx::Buffer background_buffer;
-  gfx::Buffer debug_buffer;
 
   QuadBatch batches[MAX_BATCHES];
   u32 batch_count;
   u32 quad_count;
 
-  vec2i debug_counts = {};
+  // External buffer for use by systems notified of Render events.
+  gfx::Buffer external_buffer;
+  vec2i external_counts = {};
 };

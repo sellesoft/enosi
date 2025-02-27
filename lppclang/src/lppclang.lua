@@ -130,6 +130,7 @@ typedef struct
  Type* getTemplateArgType(TemplateArg* arg);
  b8 isTemplateArgIntegral(TemplateArg* arg);
  s64 getTemplateArgIntegral(TemplateArg* arg);
+ b8 isNamespace(Decl* decl);
  b8 isAnonymous(Decl* decl);
  b8 isField(Decl* decl);
  b8 isAnonymousField(Decl* decl);
@@ -553,6 +554,10 @@ end
 
 Decl.isAnonymous = function(self)
   return 0 ~= lppclang.isAnonymous(self.handle)
+end
+
+Decl.isNamespace = function(self)
+  return 0 ~= lppclang.isNamespace(self.handle)
 end
 
 --- Test if this Decl is a struct or class.

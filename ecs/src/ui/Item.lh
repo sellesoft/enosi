@@ -6,10 +6,12 @@ $ local cmn = require "common"
 $ local ui = require "ui.UI"
 
 #include "iro/Unicode.h"
-#include "math/vec.h"
 #include "iro/containers/Tree.h"
 #include "iro/containers/Array.h"
 #include "iro/containers/SmallArray.h"
+
+#include "math/vec.h"
+#include "math/mat.h"
 
 @@lpp.import "ui/Style.lh"
 
@@ -134,31 +136,29 @@ schema
 
   margin: vec4f = 0
     accessors
-      top_left = "%.xy()",
+      top_left     = "%.xy()",
       bottom_right = "%.zw()",
-      top = "%.y",
-      left = "%.x",
-      right = "%.z",
-      bottom = "%.w";
-  
+      top          = "%.y",
+      left         = "%.x",
+      right        = "%.z",
+      bottom       = "%.w";
+
+  padding: vec4f = 0
+    accessors
+      top_left     = "%.xy()",
+      bottom_right = "%.zw()",
+      top          = "%.y",
+      left         = "%.x",
+      right        = "%.z",
+      bottom       = "%.w";
+
   display: flags
   {
     horizontal,
     flex,
     reverse,
     hidden,
-    hide_children,
-    override_cursor_start,
   };
-
-  padding: vec4f = 0
-    accessors
-      top_left = "%.xy()",
-      bottom_right = "%.zw()",
-      top = "%.y",
-      left = "%.x",
-      right = "%.z",
-      bottom = "%.w";
 
   anchor: enum
   {
@@ -170,20 +170,20 @@ schema
 
   border: vec4f = 0
     accessors
-      top_left = "%.xy()",
+      top_left     = "%.xy()",
       bottom_right = "%.zw()",
-      top = "%.y",
-      left = "%.x",
-      right = "%.z",
-      bottom = "%.w";
+      top          = "%.y",
+      left         = "%.x",
+      right        = "%.z",
+      bottom       = "%.w";
 
-  border_color: Color = 0x43242bff;
+  border_color: Color = 0x45262dff;
 
   background_color: Color = 0x00000000;
 
-  font: String = "gohu";
-  font_height: f32 = 11;
-  text_color: Color = 0xc5c9c5ff;
+  font:        String = "gohu";
+  font_height: f32    = 11;
+  text_color:  Color  = 0xc5c9c5ff;
 
   alignment: vec2f = 0 0;
 
@@ -195,14 +195,14 @@ schema
     %.border.bottom
   }
 
-  vertical_scrollbar_width: f32 = 7;
+  vertical_scrollbar_width:    f32 = 7;
   horizontal_scrollbar_height: f32 = 7;
 
-  scrollbar_color: Color = 0x16161dff;
-  scrollbar_handle_color: Color = 0x717c7c;
-
-  vertical_scrollbar_handle_width: f32 = 5;
+  vertical_scrollbar_handle_width:    f32 = 5;
   horizontal_scrollbar_handle_height: f32 = 5;
+
+  scrollbar_color:        Color = 0x16161dff;
+  scrollbar_handle_color: Color = 0x717c7c;
 
   overflow: enum
   {
@@ -252,7 +252,6 @@ schema
     { %.size.height - %.padding.top - %.padding.bottom }
   func getPaddedStyleArea
     { { $.getPaddedStyleWidth, $.getPaddedStyleHeight } }
-    
 },
 struct
 {
@@ -282,11 +281,6 @@ struct
 
   operator ItemNode*() { return node; }
 
-  struct WorkingData
-  {
-
-  };
-
   vec2f scroll;
   vec2f max_scroll;
 
@@ -308,6 +302,11 @@ struct
   // TODO(sushi) even this guy can probably be eliminated by just storing a 
   //             list of dirty Items on UI that we check every update.
   b8 dirty;
+
+  b8 init(UI& ui, String name);  
+
+  static Item* make(UI& ui, String name = nil);
+  static Item* begin(UI& ui, String name = nil);
   
   // Called according to the update_trigger style property.
   virtual void update(UI* ui, UpdateReason reason) {}

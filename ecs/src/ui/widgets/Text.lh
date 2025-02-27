@@ -162,6 +162,8 @@ struct
     state.set(s);
   }
 
+  static Text* make(UI& ui, String id = nil, String init = nil);
+
   virtual void evaluate(UI* ui) override;
 
   virtual void generate(UI* ui) override;

@@ -1,11 +1,30 @@
-$ require "common"
+$ local cmn = require "common"
 $ local ui = require "ui.UI"
+$ local Processor = require "reflect.Processor"
+$ local ast = require "reflect.AST"
 
-@@lpp.import "Editor.lh"
+$$$
+-- Import specific files we want to have reflected info of.
+
+local imported = cmn.buffer.new()
+
+imported:put(
+  lpp.import "Editor.lh",
+  lpp.import "game/map/Map.schema.lh")
+
+local p = Processor.new(tostring(imported))
+p:run()
+$$$
+@imported:get
+
+$ local decls = 
+$ {
+$   editor = p.decls.map["struct ui::MapEditor"],
+$   tile_kind = p.decls.map["enum TileKind"],
+$ }
 
 @@lpp.import "Engine.lh"
 @@lpp.import "game/map/Map.lh"
-@@lpp.import "game/map/Map.schema.lh"
 @@lpp.import "asset/Packing.lh"
 
 #include "iro/Platform.h"
@@ -18,36 +37,23 @@ namespace ui
 
 /* ----------------------------------------------------------------------------
  */
-template<>
-MapEditor* UI::make(String id)
+MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
 {
-  auto* editor = mem::stl_allocator.construct<MapEditor>();
-  if (!initItem(id, editor))
-  {
-    mem::stl_allocator.free(editor);
-    return nullptr;
-  }
-  return editor;
-}
-
-/* ----------------------------------------------------------------------------
- */
-MapEditor* MapEditor::create(UI& ui, gfx::Renderer& renderer)
-{
-  auto* editor = ui.begin<MapEditor>("game.map.editor"_str);
+  auto* editor = ui.allocateAndInitItem<MapEditor>("game.map.editor"_str);
   if (editor == nullptr)
     return nullptr;
 
-$ local this = ui.createItemContext("MapEditor", "editor")
+  @ui.style(editor, MapEditor, 
+  | size: 100% 100%
+  | border: 2
+  | display: hidden
+  | background_color: 0x000000ff)
 
-  @this.style.set.size({600,400});
-  @this.style.set.border({2,2,2,2});
-  @this.style.set.display(hidden);
-
-  editor->renderer = &renderer;
+  editor->renderer = renderer;
   editor->update_triggers.set(UpdateReason::MouseHover);
 
-  editor->texture =
+  DrawCmd* map_render = ui.drawcmds.add();
+  map_render->tex = 
     gfx::Texture::create(
       renderer,
       600,
@@ -57,13 +63,11 @@ $ local this = ui.createItemContext("MapEditor", "editor")
       gfx::ImageFilter::Nearest,
       gfx::ImageKind::TwoD,
       nullptr);
+  map_render->alloc(&ui, gfx::putFilledRectCounts());
 
-  editor->framebuffer = gfx::Framebuffer::create(renderer,
-    editor->texture, {0.0f, 0.0f, 0.0f, 1.0f});
+  editor->map_render = map_render;
 
-  editor->map_render = ui.drawcmds.add();
-  editor->map_render->alloc(&ui, gfx::putFilledRectCounts());
-  editor->map_render->tex = editor->texture;
+  editor->framebuffer = gfx::Framebuffer::create(map_render->tex);
 
   if (!editor->entmgr.init())
   {
@@ -77,9 +81,72 @@ $ local this = ui.createItemContext("MapEditor", "editor")
     return nullptr;
   }
 
-  editor->world_pos = ui.make<Text>("map.editor.world_pos"_str, ""_str);
+  editor->world_pos = Text::make(ui, "map.editor.world_pos"_str);
 
-  ui.end<MapEditor>();
+  Engine& eng = *ui.eng;
+
+  eng.subscribeToBroadcast<PreMapRender>(
+    editor, &MapEditor::onPreMapRender);
+
+  eng.subscribeToBroadcast<PreSpriteRender>(
+    editor, &MapEditor::onPreSpriteRender);
+
+  eng.subscribeToBroadcast<PostRender>(
+    editor, &MapEditor::onPostRender);
+
+  editor->left_panel = Item::begin(ui);
+  {
+    @ui.style(editor->left_panel, Item,
+    | size: 250 100%
+    | border: 2
+    | background_color: 0x111111ff)
+
+$ local toolButton = function(toolname)
+    {
+      auto* button = editor->select_button.$(toolname:lower()) = 
+        ui::Button::begin<MapEditor>(
+          ui,
+          editor,
+          [] (Button*          button,
+              MapEditor*       editor,   
+              ButtonActivation activation)
+          {
+            editor->tool = Tool::$(toolname);
+            editor->selected_tool->set("$(toolname)"_str);
+            editor->selected_tool->dirty = true;
+          },
+          "game.map.editor.select_tool_$(toolname:lower())"_str);
+
+      @ui.style(button, Button,
+      | size: 100 auto
+      | background_color: 0x224422ff
+      | border: 0 0 0 2
+      | triggers: Released)
+
+      Text::make(ui, ""_str, "$(toolname)"_str);
+
+      ui.endItem();
+    }
+$ end
+
+    @toolButton(None)
+    @toolButton(Add)
+    @toolButton(Remove)
+
+    editor->selected_tool = Text::make(ui, ""_str, "None"_str);
+
+    editor->add_options = Item::begin(ui, "game.map.editor.add_options"_str);
+    {
+      
+    }
+    ui.endItem();
+  }
+  ui.endItem();
+
+  // Initial render.
+  // editor->renderMap(ui);
+
+  editor->need_render = true;
 
   return editor;
 }
@@ -125,7 +192,29 @@ void MapEditor::generate(UI* ui)
 }
 
 /* ----------------------------------------------------------------------------
- *  TODO(sushi) map rendering needs to be moved back into here so that it
+ */
+void MapEditor::evaluate(UI* ui)
+{
+  // Rerender the map in case our size changed.
+  // TODO(sushi) it would be nice if UI Item provided a callback for 
+  //             an Item's size changing so we could detect this a little 
+  //             better. Look into that when we get around to reworking UI
+  //             Items to be transform based.
+
+  map_render->tex.recreate(
+    size.x,
+    size.y,
+    gfx::ImageFormat::RGBA,
+    gfx::ImageAddressMode::ClampToBlack,
+    gfx::ImageFilter::Nearest,
+    gfx::ImageKind::TwoD,
+    nullptr);
+
+  need_render = true;
+}
+
+/* ----------------------------------------------------------------------------
+ *  TODO(sushi) map rendering needs to be moved back into here so that it 
  *              doesnt render before we adjust position.
  */
 void MapEditor::update(UI* ui, UpdateReason reason)
@@ -135,14 +224,29 @@ void MapEditor::update(UI* ui, UpdateReason reason)
   vec2f mvp = input.mouse.window - pos_screen;
   vec2f mw = eye.screenToWorld(mvp, size);
 
+  SourceDataFile* sdfile = h_selected_map.getFile();
+
   switch (control_state)
   {
   case ControlState::None:
     if (input.wasMouseButtonPressed(MouseButton::Left))
     {
-      drag_start_viewport = mvp;
-      drag_start_eye = eye.pos;
-      control_state = ControlState::Dragging;
+      switch (tool)
+      {
+      case Tool::None:
+        {
+          drag_start_viewport = mvp;
+          drag_start_eye = eye.pos;
+          control_state = ControlState::Dragging;
+        }
+        break;
+
+      case Tool::Add:
+        {
+
+        }
+        break;
+      }
 
       Tile* tile;
       Layer* layer;
@@ -161,14 +265,23 @@ void MapEditor::update(UI* ui, UpdateReason reason)
         SourceData* tiles_data = layer_data->findChildByName("tiles"_str);
         SourceData* tile_data = tiles_data->children[tile_idx];
         tile_data->dump();
+
+        // tile_data->children.clear();
       }
     }
     break;
 
   case ControlState::Dragging:
     {
-      eye.pos =
+      vec2f new_pos = 
         drag_start_eye + eye.screenToWorld(drag_start_viewport, size) - mw;
+      
+      if (eye.pos != new_pos)
+      {
+        eye.pos = new_pos;
+        need_render = true;
+      }
+        
       if (input.wasMouseButtonReleased(MouseButton::Left))
         control_state = ControlState::None;
     }
@@ -190,6 +303,13 @@ void MapEditor::update(UI* ui, UpdateReason reason)
       // vec2f new_mw = eye.screenToWorld(mvp, size);
       // eye.pos += old_mw - new_mw;
     }
+
+    need_render = true;
+  }
+
+  if (need_render)
+  {
+    // renderMap(*ui);
   }
 
   io::StaticBuffer<512> text;
@@ -206,8 +326,16 @@ void MapEditor::update(UI* ui, UpdateReason reason)
 
 /* ----------------------------------------------------------------------------
  */
-void MapEditor::renderMap(AssetMgr& assetmgr)
+void MapEditor::renderMap(UI& ui)
 {
+  if (!need_render)
+    return;
+
+  need_render = false;
+
+  AssetMgr& assetmgr = ui.eng->assetmgr;
+  BroadcastEventBus& broadcast = ui.eng->eventbus.broadcast;
+
   if (!h_selected_map.isValid())
     return;
 
@@ -218,7 +346,6 @@ void MapEditor::renderMap(AssetMgr& assetmgr)
     destroyPackedData(&mapdef);
   }
 
-  // TODO(sushi) don't do all of this every frame
   renderer->pushBindFramebuffer(framebuffer);
 
   packSourceDataIntoType(
@@ -247,6 +374,7 @@ void MapEditor::renderMap(AssetMgr& assetmgr)
     .entmgr = &entmgr,
     .map = &map,
     .debug = true,
+    .broadcast = &broadcast,
   };
 
   eye.getViewMat(&params.view);
@@ -254,6 +382,81 @@ void MapEditor::renderMap(AssetMgr& assetmgr)
   rendersys.update(params);
 
   renderer->pushBindFramebuffer({0});
+  renderer->pushSetViewport(
+    {0,0},{ui.eng->window.size.x,ui.eng->window.size.y});
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void MapEditor::onPreMapRender(PreMapRender& event)
+{
+
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void MapEditor::onPreSpriteRender(PreSpriteRender& event)
+{
+  auto* vp = (gfx::Vertex*)rendersys.external_buffer.mapped.vp;
+  auto* ip = (gfx::Index*)rendersys.external_buffer.mapped.ip;
+
+  // Draw grid lines.
+  {
+    // TODO(sushi) dynamically size lines relative to zoom and 
+    //             their separation.
+    vec2f bl_world = floor(eye.screenToWorld({0.f, size.y}, size));
+    vec2f tr_world = ceil(eye.screenToWorld({size.x, 0.f}, size));
+
+    const f32 grid_line_width = 0.025f;
+    const Color grid_line_color = 0xfb364066;
+
+    for (f32 y = bl_world.y; y <= tr_world.y; y += 1.f)
+    {
+      rendersys.external_counts +=
+        gfx::putLine(
+          vp, ip,
+          rendersys.external_counts,
+          {tr_world.x, y},
+          {bl_world.x, y},
+          grid_line_width,
+          grid_line_color);
+    }
+
+    for (f32 x = bl_world.x; x <= tr_world.x; x += 1.f)
+    {
+      rendersys.external_counts +=
+        gfx::putLine(
+          vp, ip,
+          rendersys.external_counts,
+          {x, tr_world.y},
+          {x, bl_world.y},
+          grid_line_width,
+          grid_line_color);
+    }
+  }
+
+  // Draw layer outlines.
+  {
+    for (const Layer& layer : map.layers)
+    {
+      rendersys.external_counts +=
+        gfx::putBorders(
+          vp, ip,
+          rendersys.external_counts,
+          {0.1f,0.1f,0.1f,0.1f},
+          layer.def->pos,
+          layer.def->size,
+          0xdf99f0);
+    }
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void MapEditor::onPostRender(PostRender& event)
+{
+  auto* vp = (gfx::Vertex*)rendersys.external_buffer.mapped.vp;
+  auto* ip = (gfx::Index*)rendersys.external_buffer.mapped.ip;
 }
 
 /* ----------------------------------------------------------------------------

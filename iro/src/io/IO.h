@@ -181,7 +181,7 @@ private:
 template<size_t N>
 struct StaticBuffer : public IO
 {
-  u8  buffer[N+1] = {};
+  u8  buffer[N+1];
   s32 len = 0;
 
   // Prevent having to call open where this is used.

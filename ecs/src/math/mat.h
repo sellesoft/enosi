@@ -19,16 +19,22 @@ struct mat3x2
 {
   f32 arr[3*2];
 
+  /* --------------------------------------------------------------------------
+   */
   void set(u32 x, u32 y, f32 v)
   {
     arr[x + y * 3] = v;
   }
 
+  /* --------------------------------------------------------------------------
+   */
   f32 get(u32 x, u32 y) const
   {
     return arr[x + y * 3];
   }
 
+  /* --------------------------------------------------------------------------
+   */
   static mat3x2 identity()
   {
     return 
@@ -38,18 +44,22 @@ struct mat3x2
     };
   }
 
+  /* --------------------------------------------------------------------------
+   */
   static void calcScreenMatrices(
       vec2f screen_size, 
       mat3x2* proj,
       mat3x2* view);
 
+  /* --------------------------------------------------------------------------
+   */
   static mat3x2 createTransform(
       vec2f pos,
       f32   rotation,
       vec2f scale = {1.f,1.f})
   {
-    f32 s = sin(rotation);
-    f32 c = cos(rotation);
+    f32 s = sinf(rotation);
+    f32 c = cosf(rotation);
 
     return 
     {
@@ -58,6 +68,8 @@ struct mat3x2
     };
   }
 
+  /* --------------------------------------------------------------------------
+   */
   static mat3x2 createInverseTransform(
       vec2f pos,
       f32   rotation,
@@ -73,12 +85,29 @@ struct mat3x2
     };
   }
 
+  /* --------------------------------------------------------------------------
+   */
   vec2f transformVec(const vec2f& v) const
   {
     return 
     {
       get(0, 0) * v.x + get(1, 0) * v.y + get(2, 0),
       get(0, 1) * v.x + get(1, 1) * v.y + get(2, 1),
+    };
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  mat3x2 mul(const mat3x2& rhs) const
+  {
+    return
+    {
+      get(0,0) * rhs.get(0,0) + get(0,1) * rhs.get(1,0),
+      get(1,0) * rhs.get(0,0) + get(1,1) * rhs.get(1,0),
+      get(2,0) * rhs.get(0,0) + get(2,1) * rhs.get(1,0) + rhs.get(2,0),
+      get(0,0) * rhs.get(0,1) + get(0,1) * rhs.get(1,1),
+      get(1,0) * rhs.get(0,1) + get(1,1) * rhs.get(1,1),
+      get(2,0) * rhs.get(0,1) + get(2,1) * rhs.get(1,1) + rhs.get(2,1),
     };
   }
 };

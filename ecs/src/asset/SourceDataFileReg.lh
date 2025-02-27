@@ -5,6 +5,7 @@
 $ local cmn = require "common"
 
 #include "iro/Common.h"
+#include "iro/fs/Path.h"
 #include "iro/containers/Pool.h"
 #include "iro/containers/AVL.h"
 
@@ -19,6 +20,8 @@ struct SourceDataFileReg
   {
     SourceDataFileHeader header;
     SourceDataFile file;
+
+    fs::Path path;
     u64 path_hash;
 
     static u64 getHash(const SourceDataFileSlot* x) { return x->path_hash; }
@@ -30,13 +33,16 @@ struct SourceDataFileReg
     SourceDataFileMap;
 
   SourceDataFilePool pool;
-  SourceDataFileMap map;
+  SourceDataFileMap  map;
 
   b8 init();
   void deinit();
 
   // Opens and parses a source data file from the given path.
   SourceDataFileHandle loadFromDisk(String path);
+  
+  // Saves the given source data file to disk at the path it was loaded from.
+  b8 saveToDisk(const SourceDataFileHandle& h_sdfile);
 
 private:
   

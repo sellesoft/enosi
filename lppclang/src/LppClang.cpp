@@ -1589,6 +1589,14 @@ s64 getTemplateArgIntegral(TemplateArg* arg)
 
 /* ----------------------------------------------------------------------------
  */
+b8 isNamespace(Decl* decl)
+{
+  assert(decl);
+  return clang::NamespaceDecl::classof(getClangDecl(decl));
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 isAnonymous(Decl* decl)
 {
   return getRecordDecl(decl)->isAnonymousStructOrUnion();
