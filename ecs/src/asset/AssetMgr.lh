@@ -22,6 +22,8 @@ $ local Ref = require "asset.Ref"
 
 using namespace iro;
 
+typedef io::StaticBuffer<512> PathBuffer;
+
 /* ============================================================================
  */
 struct AssetMgr

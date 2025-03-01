@@ -12,6 +12,7 @@ $ local ui = require "ui.UI"
 @@lpp.import "ui/UI.lh"
 @@lpp.import "ui/widgets/Text.lh"
 @@lpp.import "ui/widgets/Button.lh"
+@@lpp.import "ui/widgets/ComboBox.lh"
 @@lpp.import "asset/SourceDataFileHandle.lh"
 @@lpp.import "game/Render.sys.lh"
 @@lpp.import "game/Render.events.lh"
@@ -33,6 +34,8 @@ struct Renderer;
 namespace ui
 {
 
+struct TextureDisplay;
+
 /* ============================================================================
  */
 @ui.widget(MapEditor,
@@ -45,6 +48,7 @@ schema
 struct
 {
   SourceDataFileHandle h_selected_map = {};
+  SourceDataFileHandle h_selected_map_tile_kinds = {};
 
   gfx::Framebuffer framebuffer;
 
@@ -59,6 +63,8 @@ struct
   EntityMgr entmgr;
   MapDef    mapdef;
   Map       map;
+
+  MapTileKindDefs maptiledefs;
 
   Text* world_pos;
 
@@ -81,16 +87,13 @@ struct
   };
 
   Tool tool = Tool::None;
-  Text* selected_tool;
 
-  struct
-  {
-    Button* none;
-    Button* add;
-    Button* remove;
-  } select_button;
+  ComboBox* tool_selection;
+  ComboBox* add_tile_type;
 
   Item* add_options;
+
+  TextureDisplay* texture_display;
 
   // TODO(sushi) remove once we are on Vulkan and can hopefully map 
   //             buffers while UI is updating. That doesn't work rn for 
@@ -101,7 +104,14 @@ struct
   static MapEditor* create(UI& ui, gfx::Renderer* renderer);
   void destroy();
 
-  void selectMap(SourceDataFileHandle& h_map);
+  // TODO(sushi) just take in the map name and load all the necessary stuff
+  //             internally.
+  void selectMap(
+    SourceDataFileHandle& h_map, 
+    SourceDataFileHandle& h_map_tile_kinds,
+    UI& ui,
+    AssetMgr& assetmgr,
+    gfx::Renderer& renderer);
 
   void renderMap(UI& ui);
 

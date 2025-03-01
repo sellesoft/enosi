@@ -57,7 +57,6 @@ struct Layer
     return &tile - tiles.arr;
   }
 
-
   // Returns the coordinate of a Tile from this Layer in Layer space.
   // Asserts if the given Tile does not belong to this Layer.
   vec2f getTilePos(const Tile& tile) const;

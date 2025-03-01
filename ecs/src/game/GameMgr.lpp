@@ -34,12 +34,6 @@ b8 GameMgr::init(Engine* eng)
 
   using namespace fs;
 
-  // auto testent =
-  //   entmgr.createEntityFromResource("assets/entities/Test.ent"_str);
-
-  // mindsys.attach(testent);
-  // eye.attach(testent);
-
   SourceDataFileHandle h_test_map =
     eng->source_data_file_reg.loadFromDisk("assets/maps/Test.map"_str);
 
@@ -66,8 +60,19 @@ b8 GameMgr::init(Engine* eng)
   if(!map.init(*map_def, map_params))
     return ERROR("failed to initialize the map '", map_def->name, "'\n");
 
+  SourceDataFileHandle h_test_map_tile_kinds =
+    eng->source_data_file_reg.loadFromDisk("assets/maps/Test.map_tiles"_str);
+
+  if (!h_test_map_tile_kinds.isValid())
+    return ERROR("failed to load test map tile kinds\n");
+
   map_editor = ui::MapEditor::create(eng->ui, &eng->renderer);
-  map_editor->selectMap(h_test_map);
+  map_editor->selectMap(
+    h_test_map,
+    h_test_map_tile_kinds,
+    engine->ui,
+    engine->assetmgr,
+    engine->renderer);
 
   return true;
 }
@@ -95,6 +100,7 @@ b8 GameMgr::update()
     .entmgr = &entmgr,
     .map = &map,
   };
+
   eye.getViewMat(&render_params1.view);
   if (!rendersys.update(render_params1))
     return false;
@@ -106,7 +112,7 @@ b8 GameMgr::update()
   {
     @@map_editor.style:lookup(display)
     if (@map_editor.style.display.test(hidden))
-      @map_editor.style.set.display(horizontal);
+      @map_editor.style.set.display(0);
     else
       @map_editor.style.set.display(hidden);
   }
