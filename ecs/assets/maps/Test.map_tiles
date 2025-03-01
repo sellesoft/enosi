@@ -1,0 +1,31 @@
+return
+{
+  tile_kinds = 
+  {
+    Wall = 
+    {
+      "assets/textures/WallBotLeftCornerOlive",
+      "assets/textures/WallBotLeftRightCapOlive",
+      "assets/textures/WallBotRightCornerOlive",
+      "assets/textures/WallHorizontalLeftCapOlive",
+      "assets/textures/WallHorizontalOlive",
+      "assets/textures/WallHorizontalRightCapOlive",
+      "assets/textures/WallIntersectionOlive",
+      "assets/textures/WallTopLeftCornerLeftCapOlive",
+      "assets/textures/WallTopLeftCornerOlive",
+      "assets/textures/WallTopRightCornerOlive",
+      "assets/textures/WallTopLeftCornerLeftCapOlive",
+      "assets/textures/WallTopLeftCornerOlive",
+      "assets/textures/WallTopRightCornerRightCapOlive",
+      "assets/textures/WallVerticalBotCapOlive",
+      "assets/textures/WallVerticalOlive",
+      "assets/textures/WallVerticalTopCapOlive",
+    },
+
+    Floor = 
+    {
+      "assets/textures/FloorTilesDarkGray",
+      "assets/textures/FloorTilesLightGray",
+    },
+  },
+}
