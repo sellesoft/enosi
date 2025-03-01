@@ -301,6 +301,8 @@ Record.tostring = function(self)
   return self.ast_kind.."("..self.name..")"
 end
 
+Record.__tostring = Record.tostring
+
 Record.dump = function(self, out)
   local buf = out or PrettyPrinter.new()
 
