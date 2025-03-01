@@ -52,6 +52,39 @@ b8 packSourceDataIntoEnum(const SourceData& data, T* out);
 
 /* ----------------------------------------------------------------------------
  */
+b8 packCompiledTexture(
+    const SourceData& data, 
+    gfx::CompiledTexture** out, 
+    AssetMgr& assetmgr,
+    gfx::Renderer& renderer)
+{
+  if (!data.hasStringValue())
+    return ERROR("expected a string value to pack gfx::CompiledTexture*");
+
+  *out = 
+    gfx::CompiledTexture::load(
+      data.val.str,
+      assetmgr,
+      renderer);
+
+  if (*out == nullptr)
+    return ERROR("failed to load compiled texture with name ", 
+                 data.val.str, "\n");
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 destroyCompiledTexture(gfx::CompiledTexture** data)
+{
+  *data = nullptr;
+  // (*data)->gfx_texture.destroy();
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 template<typename T>
 b8 packArray(
     const SourceData& data, 
@@ -86,6 +119,26 @@ b8 packArray<const SourceData*>(
       return ERROR("arrays cannot contain named elements\n");
 
     out->push(child);
+  }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 packArray<gfx::CompiledTexture*>(
+    const SourceData& data,
+    Array<gfx::CompiledTexture*>* out,
+    AssetMgr& assetmgr,
+    gfx::Renderer& renderer)
+{
+  for (const SourceData* child : data.children)
+  {
+    if (notnil(child->name))
+      return ERROR("arrays cannot contain named elements\n");
+
+    packCompiledTexture(*child, out->push(), assetmgr, renderer);
   }
 
   return true;
@@ -176,34 +229,9 @@ b8 packVec2(const SourceData& data, T* out)
 
 /* ----------------------------------------------------------------------------
  */
-b8 packCompiledTexture(
-    const SourceData& data, 
-    gfx::CompiledTexture** out, 
-    AssetMgr& assetmgr,
-    gfx::Renderer& renderer)
+b8 packSourceDataPointer(const SourceData& data, const SourceData** out)
 {
-  if (!data.hasStringValue())
-    return ERROR("expected a string value to pack gfx::CompiledTexture*");
-
-  *out = 
-    gfx::CompiledTexture::load(
-      data.val.str,
-      assetmgr,
-      renderer);
-
-  if (*out == nullptr)
-    return ERROR("failed to load compiled texture with name ", 
-                 data.val.str, "\n");
-
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 destroyCompiledTexture(gfx::CompiledTexture** data)
-{
-  *data = nullptr;
-  // (*data)->gfx_texture.destroy();
+  *out = &data;
   return true;
 }
 
@@ -235,110 +263,168 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
-$ local putArrayPackCase = function(declname, field, decl, prereqs)
+$ local putArrayPackCase = function(declname, addrname, type, decl, prereqs)
 $   prereqs:push(decl.template_args[1]:getDecl())
-    out->$(field.name).init();
-    if (!child->hasChildren())
-      return ERROR("expected an object for array field $(field.name)\n");
+    $(addrname).init();
+    if (!child->hasObjectData())
+      return ERROR("expected an object for array field $(addrname)\n");
     if (!packArray(
           *child,
-          &out->$(field.name), 
+          &$(addrname), 
           assetmgr,
           renderer))
-      return ERROR("failed to pack array data for field $(field.name)\n");
+      return ERROR("failed to pack array data for field $(addrname)\n");
 $ end
 
 $ -- * ------------------------------------------------------------------------
 
-$ local putStringPackCase = function(declname, field, prereqs)
-    if (!packString(*child, &out->$(field.name)))
-      return ERROR("failed to pack string data for field $(field.name)");
+$ local putStringPackCase = function(declname, addrname, type, prereqs)
+    if (!packString(*child, &$(addrname)))
+      return ERROR("failed to pack string data for field $(addrname)");
 $ end
 
 $ -- * ------------------------------------------------------------------------
 
-$ local putNumberPackCase = function(declname, field, prereqs)
-    if (!packNumber(*child, &out->$(field.name)))
-      return ERROR("failed to pack number data for field $(field.name)");
+$ local putNumberPackCase = function(declname, addrname, type, prereqs)
+    if (!packNumber(*child, &$(addrname)))
+      return ERROR("failed to pack number data for field $(addrname)");
 $ end
 
 $ -- * ------------------------------------------------------------------------
 
-$ local putStructPackCase = function(declname, field, prereqs)
-$   prereqs:push(field.type:getDecl())
+$ local putStructPackCase = function(declname, addrname, type, prereqs)
+$   prereqs:push(type:getDecl())
     if (!packSourceDataIntoType(
           *child, 
-          &out->$(field.name), 
+          &$(addrname), 
           assetmgr,
           renderer))
-      return ERROR("failed to pack struct data for field $(field.name)\n");
+      return ERROR("failed to pack struct data for field $(addrname)\n");
 $ end
 
 $ -- * ------------------------------------------------------------------------
 
-$ local putVec2PackCase = function(declname, field, prereqs)
-    if (!packVec2(*child, &out->$(field.name)))
-      return ERROR("failed to pack vec2 data for field $(field.name)\n");
+$ local putVec2PackCase = function(declname, addrname, type, prereqs)
+    if (!packVec2(*child, &$(addrname)))
+      return ERROR("failed to pack vec2 data for field $(addrname)\n");
 $ end
 
 $ -- * ------------------------------------------------------------------------
 
-$ local putEnumPackCase = function(declname, field, prereqs)
-$   prereqs:push(field.type:getDecl())
-    if (!packSourceDataIntoEnum(*child, &out->$(field.name)))
+$ local putEnumArrayPackCase = function(declname, addrname, type, prereqs)
+    if (!packSourceDataIntoEnumArray(*child, &$(addrname), assetmgr, renderer))
+      return ERROR("failed to pack enum array data for field $(addrname)\n");
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local putEnumPackCase = function(declname, addrname, type, prereqs)
+$   prereqs:push(type:getDecl())
+    if (!packSourceDataIntoEnum(*child, &$(addrname)))
       return ERROR(
-        "failed to pack $(declname) data for field $(field.name)\n");
+        "failed to pack $(declname) data for field $(addrname)\n");
 $ end
 
 $ -- * ------------------------------------------------------------------------
 
-$ local putCompiledTexturePackCase = function(declname, field, prereqs)
+$ local putCompiledTexturePackCase = function(declname, addrname)
     if (!packCompiledTexture(
         *child, 
-        &out->$(field.name), 
+        &$(addrname), 
         assetmgr,
         renderer))
       return ERROR(
-        "failed to pack $(declname) data for field $(field.name)\n");
+        "failed to pack $(declname) data for field $(addrname)\n");
 $ end
 
 $ -- * ------------------------------------------------------------------------
 
-$ local putPackCase = function(declname, field, prereqs)
-$   local type = field.type
+$ local putPackCase = function(declname, addrname, type, prereqs)
 $   if type.name == "String" then
-$     return (putStringPackCase(declname, field, prereqs))
+$     return (putStringPackCase(declname, addrname, type, prereqs))
 $   end
-$   
+$ 
 $   type = type:getDesugared()
 $   if type:is(ast.BuiltinType) then
-$     return (putNumberPackCase(declname, field, prereqs))
+$     return (putNumberPackCase(declname, addrname, type, prereqs))
 $   end
 $
 $   if type:is(ast.TagType) then
 $     local decl = type:getDecl()
 $     if decl:is(ast.TemplateSpecialization) then
 $       if decl.specialized_name == "Array" then
-$         return (putArrayPackCase(declname, field, decl, prereqs))
+$         return (putArrayPackCase(declname, addrname, type, decl, prereqs))
 $       elseif decl.specialized_name == "vec2" then
-$         return (putVec2PackCase(declname, field, prereqs))
+$         return (putVec2PackCase(declname, addrname, type, prereqs))
 $       elseif decl.specialized_name == "Flags" then
 $         -- TODO(sushi) handle Flags
+$       elseif decl.specialized_name == "EnumArray" then
+$         return (putEnumArrayPackCase(declname, addrname, type, prereqs))
 $       else
 $         error("unhandled specialized template "..decl.specialized_name)
 $       end
 $     elseif decl:is(ast.Struct) then
-$       return (putStructPackCase(declname, field, prereqs))
+$       return (putStructPackCase(declname, addrname, type, prereqs))
 $     elseif decl:is(ast.Enum) then
-$       return (putEnumPackCase(declname, field, prereqs))
+$       return (putEnumPackCase(declname, addrname, type, prereqs))
 $     end
 $   elseif type:is(ast.PointerType) then
 $     type = type.subtype
 $     if type.name == "gfx::CompiledTexture" then
-$       return (putCompiledTexturePackCase(declname, field, prereqs))
+$       return (putCompiledTexturePackCase(declname, addrname, type, prereqs))
 $     end
 $   end
 $ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local putEnumArrayPacker = function(name, decl, prereqs)
+$   local typename = removeTypeTag(decl.name)
+$   local enum_type = decl.template_args[1].decl
+$   local enum_typename = removeTypeTag(enum_type.name)
+$   local elem_decl = decl.template_args[2].decl
+$   local elem_type = elem_decl.type
+/* ----------------------------------------------------------------------------
+ */
+b8 packSourceDataIntoEnumArray(
+    const SourceData& data, 
+    $(typename)* out,
+    AssetMgr& assetmgr,
+    gfx::Renderer& renderer)
+{
+  using TSelf = $(name);
+  using TEnum = $(enum_type.name);
+  using TElem = $(elem_type.name);
+
+  if (!data.hasObjectData())
+    return ERROR("expected object data for enum array $(name)\n");
+
+  if (data.children.isEmpty())
+  {
+    mem::zero(out, sizeof(TSelf));
+    return true;
+  }
+
+  for (const SourceData* child : data.children)
+  {
+    switch (child->name.hash())
+    {
+$ for elem in enum_type.elems:each() do
+    case "$(elem)"_hashed:
+$     putPackCase(decl.name, "(*out)[TEnum::"..elem.."]", elem_type, prereqs)
+      break;
+$ end
+    default:
+      return ERROR(
+        "no element named ", child->name, " in $(enum_type.name)\n");
+    }
+  }
+
+  return true;
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
 
 $ local putStructPacker = function(name, decl, prereqs)
 /* ----------------------------------------------------------------------------
@@ -367,7 +453,7 @@ b8 packSourceDataIntoType<$(name)>(
 $ for field in decl:eachFieldWithIndex() do
     case "$(field.name)"_hashed:
       {
-$     putPackCase(decl.name, field, prereqs)
+$     putPackCase(decl.name, "out->"..field.name, field.type, prereqs)
       }
       break;
 $ end
@@ -401,6 +487,8 @@ $       if not elem_type:is(ast.PointerType) then
 $         local elem_decl = decl.template_args[1]:getDecl()
 $         putPacker(elem_decl.name, elem_decl, prereqs)
 $       end
+$     elseif decl.specialized_name == "EnumArray" then
+$       putEnumArrayPacker(name, decl, prereqs)
 $     end
 $   elseif decl:is(ast.Enum) then
 $     putEnumPacker(name, decl)
