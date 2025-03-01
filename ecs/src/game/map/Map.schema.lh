@@ -6,6 +6,7 @@ $ local Schema = require "asset.Schema"
 #include "iro/Unicode.h"
 #include "iro/containers/Array.h"
 #include "iro/containers/Slice.h"
+#include "iro/containers/EnumArray.h"
 #include "math/vec.h"
 
 using namespace iro;
@@ -24,6 +25,8 @@ enum class TileKind
   Empty,
   Wall,
   Floor,
+
+  COUNT,
 };
 
 /* ============================================================================
@@ -51,4 +54,11 @@ struct MapLayerDef
   String name;
   vec2i size;
   Array<MapLayerDef> layers;
+})
+
+/* ============================================================================
+ */
+@Schema.def(MapTileKindDefs,
+{
+  EnumArray<TileKind, Array<gfx::CompiledTexture*>> tile_kinds;
 })
