@@ -24,7 +24,7 @@ typedef io::StaticBuffer<512> PathBuffer;
 s64 CompiledTexture::writeDataPath(io::IO* io, String name, AssetMgr& assetmgr)
 {
   return io::formatv(io, 
-      assetmgr.getDataDir(), "/textures/", name, ".texture");
+      assetmgr.getDataDir(), '/', name, ".cmp_texture");
 }
 
 /* ----------------------------------------------------------------------------
@@ -119,17 +119,22 @@ b8 CompiledTexture::compileFromMemory(void* pixels, CompileParams& params)
 {
   using namespace fs;
 
+  PathBuffer data_path_buffer;
+  io::formatv(&data_path_buffer, 
+    params.assetmgr->getDataDir(), '/', params.name, ".cmp_texture"_str);
+  String data_path = data_path_buffer.asStr();
+
   // Ensure the data directories exist.
-  if (!platform::makeDir(Path::removeBasename(params.data_path), true))
+  if (!platform::makeDir(Path::removeBasename(data_path), true))
     return ERROR("failed to create data directories for data at '",
-                 params.data_path);
+                 data_path);
 
   CompiledTextureData data;
 
-  data.format = params.format;
-  data.filter = params.filter;
+  data.format       = params.format;
+  data.filter       = params.filter;
   data.address_mode = params.address_mode;
-  data.kind = params.kind;
+  data.kind         = params.kind;
 
   data.width = params.width;
   data.height = params.height;
@@ -137,13 +142,13 @@ b8 CompiledTexture::compileFromMemory(void* pixels, CompileParams& params)
   data.pixels = pixels;
 
   auto data_file = 
-    File::from(params.data_path, 
+    File::from(data_path, 
         OpenFlag::Create
       | OpenFlag::Truncate
       | OpenFlag::Write);
   if (isnil(data_file))
     return ERROR("failed to open texture data file for writing at '", 
-                 params.data_path, "'\n");
+                 data_path, "'\n");
   defer { data_file.close(); };
 
   if (!data.serialize(&data_file))

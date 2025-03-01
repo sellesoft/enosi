@@ -105,16 +105,25 @@ static void convert(
  */
 b8 CompiledTexture::compileASE(CompileParams& params)
 {
-  if (!fs::Path::exists(params.asset_path))
+  PathBuffer asset_path_buffer;
+  io::formatv(&asset_path_buffer, params.name, ".ase"_str);
+  String asset_path = asset_path_buffer.asStr();
+
+  PathBuffer data_path_buffer;
+  io::formatv(&data_path_buffer, 
+    params.assetmgr->getDataDir(), '/', params.name, ".cmp_texture"_str);
+  String data_path = data_path_buffer.asStr();
+
+  if (!fs::Path::exists(asset_path))
     return ERROR("attempt to compile texture '", params.name, "' but there"
-      " is no asset at path '", params.asset_path, "'\n");
+      " is no asset at path '", asset_path, "'\n");
 
   //TODO add a way to force an asset recompile when
   //  we need to update the compiled data format
-  if (!AssetMgr::checkNeedsCompiled(params.asset_path, params.data_path))
+  if (!AssetMgr::checkNeedsCompiled(asset_path, data_path))
     return true;
 
-  INFO("compiling '", params.asset_path, ":'\n");
+  INFO("compiling '", asset_path, ":'\n");
   SCOPED_INDENT;
 
   // TODO take in an allocator to use for temp data.
@@ -124,31 +133,31 @@ b8 CompiledTexture::compileASE(CompileParams& params)
   defer { allocator.deinit(); };
 
   // Ensure the data directories exist.
-  if (!platform::makeDir(fs::Path::removeBasename(params.data_path), true))
+  if (!platform::makeDir(fs::Path::removeBasename(data_path), true))
     return ERROR("failed to make directories\n");
 
-  auto asset_file = fs::File::from(params.asset_path, fs::OpenFlag::Read);
+  auto asset_file = fs::File::from(asset_path, fs::OpenFlag::Read);
   if (isnil(asset_file))
     return ERROR("failed to open font asset file at '",
-      params.data_path, "'\n");
+                 data_path, "'\n");
   defer { asset_file.close(); };
   u64 asset_file_size = asset_file.getInfo().byte_size;
 
   auto data_file =
-    fs::File::from(params.data_path,
+    fs::File::from(data_path,
         fs::OpenFlag::Write
       | fs::OpenFlag::Truncate
       | fs::OpenFlag::Create);
 
   if (isnil(data_file))
     return ERROR(
-      "failed to open data file for writing at '", params.data_path, "'\n");
+      "failed to open data file for writing at '", data_path, "'\n");
   defer { data_file.close(); };
 
   auto delete_data_file_if_failure = deferWithCancel
   {
     data_file.close();
-    fs::File::unlink(params.data_path);
+    fs::File::unlink(data_path);
   };
 
   io::Memory buffer;

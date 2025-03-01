@@ -64,8 +64,7 @@ $ end
 
   gfx::CompiledTexture::CompileParams white_texture_params =
   {
-    .name         = "white"_str,
-    .data_path    = "data/textures/white.texture"_str,
+    .name         = "assets/textures/white"_str,
     .width        = 4,
     .height       = 4,
     .format       = gfx::ImageFormat::BW,
@@ -94,15 +93,13 @@ $ end
   png_glob.run([&](fs::Path& asset_path)
     {
       texture_data_path_buffer.len = 0;
-      String name = asset_path.basename().subToFirst('.');
+      String name = fs::Path::removeExtension(asset_path.asStr());
       gfx::CompiledTexture::writeDataPath(
         &texture_data_path_buffer, name, assetmgr);
 
       gfx::CompiledTexture::CompileParams params =
       { //TODO(delle) add TextureDef for specifying these params
         .name         = name,
-        .asset_path   = asset_path.buffer.asStr(),
-        .data_path    = texture_data_path_buffer.asStr(),
         .format       = gfx::ImageFormat::RGBA,
         .kind         = gfx::ImageKind::TwoD,
         .filter       = gfx::ImageFilter::Nearest,
@@ -136,9 +133,7 @@ $ end
 
   gfx::Font::CompileParams params =
   {
-    .name       = "gohu"_str,
-    .asset_path = "assets/fonts/gohu.bdf"_str,
-    .data_path  = "data/fonts/gohu.cmp_font"_str,
+    .name       = "assets/fonts/gohu"_str,
     .ranges     = CodepointRanges::from(&ascii, 1),
     .allocator  = &mem::stl_allocator,
     .assetmgr   = &assetmgr,

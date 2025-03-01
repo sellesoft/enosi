@@ -71,22 +71,10 @@ void Font::getPackedChar(
 
 /* ----------------------------------------------------------------------------
  */
-s64 Font::writeAssetPath(
-    io::IO* io, 
-    String name, 
-    String ext, 
-    AssetMgr& assetmgr)
-{
-  return io::formatv(
-    io, assetmgr.getAssetDir(), "/fonts/", name, '.', ext);
-}
-
-/* ----------------------------------------------------------------------------
- */
 s64 Font::writeDataPath(io::IO* io, String name, AssetMgr& assetmgr)
 {
   return io::formatv(
-    io, assetmgr.getDataDir(), "/fonts/", name, ".cmp_font");
+    io, assetmgr.getDataDir(), '/', name, ".cmp_font");
 }
 
 /* ----------------------------------------------------------------------------

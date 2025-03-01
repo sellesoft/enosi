@@ -48,7 +48,6 @@ struct CompiledTexture : public Asset
   // The texture loaded on the gpu.
   Texture gfx_texture;
 
-  static s64 writeAssetPath(io::IO* io, String name, AssetMgr& assetmgr);
   static s64 writeDataPath(io::IO* io, String name, AssetMgr& assetmgr);
 
   static CompiledTexture* load(
@@ -59,8 +58,6 @@ struct CompiledTexture : public Asset
   struct CompileParams
   {
     String           name;
-    String           asset_path;
-    String           data_path;
     u32              width;
     u32              height;
     ImageFormat      format;

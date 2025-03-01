@@ -121,12 +121,6 @@ struct Font : public Asset
   //             arbitrary data via, say, a chat system or something.
   void getPackedChar(PackedChar* out, PackRange* range, u32 codepoint) const;
 
-  static s64 writeAssetPath(
-    io::IO* out, 
-    String name, 
-    String ext, 
-    AssetMgr& assetmgr);
-
   static s64 writeDataPath(
     io::IO* out, 
     String name, 
@@ -140,8 +134,6 @@ struct Font : public Asset
   struct CompileParams
   {
     String name;
-    String asset_path;
-    String data_path;
     CodepointRanges ranges;
     mem::Allocator* allocator;
     AssetMgr* assetmgr;

@@ -22,8 +22,6 @@ namespace gfx
 
 @defFileLogger(font.bdf, Debug)
 
-typedef io::StaticBuffer<512> PathBuffer;
-
 /* ----------------------------------------------------------------------------
  */
 b8 Font::compileBDF(CompileParams& params)
@@ -41,16 +39,25 @@ b8 Font::compileBDF(CompileParams& params)
   using namespace fs;
 
 #define error(...) \
-  (ERROR("compiling ", params.data_path, ":\n", __VA_ARGS__))
+  (ERROR("compiling ", data_path, ":\n", __VA_ARGS__))
 
-  if (!Path::exists(params.asset_path))
-    return error("attempt to load font '", params.name, "' but there is no "
-                 "asset at path '", params.asset_path, "'\n");
+  PathBuffer asset_path_buffer;
+  io::formatv(&asset_path_buffer, params.name, ".bdf"_str);
+  String asset_path = asset_path_buffer.asStr();
 
-  if (!AssetMgr::checkNeedsCompiled(params.asset_path, params.data_path))
+  PathBuffer data_path_buffer;
+  io::formatv(&data_path_buffer, 
+    params.assetmgr->getDataDir(), '/', params.name, ".cmp_font"_str);
+  String data_path = data_path_buffer.asStr();
+
+  if (!Path::exists(asset_path))
+    return error("attempt to compile font '", params.name, "' but there is no "
+                 "asset at path '", asset_path, "'\n");
+
+  if (!AssetMgr::checkNeedsCompiled(asset_path, data_path))
     return true;
 
-  INFO("compiling '", params.data_path, "'\n");
+  INFO("compiling '", data_path, "'\n");
 
   // TODO(sushi) take in an allocator to use for temp data.
   mem::LenientBump allocator;
@@ -59,13 +66,13 @@ b8 Font::compileBDF(CompileParams& params)
   defer { allocator.deinit(); };
 
   // Ensure the data directories exist.
-  if (!platform::makeDir(Path::removeBasename(params.data_path), true))
+  if (!platform::makeDir(Path::removeBasename(data_path), true))
     return error("failed to make directories\n");
 
-  auto file = File::from(params.asset_path, OpenFlag::Read);
+  auto file = File::from(asset_path, OpenFlag::Read);
   if (isnil(file))
     return error("failed to open font asset file at '", 
-                 params.data_path, "'\n");
+                 data_path, "'\n");
   defer { file.close(); };
 
   u64 file_size = file.getInfo().byte_size;
@@ -455,14 +462,14 @@ $ end
   }
 
   auto data_file = 
-    File::from(params.data_path, 
+    File::from(data_path, 
         OpenFlag::Write 
       | OpenFlag::Truncate
       | OpenFlag::Create);
 
   if (isnil(data_file))
     return error(
-        "failed to open data file for writing at '", params.data_path, "'\n");
+        "failed to open data file for writing at '", data_path, "'\n");
   defer { data_file.close(); };
 
   if (!data.serialize(&data_file))
@@ -475,7 +482,6 @@ $ end
   gfx::CompiledTexture::CompileParams tparams =
   {
     .name         = params.name,
-    .data_path    = texture_data_path.asStr(),
     .width        = u32(tex_size.x),
     .height       = u32(tex_size.y),
     .format       = gfx::ImageFormat::BW,

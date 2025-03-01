@@ -43,10 +43,12 @@ b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
 
   //load the null texture
   null_texture.trackNoRef(
-    gfx::CompiledTexture::load("null"_str, assetmgr, renderer));
+    gfx::CompiledTexture::load(
+      "assets/textures/null"_str, assetmgr, renderer));
+
   if (!null_texture.isValid())
   {
-    null_texture.track(assetmgr.findAsset("white"_str));
+    null_texture.track(assetmgr.findAsset("assets/textures/white"_str));
     if (!null_texture.isValid())
       return ERROR("failed to find a valid null texture\n");
   }
