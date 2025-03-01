@@ -219,7 +219,6 @@ struct StaticBuffer : public IO
   }
 };
 
-
 /* ============================================================================
  *  IO view over a String.
  */
@@ -255,6 +254,12 @@ struct StringView : public IO
     return bytes_to_read;
   }
 };
+
+template<size_t N>
+s64 format(IO* io, StaticBuffer<N>& x)
+{
+  return format(io, x.asStr());
+}
 
 }
 
