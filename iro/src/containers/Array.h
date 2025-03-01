@@ -198,6 +198,8 @@ struct Array
   /* --------------------------------------------------------------------------
    */ 
   T& operator [](s64 i) { assert(i >=0 && i < len()); return arr[i]; }
+  const T& operator[](s64 i) const 
+    { assert(i >= 0 && i < len()); return arr[i]; }
 
   T* begin() { return arr; }
   T* end()   { return arr + len(); }
@@ -281,3 +283,4 @@ struct MoveTrait<iro::Array<T>>
 };
 
 #endif
+

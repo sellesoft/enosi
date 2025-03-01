@@ -22,6 +22,9 @@ struct Slice
 
   static Slice<T> from(T* ptr, u64 len) { return { ptr, len }; }
 
+  template<u64 size>
+  static Slice<T> from(T (&buffer)[size]) { return from(buffer, size); }
+
   static Slice<T> invalid() { return {nullptr, 0}; }
   b8 isValid() { return ptr != nullptr; }
 
