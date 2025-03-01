@@ -102,7 +102,24 @@ struct UI
 
 private:
 
-  void updateTree(ItemNode* node, const mat3x2& current_transform);
+  // A type storing a DrawCmd deferred until after all siblings of an Item
+  // have had their DrawCmd's emitted. This caches off the original transform
+  // of the item that wants to emit it, as that information will have been
+  // lost by the time we go to emit one of these. We should try to handle this
+  // some other way later on, but for now I'm not sure how to. Possibly setting
+  // up something in the Renderer to support it? Not sure.
+  struct PostSiblingDrawCmd
+  {
+    mat3x2 transform;
+    DrawCmd* drawcmd;
+  };
+
+  typedef SmallArray<PostSiblingDrawCmd, 4> PostSiblingDrawCmdArray;
+
+  void updateTree(
+    ItemNode* node, 
+    PostSiblingDrawCmdArray& post_sibling_drawcmds,
+    const mat3x2& current_transform);
 
   struct FlexContext
   {

@@ -181,7 +181,7 @@ schema
 
   background_color: Color = 0x00000000;
 
-  font:        String = "gohu";
+  font:        String = "assets/fonts/gohu";
   font_height: f32    = 11;
   text_color:  Color  = 0xc5c9c5ff;
 
@@ -330,6 +330,8 @@ struct
   //             has a ton of draw commands.
   virtual void reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post) { }
 
+  virtual void reportDrawCmdsPostSiblings(UI* ui, DrawCmdList& list) { }
+
   // Allows a widget to tell evaluate if it should place children or not.
   virtual b8 shouldPlaceChildren() { return true; }
 
@@ -386,6 +388,12 @@ struct
   // Calculates the visual area that the content of this Item is placed in.
   // 'size' is the content area that would normally be computed for this Item.
   virtual vec2f calcContentArea(vec4f margin, vec4f border, vec2f size)
+  {
+    return size;
+  }
+
+  // Calculates the visual area that this item takes up for hit testing.
+  virtual vec2f calcVisualArea()
   {
     return size;
   }

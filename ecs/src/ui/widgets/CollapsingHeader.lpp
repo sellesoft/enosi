@@ -105,7 +105,7 @@ void CollapsingHeader::generate(UI* ui)
     margin)
 
   vec2f cpos = 
-    pos_screen + @this.style.margin.top_left + @this.style.border.top_left;
+    @this.style.margin.top_left + @this.style.border.top_left;
 
   vec2f csiz = @this.getBorderedArea;
 

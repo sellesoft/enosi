@@ -53,8 +53,10 @@ b8 Item::containsPoint(vec2f point)
   $ local this = ui.createItemContext("Item", "this")
   @@this.style:lookup(margin)
 
+  vec2f visual_area = calcVisualArea();
+
   vec2f tl = pos_screen + @this.style.margin.top_left;
-  vec2f br = pos_screen + size - @this.style.margin.bottom_right;
+  vec2f br = pos_screen + visual_area - @this.style.margin.bottom_right;
 
   return math::pointInRect(point, tl, br - tl);
 }
@@ -123,11 +125,11 @@ void Item::calcVerticalScrollBar(
   }
 
   bar_pos->x = 
-    pos_screen.x + size.x - 
+    size.x - 
     @this.style.margin.right - 
     @this.style.border.right -
     @this.style.vertical_scrollbar_width;
-  bar_pos->y = pos_screen.y + content_start.y;
+  bar_pos->y = content_start.y;
 
   bar_size->x = @this.style.vertical_scrollbar_width;
   handle_size->x = @this.style.vertical_scrollbar_width;
@@ -166,9 +168,9 @@ void Item::calcHorizontalScrollBar(
     bar_size->x -= @this.style.vertical_scrollbar_width;
   }
 
-  bar_pos->x = pos_screen.x;
+  bar_pos->x = 0.f;
   bar_pos->y = 
-    pos_screen.y + size.y - 
+    size.y - 
     @this.style.margin.bottom -
     @this.style.border.bottom -
     @this.style.horizontal_scrollbar_height;

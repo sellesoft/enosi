@@ -356,7 +356,7 @@ void Text::evaluate(UI* ui)
  */
 void Text::generate(UI* ui)
 {
-  state.draw(ui, pos_screen);
+  state.draw(ui, {0.f,0.f});
   state.freeRenderer();
 }
 

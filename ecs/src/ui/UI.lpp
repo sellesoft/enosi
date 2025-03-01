@@ -131,14 +131,6 @@ b8 UI::update(Engine& engine)
 
   renderer.pushBindBuffer(buffer);
 
-  // renderer.pushUniformVec2(
-  //   "scale"_str,
-  //   { 2.f / engine.window.size.x, -2.f / engine.window.size.y });
-
-  // renderer.pushUniformVec2(
-  //   "translation"_str,
-  //   { -1.f, 1.f });
-
   mat3x2 proj, view;
   mat3x2::calcScreenMatrices(engine.window.size, &proj, &view);
 
@@ -162,7 +154,10 @@ b8 UI::update(Engine& engine)
   auto base_transform = 
     mat3x2::createTransform({0.f,0.f}, 0.f);
 
-  updateTree(root->node, base_transform);
+  // This should probably never be added to? No, I think it could, 
+  // so the logic for handling this should be pulled out I believe.
+  PostSiblingDrawCmdArray dummy;
+  updateTree(root->node, dummy, base_transform);
 
   temp_alloc.deinit();
 
@@ -273,7 +268,10 @@ static ItemNode* findStaticSizedParent(
 
 /* ----------------------------------------------------------------------------
  */
-void UI::updateTree(ItemNode* node, const mat3x2& current_transform)
+void UI::updateTree(
+    ItemNode* node, 
+    PostSiblingDrawCmdArray& post_sibling_drawcmds,
+    const mat3x2& current_transform)
 {
   gfx::Renderer& renderer = eng->renderer;
   Window&        window   = eng->window;
@@ -442,8 +440,6 @@ $ end
     scext.x != 0.f          && scext.y != 0.f          &&
     scoff.x + scext.x > 0.f && scoff.y + scext.y > 0.f;
 
-  b8 pushed_transform = false;
-
   auto emitDrawCmd = [&](DrawCmd* drawcmd)
   {
     if (notnil(drawcmd->tex))
@@ -501,20 +497,44 @@ $ end
     postcmds.init();
     item->reportDrawCmds(this, precmds, postcmds);
 
+    DrawCmdList postsibcmds;
+    postsibcmds.init();
+    item->reportDrawCmdsPostSiblings(this, postsibcmds);
+
+    for (DrawCmd* cmd : postsibcmds)
+    {
+      PostSiblingDrawCmd* post_sib_cmd = post_sibling_drawcmds.push();
+      post_sib_cmd->drawcmd = cmd;
+      post_sib_cmd->transform = this_transform;
+    }
+
     // Emit pre-children commands.
     if (precmds.len != 0)
       emitDrawCmds(precmds);
+
+    PostSiblingDrawCmdArray children_post_sibling_drawcmds;
+    children_post_sibling_drawcmds.init();
 
     // Update child branches if the Item wants us to.
     if (item->shouldPlaceChildren())
     {
       for (ItemNode* child = node->first_child; child; child = child->next)
-        updateTree(child, this_transform);
+        updateTree(child, children_post_sibling_drawcmds, this_transform);
     }
 
     // Children likely changed scissor, so we have to set it back.
     renderer.pushSetScissor(
       vec2i(scoff.x, window.size.y - (scoff.y+scext.y)), scext);
+
+    for (PostSiblingDrawCmd& post_sib_cmd : children_post_sibling_drawcmds)
+    {
+      renderer.pushUniformMat3x2("model"_str, post_sib_cmd.transform);
+      emitDrawCmd(post_sib_cmd.drawcmd);
+    }
+
+    // Child will have pushed a different transform so restore ours.
+    // This kinda sucks, but I'm not sure of a good way around it.
+    renderer.pushUniformMat3x2("model"_str, this_transform);
 
     // Emit post-children commands.
     if (postcmds.len != 0)
@@ -594,8 +614,8 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
   item->dirty = false;
 
   $ local schema = ui.widgets.Item.schema
-  $ local item = ui.createItemContext("Item", "item")
-  $ local style = item.style
+  $ local item   = ui.createItemContext("Item", "item")
+  $ local style  = item.style
   $ local parent = ui.createItemContext("Item", "parent", true)
 
   @@style:lookup(
@@ -696,7 +716,7 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
     {
       if (@style.size.width < 0.f)
         ERROR("percent_x set but width set (", @style.size.width, ") is "
-        "negative\n");
+              "negative\n");
       else if (@parent.style.sizing.test(percent_x))
         item->size.x = @style.size.width/100.f * @parent.getPaddedWidth;
       else if (@parent.style.size.width >= 0.f)
@@ -1110,7 +1130,6 @@ void UI::genItemBranch(ItemNode* node)
         vp,
         ip,
         sum,
-        item->pos_screen +
         @item.style.margin.top_left +
         @item.style.padding.top_left,
         @item.getBorderedArea,
@@ -1137,7 +1156,6 @@ void UI::genItemBranch(ItemNode* node)
         ip,
         sum,
         @item.style.border,
-        item->pos_screen +
         @item.style.margin.top_left +
         @item.style.border.top_left,
         @item.getBorderedArea,

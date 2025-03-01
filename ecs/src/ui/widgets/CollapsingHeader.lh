@@ -41,18 +41,15 @@ struct
   static CollapsingHeader* make(UI& ui, String name = nil, String init = nil);
   static CollapsingHeader* begin(UI& ui, String name = nil, String init = nil);
 
-  virtual void  update(UI* ui, UpdateReason reason) override;
-  virtual void  evaluate(UI* ui) override;
-  virtual vec2f getMinSize(UI* ui) override;
-  virtual void  generate(UI* ui) override;
-  virtual vec2f adjustCursorStart(UI* ui, vec2f norm) override;
-  virtual AdjustedSize adjustItemSize(UI* ui, b8 ax, b8 ay) override;
-  virtual b8    shouldPlaceChildren() override { return open; }
-  virtual vec2f calcContentStart(vec4f margin, vec4f border) override;
-  virtual vec2f calcContentArea(
-    vec4f margin, 
-    vec4f border, 
-    vec2f size) override;
+  void  update(UI* ui, UpdateReason reason) override;
+  void  evaluate(UI* ui) override;
+  vec2f getMinSize(UI* ui) override;
+  void  generate(UI* ui) override;
+  vec2f adjustCursorStart(UI* ui, vec2f norm) override;
+  b8    shouldPlaceChildren() override { return open; }
+  vec2f calcContentStart(vec4f margin, vec4f border) override;
+  vec2f calcContentArea(vec4f margin, vec4f border, vec2f size) override;
+  AdjustedSize adjustItemSize(UI* ui, b8 ax, b8 ay) override;
 
   virtual void reportDrawCmds(
       UI* ui, 
