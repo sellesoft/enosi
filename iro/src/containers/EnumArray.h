@@ -11,9 +11,16 @@
 template<typename TEnum, typename TElem>
 struct EnumArray
 {
-  TElem arr[u32(TEnum::COUNT)];
+  TElem arr[u32(TEnum::COUNT)] = {};
 
   TElem& operator[](TEnum i) { return arr[(u32)i]; }
+  const TElem& operator[](TEnum i) const { return arr[(u32)i]; }
+
+  TElem* begin() { return arr; }
+  TElem* end() { return arr + u32(TEnum::COUNT); }
+
+  const TElem* begin() const { return arr; }
+  const TElem* end() const { return arr + u32(TEnum::COUNT); }
 };
 
 
