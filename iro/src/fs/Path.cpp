@@ -136,6 +136,49 @@ String Path::removeBasename(String path)
 
 /* ----------------------------------------------------------------------------
  */
+String Path::removeExtension(String path)
+{
+  u8* scan = &path.last();
+  u8* dot = nullptr;
+
+  while (scan >= path.ptr)
+  {
+    if (*scan == '.')
+      dot = scan;
+    else if (*scan == '/')
+      break;
+
+    scan -= 1;
+  }
+
+  if (dot)
+    return String::from(path.ptr, dot);
+
+  return path;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+String Path::removeFirstDir(String path)
+{
+  u8* scan = path.ptr;
+
+  if (*scan == '/')
+    scan += 1;
+
+  while (scan < path.end())
+  {
+    if (*scan == '/' && scan < &path.last())
+      return String::from(scan + 1, path.end());
+
+    scan += 1;
+  }
+
+  return path;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 TimePoint Path::modtime(String path)
 {
   return FileInfo::of(path).last_modified_time;
