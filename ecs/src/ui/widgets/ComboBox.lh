@@ -1,0 +1,105 @@
+/*
+ *  A box containing a list of selectable options.
+ */
+
+$ require "common"
+$ local ui = require "ui.UI"
+
+#include "iro/Common.h"
+
+@@lpp.import "ui/Item.lh"
+@@lpp.import "ui/widgets/Text.lh"
+
+namespace ui
+{
+
+/* ============================================================================
+ */
+@ui.widget(ComboBox,
+schema
+{
+  font        = inherit;
+  font_height = inherit;
+  text_color  = inherit;
+
+  option_height: f32 = 15;
+  box_height: f32 = 15;
+},
+struct
+{
+  typedef SmallArray<String, 8> OptionsArray;
+
+  template<typename TContext>
+  using OnOptionSelectedTyped = void (*)(TContext*, u32);
+  using OnOptionSelected = OnOptionSelectedTyped<void>;
+
+  b8 open;
+
+  void* context;
+  OnOptionSelected onOptionSelected;
+
+  DrawCmd* options_background;
+
+  TextState selected_option;
+
+  struct Option
+  {
+    String name; // owned
+    DrawCmd* drawcmd;
+  };
+
+  Array<Option> options;
+
+  static ComboBox* make(
+      UI& ui, 
+      void* context,
+      OnOptionSelected onOptionSelected,
+      Slice<String> options,
+      String id = nil);
+
+  template<typename TContext>
+  static ComboBox* make(
+      UI& ui, 
+      TContext* context,
+      OnOptionSelectedTyped<TContext> onOptionSelected,
+      Slice<String> options,
+      String id = nil)
+  {
+    union
+    {
+      OnOptionSelectedTyped<TContext> x;
+      OnOptionSelected y;
+    } selected { onOptionSelected };
+
+    return make(ui, context, selected.y, options, id);
+  }
+
+  String getSelectedOptionName()
+  {
+    return selected_option.buffer.asStr();
+  }
+    
+  void update(UI* ui, UpdateReason reason) override;
+  void evaluate(UI* ui) override;
+  void generate(UI* ui) override;
+
+  vec2f calcVisualArea() override;
+
+  void reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post) override
+  {
+    pre.push(selected_option.dc);
+  }
+
+  void reportDrawCmdsPostSiblings(UI* ui, DrawCmdList& list) override
+  {
+    if (open)
+    {
+      list.push(options_background);
+        
+      for (Option& option : options)
+        list.push(option.drawcmd);
+    }
+  }
+})
+
+}
