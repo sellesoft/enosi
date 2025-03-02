@@ -20,7 +20,6 @@ $ local ui = require "ui.UI"
 @@lpp.import "game/map/Map.lh"
 @@lpp.import "game/map/Map.schema.lh"
 @@lpp.import "graphics/Framebuffer.lh"
-@@lpp.import "graphics/Texture.lh"
 
 struct AssetMgr;
 struct BroadcastEventBus;

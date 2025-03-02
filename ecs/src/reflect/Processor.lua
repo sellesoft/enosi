@@ -155,6 +155,19 @@ end
 
 -- * --------------------------------------------------------------------------
 
+function temp_dump(o)
+  if type(o) == 'table' then
+     local s = '{ '
+     for k,v in pairs(o) do
+        if type(k) ~= 'number' then k = '"'..k..'"' end
+        s = s .. '['..k..'] = ' .. temp_dump(v) .. ','
+     end
+     return s .. '} '
+  else
+     return tostring(o)
+  end
+end
+
 Processor.processTopLevelDecl = function(self, cdecl)
   if cdecl:name() == "" then return end
 
@@ -163,6 +176,11 @@ Processor.processTopLevelDecl = function(self, cdecl)
   -- if cdecl:name() == "GameMgr" or cdecl:name() == "Engine" then
   --   print(cdecl:name())
   -- end
+
+  if not cdecl.isNamespace then
+    print(cdecl:dump())
+    print(temp_dump(cdecl))
+  end
 
   if cdecl:isNamespace() then
     local name = cdecl:name()

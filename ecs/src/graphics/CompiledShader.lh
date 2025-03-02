@@ -1,0 +1,67 @@
+/*
+ * Asset type for pre-compiled shaders
+ */
+
+$ require "common"
+
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+
+@@lpp.import "graphics/ShaderParams.lh"
+
+using namespace iro;
+
+struct AssetMgr;
+
+namespace gfx
+{
+
+/* ============================================================================
+ * Note that this structure represents exactly what we save to disk.
+ */
+struct CompiledShaderData
+{
+  ShaderType type;
+  u64 binary_size;
+  u8* binary;
+
+  b8 serialize(io::IO* out);
+};
+
+/* ============================================================================
+ */
+struct CompiledShader : public Asset 
+{
+  CompiledShaderData* data;
+
+  CompiledShaderData* getData()
+  {
+    return data;
+  }
+
+  Shader gfx_shader;
+
+  static s64 writeAssetPath(io::IO* io, String name, AssetMgr& assetmgr);
+  static s64 writeDataPath(io::IO* io, String name, AssetMgr& assetmgr);
+
+  static CompiledShader* load(
+    String name,
+    AssetMgr& assetmgr,
+    Renderer& renderer);
+
+  struct CompileParams
+  {
+    String          name;
+    String          asset_path;
+    String          data_path;
+    ShaderType      type;
+    mem::Allocator* allocator;
+    AssetMgr*       assetmgr;
+  };
+
+  static b8 compileGLSL(CompileParams& params);
+};
+
+typedef TypedAssetRef<CompiledShader> CompiledShaderRef;
+
+} // namespace gfx 

@@ -1,9 +1,12 @@
 /*
- *  A Framebuffer...
+ *  A Framebuffer is a wrapper over a texture that can be rendered to.
  */
+$ require "common"
 
 #include "iro/Common.h"
 #include "math/vec.h"
+
+@@lpp.import "graphics/Texture.lh"
 
 namespace gfx
 {
@@ -15,20 +18,18 @@ struct Texture;
  */
 struct Framebuffer
 {
-  Renderer* renderer;
+  u32 index;
 
-  void* handle;
-  void* renderpass_handle;
-
-  Texture* texture;
-  vec4f clear_color;
-
-  static Framebuffer create(
+  b8 init(
     Renderer& renderer,
-    Texture& texture,
+    u32 width,
+    u32 height,
+    Texture texture,
     vec4f clear_color);
 
-  void destroy();
+  b8 deinit(Renderer& renderer);
 };
 
 }
+
+DefineNilValue(gfx::Framebuffer, { 0 }, { return x.index == 0; });

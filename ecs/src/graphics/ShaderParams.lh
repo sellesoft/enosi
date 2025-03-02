@@ -1,0 +1,20 @@
+/*
+ * Shader parameters and types
+ */
+
+#include "iro/Common.h"
+
+namespace gfx
+{
+
+/* ============================================================================
+ */
+enum class ShaderType : u8
+{
+  Vertex,
+  Fragment,
+  Compute,
+  Geometry,
+};
+
+}

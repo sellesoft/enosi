@@ -32,6 +32,9 @@ struct PostReload;
 namespace ui
 {
 
+static constexpr u32 MAX_VERTICES = 0xffffff;
+static constexpr u32 MAX_INDICES = 0xffffff;
+
 /* ============================================================================
  */
 struct UI
@@ -57,7 +60,8 @@ struct UI
   Array<DrawCmd*> free_drawcmds_vertex_sorted;
   Array<DrawCmd*> free_drawcmds_index_sorted;
 
-  gfx::Buffer buffer;
+  gfx::Buffer vertex_buffer;
+  gfx::Buffer index_buffer;
   u64 vertex_next;
   u64 index_next;
 

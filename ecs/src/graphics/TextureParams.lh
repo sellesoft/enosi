@@ -38,14 +38,4 @@ enum class ImageAddressMode : u8
   ClampToTransparent,
 };
 
-/* ============================================================================
- */
-enum class ImageKind : u8
-{
-  OneD,
-  TwoD,
-  ThreeD,
-  Cube,
-};
-
 }

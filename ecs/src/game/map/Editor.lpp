@@ -53,16 +53,14 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
   editor->update_triggers.set(UpdateReason::MouseHover);
 
   DrawCmd* map_render = ui.drawcmds.add();
-  map_render->tex = 
-    gfx::Texture::create(
-      *renderer,
-      600,
-      400,
-      gfx::ImageFormat::RGBA,
-      gfx::ImageAddressMode::ClampToBlack,
-      gfx::ImageFilter::Nearest,
-      gfx::ImageKind::TwoD,
-      nullptr);
+  map_render->tex.init(
+    *renderer,
+    600,
+    400,
+    gfx::ImageFormat::RGBA,
+    gfx::ImageAddressMode::ClampToBlack,
+    gfx::ImageFilter::Nearest,
+    nullptr);
   map_render->alloc(&ui, gfx::putFilledRectCounts());
 
   editor->map_render = map_render;
@@ -70,6 +68,8 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
   editor->framebuffer = 
     gfx::Framebuffer::create(
       *renderer,
+      600,
+      400,
       map_render->tex,
       {0,0,0,255});
 
@@ -79,6 +79,10 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
     return nullptr;
   }
 
+  //TODO(delle) Look into updating the renderer to support multiple
+  // viewports so we dont have to make an entire new render system for
+  // this. Might also be cool in gameplay to have a "security camera"
+  // view that we could use to render the map from a different perspective.
   if (!editor->rendersys.init(*renderer, ui.eng->assetmgr))
   {
     ERROR("failed to init rendersys\n");
@@ -205,16 +209,28 @@ void MapEditor::evaluate(UI* ui)
   //             better. Look into that when we get around to reworking UI
   //             Items to be transform based.
 
-  map_render->tex.recreate(
+  map_render->tex.destroy();
+  b8 tex_init = map_render->tex.init(
+    *renderer,
     size.x,
     size.y,
     gfx::ImageFormat::RGBA,
     gfx::ImageAddressMode::ClampToBlack,
     gfx::ImageFilter::Nearest,
-    gfx::ImageKind::TwoD,
     nullptr);
 
-  need_render = true;
+  if (!tex_init)
+    return;
+
+  editor->framebuffer.destroy();
+  editor->framebuffer.init(
+    *renderer,
+    size.x,
+    size.y,
+    map_render->tex,
+    {0,0,0,255});
+
+  need_render = true; //TODO(delle) see if we still need this
 }
 
 /* ----------------------------------------------------------------------------
@@ -401,8 +417,8 @@ void MapEditor::onPreMapRender(PreMapRender& event)
  */
 void MapEditor::onPreSpriteRender(PreSpriteRender& event)
 {
-  auto* vp = (gfx::Vertex*)rendersys.external_buffer.mapped.vp;
-  auto* ip = (gfx::Index*)rendersys.external_buffer.mapped.ip;
+  auto* vp = (gfx::Vertex*)rendersys.external_vertex_buffer.mapped_data;
+  auto* ip = (gfx::Index*)rendersys.external_index_buffer.mapped_data;
 
   // Draw grid lines.
   {
@@ -459,8 +475,6 @@ void MapEditor::onPreSpriteRender(PreSpriteRender& event)
  */
 void MapEditor::onPostRender(PostRender& event)
 {
-  auto* vp = (gfx::Vertex*)rendersys.external_buffer.mapped.vp;
-  auto* ip = (gfx::Index*)rendersys.external_buffer.mapped.ip;
 }
 
 /* ----------------------------------------------------------------------------

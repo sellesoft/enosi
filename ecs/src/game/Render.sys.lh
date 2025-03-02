@@ -4,13 +4,14 @@
 
 $ require "common"
 
-@@lpp.import "graphics/CompiledTexture.lh"
-@@lpp.import "graphics/Buffer.lh"
-
 #include "iro/Common.h"
 #include "math/Rect.h"
 #include "math/mat.h"
 #include "Color.h"
+
+@@lpp.import "graphics/CompiledTexture.lh"
+@@lpp.import "graphics/Buffer.lh"
+@@lpp.import "graphics/Pipeline.lh"
 
 namespace gfx
 {
@@ -35,7 +36,7 @@ struct RenderSys
   struct QuadBatch
   {
     u32 quad_count;
-    const gfx::CompiledTexture* texture;
+    gfx::Texture texture;
   };
 
   b8 init(gfx::Renderer& renderer, AssetMgr& assetmgr);
@@ -58,25 +59,28 @@ struct RenderSys
   b8 update(const UpdateParams& params);
 
   void drawQuad(
+    gfx::Renderer& renderer,
     vec2f pos, 
-    const gfx::CompiledTexture* texture, 
-    Color color,
-    gfx::Renderer& renderer);
+    gfx::Texture texture, 
+    Color color);
 
-  gfx::CompiledTextureRef null_texture;
 
-  // TODO(sushi) move this somewhere central so it may be shared with UI
-  //             as it defines the same thing.
-  gfx::Texture white_texture;
+  gfx::Texture null_texture;
 
-  gfx::Buffer quads_buffer;
-  gfx::Buffer background_buffer;
+  gfx::Buffer background_vertex_buffer;
+  gfx::Buffer background_index_buffer;
+
+  gfx::Buffer quads_vertex_buffer;
+  gfx::Buffer quads_index_buffer;
 
   QuadBatch batches[MAX_BATCHES];
   u32 batch_count;
   u32 quad_count;
 
-  // External buffer for use by systems notified of Render events.
-  gfx::Buffer external_buffer;
+  gfx::Buffer external_vertex_buffer;
+  gfx::Buffer external_index_buffer;
   vec2i external_counts = {};
+
+  gfx::Pipeline quad_pipeline;
+  gfx::Pipeline stars_pipeline;
 };

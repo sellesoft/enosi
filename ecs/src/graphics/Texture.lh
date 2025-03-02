@@ -6,12 +6,7 @@
 $ require "common"
 
 #include "iro/Common.h"
-#include "iro/Unicode.h"
-#include "iro/memory/Allocator.h"
 
-#include "math/vec.h"
-
-@@lpp.import "asset/Asset.lh"
 @@lpp.import "graphics/TextureParams.lh"
 
 namespace gfx
@@ -23,40 +18,30 @@ struct Renderer;
  */
 struct Texture
 {
-  Renderer* renderer;
+  u32 index;
 
-  u32 width;
-  u32 height;
-
-  void* handle;
-  void* memory_handle;
-  void* view_handle;
-
-  static Texture create(
+  b8 init(
     Renderer&        renderer,
     u32              width,
     u32              height,
     ImageFormat      format,
     ImageAddressMode address_mode,
     ImageFilter      filter,
-    ImageKind        kind,
     void*            pixels);
 
-  void destroy();
+  b8 deinit(Renderer& renderer);
 
-  // TODO(sushi) once we move to Vulkan figure out if we can just update 
-  //             specific information about the Texture w/o having to store
-  //             all the properties it was originally created with.
-  void recreate(
-    u32              width,
-    u32              height,
-    ImageFormat      format,
-    ImageAddressMode address_mode,
-    ImageFilter      filter,
-    ImageKind        kind,
-    void*            pixels);
+  inline b8 operator==(const Texture& other) const
+  {
+    return index == other.index;
+  }
+
+  inline b8 operator!=(const Texture& other) const
+  {
+    return index != other.index;
+  }
 };
 
 }
 
-DefineNilValue(gfx::Texture, { 0 }, { return x.handle == nullptr; });
+DefineNilValue(gfx::Texture, { 0 }, { return x.index == 0; });

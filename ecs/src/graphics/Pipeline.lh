@@ -1,0 +1,26 @@
+/*
+ * Graphics pipeline that defines shader programs and states
+ */
+
+$ require "common"
+
+#include "iro/Common.h"
+
+@@lpp.import "graphics/Shader.lh"
+
+namespace gfx
+{
+
+struct Renderer;
+
+struct Pipeline
+{
+  u32 index;
+  
+  b8 init(Renderer& renderer, Shader vertex_shader, Shader fragment_shader);
+  b8 deinit(Renderer& renderer);
+};
+
+}
+
+DefineNilValue(gfx::Pipeline, { 0 }, { return x.index == 0; });

@@ -5,6 +5,7 @@ $ local ui = require "ui.UI"
 @@lpp.import "Engine.lh"
 @@lpp.import "Engine.events.lh"
 @@lpp.import "graphics/Renderer.lh"
+@@lpp.import "graphics/Buffer.lh"
 @@lpp.import "window/Window.lh"
 @@lpp.import "window/Window.events.lh"
 @@lpp.import "math/util.h"
@@ -55,12 +56,19 @@ b8 UI::init(Engine& engine)
   if (!free_drawcmds_index_sorted.init())
     return ERROR("failed to init index sorted free drawcmds array\n");
 
-  if (!buffer.init(
-        sizeof(gfx::Vertex) * 0xffffff,
-        sizeof(gfx::Index) * 0xffffff))
-    return ERROR("failed to init gfx::Buffer\n");
+  if (!vertex_buffer.init(renderer, nullptr,
+    sizeof(gfx::Vertex) * ui::MAX_VERTICES,
+    gfx::Buffer::Usage::VertexBuffer,
+    gfx::Buffer::MemoryProperty::DeviceMappable,
+    gfx::Buffer::MappingBehavior::Occasional))
+    return ERROR("failed to init vertex buffer\n");
 
-  buffer.setGfxAttributes();
+  if (!index_buffer.init(renderer, nullptr,
+    sizeof(gfx::Index) * ui::MAX_INDICES,
+    gfx::Buffer::Usage::IndexBuffer,
+    gfx::Buffer::MemoryProperty::DeviceMappable,
+    gfx::Buffer::MappingBehavior::Occasional))
+    return ERROR("failed to init index buffer\n");
 
   // NOTE(sushi) I do not like making root manually here but in order
   //             to not have to put a branch in make just to handle this
@@ -94,15 +102,13 @@ b8 UI::init(Engine& engine)
     0xff, 0xff, 0xff, 0xff,
   };
 
-  white_texture =
-    gfx::Texture::create(
-      renderer,
-      4, 4,
-      gfx::ImageFormat::BW,
-      gfx::ImageAddressMode::ClampToWhite,
-      gfx::ImageFilter::Nearest,
-      gfx::ImageKind::TwoD,
-      white_pixels);
+  white_texture.init(
+    renderer,
+    4, 4,
+    gfx::ImageFormat::BW,
+    gfx::ImageAddressMode::ClampToWhite,
+    gfx::ImageFilter::Nearest,
+    white_pixels);
 
   // Store a reference to the engine in case widgets need to access
   // information from it.
@@ -129,33 +135,28 @@ b8 UI::update(Engine& engine)
   //             also make this need to be retriggered as well.
   findHoveredItem(item_tree.root);
 
-  renderer.pushBindBuffer(buffer);
-
-  // renderer.pushUniformVec2(
-  //   "scale"_str,
-  //   { 2.f / engine.window.size.x, -2.f / engine.window.size.y });
-
-  // renderer.pushUniformVec2(
-  //   "translation"_str,
-  //   { -1.f, 1.f });
-
-  mat3x2 proj, view;
-  mat3x2::calcScreenMatrices(engine.window.size, &proj, &view);
-
-  mat3x2 model =
-    mat3x2::createTransform(
-      vec2f(0.f, 0.f),
-      0.f);
-
-  renderer.pushUniformMat3x2("proj"_str, proj);
-  renderer.pushUniformMat3x2("view"_str, view);
-  renderer.pushUniformMat3x2("model"_str, model);
+  renderer.pushBindVertexBuffer(vertex_buffer);
+  renderer.pushBindIndexBuffer(index_buffer);
 
   renderer.pushSetViewport(vec2i(0,0), window.size);
   renderer.pushSetScissor(vec2i(0,0), window.size);
 
-  TRACE("  mapping buffer\n");
-  buffer.map();
+  mat3x2 proj, view;
+  mat3x2::calcScreenMatrices(engine.window.size, &proj, &view);
+  gfx::Renderer::Scene scene = {
+    .proj = proj,
+    .view = view,
+    .resolution = vec2f(window.size),
+    .time = (f32)engine.frame_start_time,
+  };
+  renderer.updateScene(scene);
+
+  mat3x2 model = mat3x2::createTransform({0.f,0.f}, 0.f);
+  renderer.pushConstant(&model, sizeof(mat3x2));
+
+  TRACE("  mapping buffers\n");
+  vertex_buffer.map(renderer, 0, gfx::Buffer::MAP_WHOLE_BUFFER);
+  index_buffer.map(renderer, 0, gfx::Buffer::MAP_WHOLE_BUFFER);
 
   temp_alloc.init();
 
@@ -166,11 +167,9 @@ b8 UI::update(Engine& engine)
 
   temp_alloc.deinit();
 
-  TRACE("  unmapping buffer\n");
-  buffer.unmap();
-
-  // idk
-  buffer.num_indexes = buffer.index_size / sizeof(gfx::Index);
+  TRACE("  unmapping buffers\n");
+  vertex_buffer.unmap(renderer, true);
+  index_buffer.unmap(renderer, true);
 
   if (scrolling_item)
   {
@@ -448,7 +447,7 @@ $ end
   {
     if (notnil(drawcmd->tex))
     {
-      TRACE("  drawcmd has tex ", drawcmd->tex.handle, "\n");
+      TRACE("  drawcmd has tex ", drawcmd->tex.index, "\n");
       renderer.pushBindTexture(drawcmd->tex);
     }
     else
@@ -484,8 +483,7 @@ $ end
     mat3x2 this_transform = 
       current_transform.mul(
         mat3x2::createTransform(item->pos_local, 0.f));
-
-    renderer.pushUniformMat3x2("model"_str, this_transform);
+    renderer.pushConstant(&this_transform, sizeof(mat3x2));
 
     renderer.pushSetScissor(
       vec2i(scoff.x, window.size.y - (scoff.y+scext.y)), scext);

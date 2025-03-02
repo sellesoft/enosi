@@ -30,7 +30,6 @@ return
   },
 
   mode = "debug",
-  --renderer = "vulkan",
 
   -- OS specific config.
   os =

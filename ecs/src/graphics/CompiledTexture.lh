@@ -24,7 +24,6 @@ struct CompiledTextureData
   ImageFormat      format;
   ImageFilter      filter;
   ImageAddressMode address_mode;
-  ImageKind        kind;
 
   s32 width;
   s32 height;
@@ -64,7 +63,6 @@ struct CompiledTexture : public Asset
     u32              width;
     u32              height;
     ImageFormat      format;
-    ImageKind        kind;
     ImageFilter      filter;
     ImageAddressMode address_mode;
     mem::Allocator*  allocator;

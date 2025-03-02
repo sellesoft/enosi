@@ -108,7 +108,14 @@ CompiledTexture* CompiledTexture::load(
   // Repoint the data's pixels.
   data->pixels = (void*)(data + 1);
 
-  renderer.loadTexture(texture);
+  texture->gfx_texture.init(
+    renderer,
+    data->width,
+    data->height,
+    data->format,
+    data->address_mode,
+    data->filter,
+    data->pixels);
 
   return texture;
 }
@@ -129,7 +136,6 @@ b8 CompiledTexture::compileFromMemory(void* pixels, CompileParams& params)
   data.format = params.format;
   data.filter = params.filter;
   data.address_mode = params.address_mode;
-  data.kind = params.kind;
 
   data.width = params.width;
   data.height = params.height;

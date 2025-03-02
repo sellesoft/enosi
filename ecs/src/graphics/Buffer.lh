@@ -1,55 +1,158 @@
 /*
- *  A Buffer through which vertex and index information is given to the GPU.
+ *  A Buffer represents memory allocated on the GPU.
+ *
+ *
+ *  Choosing the correct MemoryProperty flags is pretty important for
+ *  performance and usability. The correct choice of course depends on
+ *  use case, but there are tiers of speed and access patterns that can
+ *  be understood to better make that choice. I will attempt to explain
+ *  those here.
+ *
+ *  Speed:
+ *  MemoryProperty::DeviceLocal has the fastest device access because
+ *  the memory is stored on the device. MemoryProperty::HostVisible
+ *  allows mapping memory between the host and device, but that means the
+ *  device has to send the memory to the host before the host can make any
+ *  changes, which it will have to send back to the device. A possible way to
+ *  alleviate part of that transfer time is to use MemoryProperty::HostCached,
+ *  which will keep a copy of the memory on the host and only update the memory
+ *  that has changed on the device. But, that also means you have two copies of
+ *  the memory at no benefit to sending updates to the device, so it's often
+ *  useful for host readback of data that's being written by the device.
+ *
+ *  Access:
+ *  If you never need to update the data, then it's simplest to just upload
+ *  the memory to the device and disallow mapping it back to the host.
+ *  MemoryProperty::DeviceOnly and MemoryProperty::DeviceOnlyLazy are the
+ *  choices for that, where lazy allocation means that the memory is only
+ *  allocated as needed. Lazy allocation is mainly useful on tiled
+ *  architectures (render tile-by-tile) with large render targets that don't
+ *  need to save their result after rendering, like MSAA images or depth
+ *  images, since the memory space for a finished tile can be reused. However,
+ *  if you do need to update the data, then the choices differentiate based
+ *  on how often it's necessary to update that data. MemoryProperty::DeviceOnly
+ *  might still be preferable if the memory has a high degree of random access,
+ *  like with dynamic textures or large storage buffers.
+ *  MemoryProperty::DeviceMappable is ideal for frequent updates, like uniform
+ *  buffers or dynamic vertex/index buffers, since you can map specific
+ *  sections of the memory and it doesn't require going thru a staging buffer
+ *  like MemoryProperty::DeviceOnly. MemoryProperty::HostStreamed is mainly
+ *  used for staging buffers, but should probably be used in the above use case
+ *  if MemoryProperty::DeviceMappable is not available.
+ *
+ *  Examples:
+ *    MemoryProperty::DeviceOnly
+ *      - static textures
+ *      - large storage buffers
+ *      - randomly accessed dynamic textures
+ *    MemoryProperty::DeviceOnlyLazy
+ *      - MSAA image
+ *      - depth image
+ *    MemoryProperty::DeviceMappable
+ *      - uniform buffers
+ *      - dynamic vertex/index buffers
+ *    MemoryProperty::HostStreamed
+ *      - staging buffers
+ *
+ *  Notes:
+ *  - Choosing MemoryProperty flags can also depend on what GPU is being used,
+ *    as the different brands organize their device memory in different ways.
+ *  - Allocating too many resources with MemoryProperty::DeviceLocal can
+ *    result in VRAM oversubscription (running out of memory).
+ *
+ *  References:
+ *  https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkMemoryPropertyFlagBits.html
+ *  https://asawicki.info/news_1740_vulkan_memory_types_on_pc_and_how_to_use_them
+ *  https://zeux.io/2020/02/27/writing-an-efficient-vulkan-renderer
+ *
  */
- 
+
 #include "iro/Common.h"
 
 namespace gfx
 {
+  
+struct Renderer;
 
 /* ============================================================================
  */
 struct Buffer
 {
-  u32 vbo = 0;
-  u32 ibo = 0;
-  u32 vao = 0;
-
-  u64 vertex_size = 0;
-  u64 index_size = 0;
-
-  u64 num_vertexes = 0;
-  u64 num_indexes = 0;
-
-  struct
+  enum Usage
   {
-    void* vp = nullptr;
-    void* ip = nullptr;
-  } mapped;
+    UniformBuffer,
+    StorageBuffer,
+    IndexBuffer,
+    VertexBuffer,
+  };
 
-  b8   init(u64 vsize, u64 isize);
-  void deinit();
+  enum MemoryProperty
+  {
+    // Device memory that can not be mapped.
+    // Requires MappingBehaviour::Never.
+    DeviceLocal = 1 << 0,
 
-  void setF32AttribF32(
-      u32 idx, 
-      u32 len, 
-      b8 normalized, 
-      u64 stride, 
-      u64 offset);
+    // Device memory that can be mapped.
+    // Incompatible with LazilyAllocated.
+    HostVisible = 1 << 1,
 
-  void setF32AttribU8(
-      u32 idx, 
-      u32 len, 
-      b8 normalized, 
-      u64 stride,
-      u64 offset);
+    // Device and Host memory which is automatically flushed between them.
+    // Implies HostVisible.
+    HostCoherent = 1 << 2,
 
-  // Sets the vertex attributes of this buffer to gfx's default 
-  // Vertex/Index stuff.
-  void setGfxAttributes();
+    // Device memory which is cached on the host.
+    // Requires HostVisible.
+    HostCached = 1 << 3,
 
-  void map();
-  void unmap();
+    // Device memory which is commited as needed.
+    // Incompatible with HostVisible and requires MappingBehaviour::Never.
+    LazilyAllocated = 1 << 4,
+
+    DeviceOnly = DeviceLocal,
+    DeviceOnlyLazy = DeviceLocal | LazilyAllocated,
+    DeviceMappable = DeviceLocal | HostVisible,
+    HostStreamed = HostVisible | HostCoherent,
+  };
+
+  enum MappingBehavior
+  {
+    // The buffer will never be mapped after the initial upload.
+    // Incompatible with HostVisible, HostCoherent, and HostCached.
+    Never,
+
+    // The buffer may be mapped and unmapped whenever the user wishes.
+    // Requires HostVisible, HostCoherent, or HostCached.
+    Occasional,
+
+    // The buffer is automatically mapped until destroyed.
+    // Requires HostVisible, HostCoherent, or HostCached.
+    Persistent,
+  };
+
+  static constexpr u64 MAP_WHOLE_BUFFER = 0;
+
+
+  u32 index;
+  void* mapped_data;
+
+
+  b8 init(
+    Renderer& renderer,
+    void* data,
+    u64 size,
+    Usage usage,
+    MemoryProperty properties,
+    MappingBehavior behavior);
+
+  b8 deinit(Renderer& renderer);
+
+  // If size is MAP_WHOLE_BUFFER, the range from offset to the end
+  // of the buffer is mapped.
+  b8 map(Renderer& renderer, u64 offset, u64 size);
+
+  b8 flush(Renderer& renderer);
+
+  b8 unmap(Renderer& renderer, b8 flush);
 };
 
 }
