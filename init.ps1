@@ -31,6 +31,7 @@ if (!(Test-Path bin/luajit.exe))
   cd ../../../
 
   md bin -ea 0 | Out-Null
+  md bin/lua -ea 0 | Out-Null
 
   md luajit/build/lib -ea 0 | Out-Null
   md luajit/build/include/luajit -ea 0 | Out-Null
@@ -39,6 +40,9 @@ if (!(Test-Path bin/luajit.exe))
   # Put libs, headers, and binaries in standard locations.
   cp luajit/src/src/luajit.lib -Destination luajit/build/lib
   cp luajit/src/src/lua51.lib -Destination luajit/build/lib
+  rm luajit/src/src/luajit.pdb
+  rm luajit/src/src/lua51.pdb
+  rm luajit/src/src/vc140.pdb
 
   cp luajit/src/src/lua.h     -Destination luajit/build/include/luajit/lua.h
   cp luajit/src/src/lualib.h  -Destination luajit/build/include/luajit/lualib.h
@@ -49,6 +53,7 @@ if (!(Test-Path bin/luajit.exe))
   # 'Install' luajit to our standard bin folder.
   cp luajit/src/src/luajit.exe -Destination bin
   cp luajit/src/src/lua51.dll -Destination bin
+  cp -r luajit/src/src/jit -Destination bin/lua
 }
 
 if (!(Test-Path bin/client.exe))
@@ -65,10 +70,11 @@ if (!(Test-Path llvm/llvm_build))
   echo "unzipping llvm..."
   tar -xf llvm.zip
   rm llvm.zip
+  rm llvm/src/.git
 }
 
-md tmp
-echo "\n\n"
+md tmp -ea 0 | Out-Null
+echo "`n"
 
 # For requiring iro lua modules.
 $env:LUA_PATH += ";$PWD/iro/src/lua/?.lua"
