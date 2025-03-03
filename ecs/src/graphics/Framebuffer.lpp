@@ -1,57 +1,50 @@
 $ require "common"
 
+@@lpp.import "graphics/RendererInternal.lh"
+
 @@lpp.import "graphics/Framebuffer.lh"
 @@lpp.import "graphics/Renderer.lh"
-@@lpp.import "graphics/RendererInternal.lh"
 @@lpp.import "graphics/Texture.lh"
 
 #include "iro/Logger.h"
 
-@defFileLogger(framebuffer, Info)
+@defFileLogger(gfx.framebuffer, Trace)
 
 namespace gfx
 {
 
 /* ----------------------------------------------------------------------------
  */
-Framebuffer Framebuffer::create(
+b8 Framebuffer::init(
   Renderer& renderer,
-  Texture& texture,
+  u32 width,
+  u32 height,
+  Texture texture,
   vec4f clear_color)
 {
-  void* internal = renderer.internal;
+  RendererInternal& ri = *(RendererInternal*)renderer.internal;
+  TRACE("initializing a framebuffer\n");
 
-  if (texture.handle == nullptr)
-  {
-    FATAL("null texture passed into Framebuffer::create()");
-    return {};
-  }
+  if (index != 0)
+    return ERROR("failed to initialize a framebuffer because the framebuffer"
+      " is already initialized\n");
 
-  Framebuffer out = {
-    .renderer = &renderer,
-    .texture = &texture,
-    .clear_color = clear_color,
-  };
+  if (ri.framebuffer_count >= ri.framebuffer_pool.MAX_COUNT)
+    return ERROR("failed to initialize a framebuffer because the maximum"
+      " number of framebuffers has been reached (",
+      ri.framebuffer_pool.MAX_COUNT, ")\n");
 
-$ if ECS_OPENGL then
-  GLuint handle;
-  glGenFramebuffers(1, &handle);
+  if (texture.index == 0)
+    return ERROR("failed to initialize a framebuffer because the texture is"
+      " not initialized\n");
 
-  glBindFramebuffer(GL_FRAMEBUFFER, handle);
+  if (width == 0 || height == 0)
+    return ERROR("failed to initialize a framebuffer because the width or"
+      " height is not positive\n");
 
-  glFramebufferTexture(GL_FRAMEBUFFER,
-    GL_COLOR_ATTACHMENT0, (GLuint)(u64)texture.handle, 0);
-
-  GLenum draw_buffers[1] = {GL_COLOR_ATTACHMENT0};
-  glDrawBuffers(1, draw_buffers);
-
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
-  out.handle = (void*)(u64)handle;
-$ elseif ECS_VULKAN then -- if ECS_OPENGL
   VkAttachmentDescription attachment_desc =
   {
-    .format = _RI->surface_format.format,
+    .format = ri.surface_format.format,
     .samples = VK_SAMPLE_COUNT_1_BIT,
     .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
     .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -100,62 +93,66 @@ $ elseif ECS_VULKAN then -- if ECS_OPENGL
   };
 
   VkRenderPass renderpass;
-  VkResult vk_result1 = vkCreateRenderPass(_RI->device,
-    &renderpass_create_info, &_RI->allocator, &renderpass);
-  if (vk_result1 != VK_SUCCESS)
-  {
-    FATAL("failed to create vulkan renderpass");
-    return {};
-  }
-
-  VkImageView image_view = (VkImageView)texture.view_handle;
+  if (VK_SUCCESS != vkCreateRenderPass(ri.device, &renderpass_create_info,
+    &ri.allocator, &renderpass))
+    return FATAL("failed to create the vulkan renderpass\n");
 
   VkFramebufferCreateInfo framebuffer_create_info =
   {
     .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
     .renderPass = renderpass,
     .attachmentCount = 1,
-    .pAttachments = &image_view,
-    .width = texture.width,
-    .height = texture.height,
+    .pAttachments = &ri.texture_pool.at_index(texture.index)->view,
+    .width = width,
+    .height = height,
     .layers = 1,
   };
 
-  VkFramebuffer framebuffer;
-  VkResult vk_result2 = vkCreateFramebuffer(_RI->device,
-    &framebuffer_create_info, &_RI->allocator, &framebuffer);
-  if (vk_result2 != VK_SUCCESS)
-  {
-    FATAL("failed to create vulkan framebuffer");
-    return {};
-  }
+  VkFramebuffer vk_framebuffer;
+  if (VK_SUCCESS != vkCreateFramebuffer(ri.device, &framebuffer_create_info,
+    &ri.allocator, &vk_framebuffer))
+    return FATAL("failed to create vulkan framebuffer\n");
 
-  out.handle = (void*)framebuffer;
-  out.renderpass_handle = (void*)renderpass;
-$ else -- elseif ECS_VULKAN
-#error "unhandled graphics backend"
-$ end -- else
+  RendererFramebuffer* framebuffer = ri.framebuffer_pool.add();
+  framebuffer->framebuffer = vk_framebuffer;
+  framebuffer->renderpass = renderpass;
+  framebuffer->clear_color = clear_color;
 
-  return out;
+  index = ri.framebuffer_pool.index_of(framebuffer);
+  ri.framebuffer_count++;
+
+  return true;
 }
 
 /* ----------------------------------------------------------------------------
  */
-void Framebuffer::destroy()
+b8 Framebuffer::deinit(Renderer& renderer)
 {
-  void* internal = renderer->internal;
+  RendererInternal& ri = *(RendererInternal*)renderer.internal;
+  TRACE("deinitializing a framebuffer at index ", index, "\n");
 
-$ if ECS_OPENGL then
-  GLuint handle = (GLuint)(u64)handle;
-  glDeleteFramebuffers(1, &handle);
-$ elseif ECS_VULKAN then -- if ECS_OPENGL
-  vkDestroyRenderPass(_RI->device,
-    (VkRenderPass)renderpass_handle, &_RI->allocator);
-  vkDestroyFramebuffer(_RI->device,
-    (VkFramebuffer)handle, &_RI->allocator);
-$ else -- elseif ECS_VULKAN
-#error "unhandled graphics backend"
-$ end -- else
+  if (index == 0)
+    return true;
+
+  RendererFramebuffer* framebuffer = ri.framebuffer_pool.at_index(index);
+  if (framebuffer == nullptr)
+    return ERROR("attempted to destroy a framebuffer at index ", index,
+      " which is out of bounds\n");
+
+  if (framebuffer->framebuffer == VK_NULL_HANDLE)
+    return ERROR("attempted to destroy an uninitialized framebuffer\n");
+
+  vkDestroyRenderPass(ri.device, framebuffer->renderpass, &ri.allocator);
+  vkDestroyFramebuffer(ri.device, framebuffer->framebuffer, &ri.allocator);
+
+  framebuffer->framebuffer = VK_NULL_HANDLE;
+  framebuffer->renderpass = VK_NULL_HANDLE;
+
+  index = 0;
+  ri.framebuffer_pool.remove(framebuffer);
+  ri.framebuffer_count--;
+
+  return true;
 }
 
 }

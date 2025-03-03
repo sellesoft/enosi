@@ -65,13 +65,12 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
 
   editor->map_render = map_render;
 
-  editor->framebuffer = 
-    gfx::Framebuffer::create(
-      *renderer,
-      600,
-      400,
-      map_render->tex,
-      {0,0,0,255});
+  editor->framebuffer.init(
+    *renderer,
+    600,
+    400,
+    map_render->tex,
+    {0,0,0,255});
 
   if (!editor->entmgr.init())
   {
@@ -209,7 +208,7 @@ void MapEditor::evaluate(UI* ui)
   //             better. Look into that when we get around to reworking UI
   //             Items to be transform based.
 
-  map_render->tex.destroy();
+  map_render->tex.deinit(*renderer);
   b8 tex_init = map_render->tex.init(
     *renderer,
     size.x,
@@ -222,8 +221,8 @@ void MapEditor::evaluate(UI* ui)
   if (!tex_init)
     return;
 
-  editor->framebuffer.destroy();
-  editor->framebuffer.init(
+  framebuffer.deinit(*renderer);
+  framebuffer.init(
     *renderer,
     size.x,
     size.y,
