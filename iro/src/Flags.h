@@ -84,6 +84,11 @@ struct Flags
   {
     flags &= ~((FlagType)1 << (FlagType)x);
   }
+
+  b8 isNone() const
+  {
+    return flags == 0;
+  }
 };
 
 
