@@ -105,7 +105,7 @@ void Layer::deinit()
 vec2f Layer::getTilePos(const Tile& tile) const
 {
   u32 tile_idx = getTileIndex(tile);
-  return { f32(tile_idx % def->size.y), f32(tile_idx / def->size.y) };
+  return { f32(tile_idx % def->size.x), f32(tile_idx / def->size.x) };
 }
 
 /* ----------------------------------------------------------------------------

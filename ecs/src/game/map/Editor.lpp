@@ -36,6 +36,8 @@ namespace ui
 
 @defFileLogger(map.editor, Info)
 
+const f32 layer_border_thickness = 0.25f;
+
 /* ============================================================================
  *  Helper for displaying textures.
  */
@@ -328,11 +330,13 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
     | border: 2
     | background_color: 0x111111ff)
 
+    $ local ToolEnum = decls.editor.members.map.Tool.type.decl
+
     String options[] = 
     {
-      "None"_str,
-      "Add"_str,
-      "Remove"_str,
+$ for elem in ToolEnum.elems:each() do
+      "$(elem)"_str,
+$ end
     };
 
     editor->tool_selection = 
@@ -503,6 +507,8 @@ void MapEditor::update(UI* ui, UpdateReason reason)
   vec2f mvp = input.mouse.window - pos_screen;
   vec2f mw = eye.screenToWorld(mvp, size);
 
+  cursor_world = mw;
+
   SourceDataFile* sdfile = h_selected_map.getFile();
 
   switch (control_state)
@@ -512,9 +518,50 @@ void MapEditor::update(UI* ui, UpdateReason reason)
     {
       if (tool == Tool::None)
       {
-        drag_start_viewport = mvp;
-        drag_start_eye = eye.pos;
-        control_state = ControlState::Dragging;
+        for (Layer& layer : map.layers)
+        {
+          vec2f border_pos;
+          border_pos.x = layer.def->pos.x - layer_border_thickness;
+          border_pos.y = layer.def->pos.y - layer_border_thickness;
+
+          vec2f border_ext;
+          border_ext.x = 
+            layer.def->pos.x + layer.def->size.x + layer_border_thickness;
+          border_ext.y = 
+            layer.def->pos.y + layer.def->size.y + layer_border_thickness;
+
+          border_flags.clear();
+
+          if (math::pointInRect(mw, border_pos, border_ext-border_pos))
+          {
+            INFO("in border\n");
+
+            if (mw.x < border_pos.x + layer_border_thickness)
+              border_flags.set(Border::Left);
+            else if (mw.x > border_ext.x - layer_border_thickness)
+              border_flags.set(Border::Right);
+
+            if (mw.y < border_pos.y + layer_border_thickness)
+              border_flags.set(Border::Top);
+            else if (mw.y > border_ext.y - layer_border_thickness)
+              border_flags.set(Border::Bottom);
+          }
+
+
+          if (!border_flags.isNone())
+          {
+            control_state = ControlState::DraggingBorder;
+            resizing_layer = &layer - map.layers.arr;
+            break;
+          }
+        }
+
+        if (control_state == ControlState::None)
+        {
+          drag_start_viewport = mvp;
+          drag_start_eye = eye.pos;
+          control_state = ControlState::Dragging;
+        }
       }
       else
       {
@@ -529,7 +576,7 @@ void MapEditor::update(UI* ui, UpdateReason reason)
             "selected layer ", layer_idx, " ",
             "and tile ", tile_idx, "\n");
 
-          SourceData* map_data = h_selected_map.getFile()->returned_data;
+          SourceData* map_data = sdfile->returned_data;
           SourceData* layers_data = map_data->findChildByName("layers"_str);
           SourceData* layer_data = layers_data->children[layer_idx];
           SourceData* tiles_data = layer_data->findChildByName("tiles"_str);
@@ -586,6 +633,62 @@ void MapEditor::update(UI* ui, UpdateReason reason)
         control_state = ControlState::None;
     }
     break;
+
+  case ControlState::DraggingBorder:
+    {
+      need_render = true;
+      if (input.wasMouseButtonReleased(MouseButton::Left))
+      {
+        control_state = ControlState::None;
+
+        Layer& layer = map.layers[resizing_layer];
+
+        vec2f old_pos = layer.def->pos;
+        vec2f old_ext = layer.def->pos + layer.def->size;
+
+        vec2f new_pos = old_pos;
+        vec2f new_ext = old_ext;
+
+        calcNewDraggedLayerBorder(mw, &new_pos, &new_ext);
+
+        SourceData* old_layer = getLayerSourceData(resizing_layer);
+        SourceData* old_tiles = old_layer->findChildByName("tiles"_str);
+
+        SourceData* new_layer = sdfile->allocateSourceData();
+
+        new_layer->children.init();
+
+        new_layer->addVec2(*sdfile, "pos"_str, new_pos);
+        new_layer->addVec2(*sdfile, "size"_str, new_ext-new_pos);
+
+        SourceData* new_tiles = new_layer->addObject(*sdfile, "tiles"_str);
+
+        for (s32 y = new_pos.y; y < new_ext.y; ++y)
+        {
+          for (s32 x = new_pos.x; x < new_ext.x; ++x)
+          {
+            if (x >= old_pos.x && x < old_ext.x &&
+                y >= old_pos.y && y < old_ext.y)
+            {
+              new_tiles->children.push(
+                getTileSourceData(
+                  old_tiles,
+                  layer.def->size,
+                  vec2i(x-old_pos.x, y-old_pos.y)));
+            }
+            else
+            {
+              new_tiles->addObject(*sdfile, nil);
+            }
+          }
+        }
+
+        setLayerSourceData(resizing_layer, new_layer);
+
+        new_layer->dump();
+      }
+    }
+    break;
   }
 
   if (input.scroll != 0.f)
@@ -622,6 +725,58 @@ void MapEditor::update(UI* ui, UpdateReason reason)
     eye.worldToScreen(mw, size));
 
   world_pos->set(text.asStr());
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void MapEditor::calcNewDraggedLayerBorder(vec2f mw, vec2f* pos, vec2f* ext)
+{
+  vec2f layer_pos = *pos;
+  vec2f layer_ext = *ext;
+
+  if (border_flags.test(Border::Top))
+    layer_pos.y = min(mw.y, layer_ext.y);
+  else if (border_flags.test(Border::Bottom))
+    layer_ext.y = max(mw.y, layer_pos.y);
+
+  if (border_flags.test(Border::Left))
+    layer_pos.x = min(mw.x, layer_ext.x);
+  else if (border_flags.test(Border::Right))
+    layer_ext.x = max(mw.x, layer_pos.x);
+
+  layer_pos = round(layer_pos);
+  layer_ext = round(layer_ext);
+
+  *pos = layer_pos;
+  *ext = layer_ext;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+SourceData* MapEditor::getLayerSourceData(u32 idx)
+{
+  SourceData* map_data = h_selected_map.getFile()->returned_data;
+  SourceData* layers_data = map_data->findChildByName("layers"_str);
+  return layers_data->children[idx];
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void MapEditor::setLayerSourceData(u32 idx, SourceData* data)
+{
+  SourceData* map_data = h_selected_map.getFile()->returned_data;
+  SourceData* layers_data = map_data->findChildByName("layers"_str);
+  layers_data->children[idx] = data;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+SourceData* MapEditor::getTileSourceData(
+    SourceData* tiles, 
+    vec2i size,
+    vec2i pos)
+{
+  return tiles->children[pos.x + size.x * pos.y];
 }
 
 /* ----------------------------------------------------------------------------
@@ -739,13 +894,24 @@ void MapEditor::onPreSpriteRender(PreSpriteRender& event)
   {
     for (const Layer& layer : map.layers)
     {
+      u32 layer_idx = &layer - map.layers.arr;
+
+      vec2f layer_pos = layer.def->pos;
+      vec2f layer_ext = layer.def->pos + layer.def->size;
+
+      if (control_state == ControlState::DraggingBorder &&
+          layer_idx == resizing_layer)
+      {
+        calcNewDraggedLayerBorder(cursor_world, &layer_pos, &layer_ext);
+      }
+
       rendersys.external_counts +=
         gfx::putBorders(
           vp, ip,
           rendersys.external_counts,
-          {0.1f,0.1f,0.1f,0.1f},
-          layer.def->pos,
-          layer.def->size,
+          layer_border_thickness * vec4f(1,1,1,1),
+          layer_pos,
+          layer_ext - layer_pos,
           0xdf99f0);
     }
   }

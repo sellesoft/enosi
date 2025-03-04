@@ -8,6 +8,7 @@ $ local ui = require "ui.UI"
 
 #include "iro/Common.h"
 #include "iro/Unicode.h"
+#include "iro/Flags.h"
 
 @@lpp.import "ui/UI.lh"
 @@lpp.import "ui/widgets/Text.lh"
@@ -72,6 +73,7 @@ struct
   {
     None,
     Dragging,
+    DraggingBorder,
   };
 
   ControlState control_state;
@@ -95,6 +97,22 @@ struct
 
   TextureDisplay* texture_display;
 
+  enum class Border
+  {
+    Left,
+    Right,
+    Top,
+    Bottom,
+  };
+  typedef Flags<Border> BorderFlags;
+
+  BorderFlags border_flags;
+  u32 resizing_layer;
+
+  void calcNewDraggedLayerBorder(vec2f mw, vec2f* pos, vec2f* ext);
+
+  vec2f cursor_world;
+
   // TODO(sushi) remove once we are on Vulkan and can hopefully map 
   //             buffers while UI is updating. That doesn't work rn for 
   //             whatever reason so we have to call renderMap in 
@@ -103,6 +121,14 @@ struct
 
   static MapEditor* create(UI& ui, gfx::Renderer* renderer);
   void destroy();
+
+  SourceData* getLayerSourceData(u32 idx);
+  void        setLayerSourceData(u32 idx, SourceData* data);
+
+  SourceData* getTileSourceData(
+    SourceData* tiles, 
+    vec2i layer_size, 
+    vec2i pos);
 
   // TODO(sushi) just take in the map name and load all the necessary stuff
   //             internally.
