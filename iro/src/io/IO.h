@@ -217,6 +217,12 @@ struct StaticBuffer : public IO
     len = io->read({buffer, N});
     return len;
   }
+
+  void clear()
+  {
+    len = 0;
+    buffer[0] = '\0';
+  }
 };
 
 /* ============================================================================
