@@ -1,6 +1,6 @@
 $ local cmn = require "common"
 $ local ui = require "ui.UI"
-$ local Comp = require "game.Component"
+$ local Comp = require "game.component.Component"
 $ local glob = require "Glob"
 $ local buffer = require "string.buffer"
 $ local List = require "List"
@@ -13,7 +13,7 @@ using namespace iro;
 static Logger logger =
   Logger::create("cmp"_str, Logger::Verbosity::Info);
 
-@@lpp.import "Component.lh"
+@@lpp.import "game/component/Component.lh"
 
 $ local buf = buffer.new()
 $ glob "src/game/**/*.comp.lh" :each(function(path)

@@ -2,9 +2,9 @@
 $ require "common"
 $ local glob = require "Glob"
 $ local buffer = require "string.buffer"
-$ local Comp = require "game.Component"
+$ local Comp = require "game.component.Component"
 
-@@lpp.import "game/ComponentEventBus.lh"
+@@lpp.import "game/component/ComponentEventBus.lh"
 
 $$$
 

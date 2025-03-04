@@ -10,7 +10,7 @@ local imported = cmn.buffer.new()
 
 imported:put(
   lpp.import "Editor.lh",
-  lpp.import "game/map/Map.schema.lh")
+  lpp.import "game/map/Map.defs.lh")
 
 local p = Processor.new(tostring(imported))
 p:run()

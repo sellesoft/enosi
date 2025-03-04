@@ -1,14 +1,20 @@
 $ local cmn = require "common"
 
+@@lpp.import "game/map/Map.lh"
+
+@@lpp.import "Engine.lh"
+
 @@lpp.import "asset/AssetMgr.lh"
 @@lpp.import "asset/SourceData.lh"
-@@lpp.import "Engine.lh"
-@@lpp.import "game/map/Map.lh"
-@@lpp.import "game/map/Map.schema.lh"
+
 @@lpp.import "game/GameMgr.lh"
-@@lpp.import "game/EntityLoader.lh"
+
 @@lpp.import "game/Spawner.comp.lh"
 @@lpp.import "game/Transform.comp.lh"
+
+@@lpp.import "game/map/Map.defs.lh"
+
+@@lpp.import "game/entity/EntityLoader.lh"
 
 #include "iro/Logger.h"
 #include "math/util.h"

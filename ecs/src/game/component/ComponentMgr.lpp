@@ -1,7 +1,7 @@
 $ local cmn = require "common"
 $ local buffer = require "string.buffer"
 $ local glob = require "Glob"
-$ local Comp = require "game.Component"
+$ local Comp = require "game.component.Component"
 
 #include "iro/Logger.h"
 #include "iro/containers/LinkedPool.h"

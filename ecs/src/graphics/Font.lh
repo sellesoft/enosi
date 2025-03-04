@@ -15,7 +15,7 @@ using namespace iro;
 
 @@lpp.import "asset/Asset.lh"
 
-@@lpp.import "graphics/Font.schema.lh"
+@@lpp.import "graphics/Font.defs.lh"
 @@lpp.import "graphics/CompiledTexture.lh"
 
 struct AssetMgr;

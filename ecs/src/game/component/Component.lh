@@ -11,7 +11,7 @@ $ local ui = require "ui.UI"
 
 using namespace iro;
 
-@@lpp.import "game/EntityId.lh"
+@@lpp.import "game/entity/EntityId.lh"
 
 
 /* ============================================================================

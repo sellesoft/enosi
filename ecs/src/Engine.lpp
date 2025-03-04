@@ -21,12 +21,13 @@ using namespace iro;
 
 @@lpp.import "ui/Inspector.lh"
 
-@@lpp.import "game/Component.lh"
-@@lpp.import "game/Entity.lh"
 @@lpp.import "game/Transform.comp.lh"
-@@lpp.import "asset/SourceDataParser.lh"
-@@lpp.import "asset/SourceDataFile.lh"
+@@lpp.import "game/entity/Entity.lh"
+@@lpp.import "game/component/Component.lh"
+
 @@lpp.import "asset/Packing.lh"
+@@lpp.import "asset/SourceDataFile.lh"
+@@lpp.import "asset/SourceDataParser.lh"
 
 static Logger logger =
   Logger::create("ecs.eng"_str, Logger::Verbosity::Info);

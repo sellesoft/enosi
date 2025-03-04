@@ -1,12 +1,14 @@
 $ local cmn = require "common"
 
-@@lpp.import "game/EntityMgr.lh"
-@@lpp.import "game/Component.lh"
-@@lpp.import "game/Render.sys.lh"
-@@lpp.import "game/Mind.sys.lh"
-@@lpp.import "game/Movement.sys.lh"
 @@lpp.import "game/Eye.sys.lh"
+@@lpp.import "game/Mind.sys.lh"
+@@lpp.import "game/Render.sys.lh"
+@@lpp.import "game/Movement.sys.lh"
+
 @@lpp.import "game/map/Map.lh"
+
+@@lpp.import "game/entity/EntityMgr.lh"
+@@lpp.import "game/component/Component.lh"
 
 // TODO(sushi) once we have an actual editor setup, this should be registered
 //             as a doc of it.

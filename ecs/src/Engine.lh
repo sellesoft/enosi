@@ -4,14 +4,16 @@ $ local cmn = require "common"
 
 // #include "dlfcn.h"
 
+@@lpp.import "ui/UI.lh"
 @@lpp.import "window/Window.lh"
 @@lpp.import "graphics/Renderer.lh"
-@@lpp.import "ui/UI.lh"
 
 @@lpp.import "asset/AssetMgr.lh"
 @@lpp.import "asset/SourceDataFileReg.lh"
+
 @@lpp.import "input/InputMgr.lh"
 @@lpp.import "input/Input.events.lh"
+
 @@lpp.import "window/Window.lh"
 
 @@lpp.import "game/GameMgr.lh"

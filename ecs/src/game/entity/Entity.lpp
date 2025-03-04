@@ -1,7 +1,7 @@
 $ local cmn = require "common"
 $ local ui = require "ui.UI"
 
-@@lpp.import "game/Entity.lh"
+@@lpp.import "game/entity/Entity.lh"
 
 #include "iro/Logger.h"
 #include "iro/memory/Allocator.h"

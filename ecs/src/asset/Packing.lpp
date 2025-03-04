@@ -32,7 +32,7 @@ local importPattern = function(pattern)
   end)
 end
 
-importPattern "**/*.schema.lh"
+importPattern "**/*.defs.lh"
 importPattern "**/*.comp.lh"
 
 local p = Processor.new(tostring(imported))

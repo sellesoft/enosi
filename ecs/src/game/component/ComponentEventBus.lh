@@ -5,8 +5,8 @@
 
 $ require "common"
 
-@@lpp.import "game/EntityId.lh"
-@@lpp.import "game/Entity.lh"
+@@lpp.import "game/entity/EntityId.lh"
+@@lpp.import "game/entity/Entity.lh"
 
 struct ComponentEventBus
 {

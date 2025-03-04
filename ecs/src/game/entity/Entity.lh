@@ -12,7 +12,7 @@ $ local ui = require "ui.UI"
 
 using namespace iro;
 
-@@lpp.import "game/Component.lh"
+@@lpp.import "game/component/Component.lh"
 
 /* ============================================================================
  */

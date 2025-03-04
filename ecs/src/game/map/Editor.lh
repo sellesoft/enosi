@@ -14,15 +14,20 @@ $ local ui = require "ui.UI"
 @@lpp.import "ui/widgets/Text.lh"
 @@lpp.import "ui/widgets/Button.lh"
 @@lpp.import "ui/widgets/ComboBox.lh"
+
 @@lpp.import "asset/SourceDataFileHandle.lh"
+
+@@lpp.import "graphics/Texture.lh"
+@@lpp.import "graphics/Framebuffer.lh"
+
 @@lpp.import "game/Render.sys.lh"
 @@lpp.import "game/Render.events.lh"
-@@lpp.import "game/EntityMgr.lh"
 @@lpp.import "game/Eye.sys.lh"
+
 @@lpp.import "game/map/Map.lh"
-@@lpp.import "game/map/Map.schema.lh"
-@@lpp.import "graphics/Framebuffer.lh"
-@@lpp.import "graphics/Texture.lh"
+@@lpp.import "game/map/Map.defs.lh"
+
+@@lpp.import "game/entity/EntityMgr.lh"
 
 struct AssetMgr;
 struct BroadcastEventBus;

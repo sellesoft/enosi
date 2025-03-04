@@ -1,15 +1,18 @@
 $ local cmn = require "common"
-$ local Comp = require "game.Component"
+$ local Comp = require "game.component.Component"
 $ local glob = require "Glob"
 $ local List = require "List"
 
-@@lpp.import "game/EntityLoader.lh"
+@@lpp.import "game/entity/EntityLoader.lh"
 
-@@lpp.import "game/EntityMgr.lh"
-@@lpp.import "game/Component.lh"
 @@lpp.import "asset/SourceDataFile.lh"
 @@lpp.import "asset/Packing.lh"
+
 @@lpp.import "graphics/Renderer.lh"
+
+@@lpp.import "game/entity/EntityMgr.lh"
+
+@@lpp.import "game/component/Component.lh"
 
 #include "iro/Common.h"
 #include "iro/Unicode.h"

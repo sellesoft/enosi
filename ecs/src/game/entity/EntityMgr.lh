@@ -1,16 +1,18 @@
 $ local cmn = require "common"
 $ local ui = require "ui.UI"
-$ local Comp = require "game.Component"
+$ local Comp = require "game.component.Component"
 $ local glob = require "Glob"
 $ local buffer = require "string.buffer"
 
 #include "iro/Common.h"
 #include "iro/containers/LinkedPool.h"
 
-@@lpp.import "Entity.lh"
-@@lpp.import "IndexedPool.lh"
-@@lpp.import "Component.lh"
-@@lpp.import "ComponentMgr.lh"
+@@lpp.import "game/IndexedPool.lh"
+
+@@lpp.import "game/entity/Entity.lh"
+
+@@lpp.import "game/component/Component.lh"
+@@lpp.import "game/component/ComponentMgr.lh"
 
 struct AssetMgr;
 
