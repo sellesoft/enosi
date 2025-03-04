@@ -439,6 +439,14 @@ typedef vec4<s32> vec4i;
 typedef vec4<u32> vec4u;
 typedef vec4<f32> vec4f;
 
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
+vec4<T> operator * (const T& lhs, const vec4<T>& rhs)
+{
+  return vec4<T>(lhs * rhs.x, lhs * rhs.y, lhs * rhs.z, lhs * rhs.w);
+}
+
 namespace iro::io
 {
 
