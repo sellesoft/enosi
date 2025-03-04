@@ -8,17 +8,17 @@
 #include "iro/containers/AVL.h"
 #include "iro/io/IO.h"
 
+// TODO(sushi) this sucks.
+#include "math/vec.h"
+
 using namespace iro;
+
+struct SourceDataFile;
 
 /* ============================================================================
  */
 struct SourceData
 {
-  // TODO(sushi) maybe attach a source location to these
-  //             so we can give exact locations when needed?
-  //             Or set up SourceDataFile to be able to take 
-  //             some SourceData and translate it into a source loc.
-
   String name;
 
   struct Value
@@ -95,4 +95,13 @@ struct SourceData
 
   void dump(u32 depth = 0) const;
   void dump(io::IO* out, u32 depth = 0) const;
+
+  /* --------------------------------------------------------------------------
+   *  Editing helpers.
+   */
+
+  SourceData* addObject(SourceDataFile& file, String name);
+
+  void        setVec2(SourceDataFile& file, vec2f v);
+  SourceData* addVec2(SourceDataFile& file, String name, vec2f v);
 };
