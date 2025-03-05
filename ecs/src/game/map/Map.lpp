@@ -14,6 +14,7 @@ $ local cmn = require "common"
 
 @@lpp.import "game/map/Map.defs.lh"
 
+@@lpp.import "game/entity/Entity.defs.lh"
 @@lpp.import "game/entity/EntityLoader.lh"
 
 #include "iro/Logger.h"
@@ -35,9 +36,9 @@ b8 Tile::init(
 
   this->def = &def;
   
-  for (const SourceData* ent_data : def.entities)
+  for (const EntityDef& entdef : def.entities)
   {
-    auto entid = loadEntity(*ent_data, entmgr, assetmgr, renderer);
+    auto entid = loadEntity(entdef, entmgr, assetmgr, renderer);
     auto* ent = entmgr.getEntity(entid);
     auto* transform = ent->tryComp<Transform>();
     transform->pos = pos;

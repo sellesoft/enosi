@@ -22,6 +22,9 @@ struct Component
   EntityId owner = nil;
   // TODO(sushi) this kiiinda sucks, we really need to make an intrisic pool
   //             so that we stop having to do this where its not needed.
+  // TODO(sushi) to remove at least one pointer we can prob just store a 
+  //             pointer to the prev Component in the list here and return to
+  //             using an SLinkedList?
   void* node = nullptr;
   
   static u64 getKind(const Component* cmp) { return cmp->kind; }

@@ -41,7 +41,6 @@ b8 Engine::init()
 
 $ local initSystem = function(act, name)
     {
-      INFO("initializing $(name)\n");
       auto start = TimePoint::now();
       if (!$(act))
         return FATAL("failed to initialize $(name)\n");

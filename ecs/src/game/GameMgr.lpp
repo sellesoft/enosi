@@ -46,11 +46,16 @@ b8 GameMgr::init(Engine* eng)
 
   auto* map_def = mem::stl_allocator.construct<MapDef>();
 
+  PackContext pack_context = 
+  {
+    .assetmgr  = &eng->assetmgr,
+    .renderer  = &eng->renderer,
+  };
+
   packSourceDataIntoType(
     *h_test_map.getFile()->returned_data,
     map_def,
-    eng->assetmgr,
-    eng->renderer);
+    pack_context);
 
   Map::InitParams map_params =
   {

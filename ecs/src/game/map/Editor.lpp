@@ -440,11 +440,16 @@ void MapEditor::selectMap(
   h_selected_map = h_map;
   h_selected_map_tile_kinds = h_map_tile_kinds;
 
+  PackContext pack_context = 
+  {
+    .assetmgr  = &assetmgr,
+    .renderer  = &renderer,
+  };
+
   packSourceDataIntoType(
     *h_selected_map_tile_kinds.getFile()->returned_data,
     &maptiledefs,
-    assetmgr,
-    renderer);
+    pack_context);
 
   texture_display->setFromTileKindDefs(ui, maptiledefs);
 }
@@ -803,11 +808,16 @@ void MapEditor::renderMap(UI& ui)
 
   renderer->pushBindFramebuffer(framebuffer);
 
+  PackContext pack_context = 
+  {
+    .assetmgr = &assetmgr,
+    .renderer = renderer,
+  };
+
   packSourceDataIntoType(
     *h_selected_map.getFile()->returned_data,
     &mapdef,
-    assetmgr,
-    *renderer);
+    pack_context);
 
   Map::InitParams map_params =
   {

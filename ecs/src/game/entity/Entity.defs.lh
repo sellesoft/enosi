@@ -1,0 +1,11 @@
+$ require "common"
+
+#include "iro/containers/Array.h"
+
+@@lpp.import "game/component/Component.lh"
+
+struct EntityDef
+{
+  String name;
+  Array<Component*> components;
+};

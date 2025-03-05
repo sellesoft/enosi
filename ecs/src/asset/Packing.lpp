@@ -5,6 +5,7 @@ $ local Processor = require "reflect.Processor"
 $ local ast = require "reflect.AST"
 $ local List = require "List"
 $ local util = require "Util"
+$ local component = require "game.component.Component"
 
 #include "iro/Logger.h"
 
@@ -50,13 +51,14 @@ $ end
 template<typename T>
 b8 packSourceDataIntoEnum(const SourceData& data, T* out);
 
+b8 packComponent(const SourceData& data, Component** out, PackContext& ctx);
+
 /* ----------------------------------------------------------------------------
  */
 b8 packCompiledTexture(
     const SourceData& data, 
     gfx::CompiledTexture** out, 
-    AssetMgr& assetmgr,
-    gfx::Renderer& renderer)
+    PackContext& ctx)
 {
   if (!data.hasStringValue())
     return ERROR("expected a string value to pack gfx::CompiledTexture*");
@@ -64,8 +66,8 @@ b8 packCompiledTexture(
   *out = 
     gfx::CompiledTexture::load(
       data.val.str,
-      assetmgr,
-      renderer);
+      *ctx.assetmgr,
+      *ctx.renderer);
 
   if (*out == nullptr)
     return ERROR("failed to load compiled texture with name ", 
@@ -79,7 +81,6 @@ b8 packCompiledTexture(
 b8 destroyCompiledTexture(gfx::CompiledTexture** data)
 {
   *data = nullptr;
-  // (*data)->gfx_texture.destroy();
   return true;
 }
 
@@ -89,8 +90,7 @@ template<typename T>
 b8 packArray(
     const SourceData& data, 
     Array<T>* out, 
-    AssetMgr& assetmgr,
-    gfx::Renderer& renderer)
+    PackContext& ctx)
 {
   for (const SourceData* child : data.children)
   {
@@ -98,7 +98,7 @@ b8 packArray(
       return ERROR("arrays cannot contain named elements\n");
     
     T* elem = out->push();
-    packSourceDataIntoType<T>(*child, elem, assetmgr, renderer);
+    packSourceDataIntoType<T>(*child, elem, ctx);
   }
 
   return true;
@@ -110,8 +110,7 @@ template<>
 b8 packArray<const SourceData*>(
     const SourceData& data, 
     Array<const SourceData*>* out,
-    AssetMgr& assetmgr,
-    gfx::Renderer& renderer)
+    PackContext& ctx)
 {
   for (const SourceData* child : data.children)
   {
@@ -130,15 +129,35 @@ template<>
 b8 packArray<gfx::CompiledTexture*>(
     const SourceData& data,
     Array<gfx::CompiledTexture*>* out,
-    AssetMgr& assetmgr,
-    gfx::Renderer& renderer)
+    PackContext& ctx)
 {
   for (const SourceData* child : data.children)
   {
     if (notnil(child->name))
       return ERROR("arrays cannot contain named elements\n");
 
-    packCompiledTexture(*child, out->push(), assetmgr, renderer);
+    if (!packCompiledTexture(*child, out->push(), ctx))
+      return false;
+  }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 packArray<Component*>(
+    const SourceData& data,
+    Array<Component*>* out,
+    PackContext& ctx)
+{
+  for (const SourceData* child : data.children)
+  {
+    if (notnil(child->name))
+      return ERROR("arrays cannot contain named elements\n");
+
+    if (!packComponent(*child, out->push(), ctx))
+      return false;
   }
 
   return true;
@@ -149,6 +168,9 @@ b8 packArray<gfx::CompiledTexture*>(
 template<typename T>
 b8 destroyArray(Array<T>* data)
 {
+  if (isnil(*data))
+    return true;
+
   for (T& v : *data)
     destroyPackedData(&v);
 
@@ -271,8 +293,7 @@ $   prereqs:push(decl.template_args[1]:getDecl())
     if (!packArray(
           *child,
           &$(addrname), 
-          assetmgr,
-          renderer))
+          ctx))
       return ERROR("failed to pack array data for field $(addrname)\n");
 $ end
 
@@ -297,8 +318,7 @@ $   prereqs:push(type:getDecl())
     if (!packSourceDataIntoType(
           *child, 
           &$(addrname), 
-          assetmgr,
-          renderer))
+          ctx))
       return ERROR("failed to pack struct data for field $(addrname)\n");
 $ end
 
@@ -312,7 +332,7 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local putEnumArrayPackCase = function(declname, addrname, type, prereqs)
-    if (!packSourceDataIntoEnumArray(*child, &$(addrname), assetmgr, renderer))
+    if (!packSourceDataIntoEnumArray(*child, &$(addrname), ctx))
       return ERROR("failed to pack enum array data for field $(addrname)\n");
 $ end
 
@@ -328,11 +348,7 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local putCompiledTexturePackCase = function(declname, addrname)
-    if (!packCompiledTexture(
-        *child, 
-        &$(addrname), 
-        assetmgr,
-        renderer))
+    if (!packCompiledTexture( *child, &$(addrname), ctx))
       return ERROR(
         "failed to pack $(declname) data for field $(addrname)\n");
 $ end
@@ -389,8 +405,7 @@ $   local elem_type = elem_decl.type
 b8 packSourceDataIntoEnumArray(
     const SourceData& data, 
     $(typename)* out,
-    AssetMgr& assetmgr,
-    gfx::Renderer& renderer)
+    PackContext& ctx)
 {
   using TSelf = $(name);
   using TEnum = $(enum_type.name);
@@ -433,18 +448,24 @@ template<>
 b8 packSourceDataIntoType<$(name)>(
     const SourceData& data, 
     $(name)* out,
-    AssetMgr& assetmgr,
-    gfx::Renderer& renderer)
+    PackContext& ctx)
 {
   if (isnil(data.children))
     return ERROR("expected an object to pack into $(name)\n");
 
-  // TODO(sushi) handle defaulted stuff.
+  // Zero the memory we are writing to, then call placement new on its 
+  // address so that it will fill out any default values the reflected 
+  // type specifies and zero inits the rest.
+  mem::zero(out, sizeof($(name)));
+
+  // TODO(sushi) this will require more advanced filtering of abstract types
+  //             and types that dont have a no-args contructor. These are 
+  //             most iro types that we probably dont want to be packed 
+  //             anyways.
+  // new (out) $(name);
+
   if (data.children.isEmpty())
-  {
-    mem::zero(out, sizeof($(name)));
     return true;
-  }
 
   for (const SourceData* child : data.children)
   {
@@ -465,6 +486,7 @@ $ end
   return true;
 }
 $ end
+
 
 $ -- * ------------------------------------------------------------------------
 
@@ -507,6 +529,65 @@ $     putPacker(name, decl.decl, prereqs)
 $     placed_packers[decl.name] = true
 $   end
 $ end
+
+/* ----------------------------------------------------------------------------
+ *  NOTE(sushi) this is placed after packing structs as if not we will be 
+ *              instantiating packSourceDataIntoType on each component type 
+ *              before they are defined which is a problem for whatever reason
+ *              so awesome man.
+ */
+b8 packComponent(const SourceData& data, Component** out, PackContext& ctx)
+{
+  if (isnil(data.type))
+    return ERROR("Component data must be typed\n");
+
+  switch (data.type.hash())
+  {
+$ for comp in component.components.list:each() do
+  case "$(comp.name)"_hashed:
+    {
+      auto* comp = mem::stl_allocator.allocateType<$(comp.name)>();
+      if (!packSourceDataIntoType(data, comp, ctx))
+      {
+        // TODO(sushi) it might be more appropriate to call 'destroy' here
+        //             as a Component type may contain data that needed to 
+        //             be allocated, but atm we aren't set up to be able 
+        //             to nicely 'destroy' or 'deinit' things even when they
+        //             aren't already init. We need to handle this better 
+        //             throughout the code base.
+        mem::stl_allocator.free(comp);
+        return false;
+      }
+
+      comp->kind = getComponentKind<$(comp.name)>();
+
+      *out = comp;
+    }
+    break;
+$ end
+  }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 destroyPackedData<Component*>(Component** comp)
+{
+  // TODO(sushi) this needs to properly switch on the component kind 
+  //             and deallocate anything it may have allocated during packing.
+  //             Honestly, at this point, I'm not sure just packing Component
+  //             data directly like this is such a good idea anymore!
+  //             An alternative is using some kinda hash map structure where
+  //             we just key it by member name of the component and use 
+  //             plain source data values, maybe.. I'm really not sure, but 
+  //             this should probably be rethought in the future once we 
+  //             have a greater idea of what Components have packed into them.
+  mem::stl_allocator.free(*comp);
+
+  return true;
+}
 
 $ -- * ------------------------------------------------------------------------
 

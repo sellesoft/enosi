@@ -11,7 +11,7 @@ $ local Schema = require "asset.Schema"
 
 using namespace iro;
 
-struct SourceData;
+struct EntityDef;
 
 namespace gfx
 {
@@ -35,7 +35,7 @@ struct MapTileDef
 {
   TileKind kind;
   gfx::CompiledTexture* texture;
-  Array<const SourceData*> entities;
+  Array<EntityDef> entities;
 };
 
 /* ============================================================================

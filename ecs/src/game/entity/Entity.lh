@@ -21,6 +21,14 @@ struct Entity
   typedef AVL<Component, Component::getKind> ComponentMap;
 
   String name; // owned
+
+  // TODO(sushi) in the future, we will want to specialize this map to 
+  //             store the Component kind in the map's 'slot' for a 
+  //             Component rather than the kind being stored on the Component
+  //             itself. Currently, to determine if an Entity already has a 
+  //             Component we have to dereference each AVL::Node stored in the
+  //             map AND then the Component that said Node points at. We can 
+  //             cut this down a lot by just storing the kind on the Node.
   ComponentMap components;
 
   b8 init(String name);

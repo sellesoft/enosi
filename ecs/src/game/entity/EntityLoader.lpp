@@ -5,12 +5,14 @@ $ local List = require "List"
 
 @@lpp.import "game/entity/EntityLoader.lh"
 
-@@lpp.import "asset/SourceDataFile.lh"
 @@lpp.import "asset/Packing.lh"
+@@lpp.import "asset/AssetMgr.lh"
+@@lpp.import "asset/SourceDataFile.lh"
 
 @@lpp.import "graphics/Renderer.lh"
 
 @@lpp.import "game/entity/EntityMgr.lh"
+@@lpp.import "game/entity/Entity.defs.lh"
 
 @@lpp.import "game/component/Component.lh"
 
@@ -28,6 +30,8 @@ $     buf:put(result)
 $   end
 $ end)
 @buf:get
+
+$ Comp.sort()
 
 /* ----------------------------------------------------------------------------
  */
@@ -59,7 +63,13 @@ b8 loadComponentType<$(comp.name)>(
   if (comp == nullptr)
     return ERROR("failed to allocate $(comp.name) component\n");
 
-  if (!packSourceDataIntoType(data, comp, assetmgr, renderer))
+  PackContext pack_context = 
+  {
+    .assetmgr  = &assetmgr,
+    .renderer  = &renderer,
+  };
+
+  if (!packSourceDataIntoType(data, comp, pack_context))
     return false;
 
   entmgr.addComp(ent, comp);
@@ -99,66 +109,45 @@ $ end
 /* ----------------------------------------------------------------------------
  */
 EntityId loadEntity(
-    const SourceData& data, 
+    const EntityDef& def, 
     EntityMgr& entmgr,
     AssetMgr& assetmgr,
     gfx::Renderer& renderer)
 {
   ComponentMgr& cmpmgr = entmgr.cmpmgr;
 
-$ local function failIf(cond, ...)
-$   local args = cmn.buffer.new()
-$   local first = true
-$   for arg in List{...}:each() do
-$     if first then
-$       first = false
-$     else
-$       args:put ","
-$     end
-$     args:put(arg)
-$   end
-  if ($(cond))
+  if (isnil(def.name))
   {
-    ERROR($(args));
+    ERROR("all entities must have a name\n");
     return nil;
   }
-$ end
 
-  @failIf(!data.hasObjectData(), "expected object data to define entity\n");
-
-  const SourceData* name = data.findChildByName("name"_str);
-
-  @failIf(name == nullptr, "all entities must be assigned a name\n");
-  @failIf(!name->hasStringValue(), "expected a value for name of entity\n");
-
-  EntityId entid = entmgr.createEntity(name->val.str);
-
-  @failIf(isnil(entid), "failed to create entity\n");
-
-  const SourceData* component_data = data.findChildByName("components"_str);
-  
-  @failIf(component_data == nullptr, 
-    "all entities must have a 'components' array");
-
-  @failIf(!component_data->hasObjectData(),
-    "expected an array for 'components' field");
-
-  for (const SourceData* component : component_data->children)
+  EntityId entid = entmgr.createEntity(def.name);
+  if (isnil(entid))
   {
-    @failIf(!component->hasObjectData(), 
-      "expected object data for component\n");
-
-    @failIf(!loadComponent(
-        *component, 
-        entid, 
-        entmgr, 
-        cmpmgr, 
-        assetmgr,
-        renderer), 
-      "failed to load component\n");
+    ERROR("EntityMgr failed to create entity '", def.name, "'\n");
+    return nil;
   }
 
-  auto* ent = entmgr.getEntity(entid);
+  Entity* ent = entmgr.getEntity(entid);
+
+  for (Component* defcomp : def.components)
+  {
+    switch (defcomp->kind)
+    {
+$ for comp, i in Comp.components.list:eachWithIndex() do
+$  print(comp.name)
+    case $(i):
+      {
+        auto* comp = 
+          cmpmgr.allocateComponentFromInitialData(
+            *($(comp.name)*)defcomp);
+        entmgr.addComp(ent, comp);
+      }
+      break;
+$ end
+    }
+  }
 
   if (nullptr == ent->tryComp<Transform>())
   {
@@ -178,8 +167,18 @@ EntityId loadEntity(
     AssetMgr& assetmgr,
     gfx::Renderer& renderer)
 {
-  ComponentMgr& cmpmgr = entmgr.cmpmgr;
+  EntityDef def;
 
-  return loadEntity(*sfile.returned_data, entmgr, assetmgr, renderer);
+  PackContext pack_context = 
+  {
+    .assetmgr = &assetmgr,
+    .renderer = &renderer,
+  };
 
+  packSourceDataIntoType(
+    *sfile.returned_data,
+    &def,
+    pack_context);
+
+  return loadEntity(def, entmgr, assetmgr, renderer);
 }

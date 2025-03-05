@@ -82,7 +82,6 @@ ComponentIter<$(comp.name)> ComponentMgr::iterate<$(comp.name)>()
 
 $ end
 
-
 /* ----------------------------------------------------------------------------
  */
 void ComponentMgr::deallocateComponent(Component* cmp)
