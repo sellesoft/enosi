@@ -1,0 +1,89 @@
+/*
+ *  Helper for storing the state and functionality used to edit text using
+ *  a cursor, as well as moving the cursor around. Probably primarily used 
+ *  by the input text widget.
+ */
+
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+
+using namespace iro;
+
+namespace ui
+{
+
+/* ============================================================================
+ */
+struct TextEdit
+{
+  u8* ptr;
+  u32 len;
+  u32 space;
+
+  struct
+  {
+    // Byte offset into buffer.
+    s32 pos;
+
+    // Selection size in bytes in either direction starting at the cursor.
+    s32 len;
+  } cursor;
+
+
+  b8 init(String init = nil);
+  void deinit();
+
+  String asStr() const
+  {
+    return String::from(ptr, len);
+  }
+  
+  // Cursor manipulation functions.
+  //
+  // Note the cursor move functions always return how many bytes the cursor
+  // was moved by. The 'select' parameter passed into them determines if 
+  // the movement should alter the current selection count.
+  // If 'select' is false, then the movement will reset the selection.
+
+  u32 cursorMoveRight(b8 select = false);
+  u32 cursorMoveRightWord(b8 select = false);
+  u32 cursorMoveRightWordPart(b8 select = false);
+
+  u32 cursorMoveLeft(b8 select = false);
+  u32 cursorMoveLeftWord(b8 select = false);
+  u32 cursorMoveLeftWordPart(b8 select = false);
+
+  u32 cursorMoveToStart(b8 select = false);
+  u32 cursorMoveToEnd(b8 select = false);
+
+  // Text manipulation functions.
+
+  // Deletes the current selection, if any.
+  void deleteSelection();
+  
+  // Deletes text relative to the cursor. If a selection is active, then 
+  // the selection will be deleted instead.
+  void deleteRight();
+  void deleteRightWord();
+  void deleteRightWordPart();
+
+  void deleteLeft();
+  void deleteLeftWord();
+  void deleteLeftWordPart();
+
+  // Inserts the given string at the cursor. If a selection is active, the 
+  // selected text will be replaced by the string.
+  void insertString(String str);
+
+  // Clears the entire text buffer, reseting the cursor and its selection to 0.
+  void clear();
+
+  // Internal stuff.
+private:
+  
+  utf8::Codepoint getCodepointAtCursor();
+
+  b8 isWordCodepoint(u32 c);
+};
+
+}
