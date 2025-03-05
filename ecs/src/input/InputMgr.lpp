@@ -17,5 +17,8 @@ b8 InputMgr::update(Engine& engine)
   keys_new = keys_real;
   mouse_new = mouse_real;
 
+  char_count = real_char_count;
+  real_char_count = 0;
+
   return true;  
 }

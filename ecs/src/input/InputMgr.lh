@@ -34,6 +34,10 @@ struct InputMgr
 
   f32 scroll;
 
+  u8 chars[8];
+  u8 char_count;
+  u8 real_char_count;
+
   b8   init(Engine& engine);
   void deinit();
 
