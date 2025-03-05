@@ -174,4 +174,17 @@ inline T max(T a, T b) { return a > b? a : b; }
 template<typename T>
 inline T min(T a, T b) { return a > b? b : a; }
 
+namespace unit
+{
+
+/* ----------------------------------------------------------------------------
+ *  Returns bytes needed for each unit.
+ */
+inline u64 kilobytes(u64 x) { return x << 10; }
+inline u64 megabytes(u64 x) { return x << 20; }
+inline u64 gigabytes(u64 x) { return x << 30; }
+inline u64 terabytes(u64 x) { return x << 40; }
+
+}
+
 #endif // _iro_common_h
