@@ -1,0 +1,58 @@
+/*
+ *  Widget for creating a text box that supports typing.
+ */
+
+$ require "common"
+$ local ui = require "ui.UI"
+
+@@lpp.import "ui/Item.lh"
+@@lpp.import "ui/TextEdit.lh"
+
+@@lpp.import "graphics/Font.lh"
+
+namespace ui
+{
+
+/* ============================================================================
+ */
+@ui.widget(InputText,
+schema
+{
+  font        = inherit;
+  font_height = inherit;
+  text_color  = inherit;
+},
+struct
+{
+  TextEdit text;
+
+  gfx::Font* font;
+
+  struct
+  {
+    DrawCmd* text;
+    DrawCmd* cursor;
+    DrawCmd* selection;
+  } drawcmds;
+
+  String preview; // Owned.
+
+  static InputText* make(
+      UI& ui, 
+      String init = nil, 
+      String preview = nil,
+      String id = nil);
+
+  void evaluate(UI* ui) override;
+  void generate(UI* ui) override;
+  void update(UI* ui, UpdateReason reason) override;
+  void cleanup() override;
+
+  void reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post) override
+  {
+    pre.push(drawcmds.text);
+    pre.push(drawcmds.cursor);
+  }
+})
+
+}

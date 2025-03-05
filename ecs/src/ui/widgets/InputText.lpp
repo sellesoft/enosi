@@ -1,0 +1,208 @@
+$ require "common"
+$ local ui = require "ui.UI"
+
+@@lpp.import "ui/widgets/InputText.lh"
+
+@@lpp.import "Engine.lh"
+
+@@lpp.import "ui/UI.lh"
+
+#include "ctype.h"
+
+namespace ui
+{
+
+@defFileLogger(inputtext, Info)
+
+/* ----------------------------------------------------------------------------
+ */
+InputText* InputText::make(UI& ui, String init, String preview, String id)
+{
+  auto* input_text = ui.allocateAndInitItem<InputText>(id);
+  if (input_text == nullptr)
+    return nullptr;
+
+  String text_init = 
+    notnil(init)
+    ? init
+    : notnil(preview)
+      ? preview
+      : nil;
+
+  if (notnil(preview))
+    input_text->preview = preview.allocateCopy();
+
+  if (!input_text->text.init(text_init))
+  {
+    mem::stl_allocator.deconstruct(input_text);
+    if (notnil(preview))
+      mem::stl_allocator.free(input_text->preview.ptr);
+    return nullptr;
+  }
+
+  input_text->drawcmds.text = ui.drawcmds.add();
+  input_text->drawcmds.cursor = ui.drawcmds.add();
+  input_text->drawcmds.selection = ui.drawcmds.add();
+
+  // TODO(sushi) combine these.
+  input_text->drawcmds.cursor->alloc(&ui, gfx::putFilledRectCounts());
+  input_text->drawcmds.selection->alloc(&ui, gfx::putFilledRectCounts());
+
+  input_text->update_triggers = UpdateReason::Start;
+
+  return input_text;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void InputText::evaluate(UI* ui)
+{
+  $ local this = ui.createItemContext("InputText", "this")
+
+  if (font == nullptr)
+  {
+    @@this.style:lookup(font);
+
+    if (@this.style.font == "null"_str)
+    {
+      WARN("evaluate called on an InputText with a null font style\n");
+      return;
+    }
+
+    font = 
+      gfx::Font::load(@this.style.font, ui->eng->assetmgr, ui->eng->renderer);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void InputText::generate(UI* ui)
+{
+  $ local this = ui.createItemContext("InputText", "this")
+
+  @@this.style:lookup(font_height, text_color)
+
+  String str = text.asStr();
+
+  vec2i text_counts = s32(str.countCharacters()) * gfx::putFilledRectCounts();
+  auto [vp, ip] = drawcmds.text->realloc(ui, text_counts);
+  drawcmds.text->tex = font->r_texture.getData()->gfx_texture;
+  
+  drawcmds.text->counts_used = {};
+  drawcmds.cursor->counts_used = {};
+  drawcmds.selection->counts_used = {};
+
+  vec2f cursor = {};
+
+  gfx::FontData* font_data = font->data;
+
+  auto drawCursor = [&]()
+  {
+    auto [vp, ip] = drawcmds.cursor->getPtrs(ui);
+
+    drawcmds.cursor->counts_used +=
+      gfx::putFilledRect(
+        vp, ip,
+        drawcmds.cursor->counts_used,
+        cursor,
+        vec2f(1.f, @this.style.font_height),
+        {255,255,255,255});
+  };
+
+  while (!str.isEmpty())
+  {
+    if (str.ptr - text.ptr == text.cursor.pos)
+      drawCursor();
+
+    utf8::Codepoint cp = str.advance();
+
+    gfx::PackedChar pc;
+    font->getPackedChar(&pc, cp.codepoint);
+
+    auto uv0 = 
+      vec2f(f32(pc.x0) / font_data->size_x, f32(pc.y0) / font_data->size_y);
+
+    auto uv1 = 
+      vec2f(f32(pc.x1) / font_data->size_x, f32(pc.y1) / font_data->size_y);
+
+    drawcmds.text->counts_used +=
+      gfx::putFilledRect(
+        vp, ip,
+        drawcmds.text->counts_used,
+        cursor,
+        vec2f(pc.x1 - pc.x0, pc.y1 - pc.y0),
+        { uv0.x, uv1.y },
+        { uv1.x, uv1.y },
+        { uv1.x, uv0.y },
+        { uv0.x, uv0.y },
+        @this.style.text_color);
+  
+    cursor.x += pc.xadvance;
+  }
+
+  if (text.cursor.pos == text.len)
+    drawCursor();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void InputText::update(UI* ui, UpdateReason reason)
+{
+  InputMgr& input = ui->eng->input;
+
+  if (input.wasKeyPressed(Key::Right))
+  {
+    if (input.isKeyDown(Key::LCtrl) || input.isKeyDown(Key::RCtrl))
+      text.cursorMoveRightWord();
+    else if (input.isKeyDown(Key::LAlt) || input.isKeyDown(Key::RAlt))
+      text.cursorMoveRightWordPart();
+    else
+      text.cursorMoveRight();
+  }
+
+  if (input.wasKeyPressed(Key::Left))
+  {
+    if (input.isKeyDown(Key::LCtrl) || input.isKeyDown(Key::RCtrl))
+      text.cursorMoveLeftWord();
+    else if (input.isKeyDown(Key::LAlt) || input.isKeyDown(Key::RAlt))
+      text.cursorMoveLeftWordPart();
+    else
+      text.cursorMoveLeft();
+  }
+
+  if (input.wasKeyPressed(Key::Backspace))
+  {
+    if (input.isKeyDown(Key::LCtrl) || input.isKeyDown(Key::RCtrl))
+      text.deleteLeftWord();
+    else if (input.isKeyDown(Key::LAlt) || input.isKeyDown(Key::RAlt))
+      text.deleteLeftWordPart();
+    else
+      text.deleteLeft();
+  }
+
+  if (input.wasKeyPressed(Key::Delete))
+  {
+    if (input.isKeyDown(Key::LCtrl) || input.isKeyDown(Key::RCtrl))
+      text.deleteRightWord();
+    else if (input.isKeyDown(Key::LAlt) || input.isKeyDown(Key::RAlt))
+      text.deleteRightWordPart();
+    else
+      text.deleteRight();
+  }
+
+  if (input.char_count != 0 && !iscntrl(input.chars[0]))
+  {
+    text.insertString(String::from(input.chars, input.char_count));
+  }
+
+  dirty = true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void InputText::cleanup()
+{
+
+}
+
+}
