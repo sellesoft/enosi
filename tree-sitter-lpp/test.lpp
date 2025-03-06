@@ -1,0 +1,28 @@
+int main(int a)
+{
+  struct Apple
+  {
+    int $(thing + 2) = 2;
+  };
+
+  apple.hello = "$(hi + 2)";
+}
+
+@hey.bye:there
+
+$$$
+
+local function hello()
+  print "hello"
+end
+
+$$$
+
+$ for i = 1,2 do 
+    
+$ end
+
+int main()
+{
+  
+}
