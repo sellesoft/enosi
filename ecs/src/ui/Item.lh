@@ -44,6 +44,8 @@ enum class UpdateReason
   MouseDown,
   MouseScroll,
 
+  FocusLost,
+
   // Last update callback ever invoked on an Item.
   Fin,
 };

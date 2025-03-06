@@ -316,6 +316,17 @@ $ end
     // Only allow hover and pressed when item is topmost.
     @tryUpdate(MouseHover)
     @tryUpdate(MousePressed, input.anyMouseButtonPressed())
+
+    if (input.wasMouseButtonPressed(MouseButton::Left))
+    {
+      Item* prev_focused = focused;
+      focused = item;
+
+      if (prev_focused != nullptr)
+      {
+        prev_focused->update(this, UpdateReason::FocusLost);
+      }
+    }
   }
 
   if (item->isHovered(this, Item::HoverKind::Area))
