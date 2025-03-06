@@ -117,15 +117,18 @@ void InputText::generate(UI* ui)
 
   auto drawCursor = [&]()
   {
-    auto [vp, ip] = drawcmds.cursor->getPtrs(ui);
+    if (ui->focused == this)
+    {
+      auto [vp, ip] = drawcmds.cursor->getPtrs(ui);
 
-    drawcmds.cursor->counts_used +=
-      gfx::putFilledRect(
-        vp, ip,
-        drawcmds.cursor->counts_used,
-        cursor,
-        vec2f(1.f, @this.style.font_height),
-        @this.style.cursor_color);
+      drawcmds.cursor->counts_used +=
+        gfx::putFilledRect(
+          vp, ip,
+          drawcmds.cursor->counts_used,
+          cursor,
+          vec2f(1.f, @this.style.font_height),
+          @this.style.cursor_color);
+    }
   };
 
   while (!str.isEmpty())
@@ -167,6 +170,13 @@ void InputText::generate(UI* ui)
  */
 void InputText::update(UI* ui, UpdateReason reason)
 {
+  if (ui->focused != this)
+  {
+    if (reason == UpdateReason::FocusLost)
+      dirty = true;
+    return;
+  }
+
   InputMgr& input = ui->eng->input;
 
   if (input.wasKeyPressed(Key::Right))
