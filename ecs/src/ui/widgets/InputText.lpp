@@ -55,6 +55,25 @@ InputText* InputText::make(UI& ui, String init, String preview, String id)
 
 /* ----------------------------------------------------------------------------
  */
+Item::AdjustedSize InputText::adjustItemSize(UI* ui, b8 auto_x, b8 auto_y)
+{
+  $ local this = ui.createItemContext("InputText", "this")
+
+  if (auto_y)
+  {
+    @@this.style:lookup(font_height, padding)
+
+    size.y += 
+      @this.style.font_height + 
+      @this.style.padding.top + 
+      @this.style.padding.bottom;
+  }
+
+  return { .disable_auto_y = true };
+}
+
+/* ----------------------------------------------------------------------------
+ */
 void InputText::evaluate(UI* ui)
 {
   $ local this = ui.createItemContext("InputText", "this")
@@ -80,7 +99,7 @@ void InputText::generate(UI* ui)
 {
   $ local this = ui.createItemContext("InputText", "this")
 
-  @@this.style:lookup(font_height, text_color)
+  @@this.style:lookup(font_height, text_color, cursor_color)
 
   String str = text.asStr();
 
@@ -106,7 +125,7 @@ void InputText::generate(UI* ui)
         drawcmds.cursor->counts_used,
         cursor,
         vec2f(1.f, @this.style.font_height),
-        {255,255,255,255});
+        @this.style.cursor_color);
   };
 
   while (!str.isEmpty())
