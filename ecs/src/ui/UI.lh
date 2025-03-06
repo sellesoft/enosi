@@ -42,6 +42,9 @@ struct UI
   // The currently hovered item or nullptr if none.
   Item* hovered;
 
+  // The currently focused item, eg. the last item clicked on.
+  Item* focused;
+
   // TODO(sushi) the stack prob does not need to be a whole list!
   SList<Item> item_stack;
   

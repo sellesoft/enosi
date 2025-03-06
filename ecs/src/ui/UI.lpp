@@ -290,7 +290,11 @@ void UI::updateTree(
   $ local item = ui.createItemContext("Item", "item")
   $ local style = item.style
 
-  @@item.style:lookup(overflow, display)
+  // TODO(sushi) doing these look ups every frame for every item kinda
+  //             sucks. Maybe try storing a map from item to cached
+  //             information about it that we need here? Sorta defeats the
+  //             purpose of the style map stuff though.
+  @@item.style:lookup(overflow, display, margin, padding, border)
 
   if (@item.style.display.test(hidden))
     return;
@@ -298,12 +302,6 @@ void UI::updateTree(
   $ local parent = ui.createItemContext("Item", "parent", true)
 
   @@parent.style:lookup(overflow, margin, border)
-
-  // TODO(sushi) doing these look ups every frame for every item kinda
-  //             sucks. Maybe try storing a map from item to cached
-  //             information about it that we need here? Sorta defeats the
-  //             purpose of the style map stuff though.
-  @@style:lookup(margin, border)
 
 $ local tryUpdate = function(reason, cond)
   if (item->update_triggers.test(UpdateReason::$(reason)) &&
@@ -477,11 +475,26 @@ $ end
 
   if (item_in_view)
   {
-    mat3x2 this_transform = 
+    mat3x2 item_screen_transform = 
       current_transform.mul(
         mat3x2::createTransform(item->pos_local, 0.f));
 
-    renderer.pushUniformMat3x2("model"_str, this_transform);
+    mat3x2 item_margined_transform = 
+      current_transform.mul(
+        mat3x2::createTransform(
+          item->pos_local + @style.margin.top_left, 0.f));
+
+    vec2f item_content_pos = 
+      item->pos_local +
+      @style.margin.top_left +
+      @style.border.top_left +
+      @style.padding.top_left;
+
+    mat3x2 item_content_transform = 
+      current_transform.mul(
+        mat3x2::createTransform(item_content_pos, 0.f));
+
+    renderer.pushUniformMat3x2("model"_str, item_margined_transform);
 
     renderer.pushSetScissor(
       vec2i(scoff.x, window.size.y - (scoff.y+scext.y)), scext);
@@ -489,6 +502,8 @@ $ end
     // Emit background if we have one.
     if (item->builtin.background)
       emitDrawCmd(item->builtin.background);
+
+    renderer.pushUniformMat3x2("model"_str, item_content_transform);
 
     // Ask the Item if it has any drawcmds.
     DrawCmdList precmds;
@@ -505,7 +520,7 @@ $ end
     {
       PostSiblingDrawCmd* post_sib_cmd = post_sibling_drawcmds.push();
       post_sib_cmd->drawcmd = cmd;
-      post_sib_cmd->transform = this_transform;
+      post_sib_cmd->transform = item_content_transform;
     }
 
     // Emit pre-children commands.
@@ -519,7 +534,10 @@ $ end
     if (item->shouldPlaceChildren())
     {
       for (ItemNode* child = node->first_child; child; child = child->next)
-        updateTree(child, children_post_sibling_drawcmds, this_transform);
+        updateTree(
+          child, 
+          children_post_sibling_drawcmds, 
+          item_screen_transform);
     }
 
     // Children likely changed scissor, so we have to set it back.
@@ -534,7 +552,7 @@ $ end
 
     // Child will have pushed a different transform so restore ours.
     // This kinda sucks, but I'm not sure of a good way around it.
-    renderer.pushUniformMat3x2("model"_str, this_transform);
+    renderer.pushUniformMat3x2("model"_str, item_content_transform);
 
     // Emit post-children commands.
     if (postcmds.len != 0)
@@ -543,6 +561,12 @@ $ end
     // Draw scrollbars and border when appropriate.
     if (item->builtin.scrollbars && item->max_scroll != vec2f(0.f,0.f))
       emitDrawCmd(item->builtin.scrollbars);
+
+    mat3x2 item_bordered_transform = 
+      item_margined_transform.mul(
+        mat3x2::createTransform(@style.border.top_left, 0.f));
+
+    renderer.pushUniformMat3x2("model"_str, item_bordered_transform);
 
     if (item->builtin.borders)
       emitDrawCmd(item->builtin.borders);
@@ -1130,9 +1154,8 @@ void UI::genItemBranch(ItemNode* node)
         vp,
         ip,
         sum,
-        @item.style.margin.top_left +
-        @item.style.padding.top_left,
-        @item.getBorderedArea,
+        {0.f, 0.f},
+        item->size,
         @item.style.background_color);
 
     item->builtin.background->counts_used = sum;
@@ -1156,8 +1179,7 @@ void UI::genItemBranch(ItemNode* node)
         ip,
         sum,
         @item.style.border,
-        @item.style.margin.top_left +
-        @item.style.border.top_left,
+        {0.f, 0.f},
         @item.getBorderedArea,
         @item.style.border_color);
 
