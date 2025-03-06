@@ -145,6 +145,8 @@ void Metaprogram::deinit()
   for (auto& buffer : buffers)
     buffer.close();
   buffers.deinit();
+  parser.deinit();
+  parsed_program.close();
   *this = {};
 }
 
@@ -311,7 +313,6 @@ b8 Metaprogram::run()
   // TODO(sushi) get this to incrementally stream from the parser 
   //             directly to lua.load(). My whole IO setup is too dumb 
   //             to do that atm I think.
-  io::Memory parsed_program;
   if (!parsed_program.open())
     return false;
   defer { parsed_program.close(); };
@@ -323,7 +324,6 @@ b8 Metaprogram::run()
   // Parse into the lua 'metacode' that we run in Phase 2 to form the sections 
   // processed by Phase 3.
 
-  Parser parser;
   if (!parser.init(input, instream, &parsed_program))
     return false;
   defer { parser.deinit(); };
@@ -352,32 +352,6 @@ b8 Metaprogram::run()
     file.write(parsed_program.asStr());
     file.close();
   }
-
-  // TODO(sushi) do this better okay? ^_^
-  //
-  // Cache off a mapping from lines in the generated file to those in 
-  // the original input.
-  Source temp;
-  temp.init("temp"_str);
-  defer { temp.deinit(); };
-  temp.writeCache(parsed_program.asStr());
-  temp.cacheLineOffsets();
-  for (auto& exp : parser.locmap)
-  { 
-    Source::Loc to = input->getLoc(exp.to);
-    Source::Loc from = temp.getLoc(exp.from);
-    input_line_map.push(
-      {
-        .metaprogram = s32(from.line),
-        .input = s32(to.line)
-      });
-  }
-  // push a eof line
-  input_line_map.push(
-      { 
-        .metaprogram = input_line_map.last()->metaprogram+1,
-        .input = input_line_map.last()->input+1
-      });
 
   // ~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~ Phase 2
   
@@ -702,7 +676,7 @@ String Metaprogram::consumeCurrentScope()
  */
 s32 Metaprogram::mapMetaprogramLineToInputLine(s32 line)
 {
-  for (auto& mapping : input_line_map)
+  for (auto& mapping : *getInputLineMap())
   {
     if (line <= mapping.metaprogram)
       return mapping.input;
@@ -728,6 +702,38 @@ b8 Metaprogram::errorAt(s32 offset, T... args)
   Source::Loc loc = input->getLoc(offset);
   ERROR(input->name, ":", loc.line, ":", loc.column, ": ", args..., "\n");
   return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Metaprogram::InputLineMap* Metaprogram::getInputLineMap()
+{
+  if (notnil(input_line_map))
+    return &input_line_map;
+
+  Source temp;
+  temp.init("temp"_str);
+  defer { temp.deinit(); };
+  temp.writeCache(parsed_program.asStr());
+  temp.cacheLineOffsets();
+  for (auto& exp : parser.locmap)
+  { 
+    Source::Loc to = input->getLoc(exp.to);
+    Source::Loc from = temp.getLoc(exp.from);
+    input_line_map.push(
+      {
+        .metaprogram = s32(from.line),
+        .input = s32(to.line)
+      });
+  }
+  // push a eof line
+  input_line_map.push(
+      { 
+        .metaprogram = input_line_map.last()->metaprogram+1,
+        .input = input_line_map.last()->input+1
+      });
+
+  return &input_line_map;
 }
 
 }

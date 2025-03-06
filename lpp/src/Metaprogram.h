@@ -13,6 +13,7 @@
 #include "iro/fs/Path.h"
 
 #include "Source.h"
+#include "Parser.h"
 
 namespace lpp
 {
@@ -171,6 +172,9 @@ struct Metaprogram
 
   SectionNode* current_section;
 
+  Parser parser;
+  io::Memory parsed_program;
+
   // A mapping from a line in the generated metaprogram 
   // to the corresponding line in the original input. 
   // This lets us display the proper location of an error
@@ -218,6 +222,9 @@ struct Metaprogram
 
   template<typename... T>
   b8 errorAt(s32 loc, T... args);
+
+  // Lazily generates the input line map and returns a pointer to it.
+  InputLineMap* getInputLineMap();
 
   // Indexes on the lua stack where important stuff is.
   // Eventually if lpp is ever 'stable' this should be 
