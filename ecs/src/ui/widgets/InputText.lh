@@ -22,7 +22,7 @@ schema
   font_height = inherit;
   text_color  = inherit;
 
-cursor_color: Color = 0xaaaaaaff;
+  cursor_color: Color = 0xaaaaaaff;
 },
 struct
 {

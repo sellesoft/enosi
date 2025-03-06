@@ -270,7 +270,6 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
 
   @ui.style(editor, MapEditor, 
   | size: 100% 100%
-  | border: 2
   | display: hidden
   | background_color: 0x000000ff)
 
@@ -328,6 +327,7 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
     @ui.style(editor->left_panel, Item,
     | size: 300 100%
     | border: 2
+    | padding: 3
     | background_color: 0x111111ff)
 
     $ local ToolEnum = decls.editor.members.map.Tool.type.decl

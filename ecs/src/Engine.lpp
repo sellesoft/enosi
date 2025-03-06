@@ -17,6 +17,7 @@ using namespace iro;
 @@lpp.import "ui/widgets/Text.lh"
 @@lpp.import "ui/widgets/Button.lh"
 @@lpp.import "ui/widgets/Separator.lh"
+@@lpp.import "ui/widgets/InputText.lh"
 @@lpp.import "ui/widgets/CollapsingHeader.lh"
 
 @@lpp.import "ui/Inspector.lh"
@@ -145,6 +146,29 @@ $ end
 
   $ local inspector = ui.createItemContext("Inspector", "inspector")
 
+$ if false then
+
+  auto* base = ui::Item::begin(ui, "base"_str);
+  {
+    @ui.style(base, Item,
+    | size: 100 100
+    | pos: 10 10
+    | positioning: relative
+    | border: 2 2 2 2
+    | padding: 4 4 4 4
+    | background_color: 0x0011eeff)
+
+    auto* input_text = ui::InputText::make(ui, "hello"_str);
+    @ui.style(input_text, InputText, 
+    | size: 100% auto 
+    | padding: 5 2 5 2
+    | background_color: 0x111111ff)
+
+  }
+  ui.endItem();
+
+$ end
+
   INFO("done!\n");
 
   return true;
@@ -233,7 +257,7 @@ b8 Engine::update()
   // io::format(&fps, 1.f / (TimePoint::now() - start).toSeconds());
   // inspector->fps->set(fps.asStr());
 
-  // ui.root->dirty = true;
+  ui.root->dirty = true;
 
   return true;
 }

@@ -359,7 +359,7 @@ $ local putPackCase = function(declname, addrname, type, prereqs)
 $   if type.name == "String" then
 $     return (putStringPackCase(declname, addrname, type, prereqs))
 $   end
-$ 
+$  
 $   type = type:getDesugared()
 $   if type:is(ast.BuiltinType) then
 $     return (putNumberPackCase(declname, addrname, type, prereqs))
