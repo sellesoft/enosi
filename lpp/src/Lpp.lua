@@ -68,8 +68,6 @@ ffi.cdef
 
   u64 sectionGetStartOffset(SectionNode* section);
 
-  void lua__writeAuxFile(void* lpp, String extension, String text);
-
   typedef struct
   {
     u64 line;
@@ -135,10 +133,13 @@ local MacroExpansion,
 ---@field include_dirs List
 --- If lpp is generating a dep file or not.
 ---@field generating_dep_file boolean
+--- List of arguments passed on the command line that weren't consumed by lpp.
+---@field argv table
 local lpp = {}
 
 lpp.dependencies = List{}
 lpp.include_dirs = List{}
+lpp.argv = List{}
 -- Set true in lpp.cpp if we are.
 lpp.generating_dep_file = false
 
@@ -255,6 +256,10 @@ lpp.addIncludeDir = function(path)
   lpp.include_dirs:push(path)
 end
 
+lpp.addArgv = function(arg)
+  lpp.argv:push(arg)
+end
+
 -- * --------------------------------------------------------------------------
 
 --- Process the file at 'path' with lpp. 
@@ -366,12 +371,6 @@ end
 --- Get the offset into the input file that the macro arg at 'idx' starts.
 lpp.getMacroArgOffset = function(idx)
   return lpp.metaenv.current_macro_arg_offsets[idx]
-end
-
--- * --------------------------------------------------------------------------
-
-lpp.writeAuxFile = function(extension, text)
-  C.lua__writeAuxFile(lpp.handle, luaToStr(extension), luaToStr(text))
 end
 
 -- * --------------------------------------------------------------------------

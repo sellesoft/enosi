@@ -120,7 +120,6 @@ b8 Metaprogram::init(
   this->output = output;
   this->prev = prev;
   current_section = nullptr;
-  if (!input_line_map.init()) return false;
   if (!buffers.init()) return false;
   if (!sections.init()) return false;
   if (!scope_stack.init()) return false;
@@ -133,7 +132,6 @@ b8 Metaprogram::init(
  */
 void Metaprogram::deinit()
 {
-  input_line_map.destroy();
   for (auto& section : sections)
     section.deinit();
   sections.deinit();
@@ -334,24 +332,9 @@ b8 Metaprogram::run()
   if (!parser.run())
     return false;
 
-  if (lpp->print_meta)
-    NOTICE(parsed_program.asStr(), "\n");
-
   // NOTE(sushi) we only want to output the main lpp file's metafile
-  if (lpp->output_metafile && prev == nullptr)
-  {
-    auto file = 
-      fs::File::from(lpp->metafile_output, 
-          fs::OpenFlag::Write 
-        | fs::OpenFlag::Create
-        | fs::OpenFlag::Truncate);
-    if (isnil(file))
-      return FATAL(
-          "could not open file at path '", lpp->metafile_output, " for "
-          "metafile\n");
-    file.write(parsed_program.asStr());
-    file.close();
-  }
+  if (lpp->streams.meta.io  && prev == nullptr)
+    io::format(lpp->streams.meta.io, parsed_program.asStr());
 
   // ~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~ Phase 2
   
@@ -367,11 +350,22 @@ b8 Metaprogram::run()
   TRACE("loading parsed program\n");
   if (!lua.loadbuffer(parsed_program.asStr(), (char*)input->name.ptr))
   {
-    ERROR(parsed_program.asStr(), "\n");
     auto te = translateLuaError(*this, lua.tostring());
-    ERROR(
-        "failed to load metaprogram into lua\n",
-        te.filename, ":", te.line, ": ", te.error, "\n");
+    if (diag_consumer)
+    {
+      MetaprogramDiagnostic diag;
+      diag.source = input;
+      diag.loc = te.line;
+      diag.message = te.error;
+      diag_consumer->consume(*this, diag);
+    }
+    else
+    {
+      ERROR(
+          "failed to load metaprogram into lua\n",
+          te.filename, ":", te.line, ": ", te.error, "\n");
+    }
+
     return false;
   }
   I.metaprogram = lua.gettop();
@@ -676,7 +670,10 @@ String Metaprogram::consumeCurrentScope()
  */
 s32 Metaprogram::mapMetaprogramLineToInputLine(s32 line)
 {
-  for (auto& mapping : *getInputLineMap())
+  auto line_map = InputLineMap::create();
+  generateInputLineMap(&line_map);
+    
+  for (auto& mapping : line_map)
   {
     if (line <= mapping.metaprogram)
       return mapping.input;
@@ -706,11 +703,8 @@ b8 Metaprogram::errorAt(s32 offset, T... args)
 
 /* ----------------------------------------------------------------------------
  */
-Metaprogram::InputLineMap* Metaprogram::getInputLineMap()
+void Metaprogram::generateInputLineMap(InputLineMap* out_map)
 {
-  if (notnil(input_line_map))
-    return &input_line_map;
-
   Source temp;
   temp.init("temp"_str);
   defer { temp.deinit(); };
@@ -720,20 +714,18 @@ Metaprogram::InputLineMap* Metaprogram::getInputLineMap()
   { 
     Source::Loc to = input->getLoc(exp.to);
     Source::Loc from = temp.getLoc(exp.from);
-    input_line_map.push(
+    out_map->push(
       {
         .metaprogram = s32(from.line),
         .input = s32(to.line)
       });
   }
   // push a eof line
-  input_line_map.push(
+  out_map->push(
       { 
-        .metaprogram = input_line_map.last()->metaprogram+1,
-        .input = input_line_map.last()->input+1
+        .metaprogram = out_map->last()->metaprogram+1,
+        .input = out_map->last()->input+1
       });
-
-  return &input_line_map;
 }
 
 }

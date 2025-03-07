@@ -1,9 +1,10 @@
-#include "Lpp.h"
+#include "Driver.h"
 
 #include "iro/Common.h"
 #include "iro/fs/FileSystem.h"
 #include "iro/Logger.h"
 #include "iro/Platform.h"
+#include "iro/containers/SmallArray.h"
 
 #if IRO_LINUX
 #define DEFINE_GDB_PY_SCRIPT(script_name) \
@@ -49,13 +50,33 @@ int main(int argc, const char** argv)
     iro::log.newDestination("stderr"_str, &fs::stderr, flags);
   }
 
+  SmallArray<String, 8> args;
+  for (s32 i = 1; i < argc; ++i)
+    args.push(String::fromCStr(argv[i]));
+
+  Driver::InitParams driver_params = {};
+
+  Driver driver;
+  if (!driver.init(driver_params))
+    return 1;
+  defer { driver.deinit(); };
+
+  switch (driver.processArgs(args.asSlice()))
+  {
+  case Driver::ProcessArgsResult::Error:
+    return 1;
+
+  case Driver::ProcessArgsResult::EarlyOut:
+    return 0;
+  }
+
+  driver.streams.out.stream = 
+    driver.streams.out.stream ?: &fs::stdout;
+
   Lpp lpp = {}; 
-  if (!lpp.init())
+  if (!driver.construct(&lpp))
     return 1;
   defer { lpp.deinit(); };
-
-  if (!lpp.processArgv(argc, argv))
-    return 1;
 
   if (!lpp.run())
     return 1;

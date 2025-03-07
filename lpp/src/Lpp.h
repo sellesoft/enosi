@@ -1,18 +1,11 @@
-/* ----------------------------------------------
- *
- *  lpp state and interface used throughout the 
- *  project.
- *
- *  TODO(sushi) add a lpp api function for quitting execution entirely via a longjmp 
- *              or something. When an error occurs in nested metaprograms 
- *              (like via an import macro or sometinhg) it will currently 
- *              report that every single file failed, whne we only want to show info
- *              about the failing file 
+/* 
+ *  Lpp state.
  */
 
 #ifndef _lpp_Lpp_h
 #define _lpp_Lpp_h
 
+#include "Lex.h"
 #include "iro/Common.h"
 #include "iro/containers/LinkedPool.h"
 #include "iro/LuaState.h"
@@ -29,8 +22,20 @@ using namespace iro;
 namespace lpp
 {
 
+struct Driver;
 struct Metaprogram;
 
+/* ============================================================================
+ *  Set of consumer interfaces for getting information from lpp's systems 
+ *  throughout the preprocessing process.
+ */
+struct LppConsumers
+{
+  LexerDiagnosticConsumer* lex_diag_consumer = nullptr;
+};
+
+/* ============================================================================
+ */
 struct Lpp
 {
   LuaState lua;
@@ -38,30 +43,46 @@ struct Lpp
   DLinkedPool<Metaprogram> metaprograms;
   DLinkedPool<Source> sources;
 
-  b8 initialized;
+  // A stream which information is read from or written to. The String and
+  // IO are not owned by Lpp and are expected to be kept around until it 
+  // is deinitialized.
+  struct Stream
+  {
+    String name;
+    io::IO* io;
+  };
 
-  String input;
-  String output;
+  struct Streams
+  {
+    Stream in;
+    Stream out;
+    Stream dep;
+    Stream meta;
+  };
 
-  b8  generate_depfile;
-  String depfile_output;
+  Streams streams;
 
-  b8 output_metafile;
-  String metafile_output;
+  LppConsumers consumers;
 
-  // True when we should run in lsp mode (--lsp).
-  b8 lsp;
-  // Print lua metaprograms (--print-meta)
-  b8 print_meta;
+  struct InitParams
+  {
+    Streams streams;
 
-  b8   init();
+    // Args passed through to the metaprograms.
+    Slice<String> args;
+
+    Slice<String> require_dirs;
+    Slice<String> cpath_dirs;
+    Slice<String> include_dirs;
+
+    LppConsumers consumers;
+  };
+
+  b8   init(const InitParams& params);
   void deinit();
 
   b8 run();
-
-  b8 processArgv(int argc, const char** argv);
   b8 processStream(String name, io::IO* instream, io::IO* outstream);
-  b8 writeAuxFile(String extension, String text);
 }; 
 
 }

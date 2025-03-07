@@ -33,6 +33,8 @@ b8 Parser::init(
   if (setjmp(lexer.err_handler))
   {
     lexer.deinit();
+    tokens.destroy();
+    locmap.destroy();
     return false;
   }
 

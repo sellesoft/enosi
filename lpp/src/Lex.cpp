@@ -12,7 +12,6 @@ namespace lpp
 static Logger logger = 
   Logger::create("lpp.lexer"_str, Logger::Verbosity::Notice);
 
-
 /* ----------------------------------------------------------------------------
  */
 void Lexer::ScopedLexStage::onEnter(const char* funcname)

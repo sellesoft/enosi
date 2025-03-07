@@ -77,6 +77,24 @@ DefineNilValue(lpp::Token, {},
 namespace lpp
 {
 
+struct Lexer;
+
+/* ============================================================================
+ */
+struct LexerDiagnostic
+{
+  Source* source;
+  u64     offset;
+  String  message;
+};
+
+/* ============================================================================
+ */
+struct LexerDiagnosticConsumer
+{
+  virtual void consume(const Lexer& lexer, const LexerDiagnostic& diag) = 0;
+};
+
 /* ============================================================================
  *
  *  TODO(sushi) try reworking the lexer to give a token
@@ -106,11 +124,12 @@ struct Lexer
 
   jmp_buf err_handler; // this is 200 bytes !!!
 
+  LexerDiagnosticConsumer* diag_consumer;
+
   b8   init(io::IO* input_stream, Source* src);
   void deinit();
         
   b8 run();
-
 
 private:
 

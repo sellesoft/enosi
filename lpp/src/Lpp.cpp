@@ -1,15 +1,12 @@
 #include "Lpp.h"
 
+#include "Lex.h"
 #include "stdio.h"
 
 #include "iro/Logger.h"
 #include "iro/fs/FileSystem.h"
 #include "iro/ArgIter.h"
 #include "iro/Platform.h"
-
-// Disabled for now since im giving up working on this and it 
-// actually causes clang to crash when compiling sometimes lol.
-// #include "lsp/server.h"
 
 #include "assert.h"
 
@@ -42,7 +39,7 @@ const char* lpp_metaenv_stack = "__lpp_metaenv_stack";
 
 /* ----------------------------------------------------------------------------
  */
-b8 Lpp::init()
+b8 Lpp::init(const InitParams& params)
 {
   INFO("init\n");
 
@@ -64,8 +61,6 @@ b8 Lpp::init()
     return false;
   }
 
-  input = output = nil;
-
 #define addGlobalCFunc(name) \
   lua.pushcfunction(name); \
   lua.setglobal(STRINGIZE(name));
@@ -81,15 +76,103 @@ b8 Lpp::init()
   DEBUG("loading lpp lua module\n");
   if (!lua.require("Lpp"_str))
     return false;
+  const s32 I_lpp = lua.gettop();
+
 
   // give lpp module a handle to us
   lua.pushstring("handle"_str);
   lua.pushlightuserdata(this);
   lua.settable(lua.gettop()-2);
+
+  streams = params.streams;
+  consumers = params.consumers;
+
+  if (!params.args.isEmpty())
+  {
+    lua.pushstring("addArgv"_str);
+    lua.gettable(I_lpp);
+    const s32 I_addArgv = lua.gettop();
+
+    for (String arg : params.args)
+    {
+      lua.pushvalue(I_addArgv);
+      lua.pushstring(arg);
+      if (!lua.pcall(1))
+        return ERROR(lua.tostring(), "\n");
+    }
+
+    lua.pop();
+  }
+
+  if (!params.include_dirs.isEmpty())
+  {
+    lua.pushstring("addIncludeDir"_str);
+    lua.gettable(I_lpp);
+    const s32 I_addIncludeDir = lua.gettop();
+
+    for (String dir : params.include_dirs)
+    {
+      lua.pushvalue(I_addIncludeDir);
+      lua.pushstring(dir);
+      lua.pcall(1);
+    }
+
+    lua.pop();
+  }
+
+  for (String dir : params.require_dirs)
+  {
+    lua.getglobal("package");
+    lua.pushstring("path"_str);
+    lua.gettable(-2);
+    lua.pushstring(";"_str);
+    lua.pushstring(dir);
+    lua.pushstring("/?.lua"_str);
+    lua.concat(4);
+    lua.pushstring("path"_str);
+    lua.pushvalue(-2);
+    lua.settable(-4);
+    lua.pop(2);
+  }
+
+  for (String dir : params.cpath_dirs)
+  {
+    lua.getglobal("package");
+    lua.pushstring("cpath"_str);
+    lua.gettable(-2);
+    lua.pushstring(";"_str);
+    lua.pushstring(dir);
+#if IRO_LINUX
+    lua.pushstring("/?.so"_str);
+#elif IRO_WIN32
+    lua.pushstring("/?.dll"_str);
+#endif
+    lua.concat(4);
+    lua.pushstring("cpath"_str);
+    lua.pushvalue(-2);
+    lua.settable(-4);
+    lua.pop(2);
+  }
+
+  if (!params.include_dirs.isEmpty())
+  {
+    lua.pushstring("addIncludeDir"_str);
+    lua.gettable(I_lpp);
+    const s32 I_addIncludeDir = lua.gettop();
+
+    for (String dir : params.include_dirs)
+    {
+      lua.pushvalue(I_addIncludeDir);
+      lua.pushstring(dir);
+      lua.pcall(1);
+    }
+
+    lua.pop();
+  }
+
   lua.pop();
 
   DEBUG("done initializing\n");
-  initialized = true;
 
   return true;
 }
@@ -113,77 +196,19 @@ void Lpp::deinit()
 
 /* ----------------------------------------------------------------------------
  */
-static b8 runLsp(Lpp* lpp)
-{
-  assert(!"lsp has been disabled for now");
-  return true;
-  // DEBUG("running lsp\n");
-
-  // lsp::Server server;
-
-  // if (!server.init(lpp))
-  //   return false;
-  // defer { server.deinit(); };
-
-  // return server.loop();
-}
-
-/* ----------------------------------------------------------------------------
- */
 b8 Lpp::run()
 {
   DEBUG("run\n");
 
   using namespace fs;
 
-  if (lsp)
-    return runLsp(this);
-
-  if (isnil(input))
-  {
-    FATAL("no input file specified\n");
+  if (!processStream(
+        streams.in.name, 
+        streams.in.io, 
+        streams.out.io))
     return false;
-  }
 
-  File inf = File::from(input, OpenFlag::Read);
-  if (isnil(inf))
-  {
-    FATAL("failed to open input file at path '", input, "'\n");
-    return false;
-  }
-  defer { inf.close(); };
-
-  File outf;
-  if (isnil(output))
-  {
-    outf = fs::stdout;
-  }
-  else
-  {
-    outf = File::from(output, 
-          OpenFlag::Create
-        | OpenFlag::Write
-        | OpenFlag::Truncate);
-  }
-  if (isnil(outf))
-  {
-    FATAL("failed to open output file at path '", output, "'\n");
-    return false;
-  }
-  defer { outf.close(); };
-
-  if (!processStream(input, &inf, &outf))
-  {
-
-    // TODO(sushi) maybe just output to a buffer first to avoid creating 
-    //             the file in the first place? it is nice to just write
-    //             out to it directly tho.
-    if (notnil(output))
-      Path::unlink(output);
-    return false;
-  }
-
-  if (generate_depfile)
+  if (streams.dep.io)
   {
     if (!lua.require("Lpp"_str))
       return false;
@@ -197,235 +222,7 @@ b8 Lpp::run()
 
     String result = lua.tostring();
 
-    if (notnil(depfile_output))
-    {
-      auto outf = File::from(depfile_output,
-            OpenFlag::Create
-          | OpenFlag::Write
-          | OpenFlag::Truncate);
-
-      outf.write(result);
-      outf.close();
-    }
-    else
-    {
-      fs::stdout.write(result);
-    }
-  }
-
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-static void makeLspTempOut()
-{
-  using namespace fs;
-  using enum OpenFlag;
-  using enum Log::Dest::Flag;
-
-  auto f = mem::stl_allocator.construct<File>();
-  *f = 
-    File::from("lpplsp.log"_str, 
-        Write
-      | Truncate
-      | Create);
-  if (isnil(*f))
-  {
-    ERROR("failed to open lpplsp.log\n");
-    return;
-  }
-  iro::log.newDestination("lpplsp.log"_str, f,
-        ShowCategoryName
-      | ShowVerbosity);
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 Lpp::processArgv(int argc, const char** argv)
-{
-  DEBUG("processing argv\n");
-
-  // Handle cli args that lpp recognizes and store the rest in a lua table 
-  // to be handled by the metaprogram.
-  if (!lua.require("Lpp"_str))
-    return false;
-  const s32 I_lpp = lua.gettop();
-
-  lua.newtable();
-  const s32 I_argv_table = lua.gettop();
-
-  lua.pushstring("argv"_str);
-  lua.pushvalue(I_argv_table);
-  lua.settable(I_lpp);
-
-  lua.pushstring("addIncludeDir"_str);
-  lua.gettable(I_lpp);
-  const s32 I_addIncludeDir = lua.gettop();
-
-  lua.getglobal("table");
-  const s32 I_table = lua.gettop();
-
-  lua.pushstring("insert"_str);
-  lua.gettable(I_table);
-  const s32 I_table_insert = lua.gettop();
-
-  ArgIter iter(argv, argc);
-
-  auto passthroughToLua = [=, &iter, this]()
-  {
-    lua.pushvalue(I_table_insert);
-    lua.pushvalue(I_argv_table);
-    lua.pushstring(iter.current);
-    lua.pcall(2, 0);
-  };
-
-  auto handleDoubleDash = [=, &iter, this]() -> b8
-  {
-    String arg = iter.current.sub(2);
-    switch (arg.hash())
-    {
-    case "lsp"_hashed:
-      lsp = true;
-      makeLspTempOut();
-      break;
-    case "print-meta"_hashed:
-      print_meta = true;
-      break;
-    default:
-      passthroughToLua();
-    }
-    
-    return true;
-  };
-
-  auto handleSingleDash = [=, &iter, this]() -> b8
-  {
-    String arg = iter.current.sub(1);
-    switch(arg.hash())
-    {
-    case "o"_hashed:
-      if (notnil(output))
-        return FATAL("output already specified as '", output, "'\n");
-      iter.next();
-      if (isnil(iter.current))
-        return FATAL("expected an output path after '-o'\n");
-      output = iter.current;
-      break;
-
-    // A 'require' directory. Will append the given path + ?.lua to 
-    // package.path.
-    case "R"_hashed:
-      iter.next();
-      if (isnil(iter.current))
-        return FATAL("expected a path after '-R'\n");
-      lua.getglobal("package");
-      lua.pushstring("path"_str);
-      lua.gettable(-2);
-      lua.pushstring(";"_str);
-      lua.pushstring(iter.current);
-      lua.pushstring("/?.lua"_str);
-      lua.concat(4);
-      lua.pushstring("path"_str);
-      lua.pushvalue(-2);
-      lua.settable(-4);
-      lua.pop(2);
-      break;
-
-    // A CPATH directory. Will append the given path + ?.dll/so to 
-    // package.cpath.
-    case "C"_hashed:
-      iter.next();
-      if (isnil(iter.current))
-        return FATAL("expected a path after '-C'\n");
-      lua.getglobal("package");
-      lua.pushstring("cpath"_str);
-      lua.gettable(-2);
-      lua.pushstring(";"_str);
-      lua.pushstring(iter.current);
-#if IRO_LINUX
-      lua.pushstring("/?.so"_str);
-#elif IRO_WIN32
-      lua.pushstring("/?.dll"_str);
-#endif
-      lua.concat(4);
-      lua.pushstring("cpath"_str);
-      lua.pushvalue(-2);
-      lua.settable(-4);
-      lua.pop(2);
-      break;
-
-    // An include directory, which will be searched when using lpp.include.
-    case "I"_hashed:
-      iter.next();
-      if (isnil(iter.current))
-        return FATAL("expected a path after '-I'\n");
-      lua.pushvalue(I_addIncludeDir);
-      lua.pushstring(iter.current);
-      if (!lua.pcall(1))
-        return false;
-      break;
-
-    // Outputs a lake dependency file to the path given.
-    // Suppresses any normal output.
-    case "D"_hashed:
-      iter.next();
-      if (isnil(iter.current))
-        return FATAL("expected an output path for '-D'\n");
-      generate_depfile = true;
-      depfile_output = iter.current;
-      lua.pushstring("generating_dep_file"_str);
-      lua.pushboolean(true);
-      lua.settable(I_lpp);
-      break;
-
-    case "t"_hashed:
-      logger.verbosity = Logger::Verbosity::Trace;
-      break;
-
-    case "om"_hashed:
-      iter.next();
-      if (isnil(iter.current))
-        return FATAL("expected a path to output metafile to");
-      output_metafile = true;
-      metafile_output = iter.current;
-      break;
-
-    default:
-      passthroughToLua();
-    }
-
-    return true;
-  };
-
-  for (;notnil(iter.current); iter.next())
-  {
-    String arg = iter.current;
-    
-    if (arg.ptr[0] == '-')
-    {
-      if (arg.ptr[1] == '-')
-      {
-        if (!handleDoubleDash())
-          return false;
-      }
-      else
-      {
-        if (!handleSingleDash())
-          return false;
-      }
-    }
-    else
-    {
-      if (isnil(input))
-      {
-        input = iter.current;
-      }
-      else
-      {
-        passthroughToLua();
-      }
-    }
+    io::format(streams.dep.io, result);
   }
 
   return true;
@@ -459,34 +256,6 @@ b8 Lpp::processStream(String name, io::IO* instream, io::IO* outstream)
   if (outstream)
     outstream->write(metaprog->output->cache.asStr());
   
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 Lpp::writeAuxFile(String extension, String text)
-{
-  using namespace fs;
-
-  File out;
-  if (isnil(output))
-  {
-    out = fs::stdout;
-  }
-  else
-  {
-    auto path = Path::from(output);
-    path.append('.', extension);
-    out = 
-      File::from(path, 
-          OpenFlag::Write
-        | OpenFlag::Create
-        | OpenFlag::Truncate);
-  }
-
-  out.write(text);
-  out.close();
-
   return true;
 }
 
@@ -596,16 +365,8 @@ int lua__getInputName(lua_State* L)
   auto lua = LuaState::fromExistingState(L);
   auto lpp = (Lpp*)lua.tolightuserdata(1);
 
-  lua.pushstring(lpp->input);
+  lua.pushstring(lpp->streams.in.name);
   return 1;
-}
-
-/* ----------------------------------------------------------------------------
- */
-LPP_LUAJIT_FFI_FUNC
-void lua__writeAuxFile(Lpp* lpp, String extension, String text)
-{  
-  lpp->writeAuxFile(extension, text);
 }
 
 /* ----------------------------------------------------------------------------

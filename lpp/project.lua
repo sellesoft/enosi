@@ -5,11 +5,18 @@ local lpp = sys.getLoadingProject()
 
 lpp:dependsOn "iro"
 
+lpp.report.dir.include
+{
+  from = "src",
+  to = "lpp",
+  glob = "*.h"
+} 
+
 for cfile in lake.find("src/**/*.cpp"):each() do
   lpp.report.CppObj(cfile)
 end
 
-for lfile in lake.find("src/*.lua"):each() do
+for lfile in lake.find("src/**/*.lua"):each() do
   lpp.report.LuaObj(lfile)
 end
 

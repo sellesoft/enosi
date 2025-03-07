@@ -26,6 +26,7 @@ using namespace iro;
 struct Section;
 struct Cursor;
 struct Expansion;
+struct Metaprogram;
 
 typedef SLinkedPool<io::Memory> BufferPool;
 
@@ -152,6 +153,24 @@ typedef SLinkedPool<Scope> ScopePool;
 
 /* ============================================================================
  */
+struct MetaprogramDiagnostic
+{
+  Source* source;
+  u64     loc;
+  String  message;
+};
+
+/* ============================================================================
+ */
+struct MetaprogramDiagnosticConsumer
+{
+  virtual void consume(
+    const Metaprogram& mp, 
+    const MetaprogramDiagnostic& diag) = 0;
+};
+
+/* ============================================================================
+ */
 struct Metaprogram
 {
   Lpp* lpp;
@@ -172,6 +191,8 @@ struct Metaprogram
 
   SectionNode* current_section;
 
+  MetaprogramDiagnosticConsumer* diag_consumer;
+
   Parser parser;
   io::Memory parsed_program;
 
@@ -179,17 +200,10 @@ struct Metaprogram
   // to the corresponding line in the original input. 
   // This lets us display the proper location of an error
   // in the input file when something goes wrong in lua.
-  // TODO(sushi) the way this is generated is extremely inefficient
-  //             and might be a big performance hog when lpp starts
-  //             processing larger/more files. A lot of the work done 
-  //             in the parser to get the initial byte offset mappings 
-  //             that span multiple lines should be moved to the Lexer 
-  //             if possible. The generation of this mapping is also 
-  //             pretty bad and could probably be lazy so that it only 
-  //             happens *if* there's an error to begin with.
+  // 
+  // This is only generated when needed through generateInputLineMap.
   struct InputLineMapping { s32 metaprogram; s32 input; };
   typedef Array<InputLineMapping> InputLineMap;
-  InputLineMap input_line_map;
 
 
   /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -224,7 +238,7 @@ struct Metaprogram
   b8 errorAt(s32 loc, T... args);
 
   // Lazily generates the input line map and returns a pointer to it.
-  InputLineMap* getInputLineMap();
+  void generateInputLineMap(InputLineMap* out_map);
 
   // Indexes on the lua stack where important stuff is.
   // Eventually if lpp is ever 'stable' this should be 
