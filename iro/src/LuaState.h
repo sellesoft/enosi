@@ -170,6 +170,9 @@ extern "C"
 EXPORT_DYNAMIC
 int iro__lua_inspect(lua_State* L);
 
+EXPORT_DYNAMIC
+int iro__lua_inspect_string(lua_State* L);
+
 }
 
 #endif // _iro_luastate_h

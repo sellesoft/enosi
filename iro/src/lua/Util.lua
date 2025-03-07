@@ -10,6 +10,10 @@ utils.dumpValue = function(x, max_depth)
   iro__lua_inspect(x, max_depth)
 end
 
+utils.dumpValueToString = function(x, max_depth)
+  return iro__lua_inspect_string(x, max_depth)
+end
+
 utils.deepCopy = function(t)
   local o = {}
   for k,v in pairs(t) do

@@ -1,5 +1,6 @@
 #include "LuaState.h"
 
+#include "Common.h"
 #include "Logger.h"
 #include "Unicode.h"
 #include "fs/File.h"
@@ -33,6 +34,7 @@ b8 LuaState::init()
   setglobal(STRINGIZE(name));
 
   addGlobalCFunc(iro__lua_inspect);
+  addGlobalCFunc(iro__lua_inspect_string);
 
 #undef addGlobalCFunc
 
@@ -725,6 +727,42 @@ int iro__lua_inspect(lua_State* L)
   }
 
   return 0;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+EXPORT_DYNAMIC
+int iro__lua_inspect_string(lua_State* L)
+{
+  LuaState lua = LuaState::fromExistingState(L);
+
+  if (lua.isnil(1))
+  {
+    ERROR("iro_lua_inspect(): expected a value as first argument \n");
+    return 0;
+  }
+
+  s32 max_depth = 1;
+  if (lua.isnumber(2))
+    max_depth = lua.tonumber(2);
+
+  io::Memory buffer;
+  buffer.open();
+  defer { buffer.close(); };
+    
+  if (lua.istable(1))
+  {
+    tryWriteTableMetaTypename(&lua, &buffer, 1);
+    writeLuaTable(&lua, &buffer, 1, 1, max_depth);
+  }
+  else
+  {
+    writeLuaValue(&lua, &buffer, 1);
+  }
+
+  lua.pushstring(buffer.asStr());
+
+  return 1;
 }
 
 }
