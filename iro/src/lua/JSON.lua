@@ -1,5 +1,6 @@
 local List = require "List"
 local Type = require "Type"
+local string_buffer = require "string.buffer"
 
 local json = {}
 
@@ -170,16 +171,35 @@ end
  
 Parser.checkString = function(self)
   self:skipWhitespace()
-  local start,stop = self.text:find('^".-"', self.offset)
-  if start then
-    self.offset = stop + 1
-    return self.text:sub(start+1, stop-1)
+
+  if self.text:sub(self.offset,self.offset) == '"' then
+    local start = self.offset + 1
+    local stop = start
+    local skip = false
+    while true do
+      local cur = self.text:sub(stop, stop)
+      if skip then
+        skip = false
+      elseif cur == '\\' then
+        skip = true
+      elseif cur == '"' then
+        self.offset = stop + 1
+        return self.text:sub(start, stop-1)
+      else
+        if self.offset > #self.text then
+          self:errorHere("unterminated string")
+        end
+      end
+      stop = stop + 1
+    end
   end
 end
 
 -- * --------------------------------------------------------------------------
 
 --- Decodes a given string of json into a lua table.
+---
+---@return table
 json.decode = function(text)
   local parser = Parser.new(text)
 
@@ -233,6 +253,38 @@ json.decode = function(text)
     end
   end
 
+  parseString = function(s)
+    local result = string_buffer.new()
+    local offset = 1
+
+    while offset <= #s do
+      local x = s:byte(offset)
+
+      if x == 92 then -- '\' - escape character
+        offset = offset + 1
+        local c = s:sub(offset,offset)
+        if '"' == c then
+          result:put '"'
+        elseif '\\' == c then
+          result:put '\\'
+        elseif '/' == c then
+          result:put '/'
+        elseif 'n' == c then
+          result:put "\n"
+        else
+          -- TODO(sushi) handle unicode and whatever else later when needed.
+          error("unhandled escape char "..s:sub(offset,offset))
+        end
+      else
+        result:put(string.char(x))
+      end
+
+      offset = offset + 1
+    end
+
+    return result:get()
+  end
+
   parseValue = function()
     local val
     if parser:checkToken "null" then
@@ -245,6 +297,9 @@ json.decode = function(text)
       val = parser:checkNumber()
       if not val then
         val = parser:checkString()
+        if val then
+          val = parseString(val)
+        end
       else
         val = tonumber(val)
       end
@@ -258,7 +313,7 @@ json.decode = function(text)
       end
     end
     
-    if not val then
+    if val == nil then
       parser:errorHere("expected a value")
     end
 
@@ -272,7 +327,7 @@ end
 
 --- Encodes a given lua value into json.
 json.encode = function(val)
-  local buffer = require "string.buffer" .new()
+  local buffer =  string_buffer.new()
 
   local depth = 0
 
@@ -340,8 +395,12 @@ json.encode = function(val)
   encodeValue = function(val, is_member_value)
     if type(val) == "number" then
       buffer:put(tostring(val))
+    elseif type(val) == "boolean" then
+      buffer:put(tostring(val))
     elseif type(val) == "string" then
-      buffer:put('"', val, '"')
+      local sanitized = val
+      sanitized = sanitized:gsub('"', '\\"')
+      buffer:put('"', sanitized, '"')
     elseif type(val) == "table" then
       if is_member_value then
         buffer:put "\n"
@@ -353,8 +412,9 @@ json.encode = function(val)
         encodeTable(val)
       end
     else
-      error("unexpected lua type in encodeValue, only numbers, strings, "..
-            "iro.Lists and tables are supported")
+      error(require "Util" .dumpValueToString(val).."\n"..
+            "unexpected lua type in encodeValue, only numbers, strings, "..
+            "iro.Lists, booleans and tables are supported")
     end
   end
 
