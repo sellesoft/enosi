@@ -26,9 +26,9 @@ struct Slice
   static Slice<T> from(T (&buffer)[size]) { return from(buffer, size); }
 
   static Slice<T> invalid() { return {nullptr, 0}; }
-  b8 isValid() { return ptr != nullptr; }
+  b8 isValid() const { return ptr != nullptr; }
 
-  b8 isEmpty() { return len == 0; }
+  b8 isEmpty() const { return len == 0; }
 
   Slice<T> sub(s32 start) const
   {
@@ -39,10 +39,14 @@ struct Slice
   T* begin() { return ptr; }
   T* end()   { return ptr + len; }
 
+  const T* begin() const { return ptr; }
+  const T* end()   const { return ptr + len; }
+
   T& operator[](u64 i) const { return ptr[i]; }
 };
 
 typedef Slice<u8> Bytes;
+
 
 }
 
