@@ -274,7 +274,7 @@ cmd.LppObj.complete = function(self, input, cppout, objout, depfile, metafile)
       input,
       "-o",
       cppout,
-      metafile and { "-om", metafile },
+      metafile and { "-M", metafile },
       depfile and { "-D", depfile }),
     self.cpp:complete(cppout, objout)
 end
