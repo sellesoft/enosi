@@ -11,6 +11,8 @@
 #ifndef _iro_SmallArray_h
 #define _iro_SmallArray_h
 
+#include "Slice.h"
+
 #include "../Common.h"
 #include "../memory/Memory.h"
 #include "../memory/Allocator.h"
@@ -40,7 +42,8 @@ struct SmallArray
   s32 len = 0;
   s32 space = N;
 
-  SmallArray() : small_arr() {}
+  SmallArray() { init(); }
+  ~SmallArray() { deinit(); }
 
   /* --------------------------------------------------------------------------
    */ 
@@ -182,6 +185,13 @@ struct SmallArray
   T& operator[](s32 idx) const
   {
     return arr[idx];
+  }
+
+  /* --------------------------------------------------------------------------
+   */ 
+  Slice<T> asSlice() const
+  {
+    return Slice<T>::from(arr, len);
   }
 };
 
