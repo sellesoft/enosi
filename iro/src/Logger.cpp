@@ -143,7 +143,7 @@ u64 iro_loggerSize() { return sizeof(Logger); }
 EXPORT_DYNAMIC
 void iro_initLogger(Logger* logger, String name, u32 verbosity)
 {
-  logger->init(name, Logger::Verbosity(verbosity));
+  logger->init(name.allocateCopy(), Logger::Verbosity(verbosity));
 }
 
 /* ----------------------------------------------------------------------------
