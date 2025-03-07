@@ -6,6 +6,7 @@ local log = require "Logger" ("build.sys", Verbosity.Notice)
 
 local helpers = require "build.helpers"
 local List = require "List"
+local json = require "JSON"
 
 local build_start = lake.getMonotonicClock()
 lake.registerFinalCallback(function(success)
@@ -32,16 +33,16 @@ sys.projects =
   list = List{},
 }
 
-sys.compile_commands = {}
+sys.compile_commands = List{}
 
 --- Tracks a command for a compile_commands.json
 sys.trackCompileCommandsCmd = function(dir, file, cmd)
-  table.insert(sys.compile_commands, 
+  sys.compile_commands:push
   {
     directory = dir,
     file = file,
     arguments = lake.flatten(cmd),
-  })
+  }
 end
 
 sys.root = lake.cwd()
@@ -168,7 +169,7 @@ sys.run = function()
 
   if sys.cfg.mode == "debug" then
     -- If in debug, output a compile_commands.json
-    local json = require "json"
+    local json = require "JSON"
     local file = io.open("compile_commands.json", "w")
     if not file then
       error("failed to open compile_commands.json")
