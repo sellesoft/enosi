@@ -311,6 +311,7 @@ LuaObj.defineTask = function(self, cmd)
   setFileExistanceAndModTimeCondition(self.task)
 
   self.task
+    :dependsOn(lake.task(lfile))
     :recipe(function()
       runAndReportResult(comp, lfile, ofile)
     end)
