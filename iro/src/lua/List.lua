@@ -20,7 +20,7 @@ local List = Type.make()
 List.new = function(init)
   if init then
     assert(type(init) == "table", 
-      "List.new got "..type(init).."\n"..debug.traceback())
+      "List.new got a "..type(init).." instead of a table")
   else
     init = {}
   end

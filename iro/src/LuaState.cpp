@@ -132,6 +132,13 @@ void LuaState::rawgeti(s32 tblidx, s32 idx)
 
 /* ----------------------------------------------------------------------------
  */
+b8 LuaState::rawequal(s32 idx1, s32 idx2)
+{
+  return 0 != lua_rawequal(L, idx1, idx2);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 void LuaState::setglobal(const char* name)
 {
   lua_setglobal(L, name);
@@ -427,6 +434,13 @@ b8 LuaState::istable(s32 idx)
 b8 LuaState::isnumber(s32 idx)
 {
   return lua_isnumber(L, idx);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 LuaState::isfunction(s32 idx)
+{
+  return lua_isfunction(L, idx);
 }
 
 /* ----------------------------------------------------------------------------

@@ -56,6 +56,7 @@ struct LuaState
   void setfield(s32 idx, const char* k);
 
   void rawgeti(s32 tblidx, s32 idx);
+  b8 rawequal(s32 idx1, s32 idx2);
 
   void setglobal(const char* name);
   void getglobal(const char* name);
@@ -111,6 +112,7 @@ struct LuaState
   b8 isboolean(s32 idx = -1);
   b8 istable(s32 idx = -1);
   b8 isnumber(s32 idx = -1);
+  b8 isfunction(s32 idx = -1);
 
   b8 equal(s32 lhs, s32 rhs);
 
