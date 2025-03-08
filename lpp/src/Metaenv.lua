@@ -196,7 +196,7 @@ return function(ctx)
     local invoke_capture, pos = stackcapture(1)
 
     local invocation = debug.getinfo(2)
-    table.insert(menv.macro_invocations, invocation)
+    table.insert(menv.macro_invocations, invoke_capture)
 
     if not macro then
       printMacroInvocationCallStack()
@@ -223,8 +223,12 @@ return function(ctx)
 
     local invoker
     local errhandler = function(err)
-      local out = buffer.new()
-
+      do return 
+      {
+        stack = stackcapture(1),
+        msg = err:gsub("%[.-%]:.-: ", ""),
+      }
+      end
       resolveImportStackTrace():each(function(line)
         log:error(line)
       end)
@@ -280,18 +284,14 @@ return function(ctx)
       local prev_macro_arg_offsets = menv.current_macro_arg_offsets
       menv.current_macro_arg_offsets = arg_offsets
 
-      local result = {xpcall(macro, function(err)
-        local result = {pcall(errhandler, err)}
+      lpp.err_func_filter[invoker] = true
 
-        if not result[1] then
-          log:fatal("error in error handler:\n", result[2], "\n")
-        end
-      end, unpack(args))}
+      local result = {xpcall(macro, errhandler, unpack(args))}
 
       menv.current_macro_arg_offsets = prev_macro_arg_offsets
 
       if not result[1] then
-        os.exit(1)
+        error(result[2])
       end
 
       result = result[2]
@@ -321,6 +321,29 @@ return function(ctx)
       #menv.macro_invokers)
   end
 
+  menv.macro_immediate = setmetatable({},
+  {
+    __index = function(_,key)
+      return function(is_method, macro, ...)
+        local args = List{...}
+        local arg_offsets = {}
+        args = args:map(function(arg)
+          -- Skip the first arg on methods bc they will not be a macro part.
+          if not is_method then
+            table.insert(arg_offsets, arg.start)
+            return arg.text
+          else
+            is_method = false
+            return arg
+          end
+        end)
+
+        do return macro(unpack(args)) end
+      end
+    end
+  })
+  
+  if false then
   menv.macro_immediate = function(start, indent, name, is_method, macro, ...)
     assertNotExited "macro_immediate"
     -- TODO(sushi) replace this with the better error reporting.
@@ -348,11 +371,13 @@ return function(ctx)
       end
     end)
 
+    do return macro(unpack(args)) end
+
     local errhandler = function(err)
       resolveImportStackTrace():each(function(line)
         log:error(line)
       end)
-
+      
       log:error(getProperInfoString(invocation))
 
       resolveLocalStackTrace(5, 
@@ -404,6 +429,7 @@ return function(ctx)
       log:error("macro returned non-string value\n")
       error({handled=true})
     end
+  end
   end
 
   return M

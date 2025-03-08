@@ -191,8 +191,6 @@ struct Metaprogram
 
   SectionNode* current_section;
 
-  MetaprogramDiagnosticConsumer* diag_consumer;
-
   Parser parser;
   io::Memory parsed_program;
 
@@ -204,11 +202,6 @@ struct Metaprogram
   // This is only generated when needed through generateInputLineMap.
   struct InputLineMapping { s32 metaprogram; s32 input; };
   typedef Array<InputLineMapping> InputLineMap;
-
-
-  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-  =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
-
 
   b8 init(
     Lpp*         lpp, 
@@ -227,6 +220,16 @@ struct Metaprogram
 
   void addDocumentSection(u64 start, String s);
   void addMacroSection(s64 start, String indent, u64 macro_idx);
+
+  struct StackEnt
+  {
+    String src;
+    s32 line;
+    String name;
+    Metaprogram* mp;
+  };
+
+  StackEnt getStackEnt(s32 stack_idx, s32 ent_idx);
 
   b8 processScopeSections(Scope* scope);
 

@@ -29,7 +29,7 @@ namespace lpp
 
 static Logger logger = 
   Logger::create("Lpp"_str, 
-#if LPP_DEBUG
+#if IRO_DEBUG
     Logger::Verbosity::Debug);
 #else
     Logger::Verbosity::Notice);

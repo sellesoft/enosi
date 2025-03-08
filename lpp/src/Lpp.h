@@ -6,6 +6,7 @@
 #define _lpp_Lpp_h
 
 #include "Lex.h"
+#include "Metaprogram.h"
 #include "iro/Common.h"
 #include "iro/containers/LinkedPool.h"
 #include "iro/LuaState.h"
@@ -32,6 +33,7 @@ struct Metaprogram;
 struct LppConsumers
 {
   LexerDiagnosticConsumer* lex_diag_consumer = nullptr;
+  MetaprogramDiagnosticConsumer* meta_diag_consumer = nullptr;
 };
 
 /* ============================================================================

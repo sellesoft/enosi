@@ -291,6 +291,48 @@ TranslatedError translateLuaError(Metaprogram& mp, String error)
 
 /* ----------------------------------------------------------------------------
  */
+Metaprogram::StackEnt Metaprogram::getStackEnt(s32 stack_idx, s32 ent_idx)
+{
+  StackEnt ent = {};
+
+  auto& lua = lpp->lua;
+
+  lua.pushinteger(ent_idx);
+  lua.gettable(stack_idx);
+  const s32 I_ent = lua.gettop();
+
+  lua.pushstring("src"_str);
+  lua.gettable(I_ent);
+  ent.src = lua.tostring();
+
+  lua.pop();
+
+  lua.pushstring("line"_str);
+  lua.gettable(I_ent);
+  ent.line = lua.tonumber();
+  lua.pop();
+
+  lua.pushstring("name"_str);
+  lua.gettable(I_ent);
+  ent.name = lua.tostring();
+  lua.pop();
+
+  lua.pushstring("metaenv"_str);
+  lua.gettable(I_ent);
+  if (!lua.isnil())
+  {
+    lua.pushstring("ctx"_str);
+    lua.gettable(-2);
+    ent.mp = lua.tolightuserdata<Metaprogram>();
+    lua.pop();
+  }
+  lua.pop();
+
+  return ent;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 Metaprogram::run()
 {
   using enum Section::Kind;
@@ -351,13 +393,13 @@ b8 Metaprogram::run()
   if (!lua.loadbuffer(parsed_program.asStr(), (char*)input->name.ptr))
   {
     auto te = translateLuaError(*this, lua.tostring());
-    if (diag_consumer)
+    if (lpp->consumers.meta_diag_consumer)
     {
       MetaprogramDiagnostic diag;
       diag.source = input;
       diag.loc = te.line;
       diag.message = te.error;
-      diag_consumer->consume(*this, diag);
+      lpp->consumers.meta_diag_consumer->consume(*this, diag);
     }
     else
     {
@@ -471,7 +513,8 @@ b8 Metaprogram::run()
   };
 
   // NOTE(sushi) I used to do a thing here where the global environment of the 
-  //             previous metaenvironment (if any, as in the case of processing 
+  //             previous metaenvironment (if any, as in the case of 
+  //             processing
   //             an lpp file from within another one) was copied into the one 
   //             were about to execute. This was done so that globals would be 
   //             carried through so that we can emulate C defines. I've decided
@@ -494,8 +537,65 @@ b8 Metaprogram::run()
   lua.pushvalue(I.metaprogram);
   if (!lua.pcall(0,0,I.errhandler))
   {
-    ERROR("failed to execute generated metaprogram\n",
-		  lua.tostring(), "\n");
+    const s32 I_errinfo = lua.gettop();
+
+    if (lua.isfunction())
+    {
+      lua.pushstring("cancel"_str);
+      lua.gettable(I.lpp);
+
+      if (lua.rawequal(I_errinfo, -1))
+        return false;
+    }
+
+    lua.pushstring("msg"_str);
+    lua.gettable(I_errinfo);
+    const s32 I_msg = lua.gettop();
+
+    lua.pushstring("stack"_str);
+    lua.gettable(I_errinfo);
+    const s32 I_stack = lua.gettop();
+
+    String message = lua.tostring(I_msg);
+
+    s32 stack_len = lua.objlen(I_stack);
+
+    if (lpp->consumers.meta_diag_consumer)
+    {
+      for (s32 i = 1; i <= stack_len; ++i)
+      {
+        StackEnt ent = getStackEnt(I_stack, i);
+
+        if (ent.mp)
+        {
+          MetaprogramDiagnostic diag = {};
+          diag.source = ent.mp->input;
+          diag.loc = ent.mp->mapMetaprogramLineToInputLine(ent.line);
+          diag.message = message;
+          lpp->consumers.meta_diag_consumer->consume(*this, diag);
+        }
+      }
+    }
+    else
+    {
+      for (s32 i = 1; i <= stack_len; ++i)
+      {
+        StackEnt ent = getStackEnt(I_stack, i);
+
+        if (ent.mp)
+          ent.line = ent.mp->mapMetaprogramLineToInputLine(ent.line);
+
+        ERROR(ent.src, ":", ent.line, ": ");
+
+        if (notnil(ent.name))
+          ERROR("in ", ent.name, ":");
+
+        ERROR("\n");
+      }
+
+      ERROR(message, "\n");
+    }
+
     return false;
   }
 
@@ -614,14 +714,131 @@ b8 Metaprogram::processScopeSections(Scope* scope)
         defer { popScope(); };
 
         // Get the macro and execute it.
+        TRACE("invoking macro\n");
         lua.pushinteger(section->macro_idx);
         lua.gettable(I.macro_invokers);
-        const s32 I_macro = lua.gettop();
+        if (!lua.pcall(0, 1, 0))
+        {
+          const s32 I_errinfo = lua.gettop();
 
-        TRACE("invoking macro\n");
-        if (!lua.pcall(0, 1, I.errhandler))
+          if (lua.isfunction())
+          {
+            lua.pushstring("cancel"_str);
+            lua.gettable(I.lpp);
+
+            if (lua.rawequal(I_errinfo, -1))
+              return false;
+          }
+
+          lua.pushstring("msg"_str);
+          lua.gettable(I_errinfo);
+          const s32 I_msg = lua.gettop();
+
+          lua.pushstring("stack"_str);
+          lua.gettable(I_errinfo);
+          const s32 I_stack = lua.gettop();
+
+          String message = lua.tostring(I_msg);
+
+          s32 stack_len = lua.objlen();
+
+          if (lpp->consumers.meta_diag_consumer)
+          {
+            for (s32 i = 1; i <= stack_len; ++i)
+            {
+              StackEnt ent = getStackEnt(I_stack, i);
+
+              if (ent.mp)
+              {
+                MetaprogramDiagnostic diag = {};
+                diag.source = ent.mp->input;
+                diag.loc = ent.mp->mapMetaprogramLineToInputLine(ent.line);
+                diag.message = message;
+                lpp->consumers.meta_diag_consumer->consume(*this, diag);
+              }
+            }
+          }
+          else
+          {
+            for (s32 i = 1; i <= stack_len; ++i)
+            {
+              StackEnt ent = getStackEnt(I_stack, i);
+
+              if (ent.mp)
+                ent.line = ent.mp->mapMetaprogramLineToInputLine(ent.line);
+
+              ERROR(ent.src, ":", ent.line, ": ");
+
+              if (notnil(ent.name))
+                ERROR("in ", ent.name, ":");
+
+              ERROR("\n");
+            }
+          }
+
+          Scope* scope = macro_scope;
+
+          while (scope)
+          {
+            if (scope->macro_invocation)
+            {
+              lua.pushinteger(scope->macro_invocation->macro_idx);
+              lua.gettable(I.macro_names);
+
+              Source::Loc loc = 
+                input->getLoc(scope->macro_invocation->start_offset);
+
+              lua.pushinteger(scope->macro_invocation->macro_idx);
+              lua.gettable(I.macro_invocations);
+              const s32 I_stack = lua.gettop();
+
+              s32 stack_len = lua.objlen();
+              
+              if (lpp->consumers.meta_diag_consumer)
+              {
+                for (s32 i = 1; i <= stack_len; ++i)
+                {
+                  StackEnt ent = getStackEnt(I_stack, i);
+
+                  if (ent.mp)
+                  {
+                    MetaprogramDiagnostic diag = {};
+                    diag.source = ent.mp->input;
+                    diag.loc = ent.mp->mapMetaprogramLineToInputLine(ent.line);
+                    diag.message = message;
+                    lpp->consumers.meta_diag_consumer->consume(*this, diag);
+                  }
+                }
+              }
+              else
+              {
+                for (s32 i = 1; i <= stack_len; ++i)
+                {
+                  StackEnt ent = getStackEnt(I_stack, i);
+
+                  if (ent.mp)
+                    ent.line = ent.mp->mapMetaprogramLineToInputLine(ent.line);
+
+                  ERROR(ent.src, ":", ent.line, ": ");
+
+                  if (notnil(ent.name))
+                    ERROR("in ", ent.name, ":");
+
+                  ERROR("\n");
+                }
+              }
+
+              // ERROR(message, "\n");
+              lua.pop();
+            }
+
+            scope = scope->prev;
+          }
+
+          ERROR(lua.tostring(I_msg), "\n");
+
           return false;
-        const s32 I_macro_result = lua.gettop();
+        }
 
         // Process the sections produced within the macro, if any.
         if (!processScopeSections(macro_scope))
@@ -671,6 +888,7 @@ String Metaprogram::consumeCurrentScope()
 s32 Metaprogram::mapMetaprogramLineToInputLine(s32 line)
 {
   auto line_map = InputLineMap::create();
+  defer { line_map.destroy(); };
   generateInputLineMap(&line_map);
     
   for (auto& mapping : line_map)

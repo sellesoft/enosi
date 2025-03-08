@@ -13,11 +13,15 @@ lpp.report.dir.include
 } 
 
 for cfile in lake.find("src/**/*.cpp"):each() do
-  lpp.report.CppObj(cfile)
+  if not cfile:find "main%.cpp" then
+    lpp.report.pub.CppObj(cfile)
+  else
+    lpp.report.CppObj(cfile)
+  end
 end
 
 for lfile in lake.find("src/**/*.lua"):each() do
-  lpp.report.LuaObj(lfile)
+  lpp.report.pub.LuaObj(lfile)
 end
 
 -- lpp.report.ext.SharedLib "z"

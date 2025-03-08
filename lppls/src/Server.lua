@@ -7,6 +7,7 @@ local log = require "Logger" ("lpp.lsp", Verbosity.Debug)
 local json = require "JSON"
 local util = require "Util"
 local List = require "List"
+local Type = require "Type"
 
 local server = {}
 
@@ -15,6 +16,9 @@ local handlers = {}
 
 --- Information regarding the client we are connected to.
 local client = {}
+
+--- Unique value used to indicate the server should exit.
+server.exit = {}
 
 --- A text document with its content.
 ---
@@ -27,6 +31,19 @@ local client = {}
 ---@field version number
 --- The contents of this document.
 ---@field text string
+--- Diagnostics found during preprocessing.
+---@field diags List
+local TextDocumentItem = Type.make()
+
+TextDocumentItem.new = function(lsp_params)
+  local o = lsp_params
+  o.diags = List{}
+  return setmetatable(o, TextDocumentItem)
+end
+
+TextDocumentItem.addDiag = function(self, diag)
+  
+end
 
 --- Documents currently open on the client.
 ---
@@ -80,13 +97,18 @@ handlers.initialize = function(params)
       },
 
       -- Provide coloring support.
-      colorProvider = true,
+      -- colorProvider = true,
 
       -- Provide semantic tokens support.
-      semanticTokensProvider = 
+      -- semanticTokensProvider = 
+      -- {
+      --   full = { delta = true },
+      --   legend = semantic_legend,
+      -- },
+
+      diagnosticProvider = 
       {
-        full = { delta = true },
-        legend = semantic_legend,
+        interFileDependencies = false
       }
     }
   }
@@ -99,14 +121,26 @@ handlers.initialized = function()
 end
 
 handlers["textDocument/didOpen"] = function(params)
-  open_documents[params.textDocument.uri] = params.textDocument
+  if not params.textDocument.uri:match "^file://" then
+    error "lpplsp only supports file:// uris"
+  end
+
+  local document = TextDocumentItem.new(params.textDocument)
+
+  open_documents[params.textDocument.uri] = document
+
+  local result = 
+    lpp_lsp_processFile(
+      server.handle, document.uri, document.text)
+
+  for i,diag in ipairs(result.diags) do
+    document.diags:push(diag)
+  end
 end
 
 -- * --------------------------------------------------------------------------
 
 handlers["textDocument/didChange"] = function(params)
-  log:info(util.dumpValueToString(params, 3), "\n")
-
   local document = open_documents[params.textDocument.uri]
 
   if not document then
@@ -117,13 +151,20 @@ handlers["textDocument/didChange"] = function(params)
 
   document.version = params.textDocument.version
   document.text = params.contentChanges[1].text
+  document.diags = List{}
+
+  local result = 
+    lpp_lsp_processFile(
+      server.handle, document.uri, document.text)
+
+  for i,diag in ipairs(result.diags) do
+    document.diags:push(diag)
+  end
 end
 
 -- * --------------------------------------------------------------------------
 
 handlers["textDocument/semanticTokens/full"] = function(params)
-  log:info(util.dumpValueToString(params, 4), "\n")
-
   local uri = params.textDocument.uri
   
   local document = open_documents[uri]
@@ -134,13 +175,62 @@ handlers["textDocument/semanticTokens/full"] = function(params)
   end
 
   local file = uri:gsub("file://", "")
+end
 
-  lpp_lsp_getSemanticTokens(self.handle, file, document.text)
+-- * --------------------------------------------------------------------------
+
+handlers["textDocument/diagnostic"] = function(params)
+  local doc = open_documents[params.textDocument.uri]
+  if not doc then
+    error("client requested diagnostics on unopened file "..
+          params.TextDocumentItem.uri)
+  end
+
+  local result = 
+  {
+    kind = "full",
+    items = List{}
+  }
+
+  for diag in doc.diags:each() do
+    result.items:push
+    {
+      range = 
+      { 
+        start = 
+        {
+          line = diag.line - 1,
+          character = 0,
+        },
+        ["end"] = 
+        {
+          line = diag.line - 1,
+          character = 0
+        }
+      },
+      message = diag.message
+    }
+  end
+
+  log:info(require "Util" .dumpValueToString(result, 4))
+
+  return result
+end
+
+-- * --------------------------------------------------------------------------
+
+handlers["$/cancelRequest"] = function(params)
+  return
+  {
+    code = -32601,
+    message = "cancel"
+  }
 end
 
 -- * --------------------------------------------------------------------------
 
 server.setHandle = function(handle)
+  log:info("got handle: ", handle, "\n")
   server.handle = handle
 end
 
@@ -148,11 +238,17 @@ end
 
 server.processMessage = function(msg)
   local decoded = json.decode(msg)
-  -- log:info(require "Util" .dumpValueToString(decoded, 4), "\n")
+
+  log:info("recieved ", decoded.method, "\n")
+
+  if decoded.method == "shutdown" then
+    return server.exit
+  end
 
   local handler = handlers[decoded.method]
 
   if not handler then
+    log:error(util.dumpValueToString(decoded, 4), "\n\n")
     log:error("unhandled method '", decoded.method, "'\n")
     error()
   end

@@ -8,7 +8,7 @@ namespace lpp
 {
 
 static Logger logger = 
-  Logger::create("lpp.parser"_str, Logger::Verbosity::Info);
+  Logger::create("lpp.parser"_str, Logger::Verbosity::Notice);
 
 /* ----------------------------------------------------------------------------
  */
@@ -182,20 +182,27 @@ b8 Parser::run()
           locmap.push({.from = bytes_written, .to = curt->loc});
 
           if (is_immediate)
+          {
             writeOut("__metaenv.doc(", curt->loc, 
-                ",__metaenv.macro_immediate("_str);
+                ",__metaenv.macro_immediate[\""_str);
+
+            nextSignificantToken(); // identifier
+            writeOut(getRaw(), "\"](");
+          }
           else
+          {
             writeOut("__metaenv.macro("_str);
-          writeOut(curt->loc, ",\"", 
-              source->getStr(curt->macro_indent_loc, curt->macro_indent_len),
-              "\",");
+            writeOut(curt->loc, ",\"", 
+                source->getStr(curt->macro_indent_loc, curt->macro_indent_len),
+                "\",");
 
-          TRACE("getting id\n");
-          nextSignificantToken(); // identifier
-          TRACE("got id\n");
+            TRACE("getting id\n");
+            nextSignificantToken(); // identifier
+            TRACE("got id\n");
 
-          locmap.push({.from = bytes_written, .to = curt->loc});
-          writeOut('"', getRaw(), "\",");
+            locmap.push({.from = bytes_written, .to = curt->loc});
+            writeOut('"', getRaw(), "\",");
+          }
 
           TRACE("wrote name\n");
 

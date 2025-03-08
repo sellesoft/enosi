@@ -1,4 +1,5 @@
 local List = require "List"
+local lpp = require "Lpp"
 
 ---@class Call
 --- The identifier of the source file this call was made in.
@@ -21,15 +22,13 @@ return function(offset)
   while true do
     local info = debug.getinfo(fidx + cidx)
     if not info then break end
-    -- print(info.source)
-    if info.what ~= "C" then
+    if info.what ~= "C" and not lpp.err_func_filter[info.func] then
       local tbl =
       {
         src = info.source,
         line = info.currentline,
         name = info.name,
-        pos = stack_pos,
-        func = info.func,
+        metaenv = getfenv(info.func).__metaenv
       }
       stack:push(tbl)
       fidx = fidx + 1

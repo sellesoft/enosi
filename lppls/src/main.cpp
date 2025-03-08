@@ -1,9 +1,11 @@
+#include "iro/io/IO.h"
 #include "lpp/Lpp.h"
 
 #include "iro/Common.h"
 #include "iro/fs/FileSystem.h"
 #include "iro/Logger.h"
 #include "iro/Platform.h"
+#include <csignal>
 
 using namespace iro;
 
@@ -40,6 +42,20 @@ int main()
           "lpplsp.log"_str, f, Log::Dest::Flags::none());
     }
   }
+
+  auto pidfile = 
+    fs::File::from("lpplsp.pid"_str, 
+          fs::OpenFlag::Create
+        | fs::OpenFlag::Write);
+  if (isnil(pidfile))
+  {
+    ERROR("failed to make pidfile\n");
+    return 1;
+  }
+  io::format(&pidfile, platform::getPid());
+
+  INFO("procid: ", platform::getPid(), "\n");
+  // raise(SIGSTOP);
 
   Server server;
 

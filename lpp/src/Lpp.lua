@@ -142,6 +142,7 @@ lpp.include_dirs = List{}
 lpp.argv = List{}
 -- Set true in lpp.cpp if we are.
 lpp.generating_dep_file = false
+lpp.err_func_filter = {}
 
 -- * --------------------------------------------------------------------------
 
@@ -262,6 +263,14 @@ end
 
 -- * --------------------------------------------------------------------------
 
+--- Immediately ends all preprocessing quietly and prevents lpp from 
+--- outputting the final output file.
+lpp.cancel = function()
+  error(lpp.cancel)
+end
+
+-- * --------------------------------------------------------------------------
+
 --- Process the file at 'path' with lpp. 
 ---
 --- Returns the final output of the evaluated file as a string.
@@ -269,13 +278,19 @@ end
 ---@param path string
 ---@return string
 lpp.processFile = function(path)
+  if #path == 0 then
+    error("lpp.processFile passed an empty path")
+  end
+  if not lpp.getFileFullPathIfExists(path) then
+    error("could not find '"..path.."'")
+  end
   local result = lua__processFile(lpp.handle, path)
   if not result then
-    log:fatal("failed to process path ", path, "\n")
-    error()
+    lpp.cancel()
   end
   return result
 end
+lpp.err_func_filter[lpp.processFile] = true
 
 lpp.getFileFullPathIfExists = function(path)
   return lua__getFileFullPathIfExists(path)
@@ -296,6 +311,7 @@ require = function(path)
       end
     end
   end
+
   return lua_require(path)
 end
 
