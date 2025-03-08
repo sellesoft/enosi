@@ -308,6 +308,10 @@ b8 isRunningUnderDebugger();
 void debugBreak();
 
 /* ----------------------------------------------------------------------------
+ */
+u64 getPid();
+
+/* ----------------------------------------------------------------------------
  *  TODO(sushi) put these somewhere better later.
  */
  u16 byteSwap(u16 x);
