@@ -14,7 +14,7 @@ return function(errmsg)
         {
           src = info.source,
           line = info.currentline,
-          name = info.name,
+          name = lpp.err_func_rename[info.func] or info.name,
           metaenv = getfenv(info.func).__metaenv,
         })
     end
@@ -33,6 +33,7 @@ return function(errmsg)
   return
   {
     stack = stack,
-    msg = errmsg:gsub("%[.-%]:.-: ", "")
+    msg = errmsg:gsub("%[.-%]:%d-: ", "")
+                :gsub(".-:%d-: ", "")
   }
 end

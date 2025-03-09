@@ -60,7 +60,7 @@ struct Token
   s32 method_colon_offset = 0;
 
   // Retrieve the raw string this token encompasses from the given Source
-  String getRaw(Source* src) 
+  String getRaw(Source* src) const
   { 
     if (kind == Kind::MacroHereDocArg)
       return src->getVirtualStr(loc, len);
@@ -84,15 +84,17 @@ struct Lexer;
 struct LexerDiagnostic
 {
   Source* source;
-  u64     offset;
+  u32     line;
+  u32     column;
   String  message;
 };
 
 /* ============================================================================
  */
-struct LexerDiagnosticConsumer
+struct LexerConsumer
 {
-  virtual void consume(const Lexer& lexer, const LexerDiagnostic& diag) = 0;
+  virtual void consumeDiag(const Lexer& lexer, const LexerDiagnostic& diag) {}
+  virtual void consumeToken(const Lexer& lexer, const Token& token) {}
 };
 
 /* ============================================================================
@@ -124,9 +126,13 @@ struct Lexer
 
   jmp_buf err_handler; // this is 200 bytes !!!
 
-  LexerDiagnosticConsumer* diag_consumer;
+  LexerConsumer* consumer = nullptr;
 
-  b8   init(io::IO* input_stream, Source* src);
+  b8 init(
+      io::IO* input_stream, 
+      Source* src, 
+      LexerConsumer* consumer);
+
   void deinit();
         
   b8 run();

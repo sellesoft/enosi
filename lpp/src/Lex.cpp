@@ -144,8 +144,27 @@ void Lexer::advance(s32 n)
  */
 template<typename... T>
 b8 Lexer::errorAt(s32 line, s32 column, T... args)
-{
-  ERROR(source->name, ":", line, ":", column, ": ", args..., "\n");
+{ 
+  if (consumer)
+  {
+    // TODO(sushi) this sucks
+    io::Memory message;
+    message.open();
+    io::formatv(&message, args...);
+
+    LexerDiagnostic diag = {};
+    diag.line = line;
+    diag.column = column;
+    diag.message = message.asStr();
+    diag.source = source;
+    consumer->consumeDiag(*this, diag);
+
+    message.close();
+  }
+  else
+  {
+    ERROR(source->name, ":", line, ":", column, ": ", args..., "\n");
+  }
   return false;
 }
 
@@ -185,7 +204,10 @@ void Lexer::skipWhitespace(b8 suppress_token)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Lexer::init(io::IO* input_stream, Source* src)
+b8 Lexer::init(
+    io::IO* input_stream, 
+    Source* src, 
+    LexerConsumer* consumer)
 {
   assert(input_stream and src);
 
@@ -197,6 +219,7 @@ b8 Lexer::init(io::IO* input_stream, Source* src)
   at_end = false;
   current_offset = 0;
   current_codepoint = nil;
+  consumer = consumer;
 
   // prep buffer and current
   readStreamIfNeeded(false);
@@ -629,6 +652,9 @@ void Lexer::finishCurt(Token::Kind kind, s32 len_offset)
 
     DEBUG("finished ", curt, "\n");
     TRACE("==| ", io::SanitizeControlCharacters(curt.getRaw(source)), "\n");
+
+    if (consumer)
+      consumer->consumeToken(*this, curt);
   }
 }
 

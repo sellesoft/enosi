@@ -25,6 +25,7 @@ ffi.cdef
     u64 start, 
     u64 macro_idx);
   void metaprogramAddDocumentSection(Metaprogram* ctx, u64 start, String s);
+  void metaprogramAddMacroImmediateSection(Metaprogram* ctx, u64 start);
 
   Cursor* metaprogramNewCursorAfterSection(Metaprogram* ctx);
   void metaprogramDeleteCursor(Metaprogram* ctx, Cursor* cursor);
@@ -143,6 +144,7 @@ lpp.argv = List{}
 -- Set true in lpp.cpp if we are.
 lpp.generating_dep_file = false
 lpp.err_func_filter = {}
+lpp.err_func_rename = {}
 
 -- * --------------------------------------------------------------------------
 

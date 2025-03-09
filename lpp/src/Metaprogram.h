@@ -43,11 +43,14 @@ struct Section
     Invalid,
     Document,
     Macro,
+    MacroImmediate,
   };
 
   Kind kind = Kind::Invalid;
 
-  u64 start_offset = -1;
+  // The Token at which this section starts. More detail about what this 
+  // section came from is attainable from the kind of Token that started it.
+  u64 token_idx = -1;
 
   io::Memory* buffer = nullptr;
 
@@ -56,21 +59,28 @@ struct Section
   u64 macro_idx = -1;
   String macro_indent = nil;
 
+  u64 expansion_start;
+  u64 expansion_end;
+
 
   /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
   =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
 
 
   b8 initDocument(
-      u64 start_offset, 
+      u64 token_idx,
       String raw, 
       SectionNode* node,
       io::Memory* buffer);
 
   b8 initMacro(
-      u64 start_offset, 
+      u64 token_idx,
       String macro_indent, 
       u64 macro_idx, 
+      SectionNode* node);
+
+  b8 initMacroImmediate(
+      u64 token_idx,
       SectionNode* node);
 
   void deinit();
@@ -143,6 +153,8 @@ struct Scope
   // Null when this is the global scope.
   Section* macro_invocation;
 
+  u64 global_offset = 0;
+
   // NOTE(sushi) its assumed the passed buffer is already open.
   b8   init(Scope* prev, io::Memory* buffer, Section* macro_invocation);
   void deinit();
@@ -162,11 +174,17 @@ struct MetaprogramDiagnostic
 
 /* ============================================================================
  */
-struct MetaprogramDiagnosticConsumer
+struct MetaprogramConsumer
 {
-  virtual void consume(
+  virtual void consumeDiag(
     const Metaprogram& mp, 
-    const MetaprogramDiagnostic& diag) = 0;
+    const MetaprogramDiagnostic& diag) {}
+
+  virtual void consumeSection(
+    const Metaprogram& mp,
+    const Section& section,
+    u64 expansion_start,
+    u64 expansion_end) {}
 };
 
 /* ============================================================================
@@ -184,6 +202,14 @@ struct Metaprogram
   ExpansionList expansions;
 
   ScopePool scope_stack;
+
+  struct Capture
+  {
+    u64 token_idx;
+    u64 start;
+  };
+
+  Array<Capture> captures;
 
   io::IO* instream;
   Source* input;
@@ -220,6 +246,7 @@ struct Metaprogram
 
   void addDocumentSection(u64 start, String s);
   void addMacroSection(s64 start, String indent, u64 macro_idx);
+  void addMacroImmediateSection(u64 start);
 
   struct StackEnt
   {
@@ -231,14 +258,13 @@ struct Metaprogram
 
   StackEnt getStackEnt(s32 stack_idx, s32 ent_idx);
 
+  void emitError(s32 stack_idx, Scope* scope);
+
   b8 processScopeSections(Scope* scope);
 
   String consumeCurrentScope();
 
   s32 mapMetaprogramLineToInputLine(s32 line);
-
-  template<typename... T>
-  b8 errorAt(s32 loc, T... args);
 
   // Lazily generates the input line map and returns a pointer to it.
   void generateInputLineMap(InputLineMap* out_map);

@@ -18,8 +18,6 @@ namespace lpp
  */
 struct Parser
 {
-  Array<Token> tokens;
-
   Lexer lexer;
 
   Token* curt;
@@ -38,7 +36,12 @@ struct Parser
 
   jmp_buf err_handler;
 
-  b8   init(Source* source, io::IO* instream, io::IO* outstream);
+  b8 init(
+    Source* source, 
+    io::IO* instream, 
+    io::IO* outstream,
+    LexerConsumer* lex_diag_consumer);
+
   void deinit();
 
   b8 run();
@@ -51,6 +54,8 @@ struct Parser
   b8 at(Token::Kind kind);
 
   String getRaw();
+
+  u64 curtIdx() const { return curt - lexer.tokens.arr; }
 
   void writeTokenSanitized();
 

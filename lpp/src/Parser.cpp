@@ -1,4 +1,5 @@
 #include "Parser.h"
+#include "Lex.h"
 #include "iro/LineMap.h"
 #include "iro/fs/File.h"
 
@@ -15,25 +16,24 @@ static Logger logger =
 b8 Parser::init(
     Source* src,
     io::IO* instream, 
-    io::IO* outstream)
+    io::IO* outstream,
+    LexerConsumer* lex_diag_consumer)
 {
   assert(instream && outstream);
 
   TRACE("initializing on stream '", src->name, "'\n");
 
-  tokens = Array<Token>::create();
   locmap = Array<LocMapping>::create();
   in = instream;
   out = outstream;
   source = src;
 
-  if (!lexer.init(in, src))
+  if (!lexer.init(in, src, lex_diag_consumer))
     return false;
 
   if (setjmp(lexer.err_handler))
   {
     lexer.deinit();
-    tokens.destroy();
     locmap.destroy();
     return false;
   }
@@ -52,7 +52,6 @@ b8 Parser::init(
 void Parser::deinit()
 {
   locmap.destroy();
-  tokens.destroy();
   lexer.deinit();
   *this = {};
 }
@@ -113,7 +112,7 @@ b8 Parser::run()
 
       case Whitespace:
         writeOut(
-          "__metaenv.doc("_str, curt->loc, ",\""_str);
+          "__metaenv.doc("_str, curtIdx(), ",\""_str);
         writeTokenSanitized();
         writeOut("\")\n"_str);
         nextToken();
@@ -136,7 +135,7 @@ b8 Parser::run()
           }
         }
 
-        writeOut("__metaenv.doc("_str, curt->loc, ",\""_str);
+        writeOut("__metaenv.doc("_str, curtIdx(), ",\""_str);
         writeTokenSanitized();
         writeOut("\")\n"_str);
         nextToken();
@@ -170,7 +169,7 @@ b8 Parser::run()
         TRACE("placing lua inline: '", 
               io::SanitizeControlCharacters(getRaw()), "'\n");
         locmap.push({.from = bytes_written, .to = curt->loc});
-        writeOut("__metaenv.val("_str, curt->loc, ",", getRaw(), ")\n"_str);
+        writeOut("__metaenv.val("_str, curtIdx(), ",", getRaw(), ")\n"_str);
         nextToken();
         break;
 
@@ -183,16 +182,16 @@ b8 Parser::run()
 
           if (is_immediate)
           {
-            writeOut("__metaenv.doc(", curt->loc, 
-                ",__metaenv.macro_immediate[\""_str);
+            writeOut("__metaenv.doc("_str, curtIdx(),
+              ",__metaenv.macro_immediate("_str, curtIdx(), ",");
 
             nextSignificantToken(); // identifier
-            writeOut(getRaw(), "\"](");
+            writeOut('"', getRaw(), "\", ");
           }
           else
           {
             writeOut("__metaenv.macro("_str);
-            writeOut(curt->loc, ",\"", 
+            writeOut(curtIdx(), ",\"", 
                 source->getStr(curt->macro_indent_loc, curt->macro_indent_len),
                 "\",");
 

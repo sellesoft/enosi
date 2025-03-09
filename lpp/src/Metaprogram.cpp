@@ -16,15 +16,15 @@ static Logger logger =
 /* ----------------------------------------------------------------------------
  */
 b8 Section::initDocument(
-    u64 start_offset_, 
+    u64 token_idx,
     String raw, 
-    SectionNode* node_,
+    SectionNode* node,
     io::Memory* buffer)
 {
   assert(buffer);
   this->buffer = buffer;
-  node = node_;
-  start_offset = start_offset_;
+  this->node = node;
+  this->token_idx = token_idx;
   if (!buffer->open(raw.len))
     return false;
   buffer->write(raw);
@@ -35,16 +35,26 @@ b8 Section::initDocument(
 /* ----------------------------------------------------------------------------
  */
 b8 Section::initMacro(
-    u64 start_offset, 
+    u64 token_idx, 
     String macro_indent, 
     u64 macro_idx, 
     SectionNode* node)
 {
-  this->start_offset = start_offset;
+  this->token_idx = token_idx;
   this->node = node;
   this->macro_idx = macro_idx;
   this->macro_indent = macro_indent;
   kind = Kind::Macro;
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Section::initMacroImmediate(u64 token_idx, SectionNode* node)
+{
+  this->token_idx = token_idx;
+  this->node = node;
+  kind = Kind::MacroImmediate;
   return true;
 }
 
@@ -125,6 +135,7 @@ b8 Metaprogram::init(
   if (!scope_stack.init()) return false;
   if (!expansions.init()) return false;
   if (!cursors.init()) return false;
+  if (!captures.init()) return false;
   return true;
 }
 
@@ -145,6 +156,7 @@ void Metaprogram::deinit()
   buffers.deinit();
   parser.deinit();
   parsed_program.close();
+  captures.destroy();
   *this = {};
 }
 
@@ -156,6 +168,10 @@ b8 Scope::init(Scope* prev, io::Memory* buffer, Section* macro_invocation)
   this->buffer = buffer;
   this->macro_invocation = macro_invocation;
   sections = SectionList::create();
+
+  if (prev)
+    global_offset = prev->global_offset + prev->buffer->len;
+
   return true;
 }
 
@@ -171,11 +187,11 @@ void Scope::deinit()
  */
 Scope* Metaprogram::pushScope()
 {
-  auto current = scope_stack.headNode();
-  auto node = scope_stack.push();
-  auto scope = node->data;
+  auto* current = scope_stack.headNode();
+  auto* node = scope_stack.push();
+  auto* scope = node->data;
 
-  auto buffer = buffers.push()->data;
+  auto* buffer = buffers.push()->data;
   if (!buffer->open())
     return nullptr;
   
@@ -223,6 +239,15 @@ void Metaprogram::addMacroSection(s64 start, String indent, u64 macro_idx)
   auto node = getCurrentScope()->sections.pushTail();
   node->data = sections.pushTail()->data;
   node->data->initMacro(start, indent, macro_idx, node);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Metaprogram::addMacroImmediateSection(u64 start)
+{
+  auto node = getCurrentScope()->sections.pushTail();
+  node->data = sections.pushTail()->data;
+  node->data->initMacroImmediate(start, node);
 }
 
 /* ----------------------------------------------------------------------------
@@ -333,6 +358,120 @@ Metaprogram::StackEnt Metaprogram::getStackEnt(s32 stack_idx, s32 ent_idx)
 
 /* ----------------------------------------------------------------------------
  */
+void Metaprogram::emitError(s32 errinfo_idx, Scope* scope)
+{
+  auto& lua = lpp->lua;
+
+  lua.pushstring("msg"_str);
+  lua.gettable(errinfo_idx);
+  const s32 I_msg = lua.gettop();
+
+  lua.pushstring("stack"_str);
+  lua.gettable(errinfo_idx);
+  const s32 I_stack = lua.gettop();
+
+  String message = lua.tostring(I_msg);
+
+  s32 stack_len = lua.objlen();
+
+  if (lpp->consumers.meta)
+  {
+    for (s32 i = 1; i <= stack_len; ++i)
+    {
+      StackEnt ent = getStackEnt(I_stack, i);
+
+      if (ent.mp)
+      {
+        MetaprogramDiagnostic diag = {};
+        diag.source = ent.mp->input;
+        diag.loc = ent.mp->mapMetaprogramLineToInputLine(ent.line);
+        diag.message = message;
+        lpp->consumers.meta->consumeDiag(*this, diag);
+      }
+    }
+  }
+  else
+  {
+    for (s32 i = 1; i <= stack_len; ++i)
+    {
+      StackEnt ent = getStackEnt(I_stack, i);
+
+      if (ent.mp)
+        ent.line = ent.mp->mapMetaprogramLineToInputLine(ent.line);
+
+      ERROR(ent.src, ":", ent.line, ": ");
+
+      if (notnil(ent.name))
+        ERROR("in ", ent.name, ":");
+
+      ERROR("\n");
+    }
+  }
+
+  while (scope)
+  {
+    if (scope->macro_invocation)
+    {
+      lua.pushinteger(scope->macro_invocation->macro_idx);
+      lua.gettable(I.macro_names);
+
+      u64 start_offset = 
+        parser.lexer.tokens[scope->macro_invocation->token_idx].loc;
+
+      Source::Loc loc = input->getLoc(start_offset);
+
+      lua.pushinteger(scope->macro_invocation->macro_idx);
+      lua.gettable(I.macro_invocations);
+      const s32 I_stack = lua.gettop();
+
+      s32 stack_len = lua.objlen();
+      
+      if (lpp->consumers.meta)
+      {
+        for (s32 i = 1; i <= stack_len; ++i)
+        {
+          StackEnt ent = getStackEnt(I_stack, i);
+
+          if (ent.mp)
+          {
+            MetaprogramDiagnostic diag = {};
+            diag.source = ent.mp->input;
+            diag.loc = ent.mp->mapMetaprogramLineToInputLine(ent.line);
+            diag.message = message;
+            lpp->consumers.meta->consumeDiag(*this, diag);
+          }
+        }
+      }
+      else
+      {
+        for (s32 i = 1; i <= stack_len; ++i)
+        {
+          StackEnt ent = getStackEnt(I_stack, i);
+
+          if (ent.mp)
+            ent.line = ent.mp->mapMetaprogramLineToInputLine(ent.line);
+
+          ERROR(ent.src, ":", ent.line, ": ");
+
+          if (notnil(ent.name))
+            ERROR("in ", ent.name, ":");
+
+          ERROR("\n");
+        }
+      }
+
+      // ERROR(message, "\n");
+      lua.pop();
+    }
+
+    scope = scope->prev;
+  }
+
+  ERROR(lua.tostring(I_msg), "\n");
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 Metaprogram::run()
 {
   using enum Section::Kind;
@@ -364,7 +503,11 @@ b8 Metaprogram::run()
   // Parse into the lua 'metacode' that we run in Phase 2 to form the sections 
   // processed by Phase 3.
 
-  if (!parser.init(input, instream, &parsed_program))
+  if (!parser.init(
+        input, 
+        instream, 
+        &parsed_program, 
+        lpp->consumers.lex_diag_consumer))
     return false;
   defer { parser.deinit(); };
 
@@ -393,13 +536,13 @@ b8 Metaprogram::run()
   if (!lua.loadbuffer(parsed_program.asStr(), (char*)input->name.ptr))
   {
     auto te = translateLuaError(*this, lua.tostring());
-    if (lpp->consumers.meta_diag_consumer)
+    if (lpp->consumers.meta)
     {
       MetaprogramDiagnostic diag;
       diag.source = input;
       diag.loc = te.line;
       diag.message = te.error;
-      lpp->consumers.meta_diag_consumer->consume(*this, diag);
+      lpp->consumers.meta->consumeDiag(*this, diag);
     }
     else
     {
@@ -548,53 +691,7 @@ b8 Metaprogram::run()
         return false;
     }
 
-    lua.pushstring("msg"_str);
-    lua.gettable(I_errinfo);
-    const s32 I_msg = lua.gettop();
-
-    lua.pushstring("stack"_str);
-    lua.gettable(I_errinfo);
-    const s32 I_stack = lua.gettop();
-
-    String message = lua.tostring(I_msg);
-
-    s32 stack_len = lua.objlen(I_stack);
-
-    if (lpp->consumers.meta_diag_consumer)
-    {
-      for (s32 i = 1; i <= stack_len; ++i)
-      {
-        StackEnt ent = getStackEnt(I_stack, i);
-
-        if (ent.mp)
-        {
-          MetaprogramDiagnostic diag = {};
-          diag.source = ent.mp->input;
-          diag.loc = ent.mp->mapMetaprogramLineToInputLine(ent.line);
-          diag.message = message;
-          lpp->consumers.meta_diag_consumer->consume(*this, diag);
-        }
-      }
-    }
-    else
-    {
-      for (s32 i = 1; i <= stack_len; ++i)
-      {
-        StackEnt ent = getStackEnt(I_stack, i);
-
-        if (ent.mp)
-          ent.line = ent.mp->mapMetaprogramLineToInputLine(ent.line);
-
-        ERROR(ent.src, ":", ent.line, ": ");
-
-        if (notnil(ent.name))
-          ERROR("in ", ent.name, ":");
-
-        ERROR("\n");
-      }
-
-      ERROR(message, "\n");
-    }
+    emitError(I_errinfo, nullptr);
 
     return false;
   }
@@ -680,8 +777,19 @@ b8 Metaprogram::processScopeSections(Scope* scope)
   {
     Section* section = current_section->data;
     
+    u64 start_offset = 
+      parser.lexer.tokens[section->token_idx].loc;
+
     // Any section is always an expansion into the resulting buffer.
-    expansions.pushTail({.from=section->start_offset, .to=output->cache.len});
+    expansions.pushTail({.from=start_offset, .to=output->cache.len});
+
+    Scope* current_scope = getCurrentScope();
+    section->expansion_start = 
+      current_scope->global_offset + current_scope->buffer->len;
+
+    b8 emit_section = true;
+    u64 expansion_start = scope->global_offset + scope->buffer->len;
+    u64 expansion_end = 0;
 
     switch (section->kind)
     {
@@ -690,12 +798,27 @@ b8 Metaprogram::processScopeSections(Scope* scope)
         TRACE("in ", input->name, ": ");
         TRACE("found Document section\n");
 
-        lua.pushvalue(I.lpp_runDocumentSectionCallbacks);
-        if (!lua.pcall(0, 0, I.errhandler))
-          return false;
+        if (!captures.isEmpty() && 
+            captures.last()->token_idx == section->token_idx)
+        {
+          // This document captures an immediate macro or value 
+          // result, so adjust the start to whatever the capture
+          // started at.
+          expansion_start = captures.last()->start;
+          captures.pop();
+        }
 
-        // Simple write to the output cache.
-        scope->writeBuffer(section->buffer->asStr());
+        if (!section->buffer->asStr().isEmpty())
+        {
+          lua.pushvalue(I.lpp_runDocumentSectionCallbacks);
+          if (!lua.pcall(0, 0, I.errhandler))
+            return false;
+
+          // Simple write to the output cache.
+          scope->writeBuffer(section->buffer->asStr());
+        }
+
+        // ERROR("----------------- doc scope\n", scope->buffer->asStr(), "\n");
       }  
       break;
 
@@ -717,7 +840,7 @@ b8 Metaprogram::processScopeSections(Scope* scope)
         TRACE("invoking macro\n");
         lua.pushinteger(section->macro_idx);
         lua.gettable(I.macro_invokers);
-        if (!lua.pcall(0, 1, 0))
+        if (!lua.pcall(0, 1))
         {
           const s32 I_errinfo = lua.gettop();
 
@@ -730,113 +853,8 @@ b8 Metaprogram::processScopeSections(Scope* scope)
               return false;
           }
 
-          lua.pushstring("msg"_str);
-          lua.gettable(I_errinfo);
-          const s32 I_msg = lua.gettop();
-
-          lua.pushstring("stack"_str);
-          lua.gettable(I_errinfo);
-          const s32 I_stack = lua.gettop();
-
-          String message = lua.tostring(I_msg);
-
-          s32 stack_len = lua.objlen();
-
-          if (lpp->consumers.meta_diag_consumer)
-          {
-            for (s32 i = 1; i <= stack_len; ++i)
-            {
-              StackEnt ent = getStackEnt(I_stack, i);
-
-              if (ent.mp)
-              {
-                MetaprogramDiagnostic diag = {};
-                diag.source = ent.mp->input;
-                diag.loc = ent.mp->mapMetaprogramLineToInputLine(ent.line);
-                diag.message = message;
-                lpp->consumers.meta_diag_consumer->consume(*this, diag);
-              }
-            }
-          }
-          else
-          {
-            for (s32 i = 1; i <= stack_len; ++i)
-            {
-              StackEnt ent = getStackEnt(I_stack, i);
-
-              if (ent.mp)
-                ent.line = ent.mp->mapMetaprogramLineToInputLine(ent.line);
-
-              ERROR(ent.src, ":", ent.line, ": ");
-
-              if (notnil(ent.name))
-                ERROR("in ", ent.name, ":");
-
-              ERROR("\n");
-            }
-          }
-
-          Scope* scope = macro_scope;
-
-          while (scope)
-          {
-            if (scope->macro_invocation)
-            {
-              lua.pushinteger(scope->macro_invocation->macro_idx);
-              lua.gettable(I.macro_names);
-
-              Source::Loc loc = 
-                input->getLoc(scope->macro_invocation->start_offset);
-
-              lua.pushinteger(scope->macro_invocation->macro_idx);
-              lua.gettable(I.macro_invocations);
-              const s32 I_stack = lua.gettop();
-
-              s32 stack_len = lua.objlen();
-              
-              if (lpp->consumers.meta_diag_consumer)
-              {
-                for (s32 i = 1; i <= stack_len; ++i)
-                {
-                  StackEnt ent = getStackEnt(I_stack, i);
-
-                  if (ent.mp)
-                  {
-                    MetaprogramDiagnostic diag = {};
-                    diag.source = ent.mp->input;
-                    diag.loc = ent.mp->mapMetaprogramLineToInputLine(ent.line);
-                    diag.message = message;
-                    lpp->consumers.meta_diag_consumer->consume(*this, diag);
-                  }
-                }
-              }
-              else
-              {
-                for (s32 i = 1; i <= stack_len; ++i)
-                {
-                  StackEnt ent = getStackEnt(I_stack, i);
-
-                  if (ent.mp)
-                    ent.line = ent.mp->mapMetaprogramLineToInputLine(ent.line);
-
-                  ERROR(ent.src, ":", ent.line, ": ");
-
-                  if (notnil(ent.name))
-                    ERROR("in ", ent.name, ":");
-
-                  ERROR("\n");
-                }
-              }
-
-              // ERROR(message, "\n");
-              lua.pop();
-            }
-
-            scope = scope->prev;
-          }
-
-          ERROR(lua.tostring(I_msg), "\n");
-
+          emitError(I_errinfo, macro_scope);
+         
           return false;
         }
 
@@ -848,16 +866,32 @@ b8 Metaprogram::processScopeSections(Scope* scope)
         scope->writeBuffer(macro_scope->buffer->asStr());
 
         if (!lua.isnil())
-        {
-          // Error handling and MacroExpansion stuff is handled
-          // in lua, we know this is a string if there's anything.
           scope->writeBuffer(lua.tostring());
-        }
+
+        // ERROR("----------------- macro scope\n", scope->buffer->asStr(), "\n");
 
         lua.pop();
       }
       break;
+
+    case MacroImmediate:
+      {
+        captures.push(
+            {section->token_idx, scope->global_offset + scope->buffer->len});
+        emit_section = false;
+      }
+      break;
     }
+
+    expansion_end = 
+      scope->global_offset + scope->buffer->len;
+
+    if (emit_section && lpp->consumers.meta)
+      lpp->consumers.meta->consumeSection(
+          *this, 
+          *section, 
+          expansion_start,
+          expansion_end);
   }
   return true;
 }
@@ -897,26 +931,6 @@ s32 Metaprogram::mapMetaprogramLineToInputLine(s32 line)
       return mapping.input;
   }
   return -1;
-}
-
-/* ----------------------------------------------------------------------------
- */
-template<typename... T>
-b8 Metaprogram::errorAt(s32 offset, T... args)
-{
-  input->cacheLineOffsets();
-  Scope* scope = getCurrentScope();
-  while (scope->prev != nullptr)
-  {
-    Source::Loc loc = input->getLoc(scope->macro_invocation->start_offset);
-    INFO(input->name, ":", loc.line, ":", loc.column, 
-         ": in scope invoked here:\n");
-    scope = scope->prev;
-  }
-
-  Source::Loc loc = input->getLoc(offset);
-  ERROR(input->name, ":", loc.line, ":", loc.column, ": ", args..., "\n");
-  return false;
 }
 
 /* ----------------------------------------------------------------------------
@@ -986,6 +1000,16 @@ void metaprogramAddMacroSection(
     u64 macro_idx)
 {
   mp->addMacroSection(start, indent, macro_idx);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+LPP_LUAJIT_FFI_FUNC
+void metaprogramAddMacroImmediateSection(
+    Metaprogram* mp,
+    u64 start)
+{
+  mp->addMacroImmediateSection(start);
 }
 
 /* ----------------------------------------------------------------------------
@@ -1297,8 +1321,10 @@ b8 sectionConsumeFromBeginning(SectionNode* section, u64 len)
 LPP_LUAJIT_FFI_FUNC
 u64 sectionGetStartOffset(SectionNode* section)
 {
-  assert(section);
-  return section->data->start_offset;
+  // assert(section);
+  // return section->data->start_offset;
+  assert(!"reimplement if ever used");
+  return 0;
 }
 
 }

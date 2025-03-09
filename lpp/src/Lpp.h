@@ -32,8 +32,8 @@ struct Metaprogram;
  */
 struct LppConsumers
 {
-  LexerDiagnosticConsumer* lex_diag_consumer = nullptr;
-  MetaprogramDiagnosticConsumer* meta_diag_consumer = nullptr;
+  LexerConsumer* lex_diag_consumer = nullptr;
+  MetaprogramConsumer* meta = nullptr;
 };
 
 /* ============================================================================
