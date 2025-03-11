@@ -127,16 +127,6 @@ void Lexer::advance(s32 n)
       errorHere("encountered invalid codepoint!");
       longjmp(err_handler, 0);
     }
-
-    if (at('\n'))
-    {
-      in_indentation = true;
-    }
-    else if (in_indentation)
-    {
-      if (not isspace(current()))
-        in_indentation = false;
-    }
   }
 }
 
@@ -332,13 +322,11 @@ b8 Lexer::lexLuaLineOrInlineOrBlock()
   {
     if (advance(), at('$'))
       return lexLuaBlock();
-    else
-      return errorHere("$$ has no meaning yet."_str);
+    return errorHere("$$ has no meaning yet."_str);
   }
-  else if (at('(') or at('<'))
+  if (at('(') or at('<'))
     return lexLuaInline();
-  else
-    return lexLuaLine();
+  return lexLuaLine();
 }
 
 /* ----------------------------------------------------------------------------
@@ -396,8 +384,7 @@ b8 Lexer::lexLuaInline()
       {
         if (nesting == 1)
           break;
-        else 
-          nesting -= 1;
+        nesting -= 1;
       }
     }
 

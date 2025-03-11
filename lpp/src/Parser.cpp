@@ -106,10 +106,6 @@ b8 Parser::run()
       case Invalid:
         return false;
 
-      case DollarSign: // included for lsp stuff
-        nextToken();
-        break;
-
       case Whitespace:
         writeOut(
           "__metaenv.doc("_str, curtIdx(), ",\""_str);
@@ -125,19 +121,7 @@ b8 Parser::run()
         TRACE("placing document text: '", 
               io::SanitizeControlCharacters(getRaw()), "'\n");
 
-        writeOut("__metaenv.doc("_str, curtIdx(), ",\"");
-        {
-          String raw = getRaw();
-          pushLocMap();
-          for (s32 i = 0; i < raw.len; ++i)
-          {
-            if (i && raw.ptr[i-1] == '\n' && i != raw.len-1)
-              pushLocMap(i,i);
-          }
-        }
-
-        writeTokenSanitized();
-        writeOut("\")\n"_str);
+        writeOut("__metaenv.docspan("_str, curtIdx(), ")\n");
         nextToken();
         break;
 
@@ -192,9 +176,7 @@ b8 Parser::run()
           else
           {
             writeOut("__metaenv.macro("_str);
-            writeOut(curtIdx(), ",\"", 
-                source->getStr(curt->macro_indent_loc, curt->macro_indent_len),
-                "\",");
+            writeOut(curtIdx(), ',');
 
             TRACE("getting id\n");
             nextSignificantToken(); // identifier

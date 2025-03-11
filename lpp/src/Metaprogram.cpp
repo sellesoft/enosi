@@ -34,16 +34,26 @@ b8 Section::initDocument(
 
 /* ----------------------------------------------------------------------------
  */
+b8 Section::initDocumentSpan(
+    u64 token_idx,
+    SectionNode* node)
+{
+  this->node = node;
+  this->token_idx = token_idx;
+  kind = Kind::DocumentSpan;
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 Section::initMacro(
     u64 token_idx, 
-    String macro_indent, 
     u64 macro_idx, 
     SectionNode* node)
 {
   this->token_idx = token_idx;
   this->node = node;
   this->macro_idx = macro_idx;
-  this->macro_indent = macro_indent;
   kind = Kind::Macro;
   return true;
 }
@@ -134,7 +144,6 @@ b8 Metaprogram::init(
   if (!sections.init()) return false;
   if (!scope_stack.init()) return false;
   if (!expansions.init()) return false;
-  if (!cursors.init()) return false;
   if (!captures.init()) return false;
   return true;
 }
@@ -149,7 +158,6 @@ void Metaprogram::deinit()
   for (auto& scope : scope_stack)
     scope.deinit();
   scope_stack.deinit();
-  cursors.deinit();
   expansions.deinit();
   for (auto& buffer : buffers)
     buffer.close();
@@ -234,11 +242,20 @@ void Metaprogram::addDocumentSection(u64 start, String raw)
 
 /* ----------------------------------------------------------------------------
  */
-void Metaprogram::addMacroSection(s64 start, String indent, u64 macro_idx)
+void Metaprogram::addDocumentSpanSection(u64 token_idx)
 {
   auto node = getCurrentScope()->sections.pushTail();
   node->data = sections.pushTail()->data;
-  node->data->initMacro(start, indent, macro_idx, node);
+  node->data->initDocumentSpan(token_idx, node);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Metaprogram::addMacroSection(s64 start, u64 macro_idx)
+{
+  auto node = getCurrentScope()->sections.pushTail();
+  node->data = sections.pushTail()->data;
+  node->data->initMacro(start, macro_idx, node);
 }
 
 /* ----------------------------------------------------------------------------
@@ -790,8 +807,6 @@ b8 Metaprogram::processScopeSections(Scope* scope)
     Section* section = current_section->data;
     
     Scope* current_scope = getCurrentScope();
-    section->expansion_start = 
-      current_scope->global_offset + current_scope->buffer->len;
 
     b8 emit_section = true;
     u64 expansion_start = scope->global_offset + scope->buffer->len;
@@ -800,6 +815,7 @@ b8 Metaprogram::processScopeSections(Scope* scope)
     switch (section->kind)
     {
     case Document:
+    case DocumentSpan:
       {
         TRACE("in ", input->name, ": ");
         TRACE("found Document section\n");
@@ -814,14 +830,23 @@ b8 Metaprogram::processScopeSections(Scope* scope)
           captures.pop();
         }
 
-        if (!section->buffer->asStr().isEmpty())
+        if (section->kind == DocumentSpan || 
+            !section->buffer->asStr().isEmpty())
         {
           lua.pushvalue(I.lpp_runDocumentSectionCallbacks);
           if (!lua.pcall(0, 0, I.errhandler))
             return false;
 
           // Simple write to the output cache.
-          scope->writeBuffer(section->buffer->asStr());
+          if (section->kind == Document)
+          {
+            scope->writeBuffer(section->buffer->asStr());
+          }
+          else
+          {
+            auto token = parser.lexer.tokens[section->token_idx];
+            scope->writeBuffer(input->getStr(token.loc, token.len));
+          }
         }
       }  
       break;
@@ -1029,11 +1054,10 @@ b8 sectionIsMacro(SectionNode* section);
 LPP_LUAJIT_FFI_FUNC
 void metaprogramAddMacroSection(
     Metaprogram* mp, 
-    String indent, 
     u64 start, 
     u64 macro_idx)
 {
-  mp->addMacroSection(start, indent, macro_idx);
+  mp->addMacroSection(start, macro_idx);
 }
 
 /* ----------------------------------------------------------------------------
@@ -1057,35 +1081,9 @@ void metaprogramAddDocumentSection(Metaprogram* mp, u64 start, String raw)
 /* ----------------------------------------------------------------------------
  */
 LPP_LUAJIT_FFI_FUNC
-Cursor* metaprogramNewCursorAfterSection(Metaprogram* mp)
+void metaprogramAddDocumentSpanSection(Metaprogram* mp, u64 start)
 {
-  if (!mp->current_section->next)
-    return nullptr;
-
-  Cursor* cursor = mp->cursors.add();
-  cursor->creator = mp->current_section->next;
-  cursor->section = cursor->creator;
-  cursor->range = cursor->section->data->buffer->asStr();
-  cursor->current_codepoint = 
-    utf8::decodeCharacter(cursor->range.ptr, cursor->range.len);
-  return cursor;
-}
-
-/* ----------------------------------------------------------------------------
- */
-LPP_LUAJIT_FFI_FUNC
-void metaprogramDeleteCursor(Metaprogram* mp, Cursor* cursor)
-{
-  mp->cursors.remove(cursor);
-}
-
-/* ----------------------------------------------------------------------------
- */
-LPP_LUAJIT_FFI_FUNC
-String metaprogramGetMacroIndent(Metaprogram* mp)
-{
-  assert(sectionIsMacro(mp->current_section));
-  return mp->current_section->data->macro_indent;
+  mp->addDocumentSpanSection(start);
 }
 
 /* ----------------------------------------------------------------------------
@@ -1196,76 +1194,6 @@ u64 scopeGetInvokingMacroIdx(Scope* scope)
 {
   assert(scope);
   return (scope->macro_invocation? scope->macro_invocation->macro_idx : 0);
-}
-
-/* ----------------------------------------------------------------------------
- */
-LPP_LUAJIT_FFI_FUNC
-b8 cursorNextChar(Cursor* cursor)
-{
-  Section* s = cursor->section->data;
-
-  if (s->kind == Section::Kind::Macro)
-    return false;
-
-  if (cursor->range.len == 0)
-    return false;
-
-  cursor->range.increment(cursor->current_codepoint.advance);
-  if (cursor->range.len == 0)
-    return false;
-
-  cursor->current_codepoint = 
-    utf8::decodeCharacter(cursor->range.ptr, cursor->range.len);
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-LPP_LUAJIT_FFI_FUNC
-u32 cursorCurrentCodepoint(Cursor* cursor)
-{
-  return cursor->current_codepoint.codepoint;
-}
-
-/* ----------------------------------------------------------------------------
- */
-LPP_LUAJIT_FFI_FUNC
-b8 cursorInsertString(Cursor* cursor, String text)
-{
-  Section* s = cursor->section->data;
-  if (s->kind != Section::Kind::Document)
-    return false;
-  
-  assert(cursor->range.ptr >= s->buffer->ptr);
-
-  u64 cursor_offset = cursor->range.ptr - s->buffer->ptr;
-
-  if (!s->insertString(cursor_offset, text))
-    return false;
-
-  u8* new_pos = s->buffer->ptr + cursor_offset + text.len;
-  u64 new_len = (s->buffer->ptr + s->buffer->len) - new_pos;
-  cursor->range = {new_pos, new_len};
-
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-LPP_LUAJIT_FFI_FUNC
-SectionNode* cursorGetSection(Cursor* cursor)
-{
-  return cursor->section;
-}
-
-/* ----------------------------------------------------------------------------
- */
-LPP_LUAJIT_FFI_FUNC
-String cursorGetRestOfSection(Cursor* cursor)
-{
-  assert(sectionIsDocument(cursorGetSection(cursor)));
-  return cursor->range;
 }
 
 /* ----------------------------------------------------------------------------

@@ -15,29 +15,18 @@ ffi.cdef
   void getMetaprogramResult(MetaprogramBuffer mpbuf, void* outbuf);
 
   typedef struct Metaprogram Metaprogram;
-  typedef struct Cursor Cursor;
   typedef struct SectionNode SectionNode;
   typedef struct Scope Scope;
 
   void metaprogramAddMacroSection(
     Metaprogram* ctx, 
-    String indentation, 
     u64 start, 
     u64 macro_idx);
   void metaprogramAddDocumentSection(Metaprogram* ctx, u64 start, String s);
+  void metaprogramAddDocumentSpanSection(Metaprogram* mp, u64 start);
   void metaprogramAddMacroImmediateSection(Metaprogram* ctx, u64 start);
 
-  Cursor* metaprogramNewCursorAfterSection(Metaprogram* ctx);
-  void metaprogramDeleteCursor(Metaprogram* ctx, Cursor* cursor);
-
   String metaprogramGetMacroIndent(Metaprogram* ctx);
-
-  b8  cursorNextChar(Cursor* cursor);
-  b8  cursorNextSection(Cursor* cursor);
-  u32 cursorCurrentCodepoint(Cursor* cursor);
-  b8  cursorInsertString(Cursor* cursor, String text);
-  String cursorGetRestOfSection(Cursor* cursor);
-  SectionNode* cursorGetSection(Cursor* cursor);
 
   SectionNode* metaprogramGetCurrentSection(Metaprogram* mp);
   SectionNode* metaprogramGetNextSection(Metaprogram* ctx);
@@ -231,18 +220,6 @@ local lua_print = print
 print = function(first, ...)
   local info = debug.getinfo(2)
   lua_print(info.source..":"..info.currentline..": "..tostring(first), ...)
-end
-
--- * --------------------------------------------------------------------------
-
---- Get the indentation of the current macro as a string.
----
---- Good for keeping things nicely formatted in macro expansions that span 
---- multiple lines. Please use it ^_^.
----
----@return string
-lpp.getMacroIndentation = function()
-  return strToLua(C.metaprogramGetMacroIndent(lpp.context))
 end
 
 -- * --------------------------------------------------------------------------

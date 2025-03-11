@@ -42,6 +42,7 @@ struct Section
   {
     Invalid,
     Document,
+    DocumentSpan,
     Macro,
     MacroImmediate,
   };
@@ -57,15 +58,6 @@ struct Section
   SectionNode* node = nullptr;
 
   u64 macro_idx = -1;
-  String macro_indent = nil;
-
-  u64 expansion_start;
-  u64 expansion_end;
-
-
-  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-  =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
-
 
   b8 initDocument(
       u64 token_idx,
@@ -73,9 +65,12 @@ struct Section
       SectionNode* node,
       io::Memory* buffer);
 
+  b8 initDocumentSpan(
+    u64 token_idx,
+    SectionNode* node);
+
   b8 initMacro(
       u64 token_idx,
-      String macro_indent, 
       u64 macro_idx, 
       SectionNode* node);
 
@@ -203,7 +198,6 @@ struct Metaprogram
   BufferPool buffers;
 
   SectionPool   sections;
-  CursorPool    cursors;
   ExpansionList expansions;
 
   ScopePool scope_stack;
@@ -251,7 +245,8 @@ struct Metaprogram
   Scope* getCurrentScope();
 
   void addDocumentSection(u64 start, String s);
-  void addMacroSection(s64 start, String indent, u64 macro_idx);
+  void addDocumentSpanSection(u64 token_idx);
+  void addMacroSection(s64 start, u64 macro_idx);
   void addMacroImmediateSection(u64 start);
 
   struct StackEnt

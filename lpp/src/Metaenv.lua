@@ -57,10 +57,13 @@ return function(ctx)
   end
 
   menv.doc = function(start, str)
-    -- str could be nil in the case of immediate macro invocations that don't
-    -- return anything.
     assertNotExited "doc"
     C.metaprogramAddDocumentSection(ctx, start, makeStr(str or ""))
+  end
+
+  menv.docspan = function(token)
+    assertNotExited "docspan"
+    C.metaprogramAddDocumentSpanSection(ctx, token)
   end
 
   menv.val = function(start, x)
@@ -77,7 +80,7 @@ return function(ctx)
   end
   lpp.stacktrace_func_filter[menv.val] = true
 
-  menv.macro = function(start, indent, name, is_method, macro, ...)
+  menv.macro = function(start, name, is_method, macro, ...)
     assertNotExited "macro"
     -- capture where this macro was invoked in phase 1
     local invoke_capture, pos = stackcapture(1)
@@ -144,7 +147,6 @@ return function(ctx)
     table.insert(menv.macro_names, name)
     C.metaprogramAddMacroSection(
       ctx, 
-      makeStr(indent), 
       start, 
       #menv.macro_invokers)
   end
