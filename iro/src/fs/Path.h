@@ -104,6 +104,13 @@ struct Path
   Path copy();
   void clear();
 
+  Path& set(String s)
+  {
+    clear();
+    append(s);
+    return *this;
+  }
+
   // Equivalent to the static api, but applied to this Path.
   b8 unlink() { return unlink(buffer.asStr()); }
   b8 rmdir() { return rmdir(buffer.asStr()); }
