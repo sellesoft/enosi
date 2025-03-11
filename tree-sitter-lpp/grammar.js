@@ -95,6 +95,6 @@ module.exports = grammar(
     macro_phase2: $ => '@@',
     macro_phase3: $ => '@',
 
-    _identifier: $ => /[a-zA-Z]([a-zA-Z0-9]+)?/
+    _identifier: $ => /[a-zA-Z_]([a-zA-Z0-9_]+)?/
   }
 });
