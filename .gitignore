@@ -33,3 +33,7 @@ CppProperties.json
 *.rdbg
 shaderc/
 build.log
+
+lppls/build/
+
+luals.log/
