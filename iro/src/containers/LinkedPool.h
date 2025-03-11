@@ -178,6 +178,9 @@ struct DLinkedPool
 
   List::RangeIterator begin() { return list.begin(); }
   List::RangeIterator end() { return list.end(); }
+
+  List::RangeIterator begin() const { return list.begin(); }
+  List::RangeIterator end() const { return list.end(); }
 };
 
 }
