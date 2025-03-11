@@ -40,7 +40,8 @@ struct Process
       String        file, 
       Slice<String> args, 
       String        cwd,
-      b8            non_blocking = true);
+      b8            non_blocking = true,
+      b8            redirect_err_to_out = true);
 
   b8 hasOutput() const;
   b8 hasErrOutput() const;

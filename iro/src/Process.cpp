@@ -10,10 +10,17 @@ Process Process::spawn(
     String        file, 
     Slice<String> args, 
     String        cwd,
-    b8            non_blocking)
+    b8            non_blocking,
+    b8            redirect_err_to_out)
 {
   Process out = {};
-  if (!platform::processSpawn(&out.handle, file, args, cwd, non_blocking))
+  if (!platform::processSpawn(
+        &out.handle, 
+        file, 
+        args, 
+        cwd, 
+        non_blocking,
+        redirect_err_to_out))
     return nil;
   return out;
 }

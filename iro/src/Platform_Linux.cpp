@@ -506,7 +506,8 @@ b8 processSpawn(
     String file, 
     Slice<String> args, 
     String cwd,
-    b8 non_blocking)
+    b8 non_blocking,
+    b8 redirect_err_to_out)
 {
   assert(out_handle);
 
@@ -536,8 +537,11 @@ b8 processSpawn(
   if (-1 == pipe(stdin_pipes))
     return reportErrno("failed to open pipes for process ", file);
 
-  if (-1 == pipe(stderr_pipes))
-    return reportErrno("failed to open pipes for process ", file);
+  if (!redirect_err_to_out)
+  {
+    if (-1 == pipe(stderr_pipes))
+      return reportErrno("failed to open pipes for process ", file);
+  }
 
   if (pid_t pid = fork())
   {
@@ -546,9 +550,10 @@ b8 processSpawn(
     if (pid == -1)
       return reportErrno("failed to fork process");
 
-    close(stdout_pipes[1]);
-    close(stderr_pipes[1]);
-    close(stdin_pipes[0]);
+    ::close(stdout_pipes[1]);
+    if (!redirect_err_to_out)
+      ::close(stderr_pipes[1]);
+    ::close(stdin_pipes[0]);
 
     if (non_blocking)
     {
@@ -568,7 +573,7 @@ b8 processSpawn(
     }
 
     p_proc->pid = pid;
-    p_proc->stderr = stderr_pipes[0];
+    p_proc->stderr = redirect_err_to_out? stdout_pipes[0] : stderr_pipes[0];
     p_proc->stdout = stdout_pipes[0];
     p_proc->stdin = stdin_pipes[1];
     *out_handle = p_proc;
@@ -587,12 +592,18 @@ b8 processSpawn(
       chdir(cwd);
     }
 
-    close(stdout_pipes[0]);
+    ::close(stdout_pipes[0]);
     dup2(stdout_pipes[1], 1);
-    close(stderr_pipes[0]);
-    dup2(stderr_pipes[1], 2);
 
-    close(stdin_pipes[1]);
+    if (!redirect_err_to_out)
+    {
+      ::close(stderr_pipes[0]);
+      dup2(stderr_pipes[1], 2);
+    }
+    else
+      dup2(stdout_pipes[1], 2);
+
+    ::close(stdin_pipes[1]);
     dup2(stdin_pipes[0], 0);
 
     if (-1 == execvp(argsc.arr[0], argsc.arr))

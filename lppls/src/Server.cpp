@@ -138,12 +138,14 @@ b8 Server::init()
         | fs::OpenFlag::Truncate
         | fs::OpenFlag::Create);
 
+#if 0
   clangd_log = 
     fs::File::from(
         "clangd.log"_str,
           fs::OpenFlag::Write
         | fs::OpenFlag::Truncate
         | fs::OpenFlag::Create);
+#endif
 
   if (notnil(log_file))
   {
@@ -169,7 +171,7 @@ b8 Server::init()
     Process::spawn("lua-language-server"_str, nil, nil, false);
 #endif
 
-  clangd = Process::spawn("clangd"_str, nil, nil, false);
+  clangd = Process::spawn("clangd"_str, nil, nil, false, false);
 
   INFO("initialized lpp lsp server\n");
 
@@ -239,6 +241,7 @@ b8 Server::loop()
 
     lua.pop();
 
+  #if 0
     if (clangd.hasErrOutput())
     {
       u8 clangdStderr[255];
@@ -246,6 +249,7 @@ b8 Server::loop()
       if (read)
         clangd_log.write({clangdStderr, read});
     }
+  #endif
 
     // TODO(sushi) set up an events api in platform so we don't have to do 
     //             this.

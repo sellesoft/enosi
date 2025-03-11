@@ -15,13 +15,10 @@ return function(offset)
   offset = offset or 0
   offset = offset + 2
 
-  print "------------------------------"
-
   local fidx = offset
   while true do
     local info = debug.getinfo(fidx)
     if not info then break end
-    require "Util" .dumpValue(info, 3)
     if info.what ~= "C" then
       if not lpp.stacktrace_func_filter[info.func] then
         stack:push
@@ -31,11 +28,7 @@ return function(offset)
           name = lpp.stacktrace_func_rename[info.func] or info.name,
           metaenv = getfenv(info.func).__metaenv
         }
-      else
-        print "filtered func"
       end
-    else 
-      print "C"
     end
     fidx = fidx + 1
   end

@@ -193,7 +193,8 @@ b8 processSpawn(
     String           file, 
     Slice<String>    args, 
     String           cwd,
-    b8               non_blocking);
+    b8               non_blocking,
+    b8               redirect_err_to_out);
 
 /* ----------------------------------------------------------------------------
  *  Returns true if a Process has data to be read.
