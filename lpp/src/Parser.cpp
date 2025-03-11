@@ -91,6 +91,13 @@ b8 Parser::run()
 
   nextToken();
 
+  writeOut(
+    "local __metaenv_docspan = __metaenv.docspan\n",
+    "local __metaenv_doc = __metaenv.doc\n",
+    "local __metaenv_val = __metaenv.val\n",
+    "local __metaenv_macro = __metaenv.macro\n",
+    "local __metaenv_macro_immediate = __metaenv.macro_immediate\n");
+
   for (;;)
   {
     using enum Token::Kind;
@@ -108,9 +115,7 @@ b8 Parser::run()
 
       case Whitespace:
         writeOut(
-          "__metaenv.doc("_str, curtIdx(), ",\""_str);
-        writeTokenSanitized();
-        writeOut("\")\n"_str);
+          "__metaenv_docspan("_str, curtIdx(), ")\n");
         nextToken();
         break;
 
@@ -121,7 +126,7 @@ b8 Parser::run()
         TRACE("placing document text: '", 
               io::SanitizeControlCharacters(getRaw()), "'\n");
 
-        writeOut("__metaenv.docspan("_str, curtIdx(), ")\n");
+        writeOut("__metaenv_docspan("_str, curtIdx(), ")\n");
         nextToken();
         break;
 
@@ -152,7 +157,7 @@ b8 Parser::run()
       case LuaInline:
         TRACE("placing lua inline: '", 
               io::SanitizeControlCharacters(getRaw()), "'\n");
-        writeOut("__metaenv.val("_str, curtIdx(), ',');
+        writeOut("__metaenv_val("_str, curtIdx(), ',');
         pushLocMap();
         writeOut(getRaw(), ")\n"_str);
         nextToken();
@@ -167,15 +172,15 @@ b8 Parser::run()
 
           if (is_immediate)
           {
-            writeOut("__metaenv.doc("_str, curtIdx(),
-              ",__metaenv.macro_immediate("_str, curtIdx(), ",");
+            writeOut("__metaenv_doc("_str, curtIdx(),
+              ",__metaenv_macro_immediate("_str, curtIdx(), ",");
 
             nextSignificantToken(); // identifier
             writeOut('"', getRaw(), "\", ");
           }
           else
           {
-            writeOut("__metaenv.macro("_str);
+            writeOut("__metaenv_macro("_str);
             writeOut(curtIdx(), ',');
 
             TRACE("getting id\n");
