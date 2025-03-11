@@ -75,6 +75,7 @@ return function(ctx)
     end
     C.metaprogramAddDocumentSection(ctx, start, makeStr(s))
   end
+  lpp.stacktrace_func_filter[menv.val] = true
 
   menv.macro = function(start, indent, name, is_method, macro, ...)
     assertNotExited "macro"
@@ -109,13 +110,14 @@ return function(ctx)
       local prev_macro_arg_offsets = menv.current_macro_arg_offsets
       menv.current_macro_arg_offsets = arg_offsets
 
-      lpp.err_func_filter[invoker] = true
+      lpp.stacktrace_func_filter[invoker] = true
 
       local result = {xpcall(macro, function(err)
         return
         {
           stack = stackcapture(1),
-          msg = err,
+          msg = err:gsub("%[.-%]:%d-: ", "")
+                   :gsub(".-:%d-: ", ""),
         }
       end, unpack(args))}
 
@@ -165,7 +167,7 @@ return function(ctx)
       end
     end)
 
-    lpp.err_func_rename[macro] = name
+    lpp.stacktrace_func_rename[macro] = name
 
     local prev_macro_arg_offsets = menv.current_macro_arg_offsets
     menv.current_macro_arg_offsets = arg_offsets
@@ -184,7 +186,7 @@ return function(ctx)
       error "macro returned non-string value"
     end
   end
-  lpp.err_func_filter[menv.macro_immediate] = true
+  lpp.stacktrace_func_filter[menv.macro_immediate] = true
   
   return M
 end

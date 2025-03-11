@@ -136,6 +136,7 @@ struct Expansion
 {
   u64 from;
   u64 to;
+  Array<u64> invoking_macros;
 };
 
 /* ============================================================================
@@ -185,6 +186,10 @@ struct MetaprogramConsumer
     const Section& section,
     u64 expansion_start,
     u64 expansion_end) {}
+
+  virtual void consumeExpansions(
+    const Metaprogram& mp,
+    const ExpansionList& exps) {}
 };
 
 /* ============================================================================
@@ -214,6 +219,7 @@ struct Metaprogram
   io::IO* instream;
   Source* input;
   Source* output;
+  Source meta;
 
   SectionNode* current_section;
 
@@ -268,6 +274,8 @@ struct Metaprogram
 
   // Lazily generates the input line map and returns a pointer to it.
   void generateInputLineMap(InputLineMap* out_map);
+
+  void pushExpansion(u64 from, u64 to);
 
   // Indexes on the lua stack where important stuff is.
   // Eventually if lpp is ever 'stable' this should be 

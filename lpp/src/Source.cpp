@@ -74,7 +74,7 @@ String Source::getVirtualStr(u64 loc, u64 len)
 
 /* ----------------------------------------------------------------------------
  */
-Source::Loc Source::getLoc(u64 loc)
+Source::Loc Source::getLoc(u64 loc) const
 {
   u64 l = 0, 
       m = 0, 

@@ -436,7 +436,7 @@ void Metaprogram::emitError(s32 errinfo_idx, Scope* scope)
           {
             MetaprogramDiagnostic diag = {};
             diag.source = ent.mp->input;
-            diag.loc = ent.mp->mapMetaprogramLineToInputLine(ent.line);
+            diag.loc = loc.line;
             diag.message = message;
             lpp->consumers.meta->consumeDiag(*this, diag);
           }
@@ -451,7 +451,7 @@ void Metaprogram::emitError(s32 errinfo_idx, Scope* scope)
           if (ent.mp)
             ent.line = ent.mp->mapMetaprogramLineToInputLine(ent.line);
 
-          ERROR(ent.src, ":", ent.line, ": ");
+          ERROR(ent.src, ":", loc.line, ": ");
 
           if (notnil(ent.name))
             ERROR("in ", ent.name, ":");
@@ -516,6 +516,11 @@ b8 Metaprogram::run()
 
   if (!parser.run())
     return false;
+
+  for (auto& exp : parser.locmap)
+  {
+    DEBUG(exp.from, " -> ", exp.to, "\n");
+  }
 
   // NOTE(sushi) we only want to output the main lpp file's metafile
   if (lpp->streams.meta.io  && prev == nullptr)
@@ -755,6 +760,13 @@ b8 Metaprogram::run()
     printExpansion(input, output, expansion);
   }
 
+  if (lpp->consumers.meta)
+  {
+    input->cacheLineOffsets();
+    output->cacheLineOffsets();
+    lpp->consumers.meta->consumeExpansions(*this, expansions);
+  }
+
   return true;
 }
 
@@ -777,12 +789,6 @@ b8 Metaprogram::processScopeSections(Scope* scope)
   {
     Section* section = current_section->data;
     
-    u64 start_offset = 
-      parser.lexer.tokens[section->token_idx].loc;
-
-    // Any section is always an expansion into the resulting buffer.
-    expansions.pushTail({.from=start_offset, .to=output->cache.len});
-
     Scope* current_scope = getCurrentScope();
     section->expansion_start = 
       current_scope->global_offset + current_scope->buffer->len;
@@ -817,8 +823,6 @@ b8 Metaprogram::processScopeSections(Scope* scope)
           // Simple write to the output cache.
           scope->writeBuffer(section->buffer->asStr());
         }
-
-        // ERROR("----------------- doc scope\n", scope->buffer->asStr(), "\n");
       }  
       break;
 
@@ -868,8 +872,6 @@ b8 Metaprogram::processScopeSections(Scope* scope)
         if (!lua.isnil())
           scope->writeBuffer(lua.tostring());
 
-        // ERROR("----------------- macro scope\n", scope->buffer->asStr(), "\n");
-
         lua.pop();
       }
       break;
@@ -886,12 +888,22 @@ b8 Metaprogram::processScopeSections(Scope* scope)
     expansion_end = 
       scope->global_offset + scope->buffer->len;
 
-    if (emit_section && lpp->consumers.meta)
-      lpp->consumers.meta->consumeSection(
+    if (emit_section)
+    {
+      pushExpansion(
+          parser.lexer.tokens[section->token_idx].loc,
+          expansion_start);
+
+      if (lpp->consumers.meta)
+      {
+        lpp->consumers.meta->consumeSection(
           *this, 
           *section, 
           expansion_start,
           expansion_end);
+
+      }
+    }
   }
   return true;
 }
@@ -944,12 +956,12 @@ void Metaprogram::generateInputLineMap(InputLineMap* out_map)
   temp.cacheLineOffsets();
   for (auto& exp : parser.locmap)
   { 
-    Source::Loc to = input->getLoc(exp.to);
-    Source::Loc from = temp.getLoc(exp.from);
+    Source::Loc from = input->getLoc(exp.from);
+    Source::Loc to = temp.getLoc(exp.to);
     out_map->push(
       {
-        .metaprogram = s32(from.line),
-        .input = s32(to.line)
+        .metaprogram = s32(to.line),
+        .input = s32(from.line)
       });
   }
   // push a eof line
@@ -958,6 +970,28 @@ void Metaprogram::generateInputLineMap(InputLineMap* out_map)
         .metaprogram = out_map->last()->metaprogram+1,
         .input = out_map->last()->input+1
       });
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Metaprogram::pushExpansion(u64 from, u64 to)
+{
+  auto* node = expansions.pushTail();
+  auto* exp = node->data;
+  exp->from = from;
+  exp->to = to;
+  if (auto* scope = getCurrentScope())
+  {
+    exp->invoking_macros.init();
+    for (;scope; scope = scope->prev)
+    {
+      if (scope->macro_invocation)
+      {
+        exp->invoking_macros.push(
+            parser.lexer.tokens[scope->macro_invocation->token_idx].loc);
+      }
+    }
+  }
 }
 
 }

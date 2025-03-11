@@ -63,7 +63,7 @@ struct Source
 
   // Translate a byte offset into this source to 
   // a line and column.
-  Loc getLoc(u64 offset);
+  Loc getLoc(u64 offset) const;
 };
 
 #endif // _lpp_source_h

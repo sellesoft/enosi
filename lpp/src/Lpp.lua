@@ -143,8 +143,8 @@ lpp.include_dirs = List{}
 lpp.argv = List{}
 -- Set true in lpp.cpp if we are.
 lpp.generating_dep_file = false
-lpp.err_func_filter = {}
-lpp.err_func_rename = {}
+lpp.stacktrace_func_filter = {}
+lpp.stacktrace_func_rename = {}
 
 -- * --------------------------------------------------------------------------
 
@@ -292,7 +292,7 @@ lpp.processFile = function(path)
   end
   return result
 end
-lpp.err_func_filter[lpp.processFile] = true
+lpp.stacktrace_func_filter[lpp.processFile] = true
 
 lpp.getFileFullPathIfExists = function(path)
   return lua__getFileFullPathIfExists(path)

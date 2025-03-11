@@ -219,7 +219,7 @@ b8 Lexer::init(
   at_end = false;
   current_offset = 0;
   current_codepoint = nil;
-  consumer = consumer;
+  this->consumer = consumer;
 
   // prep buffer and current
   readStreamIfNeeded(false);
