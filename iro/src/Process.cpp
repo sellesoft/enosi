@@ -9,10 +9,11 @@ namespace iro
 Process Process::spawn(
     String        file, 
     Slice<String> args, 
-    String        cwd)
+    String        cwd,
+    b8            non_blocking)
 {
   Process out = {};
-  if (!platform::processSpawn(&out.handle, file, args, cwd))
+  if (!platform::processSpawn(&out.handle, file, args, cwd, non_blocking))
     return nil;
   return out;
 }
@@ -27,10 +28,34 @@ b8 Process::hasOutput() const
 
 /* ----------------------------------------------------------------------------
  */
+b8 Process::hasErrOutput() const
+{
+  assert(handle);
+  return platform::processHasErrOutput(handle);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 u64 Process::read(Bytes buffer) const
 {
   assert(handle);
   return platform::processRead(handle, buffer);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+u64 Process::readstderr(Bytes buffer) const
+{
+  assert(handle);
+  return platform::processReadStdErr(handle, buffer);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+u64 Process::write(Bytes buffer) const
+{
+  assert(handle);
+  return platform::processWrite(handle, buffer);
 }
 
 /* ----------------------------------------------------------------------------

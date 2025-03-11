@@ -137,6 +137,11 @@ b8 closedir(fs::Dir::Handle handle);
 s64 readdir(fs::Dir::Handle handle, Bytes buffer);
 
 /* ----------------------------------------------------------------------------
+ *  Returns if the stdin pipe has data ready to read.
+ */
+b8 stdinHasData();
+
+/* ----------------------------------------------------------------------------
  *  Fills out the given fs::FileInfo with information about the file at the 
  *  given path.
  */
@@ -187,7 +192,8 @@ b8 processSpawn(
     Process::Handle* out_handle, 
     String           file, 
     Slice<String>    args, 
-    String           cwd);
+    String           cwd,
+    b8               non_blocking);
 
 /* ----------------------------------------------------------------------------
  *  Returns true if a Process has data to be read.
@@ -195,10 +201,26 @@ b8 processSpawn(
 b8 processHasOutput(Process::Handle h_process);
 
 /* ----------------------------------------------------------------------------
+ *  Returns true if a Process has data to be read over stderr.
+ */
+b8 processHasErrOutput(Process::Handle h_process);
+
+/* ----------------------------------------------------------------------------
  *  Reads some amount of output from a process. Returns the number of bytes 
  *  read, if any.
  */
 u64 processRead(Process::Handle h_process, Bytes buffer);
+
+/* ----------------------------------------------------------------------------
+ *  Reads some amount of stderr output from a process. Returns the number of 
+ *  bytes read, if any.
+ */
+u64 processReadStdErr(Process::Handle h_process, Bytes buffer);
+
+/* ----------------------------------------------------------------------------
+ *  Writes some data to the given process. Returns number of bytes written.
+ */
+u64 processWrite(Process::Handle h_process, Bytes buffer);
 
 /* ----------------------------------------------------------------------------
  *  Returns true if a Process has exited and its exit code if so.

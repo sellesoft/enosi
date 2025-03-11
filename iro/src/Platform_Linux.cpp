@@ -24,6 +24,8 @@
 #include "sys/ptrace.h"
 #include "sys/sendfile.h"
 
+#include "valgrind/callgrind.h"
+
 #include "ctime"
 
 namespace iro::platform
@@ -288,6 +290,20 @@ s64 readdir(fs::Dir::Handle handle, Bytes buffer)
 
 /* ----------------------------------------------------------------------------
  */
+b8 stdinHasData()
+{
+  struct pollfd fds;
+  fds.fd = 0;
+  fds.events = POLLIN;
+
+  if (-1 == poll(&fds, 1, 0))
+    return reportErrno("failed to poll stdin");
+
+  return 0 != (fds.revents & POLLIN);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 stat(fs::FileInfo* out_info, String path)
 {
   assert(out_info && path.ptr && path.len);
@@ -475,7 +491,9 @@ struct ProcessLinux
   //             on win32 is a HANDLE we should probably just store it on 
   //             the Process and avoid this static pool stuff.
   pid_t pid;
+  int stdin;
   int stdout;
+  int stderr;
 };
 
 using ProcessPool = StaticPool<ProcessLinux>;
@@ -487,7 +505,8 @@ b8 processSpawn(
     Process::Handle* out_handle, 
     String file, 
     Slice<String> args, 
-    String cwd)
+    String cwd,
+    b8 non_blocking)
 {
   assert(out_handle);
 
@@ -507,9 +526,17 @@ b8 processSpawn(
 
   defer { argsc.destroy(); };
 
-  int pipes[2];
+  int stdin_pipes[2];
+  int stdout_pipes[2];
+  int stderr_pipes[2];
 
-  if (-1 == pipe(pipes))
+  if (-1 == pipe(stdout_pipes))
+    return reportErrno("failed to open pipes for process ", file);
+
+  if (-1 == pipe(stdin_pipes))
+    return reportErrno("failed to open pipes for process ", file);
+
+  if (-1 == pipe(stderr_pipes))
     return reportErrno("failed to open pipes for process ", file);
 
   if (pid_t pid = fork())
@@ -519,22 +546,38 @@ b8 processSpawn(
     if (pid == -1)
       return reportErrno("failed to fork process");
 
-    close(pipes[1]);
+    close(stdout_pipes[1]);
+    close(stderr_pipes[1]);
+    close(stdin_pipes[0]);
 
-    int oldflags = fcntl(pipes[0], F_GETFL, 0);
-    if (-1 == fcntl(
-          pipes[0], 
-          F_SETFL, 
-          oldflags | O_NONBLOCK))
-      return reportErrno("failed to set child pipe as non-blocking");
+    if (non_blocking)
+    {
+      int oldflags = fcntl(stdout_pipes[0], F_GETFL, 0);
+      if (-1 == fcntl(
+            stdout_pipes[0], 
+            F_SETFL, 
+            oldflags | O_NONBLOCK))
+        return reportErrno("failed to set child pipe as non-blocking");
+
+      oldflags = fcntl(stdin_pipes[1], F_GETFL, 0);
+      if (-1 == fcntl(
+            stdin_pipes[1],
+            F_SETFL,
+            oldflags | O_NONBLOCK))
+        return reportErrno("failed to set child pipe as non-blocking");
+    }
 
     p_proc->pid = pid;
-    p_proc->stdout = pipes[0];
+    p_proc->stderr = stderr_pipes[0];
+    p_proc->stdout = stdout_pipes[0];
+    p_proc->stdin = stdin_pipes[1];
     *out_handle = p_proc;
   }
   else
   {
     // child branch
+
+    CALLGRIND_ZERO_STATS;
 
     if (notnil(cwd))
     {
@@ -544,9 +587,13 @@ b8 processSpawn(
       chdir(cwd);
     }
 
-    close(pipes[0]);
-    dup2(pipes[1], 1);
-    dup2(pipes[1], 2);
+    close(stdout_pipes[0]);
+    dup2(stdout_pipes[1], 1);
+    close(stderr_pipes[0]);
+    dup2(stderr_pipes[1], 2);
+
+    close(stdin_pipes[1]);
+    dup2(stdin_pipes[0], 0);
 
     if (-1 == execvp(argsc.arr[0], argsc.arr))
     {
@@ -583,6 +630,28 @@ b8 processHasOutput(Process::Handle h_process)
 
 /* ----------------------------------------------------------------------------
  */
+b8 processHasErrOutput(Process::Handle h_process)
+{
+  auto* p_proc = (ProcessLinux*)h_process;
+  if (p_proc == nullptr)
+    return ERROR("processHasOutput passed a null process handle\n");
+
+  struct pollfd pfd = {};
+  pfd.fd = (s64)p_proc->stderr;
+
+  pfd.events = POLLIN;
+
+  if (-1 == poll(&pfd, 1, 0))
+    return reportErrno("failed to poll process with handle ", h_process);
+
+  if (pfd.revents & POLLIN)
+    return true;
+
+  return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 u64 processRead(Process::Handle h_process, Bytes buffer)
 {
   auto* p_proc = (ProcessLinux*)h_process;
@@ -597,6 +666,48 @@ u64 processRead(Process::Handle h_process, Bytes buffer)
       r = errno = 0;
     else
       return reportErrno("failed to read from process\n");
+  }
+
+  return r;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+u64 processReadStdErr(Process::Handle h_process, Bytes buffer)
+{
+  auto* p_proc = (ProcessLinux*)h_process;
+  if (p_proc == nullptr)
+    return ERROR("processReadStdErr passed a null process handle\n");
+
+  int r = ::read(p_proc->stderr, buffer.ptr, buffer.len);
+
+  if (r == -1)
+  {
+    if (errno == EAGAIN)
+      r = errno = 0;
+    else 
+      return reportErrno("failed to read stderr from process\n");
+  }
+
+  return r;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+u64 processWrite(Process::Handle h_process, Bytes buffer)
+{
+  auto* p_proc = (ProcessLinux*)h_process;
+  if (p_proc == nullptr)
+    return ERROR("processWrite passed a null process handle\n");
+
+  int r = ::write(p_proc->stdin, buffer.ptr, buffer.len);
+
+  if (r == -1)
+  {
+    if (errno == EAGAIN)
+      r = errno = 0;
+    else 
+      return reportErrno("failed to write to process\n");
   }
 
   return r;
