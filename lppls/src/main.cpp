@@ -2,7 +2,6 @@
 #include "lpp/Lpp.h"
 
 #include "iro/Common.h"
-#include "iro/fs/FileSystem.h"
 #include "iro/Logger.h"
 #include "iro/Platform.h"
 #include <csignal>
@@ -17,7 +16,7 @@ int main()
   defer { iro::log.deinit(); };
 
   auto logger = 
-    Logger::create("lpplsp"_str, Logger::Verbosity::Trace);
+    Logger::create("lppls"_str, Logger::Verbosity::Trace);
 
   {
     using namespace fs;
