@@ -39,7 +39,7 @@ module.exports = grammar(
         bracToken($, ')')),
     ),
 
-    lua_line: $ => /.*\n/,
+    lua_line: $ => seq(repeat(/./), '\n'),
 
     lua_block: $ => repeat1(/./),
 

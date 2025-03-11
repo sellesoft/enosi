@@ -120,8 +120,20 @@
       ]
     },
     "lua_line": {
-      "type": "PATTERN",
-      "value": ".*\\n"
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "PATTERN",
+            "value": "."
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "\n"
+        }
+      ]
     },
     "lua_block": {
       "type": "REPEAT1",
