@@ -44,7 +44,7 @@ Parser.errorHere = function(self, ...)
   msg = msg.."\n"..self.text:sub(start, stop).."\n"..
         (" "):rep(column).."^"
 
-  error(msg, 2)
+  error(msg.."\n"..debug.traceback(), 2)
 end
 
 -- * --------------------------------------------------------------------------
@@ -157,11 +157,11 @@ end
 
 Parser.checkNumber = function(self)
   self:skipWhitespace()
-  local attempt = self:checkPattern("%d+%.%d+")
+  local attempt = self:checkPattern("%-?%d+%.%d+")
   if attempt then
     return attempt
   end
-  attempt = self:checkPattern("%d+")
+  attempt = self:checkPattern("%-?%d+")
   if attempt then
     return attempt
   end
@@ -271,6 +271,8 @@ json.decode = function(text)
           result:put '/'
         elseif 'n' == c then
           result:put "\n"
+        elseif 't' == c then
+          result:put "\t"
         else
           -- TODO(sushi) handle unicode and whatever else later when needed.
           error("unhandled escape char "..s:sub(offset,offset))
@@ -371,8 +373,7 @@ json.encode = function(val)
     local first = true
     for k,v in pairs(val) do
       if type(k) ~= "string" then
-        error("table keys must be strings, got "..type(k)..
-              "\ntable was: \n"..require "Util" .dumpValue(val, 2))
+        error("table keys must be strings, got "..type(k))
       end
 
       if not first then
@@ -399,7 +400,16 @@ json.encode = function(val)
       buffer:put(tostring(val))
     elseif type(val) == "string" then
       local sanitized = val
-      sanitized = sanitized:gsub('"', '\\"')
+      sanitized = 
+        sanitized
+          :gsub('\\', '\\\\')
+          :gsub('"', '\\"')
+          :gsub('%c',
+          {
+            ["\t"] = "\\t",
+            ["\n"] = "\\n",
+          })
+                  
       buffer:put('"', sanitized, '"')
     elseif type(val) == "table" then
       if is_member_value then
