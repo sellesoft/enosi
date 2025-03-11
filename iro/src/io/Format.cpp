@@ -168,6 +168,8 @@ s64 format(IO* io, const SanitizeControlCharacters<String>& x)
       else
         write(sanitized);
     }
+    else if (isnil(c))
+      break;
     else
       write(String::from((u8*)&c.codepoint, c.advance));
   }
