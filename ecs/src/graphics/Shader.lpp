@@ -29,7 +29,11 @@ static VkShaderStageFlagBits shaderTypeToVulkan(ShaderType type)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Shader::init(Renderer& renderer, ShaderType type, iro::Slice<u8> spv_binary)
+b8 Shader::init(
+  Renderer& renderer,
+  ShaderType type,
+  iro::Slice<u8> spv_binary,
+  String name)
 {
   RendererInternal& ri = *(RendererInternal*)renderer.internal;
   TRACE("initializing a shader\n");
@@ -62,12 +66,11 @@ b8 Shader::init(Renderer& renderer, ShaderType type, iro::Slice<u8> spv_binary)
   RendererShader* shader = ri.shader_pool.add();
   shader->module = shader_module;
   shader->stage = shaderTypeToVulkan(type);
-
   index = ri.shader_pool.index_of(shader);
   ri.shader_count++;
 
-  debugSetObjectName(renderer, VK_OBJECT_TYPE_SHADER_MODULE,
-    shader_module, "<shader ", index, ">");
+  debugSetObjectName(renderer, VK_OBJECT_TYPE_SHADER_MODULE, shader_module,
+    "<", name, " shader>");
 
   return true;
 }
@@ -97,4 +100,4 @@ b8 Shader::deinit(Renderer& renderer)
   return true;
 }
 
-} 
+}

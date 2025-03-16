@@ -9,8 +9,10 @@ $ local ui = require "ui.UI"
 @@lpp.import "ui/Item.lh"
 @@lpp.import "ui/DrawCmd.lh"
 
-@@lpp.import "graphics/CompiledTexture.lh"
 @@lpp.import "graphics/Buffer.lh"
+@@lpp.import "graphics/CompiledTexture.lh"
+@@lpp.import "graphics/Pipeline.lh"
+@@lpp.import "graphics/Shader.lh"
 
 #include "iro/containers/List.h"
 #include "iro/containers/Pool.h"
@@ -41,13 +43,13 @@ struct UI
 {
   // Root item of anything in the item tree.
   Item* root;
-  
+
   // The currently hovered item or nullptr if none.
   Item* hovered;
 
   // TODO(sushi) the stack prob does not need to be a whole list!
   SList<Item> item_stack;
-  
+
   typedef Tree<Item> ItemTree;
 
   ItemTree item_tree;
@@ -60,6 +62,10 @@ struct UI
   Array<DrawCmd*> free_drawcmds_vertex_sorted;
   Array<DrawCmd*> free_drawcmds_index_sorted;
 
+  gfx::Shader vertex_shader;
+  gfx::Shader fragment_shader;
+  gfx::Pipeline pipeline;
+
   gfx::Buffer vertex_buffer;
   gfx::Buffer index_buffer;
   u64 vertex_next;
@@ -71,16 +77,15 @@ struct UI
   Item* scrolling_item;
   b8 horizontal_scroll;
 
-  gfx::Texture white_texture;
-
   mem::LenientBump temp_alloc;
+
 
   b8 init(Engine& engine);
   void deinit();
 
   b8 update(Engine& engine);
 
-  // Helper for widgets to allocate themselves and initialize base Item 
+  // Helper for widgets to allocate themselves and initialize base Item
   // stuff.
   template<typename T>
   T* allocateAndInitItem(String id)

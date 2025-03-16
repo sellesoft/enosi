@@ -4,8 +4,8 @@ $ local ui = require "ui.UI"
 @@lpp.import "ui/UI.lh"
 @@lpp.import "Engine.lh"
 @@lpp.import "Engine.events.lh"
+@@lpp.import "graphics/CompiledShader.lh"
 @@lpp.import "graphics/Renderer.lh"
-@@lpp.import "graphics/Buffer.lh"
 @@lpp.import "window/Window.lh"
 @@lpp.import "window/Window.events.lh"
 @@lpp.import "math/util.h"
@@ -40,6 +40,7 @@ void UI::endItem()
  */
 b8 UI::init(Engine& engine)
 {
+  AssetMgr& assetmgr = engine.assetmgr;
   gfx::Renderer& renderer = engine.renderer;
   Window& window = engine.window;
 
@@ -56,19 +57,34 @@ b8 UI::init(Engine& engine)
   if (!free_drawcmds_index_sorted.init())
     return ERROR("failed to init index sorted free drawcmds array\n");
 
+  gfx::CompiledShader* compiled_vertex_shader =
+    gfx::CompiledShader::load("ui.vertex"_str, assetmgr, renderer);
+  if (compiled_vertex_shader == nullptr)
+    return ERROR("failed to load ui vertex shader\n");
+  vertex_shader = compiled_vertex_shader->gfx_shader;
+
+  gfx::CompiledShader* compiled_fragment_shader =
+    gfx::CompiledShader::load("ui.fragment"_str, assetmgr, renderer);
+  if (compiled_fragment_shader == nullptr)
+    return ERROR("failed to load ui fragment shader\n");
+  fragment_shader = compiled_fragment_shader->gfx_shader;
+
+  if (!pipeline.init(renderer, vertex_shader, fragment_shader, "ui"_str))
+    return ERROR("failed to init ui pipeline\n");
+
   if (!vertex_buffer.init(renderer, nullptr,
     sizeof(gfx::Vertex) * ui::MAX_VERTICES,
     gfx::Buffer::Usage::VertexBuffer,
     gfx::Buffer::MemoryProperty::DeviceMappable,
     gfx::Buffer::MappingBehavior::Occasional))
-    return ERROR("failed to init vertex buffer\n");
+    return ERROR("failed to init ui vertex buffer\n");
 
   if (!index_buffer.init(renderer, nullptr,
     sizeof(gfx::Index) * ui::MAX_INDICES,
     gfx::Buffer::Usage::IndexBuffer,
     gfx::Buffer::MemoryProperty::DeviceMappable,
     gfx::Buffer::MappingBehavior::Occasional))
-    return ERROR("failed to init index buffer\n");
+    return ERROR("failed to init ui index buffer\n");
 
   // NOTE(sushi) I do not like making root manually here but in order
   //             to not have to put a branch in make just to handle this
@@ -93,22 +109,6 @@ b8 UI::init(Engine& engine)
 
   engine.subscribeToBroadcast<WindowResized>(this, &UI::onWindowResized);
   engine.subscribeToBroadcast<PostReload>(this, &UI::onPostReload);
-
-  u8 white_pixels[16] =
-  {
-    0xff, 0xff, 0xff, 0xff,
-    0xff, 0xff, 0xff, 0xff,
-    0xff, 0xff, 0xff, 0xff,
-    0xff, 0xff, 0xff, 0xff,
-  };
-
-  white_texture.init(
-    renderer,
-    4, 4,
-    gfx::ImageFormat::BW,
-    gfx::ImageAddressMode::ClampToWhite,
-    gfx::ImageFilter::Nearest,
-    white_pixels);
 
   // Store a reference to the engine in case widgets need to access
   // information from it.
@@ -135,24 +135,13 @@ b8 UI::update(Engine& engine)
   //             also make this need to be retriggered as well.
   findHoveredItem(item_tree.root);
 
-  renderer.pushBindVertexBuffer(vertex_buffer);
-  renderer.pushBindIndexBuffer(index_buffer);
-
-  renderer.pushSetViewport(vec2i(0,0), window.size);
-  renderer.pushSetScissor(vec2i(0,0), window.size);
-
-  mat3x2 proj, view;
-  mat3x2::calcScreenMatrices(engine.window.size, &proj, &view);
-  gfx::Renderer::Scene scene = {
-    .proj = proj,
-    .view = view,
-    .resolution = vec2f(window.size),
-    .time = (f32)engine.frame_start_time,
-  };
-  renderer.updateScene(scene);
-
-  mat3x2 model = mat3x2::createTransform({0.f,0.f}, 0.f);
-  renderer.pushConstant(&model, sizeof(mat3x2));
+  renderer.bindPipeline(pipeline);
+  renderer.setViewport(vec2i(0,0), window.size);
+  renderer.setScissor(vec2i(0,0), window.size);
+  renderer.bindVertexBuffer(vertex_buffer);
+  renderer.bindIndexBuffer(index_buffer);
+  f32 push_constant[9] = {0};
+  renderer.pushConstant(&push_constant, sizeof(push_constant));
 
   TRACE("  mapping buffers\n");
   vertex_buffer.map(renderer, 0, gfx::Buffer::MAP_WHOLE_BUFFER);
@@ -160,7 +149,7 @@ b8 UI::update(Engine& engine)
 
   temp_alloc.init();
 
-  auto base_transform = 
+  auto base_transform =
     mat3x2::createTransform({0.f,0.f}, 0.f);
 
   updateTree(root->node, base_transform);
@@ -448,12 +437,12 @@ $ end
     if (notnil(drawcmd->tex))
     {
       TRACE("  drawcmd has tex ", drawcmd->tex.index, "\n");
-      renderer.pushBindTexture(drawcmd->tex);
+      renderer.bindTexture(drawcmd->tex);
     }
     else
     {
       TRACE("  drawcmd has no tex\n");
-      renderer.pushBindTexture(white_texture);
+      renderer.bindTexture(eng->white_texture);
     }
 
     if (drawcmd->counts_used.y == 0)
@@ -464,7 +453,7 @@ $ end
         "\n    ic: ", drawcmd->counts_used.y,
         "\n    vo: ", drawcmd->vertex_offset, "\n");
 
-    renderer.pushDraw(
+    renderer.draw(
       drawcmd->index_offset,
       drawcmd->counts_used.y,
       drawcmd->vertex_offset);
@@ -480,12 +469,14 @@ $ end
 
   if (item_in_view)
   {
-    mat3x2 this_transform = 
+    f32 push_constant[9];
+    mat3x2 this_transform =
       current_transform.mul(
         mat3x2::createTransform(item->pos_local, 0.f));
-    renderer.pushConstant(&this_transform, sizeof(mat3x2));
+    this_transform.to_mat3(push_constant);
+    renderer.pushConstant(&push_constant, sizeof(push_constant));
 
-    renderer.pushSetScissor(
+    renderer.setScissor(
       vec2i(scoff.x, window.size.y - (scoff.y+scext.y)), scext);
 
     // Emit background if we have one.
@@ -511,7 +502,7 @@ $ end
     }
 
     // Children likely changed scissor, so we have to set it back.
-    renderer.pushSetScissor(
+    renderer.setScissor(
       vec2i(scoff.x, window.size.y - (scoff.y+scext.y)), scext);
 
     // Emit post-children commands.

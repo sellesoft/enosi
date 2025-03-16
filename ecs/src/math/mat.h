@@ -37,19 +37,12 @@ struct mat3x2
    */
   static mat3x2 identity()
   {
-    return 
+    return
     {
       1.f, 0.f, 0.f,
       0.f, 1.f, 0.f,
     };
   }
-
-  /* --------------------------------------------------------------------------
-   */
-  static void calcScreenMatrices(
-      vec2f screen_size, 
-      mat3x2* proj,
-      mat3x2* view);
 
   /* --------------------------------------------------------------------------
    */
@@ -61,7 +54,7 @@ struct mat3x2
     f32 s = sinf(rotation);
     f32 c = cosf(rotation);
 
-    return 
+    return
     {
       c * scale.x, -s * scale.y, pos.x,
       s * scale.x,  c * scale.y, pos.y,
@@ -89,7 +82,7 @@ struct mat3x2
    */
   vec2f transformVec(const vec2f& v) const
   {
-    return 
+    return
     {
       get(0, 0) * v.x + get(1, 0) * v.y + get(2, 0),
       get(0, 1) * v.x + get(1, 1) * v.y + get(2, 1),
@@ -109,6 +102,15 @@ struct mat3x2
       get(1,0) * rhs.get(0,1) + get(1,1) * rhs.get(1,1),
       get(2,0) * rhs.get(0,1) + get(2,1) * rhs.get(1,1) + rhs.get(2,1),
     };
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void to_mat3(f32 out[9]) const
+  {
+    out[0] = arr[0]; out[1] = arr[1]; out[2] = arr[2];
+    out[3] = arr[3]; out[4] = arr[4]; out[5] = arr[5];
+    out[0] = 0.f;    out[1] = 0.f;    out[2] = 1.f;
   }
 };
 

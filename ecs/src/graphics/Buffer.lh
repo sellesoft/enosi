@@ -68,10 +68,13 @@
  */
 
 #include "iro/Common.h"
+#include "iro/Unicode.h"
+
+using namespace iro;
 
 namespace gfx
 {
-  
+
 struct Renderer;
 
 /* ============================================================================
@@ -142,7 +145,8 @@ struct Buffer
     u64 size,
     Usage usage,
     MemoryProperty properties,
-    MappingBehavior behavior);
+    MappingBehavior behavior,
+    String name = "unnamed"_str);
 
   b8 deinit(Renderer& renderer);
 

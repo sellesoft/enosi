@@ -62,7 +62,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL vkDebugCallback(
 static b8 updateSwapchain(Renderer& renderer)
 {
   RendererInternal& ri = *(RendererInternal*)renderer.internal;
-  
+
   VkSwapchainKHR old_swapchain = ri.swapchain;
 
   VkSurfaceCapabilitiesKHR capabilities;
@@ -210,7 +210,7 @@ static b8 updateSwapchain(Renderer& renderer)
 static b8 updateFramebuffers(Renderer& renderer)
 {
   RendererInternal& ri = *(RendererInternal*)renderer.internal;
-  
+
   u32 old_image_count = ri.swapchain_image_count;
 
   vkGetSwapchainImagesKHR(ri.device, ri.swapchain,
@@ -315,7 +315,7 @@ b8 Renderer::init(Engine& engine, mem::Allocator& allocator)
 
   TRACE("initializing the renderer pools\n");
   {
-    //NOTE(caj) reserve the first slots as null values
+    //NOTE(delle) reserve the first slots as null values
 
     ri.texture_pool.init();
     ri.texture_pool.add();
@@ -443,8 +443,8 @@ $ if ECS_DEBUG then
     };
 
     VkDebugUtilsMessageSeverityFlagsEXT callback_severities = (
-        VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
-      | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT
+        /*VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
+      | */VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT
       | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
       | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT);
 
@@ -710,7 +710,7 @@ $ end -- if IRO_LINUX
   {
     f32 queue_priority = 1.0f;
     u32 queue_create_info_count = 1;
-    VkDeviceQueueCreateInfo queue_create_infos[2];
+    VkDeviceQueueCreateInfo queue_create_infos[2] = {};
     queue_create_infos[0].queueFamilyIndex =
       ri.physical_device_graphics_and_compute_queue_family;
     queue_create_infos[0].queueCount = 1;
@@ -796,37 +796,37 @@ $ end -- if IRO_LINUX
 
   TRACE("creating the default descriptor set layout\n");
   {
-    VkDescriptorSetLayoutBinding scene_buffer_binding =
+    VkDescriptorSetLayoutBinding uniform_buffer_binding =
     {
       .binding = 0,
       .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
       .descriptorCount = 1,
       .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
     };
-    
+
     VkDescriptorSetLayoutBinding sampler_binding =
     {
-      .binding = 1, 
+      .binding = 1,
       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
       .descriptorCount = 1,
       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
     };
-    
+
     VkDescriptorSetLayoutBinding bindings[] =
     {
-      scene_buffer_binding,
+      uniform_buffer_binding,
       sampler_binding
     };
     constexpr u32 binding_count = sizeof(bindings) / sizeof(bindings[0]);
-    
+
     VkDescriptorSetLayoutCreateInfo layout_info =
     {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
       .bindingCount = binding_count,
       .pBindings = bindings,
     };
-    
-    if (VK_SUCCESS != vkCreateDescriptorSetLayout(ri.device, &layout_info, 
+
+    if (VK_SUCCESS != vkCreateDescriptorSetLayout(ri.device, &layout_info,
         &ri.allocator, &ri.default_descriptor_set_layout))
       return ERROR("failed to create the default descriptor set layout\n");
   }
@@ -1039,24 +1039,6 @@ $ end -- if IRO_LINUX
     }
   }
 
-  TRACE("creating the default scene buffer\n");
-  {
-    Scene scene = {
-      .proj = mat3x2::identity(),
-      .view = mat3x2::identity(),
-      .resolution = vec2f(0.0f, 0.0f),
-      .time = 0.0f,
-    };
-
-    b8 buffer_init = scene_buffer.init(*this, &scene, sizeof(Scene),
-      Buffer::Usage::UniformBuffer,
-      (Buffer::MemoryProperty)(  Buffer::MemoryProperty::HostStreamed
-                               | Buffer::MemoryProperty::HostCached),
-      Buffer::MappingBehavior::Persistent);
-    if (!buffer_init)
-        return FATAL("failed to initialize the scene uniform buffer\n");
-  }
-
   return true;
 }
 
@@ -1076,13 +1058,13 @@ b8 Renderer::deinit()
     {
       vkDestroySampler(ri.device, texture->sampler, &ri.allocator);
       texture->sampler = VK_NULL_HANDLE;
-      
+
       vkDestroyImageView(ri.device, texture->view, &ri.allocator);
       texture->view = VK_NULL_HANDLE;
-      
+
       vkDestroyImage(ri.device, texture->image, &ri.allocator);
       texture->image = VK_NULL_HANDLE;
-      
+
       vkFreeMemory(ri.device, texture->memory, &ri.allocator);
       texture->memory = VK_NULL_HANDLE;
     }
@@ -1096,7 +1078,7 @@ b8 Renderer::deinit()
     {
       vkDestroyRenderPass(ri.device, framebuffer->renderpass, &ri.allocator);
       framebuffer->renderpass = VK_NULL_HANDLE;
-      
+
       vkDestroyFramebuffer(ri.device, framebuffer->framebuffer, &ri.allocator);
       framebuffer->framebuffer = VK_NULL_HANDLE;
     }
@@ -1105,7 +1087,7 @@ b8 Renderer::deinit()
 
   for (u32 i = 0; i < ri.shader_pool.MAX_COUNT; i++)
   {
-    RendererShader* shader = ri.shader_pool.at_index(i); 
+    RendererShader* shader = ri.shader_pool.at_index(i);
     if (shader != nullptr && shader->module != VK_NULL_HANDLE)
     {
       vkDestroyShaderModule(ri.device, shader->module, &ri.allocator);
@@ -1121,7 +1103,7 @@ b8 Renderer::deinit()
     {
       vkDestroyPipeline(ri.device, pipeline->pipeline, &ri.allocator);
       pipeline->pipeline = VK_NULL_HANDLE;
-      
+
       vkDestroyPipelineLayout(ri.device, pipeline->layout, &ri.allocator);
       pipeline->layout = VK_NULL_HANDLE;
     }
@@ -1177,12 +1159,10 @@ b8 Renderer::deinit()
 
   vkDestroyDescriptorPool(ri.device, ri.descriptor_pool, &ri.allocator);
 
-  vkDestroyDescriptorSetLayout(ri.device, 
+  vkDestroyDescriptorSetLayout(ri.device,
     ri.default_descriptor_set_layout, &ri.allocator);
 
   vkDestroyCommandPool(ri.device, ri.command_pool, &ri.allocator);
-
-  scene_buffer.deinit(*this);
 
 $ if ECS_DEBUG then
   auto vkDestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)
@@ -1240,7 +1220,7 @@ b8 Renderer::update()
     {
       { .color = { 0.0f, 0.0f, 0.0f, 1.0f } }
     };
-    
+
     VkRenderPassBeginInfo begin_info =
     {
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -1291,7 +1271,7 @@ b8 Renderer::update()
 
       vkCmdSetScissor(ri.command_buffer, 0, 1, &scissor);
     }break;
-    
+
     case DrawCmd::Kind::SetViewport:
     {
       TRACE("setting the viewport to"
@@ -1319,12 +1299,12 @@ b8 Renderer::update()
       VkRenderPass vk_renderpass = VK_NULL_HANDLE;
       VkClearValue clear_values[1] = { 0.0f, 0.0f, 0.0f, 1.0f };
       VkExtent2D extent = { 0, 0 };
-      
+
       if (cmd.bind_framebuffer.index == 0)
       {
         vk_framebuffer = ri.default_framebuffers[ri.default_framebuffer_index];
         vk_renderpass = ri.default_renderpass;
-        
+
         extent =
         {
           .width = ri.surface_extent.width,
@@ -1341,7 +1321,7 @@ b8 Renderer::update()
 
         vk_framebuffer = framebuffer->framebuffer;
         vk_renderpass = framebuffer->renderpass;
-        
+
         clear_values[0] =
         {
           .color =
@@ -1352,14 +1332,14 @@ b8 Renderer::update()
             framebuffer->clear_color.w,
           },
         };
-        
+
         extent =
         {
           .width = framebuffer->width,
           .height = framebuffer->height,
         };
       }
-      
+
       VkRenderPassBeginInfo begin_info =
       {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -1379,16 +1359,42 @@ b8 Renderer::update()
       vkCmdBeginRenderPass(ri.command_buffer, &begin_info,
         VK_SUBPASS_CONTENTS_INLINE);
     }break;
-    
+
+    case DrawCmd::Kind::BindPipeline:
+    {
+      TRACE("binding pipeline ", cmd.bind_pipeline.index, "\n");
+
+      RendererPipeline* pipeline = ri.pipeline_pool.at_index(cmd.bind_pipeline.index);
+      if (pipeline == nullptr || pipeline->pipeline == VK_NULL_HANDLE)
+      {
+        ERROR("failed to bind invalid pipeline\n");
+        break;
+      }
+
+      vkCmdBindPipeline(ri.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+        pipeline->pipeline);
+
+      current_pipeline = cmd.bind_pipeline;
+    }break;
+
     case DrawCmd::Kind::BindTexture:
     {
+      TRACE("binding the texture ", cmd.bind_texture.index, "\n");
+
       if (current_pipeline.index == 0)
       {
         ERROR("attempted to bind texture without an active pipeline\n");
         break;
       }
-      
-      TRACE("binding the texture ", cmd.bind_texture.index, "\n");
+
+      RendererPipeline* pipeline =
+        ri.pipeline_pool.at_index(current_pipeline.index);
+      if (pipeline == nullptr)
+      {
+        ERROR("failed to bind the texture because the pipeline"
+          " is out of bounds\n");
+        break;
+      }
 
       if (cmd.bind_texture.index == 0)
       {
@@ -1406,19 +1412,93 @@ b8 Renderer::update()
         break;
       }
 
-      RendererPipeline* pipeline = ri.pipeline_pool.at_index(current_pipeline.index);
-      if (pipeline == nullptr)
-      {
-        ERROR("failed to bind the texture because the pipeline"
-          " is out of bounds\n");
-        break;
-      }
-      
       vkCmdBindDescriptorSets(ri.command_buffer,
         VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout, 1, 1,
         &texture->descriptor_set, 0, nullptr);
     }break;
-    
+
+    case DrawCmd::Kind::BindUniformBuffer:
+    {
+      TRACE("binding the uniform buffer ", cmd.bind_buffer.index, "\n");
+
+      if (current_pipeline.index == 0)
+      {
+        ERROR("attempted to bind a uniform buffer without"
+          " an active pipeline\n");
+        break;
+      }
+
+      RendererPipeline* pipeline =
+        ri.pipeline_pool.at_index(current_pipeline.index);
+      if (pipeline == nullptr)
+      {
+        ERROR("failed to bind the uniform buffer because the pipeline"
+          " is out of bounds\n");
+        break;
+      }
+
+      if (cmd.bind_buffer.index == 0)
+      {
+        ERROR("failed to bind the uniform buffer because it has not"
+          " been initialized\n");
+        break;
+      }
+
+      RendererBuffer* buffer =
+        ri.buffer_pool.at_index(cmd.bind_buffer.index);
+      if (buffer == nullptr)
+      {
+        ERROR("failed to bind the uniform buffer at index ",
+          cmd.bind_texture.index, " because it is out of bounds\n");
+        break;
+      }
+
+      vkCmdBindDescriptorSets(ri.command_buffer,
+        VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout, 0, 1,
+        &buffer->descriptor_set, 0, nullptr);
+    }break;
+
+    case DrawCmd::Kind::BindStorageBuffer:
+    {
+      TRACE("binding the storage buffer ", cmd.bind_buffer.index, "\n");
+
+      if (current_pipeline.index == 0)
+      {
+        ERROR("attempted to bind a storage buffer without"
+          " an active pipeline\n");
+        break;
+      }
+
+      if (cmd.bind_buffer.index == 0)
+      {
+        ERROR("failed to bind the storage buffer because it has not"
+          " been initialized\n");
+        break;
+      }
+
+      RendererBuffer* buffer =
+        ri.buffer_pool.at_index(cmd.bind_buffer.index);
+      if (buffer == nullptr)
+      {
+        ERROR("failed to bind the storage buffer at index ",
+          cmd.bind_texture.index, " because it is out of bounds\n");
+        break;
+      }
+
+      RendererPipeline* pipeline =
+        ri.pipeline_pool.at_index(current_pipeline.index);
+      if (pipeline == nullptr)
+      {
+        ERROR("failed to bind the storage buffer because the pipeline"
+          " is out of bounds\n");
+        break;
+      }
+
+      vkCmdBindDescriptorSets(ri.command_buffer,
+        VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout, 2, 1,
+        &buffer->descriptor_set, 0, nullptr);
+    }break;
+
     case DrawCmd::Kind::BindVertexBuffer:
     {
       TRACE("binding the vertex buffer ", cmd.bind_buffer.index, "\n");
@@ -1475,16 +1555,6 @@ b8 Renderer::update()
         VK_INDEX_TYPE_UINT32);
     }break;
 
-    case DrawCmd::Kind::Draw:
-    {
-      TRACE("drawing indexes [", cmd.draw.index_start, "..",
-        cmd.draw.index_start + cmd.draw.index_count,
-        "] with a vertex offset of (", cmd.draw.vertex_start, ")\n");
-
-      vkCmdDrawIndexed(ri.command_buffer, cmd.draw.index_count,
-        1, cmd.draw.index_start, cmd.draw.vertex_start, 0);
-    }break;
-    
     case DrawCmd::Kind::PushConstant:
     {
       if (current_pipeline.index == 0)
@@ -1492,7 +1562,7 @@ b8 Renderer::update()
         ERROR("attempted to push constant without an active pipeline\n");
         break;
       }
-      
+
       TRACE("pushing the constant ", cmd.push_constant.data,
         " with size ", cmd.push_constant.size, "\n");
 
@@ -1508,21 +1578,14 @@ b8 Renderer::update()
         cmd.push_constant.data);
     }break;
 
-    case DrawCmd::Kind::BindPipeline:
+    case DrawCmd::Kind::Draw:
     {
-      TRACE("binding pipeline ", cmd.bind_pipeline.index, "\n");
-      
-      RendererPipeline* pipeline = ri.pipeline_pool.at_index(cmd.bind_pipeline.index);
-      if (pipeline == nullptr || pipeline->pipeline == VK_NULL_HANDLE)
-      {
-        ERROR("failed to bind invalid pipeline\n");
-        break;
-      }
-      
-      vkCmdBindPipeline(ri.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-        pipeline->pipeline);
-      
-      current_pipeline = cmd.bind_pipeline;
+      TRACE("drawing indexes [", cmd.draw.index_start, "..",
+        cmd.draw.index_start + cmd.draw.index_count,
+        "] with a vertex offset of (", cmd.draw.vertex_start, ")\n");
+
+      vkCmdDrawIndexed(ri.command_buffer, cmd.draw.index_count,
+        1, cmd.draw.index_start, cmd.draw.vertex_start, 0);
     }break;
     }
   }
@@ -1542,7 +1605,7 @@ b8 Renderer::update()
 
 /* ----------------------------------------------------------------------------
  */
-void Renderer::pushSetScissor(vec2i pos, vec2i size)
+void Renderer::setScissor(vec2i pos, vec2i size)
 {
   DrawCmd cmd =
   {
@@ -1554,7 +1617,7 @@ void Renderer::pushSetScissor(vec2i pos, vec2i size)
 
 /* ----------------------------------------------------------------------------
  */
-void Renderer::pushSetViewport(vec2i pos, vec2i size)
+void Renderer::setViewport(vec2i pos, vec2i size)
 {
   DrawCmd cmd =
   {
@@ -1566,7 +1629,7 @@ void Renderer::pushSetViewport(vec2i pos, vec2i size)
 
 /* ----------------------------------------------------------------------------
  */
-void Renderer::pushBindFramebuffer(Framebuffer framebuffer)
+void Renderer::bindFramebuffer(Framebuffer framebuffer)
 {
   DrawCmd cmd =
   {
@@ -1578,7 +1641,7 @@ void Renderer::pushBindFramebuffer(Framebuffer framebuffer)
 
 /* ----------------------------------------------------------------------------
  */
-void Renderer::pushBindPipeline(Pipeline pipeline)
+void Renderer::bindPipeline(Pipeline pipeline)
 {
   DrawCmd cmd =
   {
@@ -1590,7 +1653,7 @@ void Renderer::pushBindPipeline(Pipeline pipeline)
 
 /* ----------------------------------------------------------------------------
  */
-void Renderer::pushBindTexture(gfx::Texture texture)
+void Renderer::bindTexture(gfx::Texture texture)
 {
   DrawCmd cmd =
   {
@@ -1602,7 +1665,31 @@ void Renderer::pushBindTexture(gfx::Texture texture)
 
 /* ----------------------------------------------------------------------------
  */
-void Renderer::pushBindVertexBuffer(Buffer buffer)
+void Renderer::bindUniformBuffer(Buffer buffer)
+{
+  DrawCmd cmd =
+  {
+    .kind = DrawCmd::Kind::BindUniformBuffer,
+    .bind_buffer = buffer,
+  };
+  drawcmds.push(cmd);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::bindStorageBuffer(Buffer buffer)
+{
+  DrawCmd cmd =
+  {
+    .kind = DrawCmd::Kind::BindStorageBuffer,
+    .bind_buffer = buffer,
+  };
+  drawcmds.push(cmd);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::bindVertexBuffer(Buffer buffer)
 {
   DrawCmd cmd =
   {
@@ -1614,7 +1701,7 @@ void Renderer::pushBindVertexBuffer(Buffer buffer)
 
 /* ----------------------------------------------------------------------------
  */
-void Renderer::pushBindIndexBuffer(Buffer buffer)
+void Renderer::bindIndexBuffer(Buffer buffer)
 {
   DrawCmd cmd =
   {
@@ -1626,7 +1713,34 @@ void Renderer::pushBindIndexBuffer(Buffer buffer)
 
 /* ----------------------------------------------------------------------------
  */
-void Renderer::pushDraw(
+void Renderer::pushConstant(void* data, u64 size)
+{
+    RendererInternal& ri = *(RendererInternal*)this->internal;
+
+    VkPhysicalDeviceLimits limits = ri.physical_device_properties.limits;
+    u64 max_push_constant_size = limits.maxPushConstantsSize;
+
+    if ((data == nullptr) || (size == 0))
+      return;
+
+    if (size > max_push_constant_size)
+    {
+      ERROR("push constant size (", size, ") exceeds device maximum allowed"
+        " size (", max_push_constant_size, ")\n");
+      return;
+    }
+
+    DrawCmd cmd =
+    {
+      .kind = DrawCmd::Kind::PushConstant,
+      .push_constant = { data, size },
+    };
+    drawcmds.push(cmd);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::draw(
   u64 index_start,
   u64 index_count,
   u64 vertex_start)
@@ -1642,41 +1756,6 @@ void Renderer::pushDraw(
     },
   };
   drawcmds.push(cmd);
-}
-
-/* ----------------------------------------------------------------------------
- */
-void Renderer::pushConstant(void* data, u64 size) {
-    RendererInternal& ri = *(RendererInternal*)this->internal;
-    
-    VkPhysicalDeviceLimits limits = ri.physical_device_properties.limits;
-    u64 max_push_constant_size = limits.maxPushConstantsSize;
-    
-    if ((data == nullptr) || (size == 0))
-      return;
-    
-    if (size > max_push_constant_size)
-    {
-      ERROR("push constant size (", size, ") exceeds device maximum allowed"
-        " size (", max_push_constant_size, ")\n");
-      return;
-    }
-    
-    DrawCmd cmd =
-    {
-      .kind = DrawCmd::Kind::PushConstant,
-      .push_constant = { data, size },
-    };
-    drawcmds.push(cmd);
-}
-
-/* ----------------------------------------------------------------------------
- */
-void Renderer::updateScene(Scene& new_scene)
-{
-  RendererInternal& ri = *(RendererInternal*)this->internal;
-  
-  mem::copy(scene_buffer.mapped_data, &new_scene, sizeof(Scene));
 }
 
 /* ----------------------------------------------------------------------------

@@ -20,7 +20,8 @@ b8 Framebuffer::init(
   u32 width,
   u32 height,
   Texture texture,
-  vec4f clear_color)
+  vec4f clear_color,
+  String name)
 {
   RendererInternal& ri = *(RendererInternal*)renderer.internal;
   TRACE("initializing a framebuffer\n");
@@ -92,15 +93,15 @@ b8 Framebuffer::init(
     .pDependencies = &dependency,
   };
 
-  VkRenderPass renderpass;
+  VkRenderPass renderpass_handle;
   if (VK_SUCCESS != vkCreateRenderPass(ri.device, &renderpass_create_info,
-    &ri.allocator, &renderpass))
+    &ri.allocator, &renderpass_handle))
     return FATAL("failed to create the vulkan renderpass\n");
 
   VkFramebufferCreateInfo framebuffer_create_info =
   {
     .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-    .renderPass = renderpass,
+    .renderPass = renderpass_handle,
     .attachmentCount = 1,
     .pAttachments = &ri.texture_pool.at_index(texture.index)->view,
     .width = width,
@@ -108,18 +109,22 @@ b8 Framebuffer::init(
     .layers = 1,
   };
 
-  VkFramebuffer vk_framebuffer;
+  VkFramebuffer framebuffer_handle;
   if (VK_SUCCESS != vkCreateFramebuffer(ri.device, &framebuffer_create_info,
-    &ri.allocator, &vk_framebuffer))
+    &ri.allocator, &framebuffer_handle))
     return FATAL("failed to create vulkan framebuffer\n");
 
   RendererFramebuffer* framebuffer = ri.framebuffer_pool.add();
-  framebuffer->framebuffer = vk_framebuffer;
-  framebuffer->renderpass = renderpass;
+  framebuffer->framebuffer = framebuffer_handle;
+  framebuffer->renderpass = renderpass_handle;
   framebuffer->clear_color = clear_color;
-
   index = ri.framebuffer_pool.index_of(framebuffer);
   ri.framebuffer_count++;
+
+  debugSetObjectName(renderer, VK_OBJECT_TYPE_FRAMEBUFFER, framebuffer_handle,
+    "<", name, " framebuffer>");
+  debugSetObjectName(renderer, VK_OBJECT_TYPE_RENDER_PASS, renderpass_handle,
+    "<", name, " renderpass>");
 
   return true;
 }

@@ -1,7 +1,7 @@
 // modified version of Star Nest by Pablo Roman Andrioli
 // https://www.shadertoy.com/view/XlfGRj
 // License: MIT
-#version 420 core
+#version 450
 
 #define iterations 17
 #define formuparam 0.53
@@ -17,20 +17,25 @@
 #define distfading 0.730
 #define saturation 0.150
 
-in vec2 in_uv;
+layout(std140, set = 0, binding = 0) uniform SceneBuffer
+{
+  mat3 proj;
+  mat3 view;
+  vec2 resolution;
+  float time;
+}scene;
 
-out vec4 out_color;
+layout(location = 0) in vec2 in_uv;
 
-uniform float u_time;
-uniform vec2 u_resolution;
+layout(location = 0) out vec4 out_color;
 
 void main()
 {
   // get coords and direction
-  vec2 uv = gl_FragCoord.xy / u_resolution.xy - 0.5;
-  uv.y *= u_resolution.y / u_resolution.x;
+  vec2 uv = gl_FragCoord.xy / scene.resolution.xy - 0.5;
+  uv.y *= scene.resolution.y / scene.resolution.x;
   vec3 dir = vec3(uv * zoom, 1.0);
-  float time = u_time * speed + 0.25;
+  float time = scene.time * speed + 0.25;
   vec3 from = vec3(1.0 + 2.0*time, 0.5 + time, -1.5);
 
   // volumetric rendering

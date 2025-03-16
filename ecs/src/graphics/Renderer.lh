@@ -28,27 +28,10 @@ namespace gfx
  */
 struct Renderer
 {
-  // NOTE(delle) Putting the scene data and buffer here since
-  //  I'm not making a pipeline API at the moment. So, we have the make a
-  //  default pipeline internally using this scene data and buffer. If we
-  //  need to support multiple pipelines, we can make a pipeline API and
-  //  not have an internal default pipeline.
-  struct Scene
-  {
-    mat3x2 proj;
-    mat3x2 view;
-    vec2f resolution;
-    f32 time;
-  };
-
-
   Engine* engine;
   mem::Allocator* allocator;
   void* internal;
-
   u64 frame;
-
-  Buffer scene_buffer;
   Array<DrawCmd> drawcmds;
 
 
@@ -56,32 +39,30 @@ struct Renderer
   b8 deinit();
   b8 update();
 
-  void pushSetScissor(vec2i pos, vec2i size);
-  void pushSetViewport(vec2i pos, vec2i size);
-  void pushBindFramebuffer(Framebuffer framebuffer);
-  void pushBindPipeline(Pipeline pipeline);
-  void pushBindTexture(Texture texture);
-  void pushBindVertexBuffer(Buffer buffer);
-  void pushBindIndexBuffer(Buffer buffer);
-  void pushDraw(u64 index_start, u64 index_count, u64 vertex_start);
+  void setScissor(vec2i pos, vec2i size);
+  void setViewport(vec2i pos, vec2i size);
+  void bindFramebuffer(Framebuffer framebuffer); //{0} for default
+  void bindPipeline(Pipeline pipeline);
+  void bindTexture(Texture texture);
+  void bindUniformBuffer(Buffer buffer);
+  void bindStorageBuffer(Buffer buffer);
+  void bindVertexBuffer(Buffer buffer);
+  void bindIndexBuffer(Buffer buffer);
   void pushConstant(void* data, u64 size);
-  void updateScene(Scene& scene);
+  void draw(u64 index_start, u64 index_count, u64 vertex_start);
 
   u32 getMaxPushConstantSize();
-
-  Renderer() {}
 
   // NOTE(sushi) explicitly deleting the copy constructor of Renderer
   //             to prevent accidental copies since operating on a copy
   //             of it has potential to cause really really awesome bugs
   //             that are hard to find.
+  Renderer() {}
   Renderer(const Renderer& rhs) = delete;
   Renderer operator=(const Renderer& rhs) = delete;
 
 private:
-
   void onWindowResized(WindowResized& event);
-
 };
 
 }

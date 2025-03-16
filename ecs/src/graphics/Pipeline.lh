@@ -5,8 +5,11 @@
 $ require "common"
 
 #include "iro/Common.h"
+#include "iro/Unicode.h"
 
 @@lpp.import "graphics/Shader.lh"
+
+using namespace iro;
 
 namespace gfx
 {
@@ -16,8 +19,13 @@ struct Renderer;
 struct Pipeline
 {
   u32 index;
-  
-  b8 init(Renderer& renderer, Shader vertex_shader, Shader fragment_shader);
+
+  b8 init(
+    Renderer& renderer,
+    Shader vertex_shader,
+    Shader fragment_shader,
+    String name = "unnamed"_str);
+
   b8 deinit(Renderer& renderer);
 };
 

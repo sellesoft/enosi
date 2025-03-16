@@ -34,6 +34,14 @@ b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
   assert(compiled_null_texture != nullptr);
   null_texture = compiled_null_texture->gfx_texture;
 
+  //init scene unfiform buffer
+  if (!scene_uniform_buffer.init(renderer, nullptr, sizeof(Scene),
+      gfx::Buffer::UniformBuffer,
+      gfx::Buffer::DeviceMappable,
+      gfx::Buffer::Occasional,
+      "render.sys scene uniform"_str))
+    return ERROR("failed to init the scene uniform buffer\n");
+
   //init background buffers
   gfx::Vertex background_vertices[4] = {
     gfx::Vertex{ vec2f(0,0), vec2f(0,1), 0xFFFFFFFF },
@@ -45,7 +53,8 @@ b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
       4 * sizeof(gfx::Vertex),
       gfx::Buffer::VertexBuffer,
       gfx::Buffer::DeviceOnly,
-      gfx::Buffer::Never))
+      gfx::Buffer::Never,
+      "render.sys background vertex"_str))
     return ERROR("failed to init the background vertex buffer\n");
 
   gfx::Index background_indices[6] = { 0, 1, 2, 0, 2, 3 };
@@ -53,7 +62,8 @@ b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
       6 * sizeof(gfx::Index),
       gfx::Buffer::IndexBuffer,
       gfx::Buffer::DeviceOnly,
-      gfx::Buffer::Never))
+      gfx::Buffer::Never,
+      "render.sys background index"_str))
     return ERROR("failed to init the background index buffer\n");
 
   //init quad buffers
@@ -61,7 +71,8 @@ b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
       MAX_QUADS * 4 * sizeof(gfx::Vertex),
       gfx::Buffer::VertexBuffer,
       gfx::Buffer::DeviceMappable,
-      gfx::Buffer::Occasional))
+      gfx::Buffer::Occasional,
+      "render.sys quad vertex"_str))
     return ERROR("failed to init the quads vertex buffer\n");
 
   gfx::Index quad_indices[MAX_QUADS * 6];
@@ -79,7 +90,8 @@ b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
       MAX_QUADS * 6 * sizeof(gfx::Index),
       gfx::Buffer::IndexBuffer,
       gfx::Buffer::DeviceOnly,
-      gfx::Buffer::Never))
+      gfx::Buffer::Never,
+      "render.sys quad index"_str))
     return ERROR("failed to init the quads index buffer\n");
 
   //init quads batches
@@ -92,46 +104,52 @@ b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
       MAX_EXTERNAL * 4 * sizeof(gfx::Vertex),
       gfx::Buffer::VertexBuffer,
       gfx::Buffer::DeviceMappable,
-      gfx::Buffer::Occasional))
+      gfx::Buffer::Occasional,
+      "render.sys external vertex"_str))
     return ERROR("failed to init external vertex buffer\n");
 
   if (!external_index_buffer.init(renderer, nullptr,
       MAX_EXTERNAL * 6 * sizeof(gfx::Index),
       gfx::Buffer::IndexBuffer,
       gfx::Buffer::DeviceMappable,
-      gfx::Buffer::Occasional))
+      gfx::Buffer::Occasional,
+      "render.sys external index"_str))
     return ERROR("failed to init external index buffer\n");
 
   //init the quad pipeline
-  gfx::CompiledShader* compiled_vertex_shader =
-    gfx::CompiledShader::load("vertex"_str, assetmgr, renderer);
-  if (compiled_vertex_shader == nullptr)
+  gfx::CompiledShader* compiled_quad_vertex_shader =
+    gfx::CompiledShader::load("scene.vertex"_str, assetmgr, renderer);
+  if (compiled_quad_vertex_shader == nullptr)
     return ERROR("failed to load the vertex shader\n");
+  quad_vertex_shader = compiled_quad_vertex_shader->gfx_shader;
 
-  gfx::CompiledShader* compiled_fragment_shader =
-    gfx::CompiledShader::load("fragment"_str, assetmgr, renderer);
-  if (compiled_fragment_shader == nullptr)
+  gfx::CompiledShader* compiled_quad_fragment_shader =
+    gfx::CompiledShader::load("scene.fragment"_str, assetmgr, renderer);
+  if (compiled_quad_fragment_shader == nullptr)
     return ERROR("failed to load the fragment shader\n");
+  quad_fragment_shader = compiled_quad_fragment_shader->gfx_shader;
 
   if (!quad_pipeline.init(renderer,
-    compiled_vertex_shader->gfx_shader,
-    compiled_fragment_shader->gfx_shader))
+    quad_vertex_shader, quad_fragment_shader,
+    "render.sys quad"_str))
     return ERROR("failed to init the quad pipeline\n");
 
   //init the stars pipeline
-  gfx::CompiledShader* compiled_stars_vertex_shader =
-    gfx::CompiledShader::load("fullscreen_vert"_str, assetmgr, renderer);
-  if (compiled_stars_vertex_shader == nullptr)
+  gfx::CompiledShader* compiled_fullscreen_vertex_shader =
+    gfx::CompiledShader::load("fullscreen.vertex"_str, assetmgr, renderer);
+  if (compiled_fullscreen_vertex_shader == nullptr)
     return ERROR("failed to load fullscreen vertex shader\n");
+  fullscreen_vertex_shader = compiled_fullscreen_vertex_shader->gfx_shader;
 
   gfx::CompiledShader* compiled_stars_fragment_shader =
-    gfx::CompiledShader::load("stars_frag"_str, assetmgr, renderer);
+    gfx::CompiledShader::load("stars.fragment"_str, assetmgr, renderer);
   if (compiled_stars_fragment_shader == nullptr)
     return ERROR("failed to load stars fragment shader\n");
+  stars_fragment_shader = compiled_stars_fragment_shader->gfx_shader;
 
   if (!stars_pipeline.init(renderer,
-    compiled_stars_vertex_shader->gfx_shader,
-    compiled_stars_fragment_shader->gfx_shader))
+    fullscreen_vertex_shader, stars_fragment_shader,
+    "stars"_str))
     return ERROR("failed to init the stars pipeline\n");
 
   return true;
@@ -141,14 +159,19 @@ b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
  */
 void RenderSys::deinit(gfx::Renderer& renderer)
 {
-  quad_pipeline.deinit(renderer);
-  stars_pipeline.deinit(renderer);
-  quads_vertex_buffer.deinit(renderer);
-  quads_index_buffer.deinit(renderer);
+  scene_uniform_buffer.deinit(renderer);
   background_vertex_buffer.deinit(renderer);
   background_index_buffer.deinit(renderer);
+  quads_vertex_buffer.deinit(renderer);
+  quads_index_buffer.deinit(renderer);
   external_vertex_buffer.deinit(renderer);
   external_index_buffer.deinit(renderer);
+  quad_vertex_shader.deinit(renderer);
+  quad_fragment_shader.deinit(renderer);
+  quad_pipeline.deinit(renderer);
+  fullscreen_vertex_shader.deinit(renderer);
+  stars_fragment_shader.deinit(renderer);
+  stars_pipeline.deinit(renderer);
 }
 
 /* ----------------------------------------------------------------------------
@@ -158,15 +181,15 @@ static void drawBatches(RenderSys& sys, gfx::Renderer& renderer)
   assert(sys.batch_count <= RenderSys::MAX_BATCHES);
   assert(sys.quad_count <= RenderSys::MAX_QUADS);
 
-  renderer.pushBindVertexBuffer(sys.quads_vertex_buffer);
-  renderer.pushBindIndexBuffer(sys.quads_index_buffer);
+  renderer.bindVertexBuffer(sys.quads_vertex_buffer);
+  renderer.bindIndexBuffer(sys.quads_index_buffer);
 
   u32 index_offset = 0;
   for (u32 i = 0; i < sys.batch_count; i++)
   {
     assert(notnil(sys.batches[i].texture));
-    renderer.pushBindTexture(sys.batches[i].texture);
-    renderer.pushDraw(index_offset, 6*sys.batches[i].quad_count, 0);
+    renderer.bindTexture(sys.batches[i].texture);
+    renderer.draw(index_offset, 6*sys.batches[i].quad_count, 0);
     index_offset += 6*sys.batches[i].quad_count;
   }
   assert(index_offset == 6*sys.quad_count);
@@ -240,20 +263,16 @@ b8 RenderSys::update(const UpdateParams& params)
   ///////////////////////////////////////////////
   // 0. Update Scene
   {
-    renderer.pushSetViewport(params.viewport.pos, params.viewport.size);
-    renderer.pushSetScissor(params.viewport.pos, params.viewport.size);
+    renderer.setViewport(params.viewport.pos, params.viewport.size);
+    renderer.setScissor(params.viewport.pos, params.viewport.size);
 
-    auto proj = mat3x2::identity();
+    mat3x2 proj = mat3x2::identity();
     proj.set(0, 0, EyeSys::pixels_per_meter * 2.f / (f32)params.viewport.w);
     proj.set(1, 1, EyeSys::pixels_per_meter * 2.f / (f32)params.viewport.h);
-  
-    gfx::Renderer::Scene scene = {
-      .proj = proj,
-      .view = params.view,
-      .resolution = vec2f(params.viewport.w, params.viewport.h),
-      .time = (f32)renderer.engine->frame_start_time,
-    };
-    renderer.updateScene(scene);
+    proj.to_mat3(scene.proj);
+    params.view.to_mat3(scene.view);
+    scene.resolution = vec2f(params.viewport.w, params.viewport.h);
+    scene.time = (f32)renderer.engine->frame_start_time;
   }
 
   external_counts = {};
@@ -265,10 +284,17 @@ b8 RenderSys::update(const UpdateParams& params)
   {
     TRACE("render.sys draw background\n");
 
-    renderer.pushBindPipeline(stars_pipeline);
-    renderer.pushBindVertexBuffer(background_vertex_buffer);
-    renderer.pushBindIndexBuffer(background_index_buffer);
-    renderer.pushDraw(0, 6, 0);
+    renderer.bindPipeline(stars_pipeline);
+
+    renderer.bindUniformBuffer(scene_uniform_buffer);
+
+    renderer.bindVertexBuffer(background_vertex_buffer);
+    renderer.bindIndexBuffer(background_index_buffer);
+
+    f32 push[9] = {0.0f};
+    renderer.pushConstant(&push, sizeof(push));
+
+    renderer.draw(0, 6, 0);
   }
 
   ///////////////////////////////////////////////
@@ -276,11 +302,11 @@ b8 RenderSys::update(const UpdateParams& params)
   // TODO(delle) only update changed tiles after init
   TRACE("render.sys draw map tiles\n");
 
-  renderer.pushBindPipeline(quad_pipeline);
+  renderer.bindPipeline(quad_pipeline);
   quads_vertex_buffer.map(renderer, 0, gfx::Buffer::MAP_WHOLE_BUFFER);
 
-  mat3x2 tm = mat3x2::createTransform({0.0f,0.0f}, 0.0f);
-  renderer.pushConstant(&tm, sizeof(mat3x2));
+  f32 push[9] = {0.0f};
+  renderer.pushConstant(&push, sizeof(push));
 
   if (params.broadcast)
     params.broadcast->raise<PreMapRender>({this});
@@ -358,10 +384,10 @@ b8 RenderSys::update(const UpdateParams& params)
 
   if (external_counts.x != 0)
   {
-    renderer.pushBindTexture(renderer.engine->white_texture);
-    renderer.pushBindVertexBuffer(external_vertex_buffer);
-    renderer.pushBindIndexBuffer(external_index_buffer);
-    renderer.pushDraw(0, external_counts.y, 0);
+    renderer.bindTexture(renderer.engine->white_texture);
+    renderer.bindVertexBuffer(external_vertex_buffer);
+    renderer.bindIndexBuffer(external_index_buffer);
+    renderer.draw(0, external_counts.y, 0);
   }
 
   return true;

@@ -1,6 +1,6 @@
-#version 420 core
+#version 450
 
-out vec2 out_uv;
+layout(location = 0) out vec2 out_uv;
 
 void main()
 {

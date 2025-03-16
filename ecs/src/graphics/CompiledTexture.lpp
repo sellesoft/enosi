@@ -23,7 +23,7 @@ typedef io::StaticBuffer<512> PathBuffer;
  */
 s64 CompiledTexture::writeDataPath(io::IO* io, String name, AssetMgr& assetmgr)
 {
-  return io::formatv(io, 
+  return io::formatv(io,
       assetmgr.getDataDir(), "/textures/", name, ".texture");
 }
 
@@ -55,8 +55,8 @@ b8 CompiledTextureData::serialize(io::IO* out)
 /* ----------------------------------------------------------------------------
  */
 CompiledTexture* CompiledTexture::load(
-    String name, 
-    AssetMgr& assetmgr, 
+    String name,
+    AssetMgr& assetmgr,
     gfx::Renderer& renderer)
 {
   using namespace fs;
@@ -98,7 +98,7 @@ CompiledTexture* CompiledTexture::load(
   defer { compiled_data_file.close(); };
 
   u64 file_size = compiled_data_file.getInfo().byte_size;
-  texture->data = 
+  texture->data =
     (CompiledTextureData*)mem::stl_allocator.allocate(file_size);
 
   compiled_data_file.read({(u8*)texture->data, file_size});
@@ -115,7 +115,8 @@ CompiledTexture* CompiledTexture::load(
     data->format,
     data->address_mode,
     data->filter,
-    data->pixels);
+    data->pixels,
+    name);
 
   return texture;
 }
@@ -142,13 +143,13 @@ b8 CompiledTexture::compileFromMemory(void* pixels, CompileParams& params)
 
   data.pixels = pixels;
 
-  auto data_file = 
-    File::from(params.data_path, 
+  auto data_file =
+    File::from(params.data_path,
         OpenFlag::Create
       | OpenFlag::Truncate
       | OpenFlag::Write);
   if (isnil(data_file))
-    return ERROR("failed to open texture data file for writing at '", 
+    return ERROR("failed to open texture data file for writing at '",
                  params.data_path, "'\n");
   defer { data_file.close(); };
 

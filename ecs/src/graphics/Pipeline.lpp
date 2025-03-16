@@ -17,7 +17,8 @@ namespace gfx {
 b8 Pipeline::init(
   Renderer& renderer,
   Shader vert_shader,
-  Shader frag_shader)
+  Shader frag_shader,
+  String name)
 {
   RendererInternal& ri = *(RendererInternal*)renderer.internal;
   TRACE("initializing a pipeline with vertex shader ", vert_shader.index,
@@ -46,7 +47,7 @@ b8 Pipeline::init(
     .offset = 0,
     .size = renderer.getMaxPushConstantSize(),
   };
-  
+
   VkPipelineLayoutCreateInfo pipeline_layout_create_info =
   {
     .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -55,7 +56,7 @@ b8 Pipeline::init(
     .pushConstantRangeCount = 1,
     .pPushConstantRanges = &push_constant,
   };
-  
+
   VkPipelineLayout pipeline_layout;
   if (VK_SUCCESS != vkCreatePipelineLayout(ri.device,
       &pipeline_layout_create_info, &ri.allocator, &pipeline_layout))
@@ -196,7 +197,7 @@ b8 Pipeline::init(
       .pName = "main",
     },
     {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO, 
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
       .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
       .module = frag_renderer_shader->module,
       .pName = "main",
@@ -220,18 +221,22 @@ b8 Pipeline::init(
     .subpass = 0,
   };
 
-  VkPipeline vk_pipeline;
+  VkPipeline pipeline_handle;
   if (VK_SUCCESS != vkCreateGraphicsPipelines(ri.device, ri.pipeline_cache, 1,
-    &pipeline_create_info, &ri.allocator, &vk_pipeline))
+    &pipeline_create_info, &ri.allocator, &pipeline_handle))
     return ERROR("failed to create the graphics pipeline\n");
 
   RendererPipeline* pipeline = ri.pipeline_pool.at_index(ri.pipeline_count);
-  pipeline->pipeline = vk_pipeline;
+  pipeline->pipeline = pipeline_handle;
   pipeline->layout = pipeline_layout;
-
   index = ri.pipeline_pool.index_of(pipeline);
   ri.pipeline_count++;
-  
+
+  debugSetObjectName(renderer, VK_OBJECT_TYPE_PIPELINE, pipeline_handle,
+    "<", name, " pipeline>");
+  debugSetObjectName(renderer, VK_OBJECT_TYPE_PIPELINE_LAYOUT, pipeline_layout,
+    "<", name, " pipeline layout>");
+
   destroy_pipeline_layout.cancel();
   return true;
 }
@@ -242,7 +247,7 @@ b8 Pipeline::deinit(Renderer& renderer)
 {
   RendererInternal& ri = *(RendererInternal*)renderer.internal;
   TRACE("destroying the pipeline at index ", index, "\n");
-  
+
   if (index == 0)
     return true;
 
@@ -253,7 +258,7 @@ b8 Pipeline::deinit(Renderer& renderer)
 
   if (pipeline->pipeline == VK_NULL_HANDLE)
     return ERROR("attempted to destroy an uninitialized pipeline\n");
-  
+
   vkDestroyPipeline(ri.device, pipeline->pipeline, &ri.allocator);
   vkDestroyPipelineLayout(ri.device, pipeline->layout, &ri.allocator);
 
@@ -263,8 +268,8 @@ b8 Pipeline::deinit(Renderer& renderer)
   index = 0;
   ri.pipeline_pool.remove(pipeline);
   ri.pipeline_count--;
-  
+
   return true;
 }
 
-} 
+}

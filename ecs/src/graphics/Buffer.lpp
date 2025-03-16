@@ -21,7 +21,8 @@ b8 Buffer::init(
   u64 requested_size,
   Usage usage,
   MemoryProperty properties,
-  MappingBehavior behavior)
+  MappingBehavior behavior,
+  String name)
 {
   RendererInternal& ri = *(RendererInternal*)renderer.internal;
   TRACE("initializing a buffer with ",requested_size," bytes\n");
@@ -320,7 +321,7 @@ b8 Buffer::init(
       .descriptorSetCount = 1,
       .pSetLayouts = &ri.default_descriptor_set_layout,
     };
-    
+
     if (VK_SUCCESS != vkAllocateDescriptorSets(ri.device, &alloc_info,
       &descriptor_set))
       return ERROR("failed to allocate a descriptor set for a vulkan buffer\n");
@@ -359,6 +360,13 @@ b8 Buffer::init(
   index = ri.buffer_pool.index_of(buffer);
   ri.buffer_count++;
 
+  debugSetObjectName(renderer, VK_OBJECT_TYPE_BUFFER, buffer_handle,
+    "<", name, " buffer>");
+  debugSetObjectName(renderer, VK_OBJECT_TYPE_DEVICE_MEMORY, memory_handle,
+    "<", name, " memory>");
+  debugSetObjectName(renderer, VK_OBJECT_TYPE_DESCRIPTOR_SET, descriptor_set,
+    "<", name, " descriptor>");
+
   delete_buffer_if_failure.cancel();
   delete_buffer_memory_if_failure.cancel();
   return true;
@@ -389,7 +397,7 @@ b8 Buffer::deinit(Renderer& renderer)
 
   vkDestroyBuffer(ri.device, buffer->buffer, &ri.allocator);
   vkFreeMemory(ri.device, buffer->memory, &ri.allocator);
-  
+
   mapped_data = nullptr;
   buffer->buffer = VK_NULL_HANDLE;
   buffer->memory = VK_NULL_HANDLE;
@@ -492,7 +500,7 @@ b8 Buffer::unmap(Renderer& renderer, b8 flush)
 
   if (buffer->buffer == VK_NULL_HANDLE)
     return ERROR("attempted to unmap an uninitialized buffer\n");
-  
+
   if (flush)
   {
     VkMappedMemoryRange range =

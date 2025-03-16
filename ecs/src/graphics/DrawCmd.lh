@@ -26,6 +26,8 @@ struct DrawCmd
     BindFramebuffer,
     BindPipeline,
     BindTexture,
+    BindUniformBuffer,
+    BindStorageBuffer,
     BindVertexBuffer,
     BindIndexBuffer,
     PushConstant,
@@ -47,13 +49,13 @@ struct DrawCmd
       vec2f pos;
       vec2f size;
     } set_viewport;
-    
+
     Framebuffer bind_framebuffer;
-    
+
     Pipeline bind_pipeline;
-    
+
     Texture bind_texture;
-    
+
     Buffer bind_buffer;
 
     struct

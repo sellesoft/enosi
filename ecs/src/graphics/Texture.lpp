@@ -68,13 +68,14 @@ static VkSamplerAddressMode imageAddressModeToVulkan(ImageAddressMode x){
 /* ----------------------------------------------------------------------------
  */
 b8 Texture::init(
-    Renderer&        renderer,
-    u32              width,
-    u32              height,
-    ImageFormat      format,
-    ImageAddressMode address_mode,
-    ImageFilter      filter,
-    void*            pixels)
+  Renderer&        renderer,
+  u32              width,
+  u32              height,
+  ImageFormat      format,
+  ImageAddressMode address_mode,
+  ImageFilter      filter,
+  void*            pixels,
+  String           name)
 {
   RendererInternal& ri = *(RendererInternal*)renderer.internal;
   TRACE("creating a texture of size ", width, "x", height, "\n");
@@ -241,7 +242,7 @@ b8 Texture::init(
       .allocationSize = staging_memory_requirements.size,
       .memoryTypeIndex = staging_buffer_memory_type,
     };
-    
+
     VkDeviceMemory staging_buffer_memory;
     if (VK_SUCCESS != vkAllocateMemory(ri.device, &staging_buffer_alloc_info,
       &ri.allocator, &staging_buffer_memory))
@@ -372,7 +373,7 @@ b8 Texture::init(
       .descriptorSetCount = 1,
       .pSetLayouts = &ri.default_descriptor_set_layout,
     };
-    
+
     if (VK_SUCCESS != vkAllocateDescriptorSets(ri.device, &alloc_info,
       &descriptor_set))
       return ERROR("failed to allocate a descriptor set for a vulkan texture\n");
@@ -404,9 +405,19 @@ b8 Texture::init(
   texture->view = view;
   texture->sampler = sampler;
   texture->descriptor_set = descriptor_set;
-  
   index = ri.texture_pool.index_of(texture);
   ri.texture_count++;
+
+  debugSetObjectName(renderer, VK_OBJECT_TYPE_IMAGE, image,
+    "<", name, " image>");
+  debugSetObjectName(renderer, VK_OBJECT_TYPE_DEVICE_MEMORY, memory,
+    "<", name, " memory>");
+  debugSetObjectName(renderer, VK_OBJECT_TYPE_IMAGE_VIEW, view,
+    "<", name, " image view>");
+  debugSetObjectName(renderer, VK_OBJECT_TYPE_SAMPLER, sampler,
+    "<", name, " sampler>");
+  debugSetObjectName(renderer, VK_OBJECT_TYPE_DESCRIPTOR_SET, descriptor_set,
+    "<", name, " descriptor>");
 
   destroy_image_if_failure.cancel();
   free_memory_if_failure.cancel();

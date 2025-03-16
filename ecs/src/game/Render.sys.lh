@@ -39,6 +39,15 @@ struct RenderSys
     gfx::Texture texture;
   };
 
+  struct Scene
+  {
+    f32 proj[9];
+    f32 view[9];
+    vec2f resolution;
+    f32 time;
+  };
+
+
   b8 init(gfx::Renderer& renderer, AssetMgr& assetmgr);
   void deinit(gfx::Renderer& renderer);
 
@@ -60,12 +69,15 @@ struct RenderSys
 
   void drawQuad(
     gfx::Renderer& renderer,
-    vec2f pos, 
-    gfx::Texture texture, 
+    vec2f pos,
+    gfx::Texture texture,
     Color color);
 
 
   gfx::Texture null_texture;
+
+  Scene scene;
+  gfx::Buffer scene_uniform_buffer;
 
   gfx::Buffer background_vertex_buffer;
   gfx::Buffer background_index_buffer;
@@ -81,6 +93,11 @@ struct RenderSys
   gfx::Buffer external_index_buffer;
   vec2i external_counts = {};
 
+  gfx::Shader quad_vertex_shader;
+  gfx::Shader quad_fragment_shader;
   gfx::Pipeline quad_pipeline;
+
+  gfx::Shader fullscreen_vertex_shader;
+  gfx::Shader stars_fragment_shader;
   gfx::Pipeline stars_pipeline;
 };

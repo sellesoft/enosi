@@ -17,7 +17,7 @@ p:run()
 $$$
 @imported:get
 
-$ local decls = 
+$ local decls =
 $ {
 $   editor = p.decls.map["struct ui::MapEditor"],
 $   tile_kind = p.decls.map["enum TileKind"],
@@ -43,7 +43,7 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
   if (editor == nullptr)
     return nullptr;
 
-  @ui.style(editor, MapEditor, 
+  @ui.style(editor, MapEditor,
   | size: 100% 100%
   | border: 2
   | display: hidden
@@ -110,12 +110,12 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
 
 $ local toolButton = function(toolname)
     {
-      auto* button = editor->select_button.$(toolname:lower()) = 
+      auto* button = editor->select_button.$(toolname:lower()) =
         ui::Button::begin<MapEditor>(
           ui,
           editor,
           [] (Button*          button,
-              MapEditor*       editor,   
+              MapEditor*       editor,
               ButtonActivation activation)
           {
             editor->tool = Tool::$(toolname);
@@ -144,7 +144,7 @@ $ end
 
     editor->add_options = Item::begin(ui, "game.map.editor.add_options"_str);
     {
-      
+
     }
     ui.endItem();
   }
@@ -203,8 +203,8 @@ void MapEditor::generate(UI* ui)
 void MapEditor::evaluate(UI* ui)
 {
   // Rerender the map in case our size changed.
-  // TODO(sushi) it would be nice if UI Item provided a callback for 
-  //             an Item's size changing so we could detect this a little 
+  // TODO(sushi) it would be nice if UI Item provided a callback for
+  //             an Item's size changing so we could detect this a little
   //             better. Look into that when we get around to reworking UI
   //             Items to be transform based.
 
@@ -233,7 +233,7 @@ void MapEditor::evaluate(UI* ui)
 }
 
 /* ----------------------------------------------------------------------------
- *  TODO(sushi) map rendering needs to be moved back into here so that it 
+ *  TODO(sushi) map rendering needs to be moved back into here so that it
  *              doesnt render before we adjust position.
  */
 void MapEditor::update(UI* ui, UpdateReason reason)
@@ -292,15 +292,15 @@ void MapEditor::update(UI* ui, UpdateReason reason)
 
   case ControlState::Dragging:
     {
-      vec2f new_pos = 
+      vec2f new_pos =
         drag_start_eye + eye.screenToWorld(drag_start_viewport, size) - mw;
-      
+
       if (eye.pos != new_pos)
       {
         eye.pos = new_pos;
         need_render = true;
       }
-        
+
       if (input.wasMouseButtonReleased(MouseButton::Left))
         control_state = ControlState::None;
     }
@@ -365,7 +365,7 @@ void MapEditor::renderMap(UI& ui)
     destroyPackedData(&mapdef);
   }
 
-  renderer->pushBindFramebuffer(framebuffer);
+  renderer->bindFramebuffer(framebuffer);
 
   packSourceDataIntoType(
     *h_selected_map.getFile()->returned_data,
@@ -400,9 +400,8 @@ void MapEditor::renderMap(UI& ui)
 
   rendersys.update(params);
 
-  renderer->pushBindFramebuffer({0});
-  renderer->pushSetViewport(
-    {0,0},{ui.eng->window.size.x,ui.eng->window.size.y});
+  renderer->bindFramebuffer({0});
+  renderer->setViewport({0,0}, {ui.eng->window.size.x,ui.eng->window.size.y});
 }
 
 /* ----------------------------------------------------------------------------
@@ -421,7 +420,7 @@ void MapEditor::onPreSpriteRender(PreSpriteRender& event)
 
   // Draw grid lines.
   {
-    // TODO(sushi) dynamically size lines relative to zoom and 
+    // TODO(sushi) dynamically size lines relative to zoom and
     //             their separation.
     vec2f bl_world = floor(eye.screenToWorld({0.f, size.y}, size));
     vec2f tr_world = ceil(eye.screenToWorld({size.x, 0.f}, size));

@@ -6,8 +6,11 @@
 $ require "common"
 
 #include "iro/Common.h"
+#include "iro/Unicode.h"
 
 @@lpp.import "graphics/TextureParams.lh"
+
+using namespace iro;
 
 namespace gfx
 {
@@ -27,7 +30,8 @@ struct Texture
     ImageFormat      format,
     ImageAddressMode address_mode,
     ImageFilter      filter,
-    void*            pixels);
+    void*            pixels,
+    String           name = "unnamed"_str);
 
   b8 deinit(Renderer& renderer);
 

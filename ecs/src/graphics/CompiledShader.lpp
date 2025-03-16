@@ -96,7 +96,7 @@ CompiledShader* CompiledShader::load(
   defer { compiled_data_file.close(); };
 
   u64 file_size = compiled_data_file.getInfo().byte_size;
-  shader->data = 
+  shader->data =
     (CompiledShaderData*)mem::stl_allocator.allocate(file_size);
 
 	compiled_data_file.read({(u8*)shader->data, file_size});
@@ -105,7 +105,7 @@ CompiledShader* CompiledShader::load(
 	data->binary = (u8*)(data + 1);
 
 	Slice<u8> binary_slice = Slice<u8>::from(data->binary, data->binary_size);
-  shader->gfx_shader.init(renderer, data->type, binary_slice);
+  shader->gfx_shader.init(renderer, data->type, binary_slice, name);
 
   return shader;
 }
@@ -183,4 +183,4 @@ $ end -- if not ECS_DEBUG
   return true;
 }
 
-} // namespace gfx 
+} // namespace gfx
