@@ -90,7 +90,7 @@ $ end
     b8 compiled = gfx::CompiledTexture::compileFromMemory(pixels, white_texture_params);
     if (!compiled)
       return ERROR("failed to compile the white texture\n");
-    
+
     auto compiled_white_texture = gfx::CompiledTexture::load("white"_str, assetmgr, renderer);
     if (compiled_white_texture == nullptr)
       return ERROR("failed to load the white texture\n");
@@ -131,31 +131,31 @@ $ end
 
   TRACE("compiling shaders\n");
   {
-    gfx::CompiledShader::CompileParams vertex_shader_params =
+    gfx::CompiledShader::CompileParams scene_vertex_shader_params =
     {
-      .name         = "vertex"_str,
-      .asset_path   = "assets/shaders/vertex.glsl"_str,
-      .data_path    = "data/shaders/vertex.shader"_str,
+      .name         = "scene.vertex"_str,
+      .asset_path   = "assets/shaders/scene.vertex.glsl"_str,
+      .data_path    = "data/shaders/scene.vertex.shader"_str,
       .type         = gfx::ShaderType::Vertex,
       .allocator    = &mem::stl_allocator,
       .assetmgr     = &assetmgr,
     };
-    gfx::CompiledShader::compileGLSL(vertex_shader_params);
+    gfx::CompiledShader::compileGLSL(scene_vertex_shader_params);
 
-    gfx::CompiledShader::CompileParams fragment_shader_params =
+    gfx::CompiledShader::CompileParams scene_fragment_shader_params =
     {
-      .name         = "fragment"_str,
-      .asset_path   = "assets/shaders/fragment.glsl"_str,
-      .data_path    = "data/shaders/fragment.shader"_str,
+      .name         = "scene.fragment"_str,
+      .asset_path   = "assets/shaders/scene.fragment.glsl"_str,
+      .data_path    = "data/shaders/scene.fragment.shader"_str,
       .type         = gfx::ShaderType::Fragment,
     };
-    gfx::CompiledShader::compileGLSL(fragment_shader_params);
+    gfx::CompiledShader::compileGLSL(scene_fragment_shader_params);
 
     gfx::CompiledShader::CompileParams fullscreen_vertex_shader_params =
     {
-      .name         = "fullscreen_vert"_str,
-      .asset_path   = "assets/shaders/fullscreen_vert.glsl"_str,
-      .data_path    = "data/shaders/fullscreen_vert.shader"_str,
+      .name         = "fullscreen.vertex"_str,
+      .asset_path   = "assets/shaders/fullscreen.vertex.glsl"_str,
+      .data_path    = "data/shaders/fullscreen.vertex.shader"_str,
       .type         = gfx::ShaderType::Vertex,
       .allocator    = &mem::stl_allocator,
       .assetmgr     = &assetmgr,
@@ -164,12 +164,32 @@ $ end
 
     gfx::CompiledShader::CompileParams stars_fragment_shader_params =
     {
-      .name         = "stars_frag"_str,
-      .asset_path   = "assets/shaders/stars_frag.glsl"_str,
-      .data_path    = "data/shaders/stars_frag.shader"_str,
+      .name         = "stars.fragment"_str,
+      .asset_path   = "assets/shaders/stars.fragment.glsl"_str,
+      .data_path    = "data/shaders/stars.fragment.shader"_str,
       .type         = gfx::ShaderType::Fragment,
     };
     gfx::CompiledShader::compileGLSL(stars_fragment_shader_params);
+
+    gfx::CompiledShader::CompileParams ui_vertex_shader_params =
+    {
+      .name         = "ui.vertex"_str,
+      .asset_path   = "assets/shaders/ui.vertex.glsl"_str,
+      .data_path    = "data/shaders/ui.vertex.shader"_str,
+      .type         = gfx::ShaderType::Vertex,
+      .allocator    = &mem::stl_allocator,
+      .assetmgr     = &assetmgr,
+    };
+    gfx::CompiledShader::compileGLSL(ui_vertex_shader_params);
+
+    gfx::CompiledShader::CompileParams ui_fragment_shader_params =
+    {
+      .name         = "ui.fragment"_str,
+      .asset_path   = "assets/shaders/ui.fragment.glsl"_str,
+      .data_path    = "data/shaders/ui.fragment.shader"_str,
+      .type         = gfx::ShaderType::Fragment,
+    };
+    gfx::CompiledShader::compileGLSL(ui_fragment_shader_params);
   }
 
   TRACE("compiling gohu font\n");

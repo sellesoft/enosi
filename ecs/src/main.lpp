@@ -3,6 +3,7 @@ $ local event = require "event.Event"
 
 #include "iro/Logger.h"
 #include "iro/fs/FileSystem.h"
+#include "iro/Platform.h"
 #include "iro/time/Time.h"
 
 @lpp.import "Engine.lh"
@@ -11,10 +12,10 @@ $ if IRO_LINUX then
 #include "iro/GDBScriptDef.h"
 $ end
 
-static Logger logger = 
+static Logger logger =
   Logger::create("ecs"_str, Logger::Verbosity::Trace);
 
-int main()
+int main(int argc, const char** args)
 {
   iro::log.init();
   defer { iro::log.deinit(); };
@@ -28,7 +29,7 @@ int main()
 
     if (fs::stdout.isatty())
     {
-      flags = 
+      flags =
           AllowColor
         | TrackLongestName
         | PadVerbosity
@@ -38,7 +39,7 @@ int main()
     }
     else
     {
-      flags = 
+      flags =
           ShowCategoryName
         | ShowVerbosity
         | PrefixNewlines;
@@ -47,13 +48,26 @@ int main()
     iro::log.newDestination("stdout"_str, &fs::stdout, flags);
   }
 
+  if (argc > 1)
+  {
+    for (int i = 1; i < argc; i++)
+    {
+      switch (iro::String::fromCStr(args[i]).hash())
+      {
+      case "-wipe"_hashed:
+        //iro::platform::removeDir("data"_str, recursive = true);
+        break;
+      }
+    }
+  }
+
   Engine engine = {};
   if (!engine.init())
     return ERROR("failed to initialize engine\n");
 
   auto program_start_time = TimePoint::now();
 
-  for (;;) 
+  for (;;)
   {
     if (!engine.update())
       break;

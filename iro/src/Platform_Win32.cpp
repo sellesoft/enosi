@@ -923,7 +923,7 @@ b8 removeDir(String path)
   }
   defer{ if (wpath != win32_str) mem::stl_allocator.free(wpath); };
 
-  if (!RemoveDirectoryW(wpath))
+  if (RemoveDirectoryW(wpath))
     return true;
 
   ERROR("failed to remove dir at path '", path, "': ",

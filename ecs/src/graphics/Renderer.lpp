@@ -589,7 +589,6 @@ $ end -- if IRO_LINUX
   const char* required_device_extensions[] =
   {
     VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-    VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME,
   };
   constexpr u32 required_device_extension_count =
     sizeof(required_device_extensions)
@@ -711,6 +710,7 @@ $ end -- if IRO_LINUX
     f32 queue_priority = 1.0f;
     u32 queue_create_info_count = 1;
     VkDeviceQueueCreateInfo queue_create_infos[2] = {};
+    queue_create_infos[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     queue_create_infos[0].queueFamilyIndex =
       ri.physical_device_graphics_and_compute_queue_family;
     queue_create_infos[0].queueCount = 1;
@@ -720,6 +720,7 @@ $ end -- if IRO_LINUX
         != ri.physical_device_present_queue_family)
     {
       queue_create_info_count = 2;
+      queue_create_infos[1].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
       queue_create_infos[1].queueFamilyIndex =
         ri.physical_device_present_queue_family;
       queue_create_infos[1].queueCount = 1;
@@ -1001,13 +1002,13 @@ $ end -- if IRO_LINUX
       &ri.allocator, &ri.image_acquired_semaphore))
       return FATAL("failed to create the vulkan image acquired semaphore\n");
     debugSetObjectName(*this, VK_OBJECT_TYPE_SEMAPHORE,
-        ri.default_renderpass, "<image acquired semaphore>");
+        ri.image_acquired_semaphore, "<image acquired semaphore>");
 
     if (VK_SUCCESS != vkCreateSemaphore(ri.device, &semaphore_info,
       &ri.allocator, &ri.render_complete_semaphore))
       return FATAL("failed to create the vulkan render complete semaphore\n");
     debugSetObjectName(*this, VK_OBJECT_TYPE_SEMAPHORE,
-        ri.default_renderpass, "<render complete semaphore>");
+        ri.render_complete_semaphore, "<render complete semaphore>");
   }
 
   TRACE("creating the vulkan pipeline cache\n");
