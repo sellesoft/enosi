@@ -55,6 +55,10 @@ struct STLAllocator : public Allocator
   void* allocate(u64 size) override;
   void* reallocate(void* ptr, u64 size) override;
   void  free(void* ptr) override;
+
+#if IRO_DEBUG
+  u64 bytes_allocated;
+#endif
 };
 
 extern STLAllocator stl_allocator;
