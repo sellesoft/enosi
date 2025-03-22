@@ -88,6 +88,13 @@ b8 Lpp::init(const InitParams& params)
   use_full_filepaths = params.use_full_filepaths;
   vfs = params.vfs;
 
+  if (streams.dep.io)
+  {
+    lua.pushstring("generating_dep_file"_str);
+    lua.pushboolean(true);
+    lua.settable(I_lpp);
+  }
+
   if (!params.args.isEmpty())
   {
     lua.pushstring("addArgv"_str);
