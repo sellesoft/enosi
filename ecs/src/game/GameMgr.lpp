@@ -102,24 +102,28 @@ b8 GameMgr::update()
   if (!eye.update(*this))
     return false;
 
-  RenderSys::UpdateParams render_params1 =
-  {
-    .viewport = { .size = engine->window.size },
-    .renderer = engine->renderer,
-    .entmgr = &entmgr,
-    .map = &map,
-  };
+  $ local map_editor = ui.createItemContext("MapEditor", "map_editor")
+  @@map_editor.style:lookup(display)
 
-  eye.getViewMat(&render_params1.view);
-  if (!rendersys.update(render_params1))
-    return false;
+  if (@map_editor.style.display.test(hidden))
+  {
+    RenderSys::UpdateParams render_params1 =
+    {
+      .viewport = { .size = engine->window.size },
+      .renderer = engine->renderer,
+      .entmgr = &entmgr,
+      .map = &map,
+    };
+
+    eye.getViewMat(&render_params1.view);
+    if (!rendersys.update(render_params1))
+      return false;
+  }
 
   map_editor->renderMap(engine->ui);
 
-  $ local map_editor = ui.createItemContext("MapEditor", "map_editor")
   if (engine->input.wasKeyPressed(Key::M))
   {
-    @@map_editor.style:lookup(display)
     if (@map_editor.style.display.test(hidden))
       @map_editor.style.set.display(0);
     else

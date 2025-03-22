@@ -58,9 +58,9 @@ struct TextureDisplay : public Item
 
   /* --------------------------------------------------------------------------
    */
-  static TextureDisplay* create(UI& ui)
+  static TextureDisplay* create(UI& ui, String id)
   {
-    auto* td = ui.allocateAndInitItem<TextureDisplay>(nil);
+    auto* td = ui.allocateAndInitItem<TextureDisplay>(id);
     if (td == nullptr)
       return nullptr;
 
@@ -309,8 +309,6 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
     return nullptr;
   }
 
-  editor->world_pos = Text::make(ui, "map.editor.world_pos"_str);
-
   Engine& eng = *ui.eng;
 
   eng.subscribeToBroadcast<PreMapRender>(
@@ -322,8 +320,10 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
   eng.subscribeToBroadcast<PostRender>(
     editor, &MapEditor::onPostRender);
 
-  editor->left_panel = Item::begin(ui);
+  editor->left_panel = Item::begin(ui, "left_panel"_str);
   {
+    editor->world_pos = Text::make(ui, "world_pos"_str);
+
     @ui.style(editor->left_panel, Item,
     | size: 300 100%
     | border: 2
@@ -334,9 +334,9 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
 
     String options[] = 
     {
-$ for elem in ToolEnum.elems:each() do
+$   for elem in ToolEnum.elems:each() do
       "$(elem)"_str,
-$ end
+$   end
     };
 
     editor->tool_selection = 
@@ -360,7 +360,7 @@ $ end
           editor->tool = (Tool)selected;
         },
         Slice<String>::from(options),
-        "None"_str);
+        "tool_selection"_str);
 
     @ui.style(editor->tool_selection, ComboBox, 
     | size: 100% auto
@@ -372,7 +372,7 @@ $ end
     | size: 100% 1
     | margin: 0 5 0 5)
 
-    editor->add_options = Item::begin(ui, "game.map.editor.add_options"_str);
+    editor->add_options = Item::begin(ui, "add_options"_str);
     {
       @ui.style(editor->add_options, Item,
       | size: 100% auto
@@ -394,13 +394,14 @@ $     end
             editor->texture_display->displayed_kind = (TileKind)selected;
           },
           Slice<String>::from(add_type_options),
-          "$(decls.tile_kind.elems[1])"_str);
+          "tile_kind"_str);
 
       @ui.style(editor->add_tile_type, ComboBox, 
       | size: 100% auto
       | background_color: 0x570000ff)
 
-      editor->texture_display = TextureDisplay::create(ui);
+      editor->texture_display = 
+        TextureDisplay::create(ui, "texture_display"_str);
 
       @ui.style(editor->texture_display, Item, 
       | size: 100% auto
