@@ -81,6 +81,8 @@ struct Path
   // Gets the last modified time of the file at the given path.
   static TimePoint modtime(String path);
 
+  static b8 isRooted(String path);
+
   // Compares the modification times of the given paths.
   //  0 is returned if they are equal, 
   //  1 is returned if path0 > path1,

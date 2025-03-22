@@ -40,7 +40,7 @@ InputText* InputText::make(UI& ui, String init, String preview, String id)
     return nullptr;
   }
 
-  input_text->drawcmds.text = ui.drawcmds.add();
+  input_text->drawcmds.text = ui.drawcmds.add(); 
   input_text->drawcmds.cursor = ui.drawcmds.add();
   input_text->drawcmds.selection = ui.drawcmds.add();
 
@@ -89,7 +89,10 @@ void InputText::evaluate(UI* ui)
     }
 
     font = 
-      gfx::Font::load(@this.style.font, ui->eng->assetmgr, ui->eng->renderer);
+      gfx::Font::load(
+        @this.style.font, 
+        ui->eng->assetmgr, 
+        ui->eng->renderer);
   }
 }
 
@@ -112,7 +115,7 @@ void InputText::generate(UI* ui)
   drawcmds.selection->counts_used = {};
 
   vec2f cursor = {};
-
+ 
   gfx::FontData* font_data = font->data;
 
   auto drawCursor = [&]()

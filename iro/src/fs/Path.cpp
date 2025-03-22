@@ -186,6 +186,19 @@ TimePoint Path::modtime(String path)
 
 /* ----------------------------------------------------------------------------
  */
+b8 Path::isRooted(String path)
+{
+#if IRO_WINDOWS 
+  return path.findFirst(':').found();
+#elif IRO_LINUX
+  return path.ptr[0] == '/';
+#else
+#  error "unhandle OS in Path::isRooted"
+#endif
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 Path::exists(String path)
 {
   return platform::fileExists(path);
