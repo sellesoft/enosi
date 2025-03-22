@@ -37,7 +37,9 @@ ComboBox* ComboBox::make(
     return nullptr;
   }
 
-  cb->update_triggers = UpdateReason::MouseReleased;
+  cb->update_triggers = 
+      UpdateReason::MouseReleased
+    | UpdateReason::FocusLost;
 
   cb->options = Array<Option>::create(options.len);
 
@@ -57,6 +59,16 @@ void ComboBox::update(UI* ui, UpdateReason reason)
 {
   $ local this = ui.createItemContext("ComboBox", "this")
 
+  INFO("ComboBox update ", (u32)reason, "\n");
+
+  dirty = true;
+
+  if (reason == UpdateReason::FocusLost)
+  {
+    open = false;
+    return;
+  }
+
   if (open)
   {
     vec2f cursor_local = ui->eng->input.mouse.window - pos_screen;
@@ -68,20 +80,18 @@ void ComboBox::update(UI* ui, UpdateReason reason)
       u32 yoff = cursor_local.y - @this.style.box_height;
       u32 selection = yoff / u32(@this.style.option_height);
 
-      selection = min<u32>(selection, options.len());
+      selection = min<u32>(selection, options.len()-1);
 
       onOptionSelected(context, selection);
 
       Option* selected = &options[selection];
       selected_option.set(selected->name);
     }
-  
+ 
     open = false;
   }
   else
     open = true;
-
-  dirty = true;
 }
 
 /* ----------------------------------------------------------------------------
@@ -95,7 +105,7 @@ void ComboBox::evaluate(UI* ui)
 
   if (open)
   {
-    size.y += @this.style.option_height * options.len();
+    // size.y += @this.style.option_height * options.len();
   }
 
   selected_option.checkFont(@this.style.font, ui);

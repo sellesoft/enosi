@@ -19,10 +19,7 @@ namespace ui
  */
 void TextRenderer::findTextBreaks()
 {
-  if (breaks.isInit())
-    return;
-
-  breaks.init();
+  breaks.clear();
 
   $ local Text = ui.widgets.Text.schema
 

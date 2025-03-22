@@ -61,6 +61,7 @@ struct TextRenderer
     this->max_width = max_width;
     this->wrap = wrap;
     this->color = color;
+    breaks.init();
   }
 
   void deinit()
