@@ -10,11 +10,6 @@
     "fields": {}
   },
   {
-    "type": "lua_line",
-    "named": true,
-    "fields": {}
-  },
-  {
     "type": "macro",
     "named": true,
     "fields": {},
@@ -143,10 +138,6 @@
     }
   },
   {
-    "type": "\n",
-    "named": false
-  },
-  {
     "type": "\"",
     "named": false
   },
@@ -160,6 +151,10 @@
   },
   {
     "type": "document",
+    "named": true
+  },
+  {
+    "type": "lua_line",
     "named": true
   },
   {
