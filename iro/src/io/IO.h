@@ -14,6 +14,7 @@
 #include "../memory/Allocator.h"
 #include "../memory/Memory.h"
 #include "../containers/Slice.h"
+#include "../containers/ArrayFuncs.h"
 
 #include "assert.h"
 
@@ -33,7 +34,10 @@ enum class Flag
 typedef iro::Flags<Flag> Flags; 
 
 /* ============================================================================
- *  Base interface for input/output
+ *  Base interface for input/output.
+ *
+ *  TODO(sushi) rework this into a Stream type and this file into more general
+ *              I/O stuff.
  */
 struct IO
 {
@@ -222,6 +226,73 @@ struct StaticBuffer : public IO
   {
     len = 0;
     buffer[0] = '\0';
+  }
+};
+
+/* ============================================================================
+ *  A buffer that lives on stack until it is overrun, at which point it moves
+ *  to heap. 
+ *
+ *  Because this is meant for use primarily on the stack, it uses RAII to 
+ *  automatically clean itself up upon exiting scope.
+ *
+ *  TODO(sushi) maybe support providing an allocator if ever seems useful.
+ */
+template<s32 StackSize>
+struct SmallBuffer : public IO
+{
+  u8 stack[StackSize] = {};
+
+  u8* ptr = stack;
+  s32 len = 0;
+  s32 space = StackSize;
+
+  SmallBuffer() { }
+  ~SmallBuffer() { clear(); }
+
+  b8 isSmall() const { return ptr == stack; }
+
+  void clear()
+  {
+    if (!isSmall())
+    {
+      mem::stl_allocator.free(ptr);
+      ptr = stack;
+      space = StackSize;
+    }
+    len = 0;
+    mem::zero(stack, StackSize);
+  }
+
+  s64 write(Bytes slice) override
+  {
+    s32 space_needed = len + slice.len;
+    if (space_needed > space)
+    {
+      if (isSmall())
+      {
+        // Move to heap.
+        space = space_needed * 2;
+        ptr = (u8*)mem::stl_allocator.allocate(space);
+        mem::copy(ptr, stack, len);
+      }
+      else
+      {
+        while (space < space_needed)
+          space = 2 * space;
+        ptr = (u8*)mem::stl_allocator.reallocate(ptr, space);
+      }
+    }
+
+    mem::copy(ptr + len, slice.ptr, slice.len);
+    len += slice.len;
+  }
+
+  s64 read(Bytes buffer) override
+  {
+    // TODO(sushi) implement reading from this if ever needed.
+    assert(!"reading from SmallBuffer is not supported!");
+    return 0;
   }
 };
 
