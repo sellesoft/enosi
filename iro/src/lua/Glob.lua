@@ -24,13 +24,15 @@ local strtype = ffi.typeof("String")
 ---@return str
 local make_str = function(s)
   if not s then
-    print(debug.traceback())
-    os.exit(1)
+    error("make_str passed a nil s")
   end
   return strtype(s, #s)
 end
 
 return function(pattern)
+  if not pattern then
+    error("glob passed a nil pattern")
+  end
   local glob = C.iro_glob(make_str(pattern))
   if glob.paths == 0 then
     return List{}

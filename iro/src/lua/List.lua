@@ -69,6 +69,10 @@ List.pushFront = function(self, elem)
   return self
 end
 
+List.popFront = function(self)
+  return table.remove(self, 1)
+end
+
 List.pushList = function(self, l)
   for elem in l:each() do self:push(elem) end
   return self
