@@ -84,8 +84,6 @@ Font* Font::load(
     AssetMgr& assetmgr,
     gfx::Renderer& renderer)
 {
-  INFO("loading font '", name, "'\n");
-
   using namespace fs;
 
   PathBuffer data_path_buf;
