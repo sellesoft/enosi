@@ -30,7 +30,7 @@ namespace lpp
 static Logger logger = 
   Logger::create("Lpp"_str, 
 #if IRO_DEBUG
-    Logger::Verbosity::Debug);
+    Logger::Verbosity::Notice);
 #else
     Logger::Verbosity::Notice);
 #endif
@@ -78,7 +78,6 @@ b8 Lpp::init(const InitParams& params)
     return false;
   const s32 I_lpp = lua.gettop();
 
-
   // give lpp module a handle to us
   lua.pushstring("handle"_str);
   lua.pushlightuserdata(this);
@@ -86,6 +85,8 @@ b8 Lpp::init(const InitParams& params)
 
   streams = params.streams;
   consumers = params.consumers;
+  use_full_filepaths = params.use_full_filepaths;
+  vfs = params.vfs;
 
   if (!params.args.isEmpty())
   {
@@ -296,16 +297,40 @@ int lua__processFile(lua_State* L)
     return 0;
   }
 
-  auto f = fs::File::from(path, fs::OpenFlag::Read);
-  if (isnil(f))
-    return {};
-  defer { f.close(); };
+  // This is scuffed as hell, but I do NOT want to be working on the ls anymore
+  io::IO* stream = nullptr;
+  io::StringView virtual_content;
+  fs::File file;
+  if (lpp->vfs)
+  {
+    String content = lpp->vfs->open(path.asStr());
+    if (notnil(content))
+    {
+      virtual_content = io::StringView::from(content);
+      stream = &virtual_content;
+    }
+  }
+
+  if (stream == nullptr)
+  {
+    file = fs::File::from(path, fs::OpenFlag::Read);
+    if (isnil(file))
+      return {};
+    stream = &file;
+  }
+
+  defer { stream->close(); };
 
   io::Memory mem;
   mem.open();
   defer { mem.close(); };
 
-  if (!lpp->processStream(reqpath, &f, &mem))
+  String name = 
+    lpp->use_full_filepaths
+    ? path.asStr() 
+    : reqpath;
+  
+  if (!lpp->processStream(name, stream, &mem))
     return 0;
 
   lua.pushstring(mem.asStr());

@@ -16,6 +16,7 @@ static Logger logger =
 b8 Driver::init(const InitParams& params)
 {
   consumers = params.consumers;
+  vfs = params.vfs;
 
   streams.in.init(params.in_stream_name, params.in_stream);
   streams.out.init(params.out_stream_name, params.out_stream);
@@ -63,6 +64,10 @@ Driver::ProcessArgsResult Driver::processArgs(Slice<String> args)
         // Print version and exit.
         io::format(&fs::stdout, "0.1\n");
         return ProcessArgsResult::EarlyOut;
+      }
+      else if (arg == "use-full-filepaths"_str)
+      {
+        use_full_filepaths = true;
       }
       else
       {
@@ -322,6 +327,9 @@ b8 Driver::construct(Lpp* lpp)
   params.include_dirs = include_dirs.asSlice();
 
   params.consumers = consumers;
+  params.vfs = vfs;
+
+  params.use_full_filepaths = use_full_filepaths;
 
   return lpp->init(params);
 }

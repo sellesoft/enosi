@@ -52,6 +52,7 @@ struct Server
   {
     s32 server;
     s32 processMessage;
+    s32 processFromQueue;
     s32 pollSubServers;
     s32 exit;
   } I;

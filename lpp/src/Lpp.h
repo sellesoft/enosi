@@ -23,9 +23,6 @@ using namespace iro;
 namespace lpp
 {
 
-struct Driver;
-struct Metaprogram;
-
 /* ============================================================================
  *  Set of consumer interfaces for getting information from lpp's systems 
  *  throughout the preprocessing process.
@@ -34,6 +31,19 @@ struct LppConsumers
 {
   LexerConsumer* lex_diag_consumer = nullptr;
   MetaprogramConsumer* meta = nullptr;
+};
+
+/* ============================================================================
+ *  An interface for overlaying files onto the actual file system. When lpp
+ *  goes to open a file, and this is available, it will first ask whatever
+ *  this is for the contents first. If a nil String is returned, the 
+ *  actual file is opened. The path given is an absolute path to the file 
+ *  to be opened.
+ */
+struct LppVFS
+{
+  virtual String open(String path) = 0;
+
 };
 
 /* ============================================================================
@@ -66,6 +76,10 @@ struct Lpp
 
   LppConsumers consumers;
 
+  LppVFS* vfs;
+
+  b8 use_full_filepaths;
+
   struct InitParams
   {
     Streams streams;
@@ -78,6 +92,9 @@ struct Lpp
     Slice<String> include_dirs;
 
     LppConsumers consumers;
+    LppVFS* vfs;
+
+    b8 use_full_filepaths;
   };
 
   b8   init(const InitParams& params);

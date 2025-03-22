@@ -76,6 +76,8 @@ String Source::getVirtualStr(u64 loc, u64 len)
  */
 Source::Loc Source::getLoc(u64 loc) const
 {
+  assert(loc < cache.len);
+
   u64 l = 0, 
       m = 0, 
       r = line_offsets.len() - 1;
@@ -104,6 +106,8 @@ Source::Loc Source::getLoc(u64 loc) const
     if (offset >= loc)
       break;
     utf8::Codepoint c = utf8::decodeCharacter(cache.ptr + offset, 4);
+    if (isnil(c))
+      break;
     offset += c.advance;
     column += 1;
   }

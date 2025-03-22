@@ -27,6 +27,7 @@ int main()
           ShowCategoryName
         | ShowVerbosity);
 
+#if IRO_DEBUG
     auto* f = mem::stl_allocator.construct<File>();
     *f = 
       File::from(
@@ -40,8 +41,10 @@ int main()
       iro::log.newDestination(
           "lpplsp.log"_str, f, Log::Dest::Flags::none());
     }
+#endif
   }
 
+#if IRO_DEBUG
   auto pidfile = 
     fs::File::from("lpplsp.pid"_str, 
           fs::OpenFlag::Create
@@ -54,7 +57,8 @@ int main()
   io::format(&pidfile, platform::getPid());
 
   INFO("procid: ", platform::getPid(), "\n");
-  // raise(SIGSTOP);
+  raise(SIGSTOP);
+#endif
 
   Server server;
 

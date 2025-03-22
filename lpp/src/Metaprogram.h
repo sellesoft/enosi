@@ -185,6 +185,10 @@ struct MetaprogramConsumer
   virtual void consumeExpansions(
     const Metaprogram& mp,
     const ExpansionList& exps) {}
+
+  virtual void consumeMetafile(
+    const Metaprogram& mp,
+    String metafile) {}
 };
 
 /* ============================================================================
@@ -218,7 +222,6 @@ struct Metaprogram
   SectionNode* current_section;
 
   Parser parser;
-  io::Memory parsed_program;
 
   // A mapping from a line in the generated metaprogram 
   // to the corresponding line in the original input. 

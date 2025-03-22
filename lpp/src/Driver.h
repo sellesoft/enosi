@@ -22,6 +22,7 @@ namespace lpp
 {
 
 struct Lpp;
+struct Driver;
 
 /* ============================================================================
  */
@@ -79,6 +80,9 @@ struct Driver
   } streams;
 
   LppConsumers consumers;
+  LppVFS* vfs;
+
+  b8 use_full_filepaths;
 
   struct InitParams
   {
@@ -106,6 +110,8 @@ struct Driver
     // A set of consumers used to extract information from lpp during 
     // preprocessing.
     LppConsumers consumers;
+
+    LppVFS* vfs;
   };
 
   b8   init(const InitParams& params);

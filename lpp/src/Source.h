@@ -3,6 +3,10 @@
  *  
  *  Handles translating source locations (byte offsets) to other information
  *  such as raw strings and line+columns as well as caching useful information.
+ *
+ *  TODO(sushi) this should probably be expanded to manage all of the 
+ *              information related to some 'source', eg. its lexer, parser,
+ *              tokens, metaprogram, each intermediate buffer we need, etc.
  */
 
 #ifndef _lpp_Source_h

@@ -4,6 +4,7 @@
 #include "iro/fs/File.h"
 #include "iro/Platform.h"
 #include "iro/io/IO.h"
+#include "iro/fs/Path.h"
 
 #include "lpp/Lex.h"
 #include "lpp/Lpp.h"
@@ -111,6 +112,10 @@ b8 Server::init()
   lua.gettable(I.server);
   I.processMessage = lua.gettop();
 
+  lua.pushstring("processFromQueue"_str);
+  lua.gettable(I.server);
+  I.processFromQueue = lua.gettop();
+
   lua.pushstring("pollSubServers"_str);
   lua.gettable(I.server);
   I.pollSubServers = lua.gettop();
@@ -200,7 +205,7 @@ b8 Server::loop()
   {
     buffer.clear();
 
-    if (platform::stdinHasData())
+    while (platform::stdinHasData())
     {
       Bytes reserved_space = buffer.reserve(readContentLength(&fs::stdin));
       buffer.commit(reserved_space.len);
@@ -229,6 +234,14 @@ b8 Server::loop()
         if (lua.rawequal(-1, I.exit))
           break;
       }
+    }
+
+    lua.pushvalue(I.processFromQueue);
+
+    if (!lua.pcall())
+    {
+      return ERROR("server.processFromQueue resulted in error:\n",
+                   lua.tostring(), "\n");
     }
 
     lua.pushvalue(I.pollSubServers);
@@ -261,38 +274,46 @@ b8 Server::loop()
 
 /* ----------------------------------------------------------------------------
  */
+static s32 getOrCreateSourceTable(
+    LuaState&     lua, 
+    s32           I_result, 
+    const Source& source)
+{
+  assert(fs::Path::isRooted(source.name) && 
+      "TODO(sushi) handle non-file sources");
+
+  lua.pushstring(source.name);
+  lua.gettable(I_result);
+  if (lua.isnil())
+  {
+    lua.pop();
+    lua.newtable();
+    const s32 I_newtable = lua.gettop();
+    lua.pushstring("diags"_str);
+    lua.newtable();
+    lua.settable(I_newtable);
+    lua.pushstring("macro_calls"_str);
+    lua.newtable();
+    lua.settable(I_newtable);
+    lua.pushstring("output_expansions"_str);
+    lua.newtable();
+    lua.settable(I_newtable);
+    lua.pushstring("meta_expansions"_str);
+    lua.newtable();
+    lua.settable(I_newtable);
+    lua.pushstring(source.name);
+    lua.pushvalue(I_newtable);
+    lua.settable(I_result);
+  }
+  return lua.gettop();
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 Server::processFile()
 {
   const s32 I_document = 2;
-
-  lua.newtable();
-  const s32 I_result = 3;
-
-  lua.newtable();
-  const s32 I_result_diags = 4;
-  lua.pushstring("diags"_str);
-  lua.pushvalue(I_result_diags);
-  lua.settable(I_result);
-
-  lua.newtable();
-  const s32 I_result_macro_calls = 5;
-  lua.pushstring("macro_calls"_str);
-  lua.pushvalue(I_result_macro_calls);
-  lua.settable(I_result);
-
-  lua.newtable();
-  const s32 I_result_output_expansions = 6;
-  lua.pushstring("output_expansions"_str);
-  lua.pushvalue(I_result_output_expansions);
-  lua.settable(I_result);
-
-  lua.newtable();
-  const s32 I_result_meta_expansions = 7;
-  lua.pushstring("meta_expansions"_str);
-  lua.pushvalue(I_result_meta_expansions);
-  lua.settable(I_result);
-
-  const s32 result_field_count = 4;
+  const s32 I_overlay = 3;
 
   lua.pushstring("uri"_str);
   lua.gettable(I_document);
@@ -305,6 +326,9 @@ b8 Server::processFile()
   lua.gettable(I_document);
   String text = lua.tostring();
   lua.pop();
+
+  lua.newtable();
+  const s32 I_result = lua.gettop();
 
   io::Memory output;
   io::Memory meta;
@@ -319,70 +343,82 @@ b8 Server::processFile()
     dep.close();
   };
 
+  // TODO(sushi) the way the result is organized here sucks, it needs to 
+  //             be reorganized again to simplify Server.lua:processDocument
+
   struct MetaprogramConsumer : lpp::MetaprogramConsumer
   {
     LuaState& lua;
     String name;
-    fs::File& log_file;
     io::Memory& meta;
+
+    s32 I_result;
 
     MetaprogramConsumer(
         LuaState& lua,
         String name,
-        fs::File& file,
         io::Memory& meta) : 
       lua(lua), 
       name(name),
-      log_file(file),
-      meta(meta) {}
+      meta(meta) 
+    {
+      lua.newtable();
+      I_result = lua.gettop();
+    }
 
     void consumeDiag(
         const lpp::Metaprogram& mp, 
         const lpp::MetaprogramDiagnostic& diag) override
     {
-      if (diag.source->name == name)
-      {
-        lua.newtable();
-        const s32 I_diag = lua.gettop();
+      const s32 I_source = 
+        getOrCreateSourceTable(lua, I_result, *diag.source);
 
-        lua.pushstring("range"_str);
-        lua.newtable();
-        const s32 I_range = lua.gettop();
+      lua.newtable();
+      const s32 I_diag = lua.gettop();
 
-        lua.pushstring("start"_str);
-        lua.newtable();
-        const s32 I_start = lua.gettop();
+      lua.pushstring("range"_str);
+      lua.newtable();
+      const s32 I_range = lua.gettop();
 
-        lua.pushstring("end"_str);
-        lua.newtable();
-        const s32 I_end = lua.gettop();
+      lua.pushstring("start"_str);
+      lua.newtable();
+      const s32 I_start = lua.gettop();
 
-        lua.pushstring("line"_str);
-        lua.pushinteger(diag.loc-1);
-        lua.pushstring("line"_str);
-        lua.pushinteger(diag.loc-1);
-        lua.settable(I_start);
-        lua.settable(I_end);
+      lua.pushstring("end"_str);
+      lua.newtable();
+      const s32 I_end = lua.gettop();
 
-        lua.pushstring("character"_str);
-        lua.pushinteger(0);
-        lua.pushstring("character"_str);
-        lua.pushinteger(0);
-        lua.settable(I_start);
-        lua.settable(I_end);
+      lua.pushstring("line"_str);
+      lua.pushinteger(diag.loc-1);
+      lua.pushstring("line"_str);
+      lua.pushinteger(diag.loc-1);
+      lua.settable(I_start);
+      lua.settable(I_end);
 
-        lua.settable(I_range);
-        lua.settable(I_range);
-        lua.settable(I_diag);
+      lua.pushstring("character"_str);
+      lua.pushinteger(0);
+      lua.pushstring("character"_str);
+      lua.pushinteger(0);
+      lua.settable(I_start);
+      lua.settable(I_end);
 
-        lua.pushstring("message"_str);
-        lua.pushstring(diag.message);
-        lua.settable(I_diag);
+      lua.settable(I_range);
+      lua.settable(I_range);
+      lua.settable(I_diag);
 
-        lua.tableInsert(I_result_diags, I_diag);
+      lua.pushstring("message"_str);
+      lua.pushstring(diag.message);
+      lua.settable(I_diag);
 
-        lua.pop();
-      }
+      lua.pushstring("diags"_str);
+      lua.gettable(I_source);
+      const s32 I_diags = lua.gettop();
+
+      lua.pushinteger(lua.objlen(I_diags) + 1);
+      lua.pushvalue(I_diag);
+      lua.settable(I_diags);
+
+      lua.pop(3);
     }
 
     void consumeSection(
@@ -391,8 +427,8 @@ b8 Server::processFile()
         u64 expansion_start,
         u64 expansion_end) override
     {
-      if (mp.input->name != name)
-        return;
+      const s32 I_source = 
+        getOrCreateSourceTable(lua, I_result, *mp.input);
         
       lpp::Token tok = mp.parser.lexer.tokens[section.token_idx];
 
@@ -404,6 +440,7 @@ b8 Server::processFile()
         break;
 
       default:
+        lua.pop();
         return;
       }
 
@@ -436,31 +473,34 @@ b8 Server::processFile()
       lua.settable(I_call);
       lua.pop();
 
-      lua.pushinteger(lua.objlen(I_result_macro_calls) + 1);
-      lua.pushvalue(I_call);
-      lua.settable(I_result_macro_calls);
+      lua.pushstring("macro_calls"_str);
+      lua.gettable(I_source);
+      const s32 I_macro_calls = lua.gettop();
 
-      lua.pop();
+      lua.pushinteger(lua.objlen(I_macro_calls) + 1);
+      lua.pushvalue(I_call);
+      lua.settable(I_macro_calls);
+
+      lua.pop(3);
     }
 
     void consumeExpansions(
         const lpp::Metaprogram& mp,
         const lpp::ExpansionList& exps) override
     {
-      if (mp.input->name != name)
-        return;
+      const s32 I_source = 
+        getOrCreateSourceTable(lua, I_result, *mp.input);
 
-      Source meta_src;
-      meta_src.init("meta"_str);
-      meta_src.writeCache(meta.asStr());
-      meta_src.cacheLineOffsets();
-
+      lua.pushstring("meta_expansions"_str);
+      lua.gettable(I_source);
+      const s32 I_meta_expansions = lua.gettop();
+      
       for (const lpp::Parser::LocMapping& exp : mp.parser.locmap)
       {
         Source::Loc from = mp.input->getLoc(exp.from);
-        Source::Loc to = meta_src.getLoc(exp.to);
+        Source::Loc to = mp.meta.getLoc(exp.to);
 
-        lua.pushinteger(lua.objlen(I_result_meta_expansions) + 1);
+        lua.pushinteger(lua.objlen(I_meta_expansions) + 1);
         lua.newtable();
         const s32 I_expansion = lua.gettop();
 
@@ -510,15 +550,20 @@ b8 Server::processFile()
         lua.settable(I_to);
         lua.settable(I_expansion);
 
-        lua.settable(I_result_meta_expansions);
+        lua.settable(I_meta_expansions);
       }
+
+      lua.pop();
+      lua.pushstring("output_expansions"_str);
+      lua.gettable(I_source);
+      const s32 I_output_expansions = lua.gettop();
         
       for (const lpp::Expansion& exp : exps)
       {
         Source::Loc from = mp.input->getLoc(exp.from);
         Source::Loc to = mp.output->getLoc(exp.to);
 
-        lua.pushinteger(lua.objlen(I_result_output_expansions) + 1);
+        lua.pushinteger(lua.objlen(I_output_expansions) + 1);
         lua.newtable();
         const s32 I_expansion = lua.gettop();
 
@@ -564,71 +609,128 @@ b8 Server::processFile()
         lua.settable(I_to);
         lua.settable(I_expansion);
 
-        lua.settable(I_result_output_expansions);
+        lua.settable(I_output_expansions);
       }
+
+      lua.pop(2);
     }
 
-  } meta_consumer { lua, name, log_file, meta };
+    void consumeMetafile(
+        const lpp::Metaprogram& mp,
+        String metafile) override
+    {
+      const s32 I_source = 
+        getOrCreateSourceTable(lua, I_result, *mp.input);
+
+      lua.pushstring("output"_str);
+      lua.pushstring(metafile);
+      lua.settable(I_source);
+
+      lua.pop();
+    }
+
+  } meta_consumer { lua, name, meta };
 
   struct LexerConsumer : lpp::LexerConsumer
   {
     LuaState& lua;
     String name;
 
+    s32 I_result;
+
     LexerConsumer(
         LuaState& lua,
-        String name) : lua(lua), name(name) {}
+        String name) : lua(lua), name(name) 
+    {
+      lua.newtable();
+      I_result = lua.gettop();
+    }
 
     void consumeDiag(
         const lpp::Lexer& lexer, 
         const lpp::LexerDiagnostic& diag) override
     {
-      if (diag.source->name == name)
-      {
-        lua.newtable();
-        const s32 I_diag = lua.gettop();
+      const s32 I_source =
+        getOrCreateSourceTable(lua, I_result, *lexer.source);
 
-        lua.pushstring("range"_str);
-        lua.newtable();
-        const s32 I_range = lua.gettop();
+      lua.newtable();
+      const s32 I_diag = lua.gettop();
 
-        lua.pushstring("start"_str);
-        lua.newtable();
-        const s32 I_start = lua.gettop();
+      lua.pushstring("range"_str);
+      lua.newtable();
+      const s32 I_range = lua.gettop();
 
-        lua.pushstring("end"_str);
-        lua.newtable();
-        const s32 I_end = lua.gettop();
+      lua.pushstring("start"_str);
+      lua.newtable();
+      const s32 I_start = lua.gettop();
 
-        lua.pushstring("line"_str);
-        lua.pushinteger(diag.line);
-        lua.pushstring("line"_str);
-        lua.pushinteger(diag.line);
-        lua.settable(I_start);
-        lua.settable(I_end);
+      lua.pushstring("end"_str);
+      lua.newtable();
+      const s32 I_end = lua.gettop();
 
-        lua.pushstring("character"_str);
-        lua.pushinteger(diag.column);
-        lua.pushstring("character"_str);
-        lua.pushinteger(diag.column);
-        lua.settable(I_start);
-        lua.settable(I_end);
+      lua.pushstring("line"_str);
+      lua.pushinteger(diag.line-1);
+      lua.pushstring("line"_str);
+      lua.pushinteger(diag.line-1);
+      lua.settable(I_start);
+      lua.settable(I_end);
 
-        lua.settable(I_range);
-        lua.settable(I_range);
-        lua.settable(I_diag);
+      lua.pushstring("character"_str);
+      lua.pushinteger(diag.column-1);
+      lua.pushstring("character"_str);
+      lua.pushinteger(diag.column-1);
+      lua.settable(I_start);
+      lua.settable(I_end);
 
-        lua.pushstring("message"_str);
-        lua.pushstring(diag.message);
-        lua.settable(I_diag);
+      lua.settable(I_range);
+      lua.settable(I_range);
+      lua.settable(I_diag);
 
-        lua.tableInsert(I_result_diags, I_diag);
+      lua.pushstring("message"_str);
+      lua.pushstring(diag.message);
+      lua.settable(I_diag);
 
-        lua.pop();
-      }
+      lua.pushstring("diags"_str);
+      lua.gettable(I_source);
+      const s32 I_diags = lua.gettop();
+
+      lua.pushinteger(lua.objlen(I_diags) + 1);
+      lua.pushvalue(I_diag);
+      lua.settable(I_diags);
+
+      lua.pop(3);
     }
 
   } lex_diag_consumer { lua, name };
+
+  struct VFS : lpp::LppVFS
+  {
+    String overlay_path;
+    String content;
+
+    String open(String path) override
+    {
+      if (path == overlay_path)
+        return content;
+      return nil;
+    }
+  };
+
+  // whatever
+  VFS vfs;
+  VFS* pvfs = nullptr;
+  if (!lua.isboolean(I_overlay))
+  {
+    pvfs = &vfs;
+    lua.pushstring("uri"_str);
+    lua.gettable(I_overlay);
+    String uri = lua.tostring();
+    vfs.overlay_path = uri.sub("file://"_str.len);
+    
+    lua.pushstring("text"_str);
+    lua.gettable(I_overlay);
+    vfs.content = lua.tostring();
+  }
 
   auto input = io::StringView::from(text);
 
@@ -645,7 +747,9 @@ b8 Server::processFile()
     {
       .meta = &meta_consumer,
       .lex_diag_consumer = &lex_diag_consumer,
-    }
+    },
+
+    .vfs = pvfs,
   };
 
   lpp::Driver driver;
@@ -654,6 +758,10 @@ b8 Server::processFile()
   defer { driver.deinit(); };
   
   SmallArray<String, 16> args;
+
+  // Instruct lpp to use full filenames when processing files to simplify 
+  // mapping Sources to their internal document.
+  args.push("--use-full-filenames"_str);
 
   auto cwd = fs::Path::cwd();
   fs::Path dir;
@@ -742,12 +850,34 @@ b8 Server::processFile()
 
   lpp.run();
 
-  if (!meta.asStr().isEmpty())
-  {
-    lua.pushstring("meta"_str);
-    lua.pushstring(meta.asStr());
-    lua.settable(I_result);
-  }
+  lua.pushvalue(meta_consumer.I_result);
+
+  lua.pushstring("meta"_str);
+  lua.newtable();
+  const s32 I_meta_result = lua.gettop();
+
+  lua.pushstring("docs"_str);
+  lua.pushvalue(meta_consumer.I_result);
+  lua.settable(I_meta_result);
+
+  /*if (!meta.asStr().isEmpty())*/
+  /*{*/
+  /*  lua.pushstring("output"_str);*/
+  /*  lua.pushstring(output.asStr());*/
+  /*  lua.settable(I_meta_result);*/
+  /*}*/
+
+  lua.settable(I_result);
+
+  lua.pushstring("lex"_str);
+  lua.newtable();
+  const s32 I_lex_result = lua.gettop();
+
+  lua.pushstring("docs"_str);
+  lua.pushvalue(lex_diag_consumer.I_result);
+  lua.settable(I_lex_result);
+
+  lua.settable(I_result);
 
   if (!output.asStr().isEmpty())
   {
@@ -756,9 +886,7 @@ b8 Server::processFile()
     lua.settable(I_result);
   }
 
-  lua.pop(result_field_count);
-
-  INFO("successfully processed file\n");
+  lua.settop(I_result);
 
   return true;
 }

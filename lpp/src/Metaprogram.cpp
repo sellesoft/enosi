@@ -145,6 +145,7 @@ b8 Metaprogram::init(
   if (!scope_stack.init()) return false;
   if (!expansions.init()) return false;
   if (!captures.init()) return false;
+  if (!meta.init("meta"_str)) return false;
   return true;
 }
 
@@ -163,8 +164,8 @@ void Metaprogram::deinit()
     buffer.close();
   buffers.deinit();
   parser.deinit();
-  parsed_program.close();
   captures.destroy();
+  meta.deinit();
   *this = {};
 }
 
@@ -505,14 +506,6 @@ b8 Metaprogram::run()
   }
   I.errhandler = lua.gettop();
 
-  // The parsed program, to be executed in phase 2.
-  // TODO(sushi) get this to incrementally stream from the parser 
-  //             directly to lua.load(). My whole IO setup is too dumb 
-  //             to do that atm I think.
-  if (!parsed_program.open())
-    return false;
-  defer { parsed_program.close(); };
-
   // ~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~ Phase 1
   
   DEBUG("phase 1\n");
@@ -523,7 +516,7 @@ b8 Metaprogram::run()
   if (!parser.init(
         input, 
         instream, 
-        &parsed_program, 
+        &meta.cache, 
         lpp->consumers.lex_diag_consumer))
     return false;
   defer { parser.deinit(); };
@@ -534,6 +527,8 @@ b8 Metaprogram::run()
   if (!parser.run())
     return false;
 
+  meta.cacheLineOffsets();
+
   for (auto& exp : parser.locmap)
   {
     DEBUG(exp.from, " -> ", exp.to, "\n");
@@ -541,7 +536,10 @@ b8 Metaprogram::run()
 
   // NOTE(sushi) we only want to output the main lpp file's metafile
   if (lpp->streams.meta.io  && prev == nullptr)
-    io::format(lpp->streams.meta.io, parsed_program.asStr());
+    io::format(lpp->streams.meta.io, meta.cache.asStr());
+
+  if (lpp->consumers.meta)
+    lpp->consumers.meta->consumeMetafile(*this, meta.cache.asStr());
 
   // ~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~=~ Phase 2
   
@@ -555,7 +553,7 @@ b8 Metaprogram::run()
   defer { popScope(); };
 
   TRACE("loading parsed program\n");
-  if (!lua.loadbuffer(parsed_program.asStr(), (char*)input->name.ptr))
+  if (!lua.loadbuffer(meta.cache.asStr(), (char*)input->name.ptr))
   {
     auto te = translateLuaError(*this, lua.tostring());
     if (lpp->consumers.meta)
@@ -974,15 +972,10 @@ s32 Metaprogram::mapMetaprogramLineToInputLine(s32 line)
  */
 void Metaprogram::generateInputLineMap(InputLineMap* out_map)
 {
-  Source temp;
-  temp.init("temp"_str);
-  defer { temp.deinit(); };
-  temp.writeCache(parsed_program.asStr());
-  temp.cacheLineOffsets();
   for (auto& exp : parser.locmap)
   { 
     Source::Loc from = input->getLoc(exp.from);
-    Source::Loc to = temp.getLoc(exp.to);
+    Source::Loc to = meta.getLoc(exp.to);
     out_map->push(
       {
         .metaprogram = s32(to.line),

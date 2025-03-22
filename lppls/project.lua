@@ -17,4 +17,4 @@ local exe =
   lppls.report.Exe("lppls",
     lppls:gatherBuildObjects{bobj.CppObj, bobj.LuaObj})
 
--- lppls.report.published(lppls)
+lppls.report.published(exe)
