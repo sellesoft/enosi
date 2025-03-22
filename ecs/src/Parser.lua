@@ -42,8 +42,6 @@ Parser.errorHere = function(self, ...)
 
   local scan = self.offset
 
-  print(scan)
-
   while true do
     if self.text:sub(scan,scan) == "\n" or
        scan == 1

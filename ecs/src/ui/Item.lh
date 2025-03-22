@@ -305,7 +305,8 @@ struct
   //             list of dirty Items on UI that we check every update.
   b8 dirty;
 
-  b8 init(UI& ui, String name);  
+  b8 init(UI& ui, String name);
+  void deinit();
 
   static Item* make(UI& ui, String name = nil);
   static Item* begin(UI& ui, String name = nil);
@@ -331,8 +332,8 @@ struct
   //             as copying out into a temp array kinda sucks when an Item
   //             has a ton of draw commands.
   virtual void reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post) { }
-
   virtual void reportDrawCmdsPostSiblings(UI* ui, DrawCmdList& list) { }
+  virtual void reportDrawCmdsTopMost(UI* ui, DrawCmdList& list) { }
 
   // Allows a widget to tell evaluate if it should place children or not.
   virtual b8 shouldPlaceChildren() { return true; }

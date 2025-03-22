@@ -22,6 +22,37 @@ static Logger logger =
 
 /* ----------------------------------------------------------------------------
  */
+void UI::destroyItem(Item* item)
+{
+  assert(item != root);
+
+  if (hovered == item)
+    hovered = nullptr;
+
+  if (focused == item)
+    focused = nullptr;
+
+  while (ItemNode* child = item->node->first_child)
+    destroyItem(child->data);
+    
+  item->cleanup();
+  item->style.deinit();
+  item_tree.remove(item->node);
+  
+  if (item->builtin.borders)
+    item->builtin.borders->remove(this);
+
+  if (item->builtin.scrollbars)
+    item->builtin.scrollbars->remove(this);
+
+  if (item->builtin.background)
+    item->builtin.background->remove(this);
+
+  mem::stl_allocator.free(item);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 void UI::beginItem(Item* item)
 {
   item_stack.push(item);
@@ -127,7 +158,7 @@ b8 UI::update(Engine& engine)
   // TODO(sushi) only do this if the mouse moves by subscribing to the
   //             MouseMoved event, maybe. A lot of other stuff will
   //             also make this need to be retriggered as well.
-  findHoveredItem(item_tree.root);
+  // findHoveredItem(item_tree.root);
 
   renderer.pushBindBuffer(buffer);
 
@@ -154,10 +185,27 @@ b8 UI::update(Engine& engine)
   auto base_transform = 
     mat3x2::createTransform({0.f,0.f}, 0.f);
 
-  // This should probably never be added to? No, I think it could, 
-  // so the logic for handling this should be pulled out I believe.
-  PostSiblingDrawCmdArray dummy;
-  updateTree(root->node, dummy, base_transform);
+  DeferredDrawCmdList top_most_drawcmds;
+
+  UpdateTreeContext ctx = 
+  {
+    .top_most_drawcmds = &top_most_drawcmds,
+    .post_sibling_drawcmds = nullptr,
+    .current_transform = &base_transform,
+  };
+
+  updateTree(root->node, ctx);
+
+  // Draw top most drawcmds with no scissor.
+  renderer.pushSetScissor(vec2i(0,0), window.size);
+  emitDrawCmds(top_most_drawcmds);
+
+  if (ctx.hovered && ctx.hovered != hovered)
+  {
+    INFO("new hover: ", ctx.hovered, " ", ctx.hovered->name, "\n");
+  }
+
+  hovered = ctx.hovered;
 
   temp_alloc.deinit();
 
@@ -268,10 +316,7 @@ static ItemNode* findStaticSizedParent(
 
 /* ----------------------------------------------------------------------------
  */
-void UI::updateTree(
-    ItemNode* node, 
-    PostSiblingDrawCmdArray& post_sibling_drawcmds,
-    const mat3x2& current_transform)
+void UI::updateTree(ItemNode* node, UpdateTreeContext& ctx)
 {
   gfx::Renderer& renderer = eng->renderer;
   Window&        window   = eng->window;
@@ -303,17 +348,16 @@ void UI::updateTree(
 
   @@parent.style:lookup(overflow, margin, border)
 
-$ local tryUpdate = function(reason, cond)
-  if (item->update_triggers.test(UpdateReason::$(reason)) &&
+$ local tryUpdate = function(reason, cond, item)
+  if ($(item or "item")->update_triggers.test(UpdateReason::$(reason)) &&
       ($(cond or "true")))
-    item->update(this, UpdateReason::$(reason));
+    $(item or "item")->update(this, UpdateReason::$(reason));
 $ end
 
   @tryUpdate(Start)
 
-  if (item->isHovered(this, Item::HoverKind::Topmost))
+  if (hovered == item)
   {
-    // Only allow hover and pressed when item is topmost.
     @tryUpdate(MouseHover)
     @tryUpdate(MousePressed, input.anyMouseButtonPressed())
 
@@ -322,22 +366,23 @@ $ end
       Item* prev_focused = focused;
       focused = item;
 
-      if (prev_focused != nullptr)
+      if (prev_focused)
+        INFO("focused ", prev_focused->name, " -> ", focused->name, "\n");
+      else
+        INFO("focused ", focused->name, "\n");
+
+      if (prev_focused && prev_focused != item)
       {
-        prev_focused->update(this, UpdateReason::FocusLost);
+        @tryUpdate(FocusLost, true, prev_focused)
       }
     }
-  }
 
-  if (item->isHovered(this, Item::HoverKind::Area))
-  {
-    // Allow other mouse inputs if the item is hovered at all.
     @tryUpdate(MouseReleased, input.anyMouseButtonReleased())
     @tryUpdate(MouseDown, input.anyMouseButtonDown())
     @tryUpdate(MouseScroll, input.scroll != 0.f)
   }
 
-  @tryUpdate(MouseHoverChild, item->isHovered(this, Item::HoverKind::Child))
+  // \@tryUpdate(MouseHoverChild, item->isHovered(this, Item::HoverKind::Child))
 
   if (item->dirty)
   {
@@ -372,7 +417,7 @@ $ end
     vec2f cpos =
       item->pos_screen +
       @style.margin.top_left;
-    vec2f csiz = @item.getMarginedArea;
+    vec2f csiz = max(@item.getMarginedArea, item->calcVisualArea());
 
     vec2f ppos =
       parent->pos_screen +
@@ -449,43 +494,10 @@ $ end
     scext.x != 0.f          && scext.y != 0.f          &&
     scoff.x + scext.x > 0.f && scoff.y + scext.y > 0.f;
 
-  auto emitDrawCmd = [&](DrawCmd* drawcmd)
-  {
-    if (notnil(drawcmd->tex))
-    {
-      TRACE("  drawcmd has tex ", drawcmd->tex.handle, "\n");
-      renderer.pushBindTexture(drawcmd->tex);
-    }
-    else
-    {
-      TRACE("  drawcmd has no tex\n");
-      renderer.pushBindTexture(white_texture);
-    }
-
-    if (drawcmd->counts_used.y == 0)
-      return;
-
-    TRACE("  pushing draw \n",
-        "    io: ", drawcmd->index_offset,
-        "\n    ic: ", drawcmd->counts_used.y,
-        "\n    vo: ", drawcmd->vertex_offset, "\n");
-
-    renderer.pushDraw(
-      drawcmd->index_offset,
-      drawcmd->counts_used.y,
-      drawcmd->vertex_offset);
-  };
-
-  auto emitDrawCmds = [&](DrawCmdList& drawcmds)
-  {
-    TRACE("pushing draw cmds \n");
-
-    for (DrawCmd* drawcmd : drawcmds)
-      emitDrawCmd(drawcmd);
-  };
-
   if (item_in_view)
   {
+    const mat3x2& current_transform = *ctx.current_transform;
+
     mat3x2 item_screen_transform = 
       current_transform.mul(
         mat3x2::createTransform(item->pos_local, 0.f));
@@ -518,48 +530,65 @@ $ end
 
     // Ask the Item if it has any drawcmds.
     DrawCmdList precmds;
-    precmds.init();
     DrawCmdList postcmds;
-    postcmds.init();
     item->reportDrawCmds(this, precmds, postcmds);
 
-    DrawCmdList postsibcmds;
-    postsibcmds.init();
-    item->reportDrawCmdsPostSiblings(this, postsibcmds);
+    DrawCmdList topmostcmds;
+    item->reportDrawCmdsTopMost(this, topmostcmds);
 
-    for (DrawCmd* cmd : postsibcmds)
+    for (DrawCmd* cmd : topmostcmds)
     {
-      PostSiblingDrawCmd* post_sib_cmd = post_sibling_drawcmds.push();
-      post_sib_cmd->drawcmd = cmd;
-      post_sib_cmd->transform = item_content_transform;
+      DeferredDrawCmd* deferred_cmd = ctx.top_most_drawcmds->push();
+      deferred_cmd->drawcmd = cmd;
+      deferred_cmd->transform = item_content_transform;
+    }
+
+    if (ctx.post_sibling_drawcmds != nullptr)
+    {
+      DrawCmdList postsibcmds;
+      item->reportDrawCmdsPostSiblings(this, postsibcmds);
+
+      for (DrawCmd* cmd : postsibcmds)
+      {
+        DeferredDrawCmd* deferred_cmd = ctx.post_sibling_drawcmds->push();
+        deferred_cmd->drawcmd = cmd;
+        deferred_cmd->transform = item_content_transform;
+      }
     }
 
     // Emit pre-children commands.
     if (precmds.len != 0)
       emitDrawCmds(precmds);
 
-    PostSiblingDrawCmdArray children_post_sibling_drawcmds;
-    children_post_sibling_drawcmds.init();
+    DeferredDrawCmdList children_post_sibling_drawcmds;
+
+    UpdateTreeContext child_ctx = 
+      ctx.inherit(&children_post_sibling_drawcmds, &item_screen_transform);
 
     // Update child branches if the Item wants us to.
     if (item->shouldPlaceChildren())
     {
-      for (ItemNode* child = node->first_child; child; child = child->next)
-        updateTree(
-          child, 
-          children_post_sibling_drawcmds, 
-          item_screen_transform);
+      for (ItemNode* child = node->last_child; child; child = child->prev)
+        updateTree(child, child_ctx);
     }
+
+    if (child_ctx.hovered == nullptr)
+    {
+      vec2f visual_area = item->calcVisualArea();
+      if (math::pointInRect(
+            eng->input.mouse.window, 
+            item->visible_start,
+            visual_area))
+        ctx.hovered = item;
+    }
+    else
+      ctx.hovered = child_ctx.hovered;
 
     // Children likely changed scissor, so we have to set it back.
     renderer.pushSetScissor(
       vec2i(scoff.x, window.size.y - (scoff.y+scext.y)), scext);
 
-    for (PostSiblingDrawCmd& post_sib_cmd : children_post_sibling_drawcmds)
-    {
-      renderer.pushUniformMat3x2("model"_str, post_sib_cmd.transform);
-      emitDrawCmd(post_sib_cmd.drawcmd);
-    }
+    emitDrawCmds(children_post_sibling_drawcmds);
 
     // Child will have pushed a different transform so restore ours.
     // This kinda sucks, but I'm not sure of a good way around it.
@@ -1280,29 +1309,53 @@ void UI::genItemBranch(ItemNode* node)
 
 /* ----------------------------------------------------------------------------
  */
-b8 UI::findHoveredItem(ItemTree::Node* node)
+void UI::emitDrawCmd(DrawCmd* drawcmd)
 {
-  Item* item = node->data;
+  if (drawcmd->counts_used.y == 0)
+    return;
 
-  $ local item = ui.createItemContext("Item", "item")
-  @@item.style:lookup(display)
-
-  if (!@item.style.display.test(hidden) && item->shouldPlaceChildren())
+  if (notnil(drawcmd->tex))
   {
-    for (ItemTree::Node* child = node->last_child; child; child = child->prev)
-    {
-      if (findHoveredItem(child))
-        return true;
-    }
+    TRACE("  drawcmd has tex ", drawcmd->tex.handle, "\n");
+    eng->renderer.pushBindTexture(drawcmd->tex);
+  }
+  else
+  {
+    TRACE("  drawcmd has no tex\n");
+    eng->renderer.pushBindTexture(white_texture);
   }
 
-  if (item->containsPoint(eng->input.mouse.window))
-  {
-    hovered = item;
-    return true;
-  }
+  TRACE("  pushing draw \n",
+      "      io: ", drawcmd->index_offset,
+      "\n    ic: ", drawcmd->counts_used.y,
+      "\n    vo: ", drawcmd->vertex_offset, "\n");
 
-  return false;
+  eng->renderer.pushDraw(
+    drawcmd->index_offset,
+    drawcmd->counts_used.y,
+    drawcmd->vertex_offset);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::emitDrawCmds(DrawCmdList& drawcmds)
+{
+  TRACE("pushing draw cmds \n");
+
+  for (DrawCmd* drawcmd : drawcmds)
+    emitDrawCmd(drawcmd);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::emitDrawCmds(DeferredDrawCmdList& drawcmds)
+{
+  for (DeferredDrawCmd& cmd : drawcmds)
+  {
+    if (cmd.drawcmd->counts_used.x != 0)
+      eng->renderer.pushUniformMat3x2("model"_str, cmd.transform);
+    emitDrawCmd(cmd.drawcmd);
+  }
 }
 
 /* ----------------------------------------------------------------------------
