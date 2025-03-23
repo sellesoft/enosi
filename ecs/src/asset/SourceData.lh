@@ -19,6 +19,10 @@ struct SourceDataFile;
  */
 struct SourceData
 {
+  // NOTE(sushi) all Strings on a SourceData are ALWAYS assumed to be 
+  //             stored elsewhere! A SourceData will NEVER clean up 
+  //             Strings stored on it upon deletion!!!
+
   String name;
 
   struct Value

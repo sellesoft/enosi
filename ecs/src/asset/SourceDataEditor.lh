@@ -9,6 +9,8 @@ $ local ui = require "ui.UI"
 
 @@lpp.import "graphics/Font.lh"
 
+struct SourceData;
+
 namespace ui
 {
 
@@ -23,8 +25,24 @@ schema
 },
 struct
 {
+  // The SourceData we are editing. This is not owned by the editor, and 
+  // so is not cleaned up when setSourceData is called, and is expected to
+  // be kept in memory until released from the editor.
+  SourceData* sdata;
+
+  u64 type_id;
+
+  static SourceDataEditor* create(UI& ui);
+  void destroy();
+
+  void setSourceData(UI& ui, SourceData* data);
+
+  void evaluate(UI* ui) override;
+  void generate(UI* ui) override;
+
+private:
   
-  
+  void placeSourceDataItems(UI& ui, SourceData* sdata);
 })
 
 }

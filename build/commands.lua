@@ -117,7 +117,7 @@ cmd.CppObj.getIOIndependentFlags = function(params)
       params.pic and "-fPIC",
       "-std="..(params.std or "c++20"),
       params.nortti and "-fno-rtti",
-      params.debug_info and "-g" ,
+      params.debug_info and "-g",
       params.address_sanitizer and "-fsanitize=address",
       not params.export_all and "-fvisibility=hidden",
       --"-fpatchable-function-entry=16",

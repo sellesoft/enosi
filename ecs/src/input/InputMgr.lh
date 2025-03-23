@@ -13,6 +13,8 @@ using namespace iro;
 
 struct Engine;
 
+/* ============================================================================
+ */
 struct InputMgr
 {
   typedef EnumBitArray<Key> KeyMap;
@@ -43,6 +45,20 @@ struct InputMgr
 
   b8 update(Engine& engine);
 
+  // TODO(sushi) do this better. This is used to allow the UI system to 
+  //             consume input so that when we are, say, typing into an 
+  //             input text widget we dont also send those inputs to the
+  //             game. Later on we should instead send a different set of 
+  //             input bits to the game systems, but at the moment I'm
+  //             not completely sure how I want input for the game to work,
+  //             so we'll stick with this for now.
+  // NOTE(sushi) ok never mind, this doesn't actually work. We need to 
+  //             do what I suggested above, where we send to the game a 
+  //             different input state entirely, I don't want to focus on 
+  //             that at the moment though.
+  void consumeMouseInput();
+  void consumeKeyInput();
+
   b8 isKeyDown(Key key)
   {
     return keys_new.test(key);
@@ -51,9 +67,17 @@ struct InputMgr
   {
     return keys_new.test(key) && !keys_old.test(key);
   }
+  b8 anyKeyPressed()
+  {
+    return keys_new.bitAnd(keys_old.bitNot()).testAny();
+  }
   b8 wasKeyReleased(Key key)
   {
     return !keys_new.test(key) && keys_old.test(key);
+  }
+  b8 anyKeyReleased()
+  {
+    return keys_new.bitNot().bitAnd(keys_old).testAny();
   }
   b8 isMouseButtonDown(MouseButton button) 
   {

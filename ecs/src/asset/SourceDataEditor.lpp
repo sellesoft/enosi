@@ -1,0 +1,167 @@
+$ local cmn = require "common"
+$ local ui = require "ui.UI"
+$ local glob = require "Glob"
+$ local Processor = require "reflect.Processor"
+
+@@lpp.import "asset/SourceDataEditor.lh"
+
+@@lpp.import "asset/SourceData.lh"
+
+@@lpp.import "ui/UI.lh"
+@@lpp.import "ui/widgets/InputText.lh"
+@@lpp.import "ui/widgets/CollapsingHeader.lh"
+
+$$$
+local imported = cmn.buffer.new()
+
+local importPattern = function(pattern)
+  glob(pattern):each(function(path)
+    if path and path:find("%S") then
+      imported:put(lpp.import(path))
+    end
+  end)
+end
+
+importPattern "**/*.defs.lh"
+importPattern "**/*.comp.lh"
+
+local p = Processor.new(imported:get())
+p:run()
+$$$
+
+namespace ui
+{ 
+
+/* ============================================================================
+ */
+struct FieldInputText : public InputText
+{
+  SourceData* sdata;
+
+  static FieldInputText* make(UI& ui, SourceData* data)
+  {
+    auto* fit = ui.allocateAndInitItem<FieldInputText>(nil);
+    if (fit == nullptr)
+      return nullptr;
+
+    fit->sdata = data;
+
+    if (!fit->InputText::init(ui, data->val.str))
+    {
+      ui.destroyItem(fit);
+      return nullptr;
+    }
+
+    return fit;
+  }
+
+  void onTextChanged() override
+  {
+    sdata->val.str = text.asStr();
+    sdata->dump();
+  };
+};
+
+/* ----------------------------------------------------------------------------
+ */
+SourceDataEditor* SourceDataEditor::create(UI& ui)
+{
+  auto* editor = ui.allocateAndInitItem<SourceDataEditor>(nil);
+  if (editor == nullptr)
+    return nullptr;
+
+  ui.beginItem(editor);
+
+  @ui.style(editor, SourceDataEditor,
+  | size: 100% 100%
+  | background_color: 0x000000ff)
+
+  auto* default_text = ui::Text::make(ui, "No source data selected.."_str);
+  @ui.style(default_text, Text, alignment: 0.5 0.5)
+
+  ui.endItem();
+
+  return editor;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SourceDataEditor::setSourceData(UI& ui, SourceData* data)
+{
+  ui.destroyItemChildren(this);
+
+  sdata = data;
+
+  assert(data->hasObjectData());
+
+  ui.beginItem(this);
+  {
+    if (notnil(data->name))
+    {
+      placeSourceDataItems(ui, sdata);
+    }
+    else
+    {
+      for (SourceData* child : data->children)
+      {
+        placeSourceDataItems(ui, child);
+      }
+    }
+  }
+  ui.endItem();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SourceDataEditor::placeSourceDataItems(UI& ui, SourceData* data)
+{
+  if (data->hasObjectData())
+  {
+    auto* header = CollapsingHeader::begin(ui, data->name);
+    {
+      @ui.style(header, CollapsingHeader, 
+      | size: 100% auto
+      | background_color: 0x111133ff)
+
+      for (SourceData* child : data->children)
+      {
+        placeSourceDataItems(ui, child);
+      }
+    }
+    ui.endItem();
+  }
+  else
+  {
+    auto* container = Item::begin(ui);
+    {
+      @ui.style(container, Item, 
+      | size: 100% auto
+      | display: horizontal flex
+      | background_color: 0x331111ff)
+
+      auto* name = Text::make(ui, data->name);
+      @ui.style(name, Text, 
+      | size: flex(1) auto)
+
+      auto* value = FieldInputText::make(ui, data);
+      @ui.style(value, InputText, size: flex(1) auto)
+    }
+    ui.endItem();
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SourceDataEditor::evaluate(UI* ui)
+{
+
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SourceDataEditor::generate(UI* ui)
+{
+
+}
+
+}
