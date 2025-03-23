@@ -59,28 +59,52 @@ struct BitArray
     return 0 != (words[word] & (1 << bit));
   }
 
-  void bitOr(const Self& rhs)
+  void clear()
   {
     for (u32 i = 0; i < WordCount; ++i)
-      words[i] |= rhs.words[i];
+      words[i] = 0;
   }
 
-  void bitAnd(const Self& rhs)
+  b8 testAny() const
   {
     for (u32 i = 0; i < WordCount; ++i)
-      words[i] &= rhs.words[i];
+    {
+      if (words[i])
+        return true;
+    }
+    return false;
   }
 
-  void bitXor(const Self& rhs)
+  Self bitOr(const Self& rhs) const
   {
+    Self out = *this;
     for (u32 i = 0; i < WordCount; ++i)
-      words[i] ^= rhs.words[i];
+      out.words[i] |= rhs.words[i];
+    return out;
   }
 
-  void bitNot()
+  Self bitAnd(const Self& rhs) const
   {
+    Self out = *this;
     for (u32 i = 0; i < WordCount; ++i)
-      words[i] = ~words[i];
+      out.words[i] &= rhs.words[i];
+    return out;
+  }
+
+  Self bitXor(const Self& rhs) const
+  {
+    Self out = *this;
+    for (u32 i = 0; i < WordCount; ++i)
+      out.words[i] ^= rhs.words[i];
+    return out;
+  }
+
+  Self bitNot() const
+  {
+    Self out = {};
+    for (u32 i = 0; i < WordCount; ++i)
+      out.words[i] = ~words[i];
+    return out;
   }
 };
 
