@@ -35,4 +35,5 @@ struct GameMgr
   void deinit();
 
   b8 update();
+  b8 render();
 };

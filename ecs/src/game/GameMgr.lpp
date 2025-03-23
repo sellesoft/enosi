@@ -23,6 +23,8 @@ using namespace iro;
 static Logger logger =
   Logger::create("gamemgr"_str, Logger::Verbosity::Info);
 
+/* ----------------------------------------------------------------------------
+ */
 b8 GameMgr::init(Engine* eng)
 {
   INFO("initializing\n");
@@ -86,11 +88,15 @@ b8 GameMgr::init(Engine* eng)
   return true;
 }
 
+/* ----------------------------------------------------------------------------
+ */
 void GameMgr::deinit()
 {
   entmgr.deinit();
 }
 
+/* ----------------------------------------------------------------------------
+ */
 b8 GameMgr::update()
 {
   if (!mindsys.update(*this))
@@ -103,11 +109,31 @@ b8 GameMgr::update()
     return false;
 
   $ local map_editor = ui.createItemContext("MapEditor", "map_editor")
+
+  map_editor->renderMap(engine->ui);
+
+  if (engine->input.wasKeyPressed(Key::M))
+  {
+    @@map_editor.style:lookup(display)
+    if (@map_editor.style.display.test(hidden))
+      @map_editor.style.set.display(0);
+    else
+      @map_editor.style.set.display(hidden);
+  }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 GameMgr::render()
+{
+  $ local map_editor = ui.createItemContext("MapEditor", "map_editor")
   @@map_editor.style:lookup(display)
 
   if (@map_editor.style.display.test(hidden))
   {
-    RenderSys::UpdateParams render_params1 =
+    RenderSys::UpdateParams render_params =
     {
       .viewport = { .size = engine->window.size },
       .renderer = engine->renderer,
@@ -115,19 +141,9 @@ b8 GameMgr::update()
       .map = &map,
     };
 
-    eye.getViewMat(&render_params1.view);
-    if (!rendersys.update(render_params1))
+    eye.getViewMat(&render_params.view);
+    if (!rendersys.update(render_params))
       return false;
-  }
-
-  map_editor->renderMap(engine->ui);
-
-  if (engine->input.wasKeyPressed(Key::M))
-  {
-    if (@map_editor.style.display.test(hidden))
-      @map_editor.style.set.display(0);
-    else
-      @map_editor.style.set.display(hidden);
   }
 
   return true;
