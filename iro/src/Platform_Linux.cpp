@@ -962,7 +962,7 @@ b8 isRunningUnderDebugger()
  */
 void debugBreak()
 {
-  raise(SIGTRAP);
+  __builtin_debugtrap();
 }
 
 /* ----------------------------------------------------------------------------
