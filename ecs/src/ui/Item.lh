@@ -44,7 +44,10 @@ enum class UpdateReason
   MouseDown,
   MouseScroll,
 
+  FocusGained,
   FocusLost,
+
+  FocusedKeyPress,
 
   // Last update callback ever invoked on an Item.
   Fin,
@@ -74,52 +77,46 @@ schema
     parseValue
     {
       -- Special because we could encounter a percentage or keyword.
-      local x, xperc
+      local sizing = ""
+
+      local addSizing = function(s)
+        if 0 ~= #sizing then
+          sizing = sizing.."|"
+        end
+        sizing = sizing..s
+      end
+
+      local x, xperc, xflex
       if parser:checkToken "auto" then
-        x = "auto"
+        addSizing "auto_x"
+      elseif parser:checkToken "flex" then
+        x = parser:expectPattern "%b()" :sub(2,-2)
+        addSizing "flex"
       else
         x = parser:expectNumber()
-        xperc = parser:checkToken "%%"
+        if parser:checkToken "%%" then
+          addSizing "percent_x"
+        end
       end
 
       local y, yperc
       if parser:checkToken "auto" then
-        y = "auto"
+        addSizing "auto_y"
+      elseif parser:checkToken "flex" then
+        y = parser:expectPattern "%b()" :sub(2,-2)
+        addSizing "flex"
       else
         y = parser:expectNumber()
-        yperc = parser:checkToken "%%"
-      end
-
-      local sizing = ""
-      local sizing_count = 0
-
-      local addSizing = function(s)
-        if sizing_count > 0 then
-          sizing = sizing.."|"
+        if parser:checkToken "%%" then
+          addSizing "percent_y"
         end
-        sizing = sizing..s
-        sizing_count = sizing_count + 1
       end
 
-      if x == "auto" then
-        x = 0
-        addSizing "auto_x"
-      elseif xperc then
-        addSizing "percent_x"
-      end
-
-      if y == "auto" then
-        y = 0
-        addSizing "auto_y"
-      elseif yperc then
-        addSizing "percent_y"
-      end
-
-      if sizing_count > 0 then
+      if #sizing ~= 0 then
         style.set.sizing(sizing)
       end
 
-      return "{"..x..","..y.."}"
+      return "{"..(x or 0)..","..(y or 0).."}"
     };
 
   sizing: flags

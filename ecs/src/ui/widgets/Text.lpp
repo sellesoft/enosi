@@ -210,7 +210,8 @@ b8 TextState::init(UI* ui, String init)
 void TextState::deinit()
 {
   buffer.close();
-  font.release();
+  if (font.isValid())
+    font.release();
   font_name = nil;
 }
 
@@ -295,7 +296,7 @@ void TextState::freeRenderer()
 
 /* ----------------------------------------------------------------------------
  */
-Text* Text::make(UI& ui, String id, String init)
+Text* Text::make(UI& ui, String init, String id)
 {
   auto* text = ui.allocateAndInitItem<Text>(id);
   if (text == nullptr)
@@ -325,7 +326,8 @@ void Text::evaluate(UI* ui)
     wrap,
     font_height,
     tab_spaces,
-    text_color)
+    text_color,
+    sizing)
 
   state.checkFont(@style.font, ui);
 
@@ -346,7 +348,13 @@ void Text::evaluate(UI* ui)
     @style.wrap,
     @style.text_color);
 
-  size = state.renderer->size;
+  if (@style.sizing.test(flex))
+  {
+    size.x = size.x ?: state.renderer->size.x;
+    size.y = size.y ?: state.renderer->size.y;
+  }
+  else
+    size = state.renderer->size;
 }
 
 /* ----------------------------------------------------------------------------

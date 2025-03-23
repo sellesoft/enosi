@@ -15,7 +15,7 @@ namespace ui
 
 /* ----------------------------------------------------------------------------
  */
-CollapsingHeader* CollapsingHeader::make(UI& ui, String name, String init)
+CollapsingHeader* CollapsingHeader::make(UI& ui, String init, String name)
 {
   auto* ch = ui.allocateAndInitItem<CollapsingHeader>(name);
   if (ch == nullptr)
@@ -34,9 +34,9 @@ CollapsingHeader* CollapsingHeader::make(UI& ui, String name, String init)
 
 /* ----------------------------------------------------------------------------
  */
-CollapsingHeader* CollapsingHeader::begin(UI& ui, String name, String init)
+CollapsingHeader* CollapsingHeader::begin(UI& ui, String init, String name)
 {
-  auto* ch = CollapsingHeader::make(ui, name, init);
+  auto* ch = CollapsingHeader::make(ui, init, name);
   if (ch == nullptr)
     return nullptr;
   ui.beginItem(ch);
@@ -242,6 +242,23 @@ vec2f CollapsingHeader::calcContentArea(vec4f margin, vec4f border, vec2f size)
   return vec2f(
     @this.getBorderedWidth,
     @this.getBorderedHeight - @this.style.header_height);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+vec2f CollapsingHeader::calcVisualArea()
+{
+  // if (open)
+  // {
+  //   $ local this = ui.createItemContext("CollapsingHeader", "this")
+  //   \@\@this.style:lookup(header_height, margin, border)
+
+  //   return vec2f(
+  //     \@this.getBordered
+  //   )
+  // }
+
+  return size;
 }
 
 }

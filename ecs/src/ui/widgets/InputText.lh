@@ -45,6 +45,8 @@ struct
       String preview = nil,
       String id = nil);
 
+  b8 init(UI& ui, String init = nil, String preview = nil);
+
   void evaluate(UI* ui) override;
   void generate(UI* ui) override;
   void update(UI* ui, UpdateReason reason) override;
@@ -57,6 +59,15 @@ struct
   }
 
   AdjustedSize adjustItemSize(UI* ui, b8 auto_x, b8 auto_y) override;
+
+  // Callbacks to support custom functionality when certain things happen.
+  // This is experimental as I'm not sure if its a good idea yet (I don't
+  // like to overuse virtual stuff) but it seems like a better alternative to
+  // traditional C function pointers and void* context and polling the 
+  // InputText constantly for buffer changes.
+
+  virtual void onTextChanged() {}
+  virtual void onFocusLost() {}
 })
 
 }

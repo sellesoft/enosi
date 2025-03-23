@@ -38,8 +38,8 @@ struct
 
   TextState header_text;
 
-  static CollapsingHeader* make(UI& ui, String name = nil, String init = nil);
-  static CollapsingHeader* begin(UI& ui, String name = nil, String init = nil);
+  static CollapsingHeader* make(UI& ui, String init = nil, String name = nil);
+  static CollapsingHeader* begin(UI& ui, String init = nil, String name = nil);
 
   void  update(UI* ui, UpdateReason reason) override;
   void  evaluate(UI* ui) override;
@@ -50,6 +50,7 @@ struct
   vec2f calcContentStart(vec4f margin, vec4f border) override;
   vec2f calcContentArea(vec4f margin, vec4f border, vec2f size) override;
   AdjustedSize adjustItemSize(UI* ui, b8 ax, b8 ay) override;
+  vec2f calcVisualArea() override;
 
   virtual void reportDrawCmds(
       UI* ui, 

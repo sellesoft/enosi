@@ -22,6 +22,19 @@ InputText* InputText::make(UI& ui, String init, String preview, String id)
   if (input_text == nullptr)
     return nullptr;
 
+  if (!input_text->init(ui, init, preview))
+  {
+    ui.destroyItem(input_text);
+    return nullptr;
+  }
+
+  return input_text;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 InputText::init(UI& ui, String init, String preview)
+{
   String text_init = 
     notnil(init)
     ? init
@@ -30,27 +43,29 @@ InputText* InputText::make(UI& ui, String init, String preview, String id)
       : nil;
 
   if (notnil(preview))
-    input_text->preview = preview.allocateCopy();
+    this->preview = preview.allocateCopy();
 
-  if (!input_text->text.init(text_init))
+  if (!text.init(text_init))
   {
-    mem::stl_allocator.deconstruct(input_text);
     if (notnil(preview))
-      mem::stl_allocator.free(input_text->preview.ptr);
-    return nullptr;
+      mem::stl_allocator.free(this->preview.ptr);
+    return false;
   }
 
-  input_text->drawcmds.text = ui.drawcmds.add(); 
-  input_text->drawcmds.cursor = ui.drawcmds.add();
-  input_text->drawcmds.selection = ui.drawcmds.add();
+  drawcmds.text = ui.drawcmds.add(); 
+  drawcmds.cursor = ui.drawcmds.add();
+  drawcmds.selection = ui.drawcmds.add();
 
   // TODO(sushi) combine these.
-  input_text->drawcmds.cursor->alloc(&ui, gfx::putFilledRectCounts());
-  input_text->drawcmds.selection->alloc(&ui, gfx::putFilledRectCounts());
+  drawcmds.cursor->alloc(&ui, gfx::putFilledRectCounts());
+  drawcmds.selection->alloc(&ui, gfx::putFilledRectCounts());
 
-  input_text->update_triggers = UpdateReason::Start;
+  update_triggers = 
+      UpdateReason::FocusedKeyPress
+    | UpdateReason::FocusGained
+    | UpdateReason::FocusLost;
 
-  return input_text;
+  return true;
 }
 
 /* ----------------------------------------------------------------------------
@@ -173,10 +188,16 @@ void InputText::generate(UI* ui)
  */
 void InputText::update(UI* ui, UpdateReason reason)
 {
-  if (ui->focused != this)
+  if (dirty && reason == UpdateReason::FocusedKeyPress)
   {
-    if (reason == UpdateReason::FocusLost)
-      dirty = true;
+    // Currently since UI will walk up the tree to find a 'statically' sized
+    // parent then reevaluate
+  }
+
+  if (reason == UpdateReason::FocusGained ||
+      reason == UpdateReason::FocusLost)
+  {
+    dirty = true;
     return;
   }
 
@@ -225,6 +246,7 @@ void InputText::update(UI* ui, UpdateReason reason)
   if (input.char_count != 0 && !iscntrl(input.chars[0]))
   {
     text.insertString(String::from(input.chars, input.char_count));
+    onTextChanged();
   }
 
   dirty = true;

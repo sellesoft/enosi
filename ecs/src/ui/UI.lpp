@@ -32,8 +32,7 @@ void UI::destroyItem(Item* item)
   if (focused == item)
     focused = nullptr;
 
-  while (ItemNode* child = item->node->first_child)
-    destroyItem(child->data);
+  destroyItemChildren(item);
     
   item->cleanup();
   item->style.deinit();
@@ -49,6 +48,14 @@ void UI::destroyItem(Item* item)
     item->builtin.background->remove(this);
 
   mem::stl_allocator.free(item);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::destroyItemChildren(Item* item)
+{
+  while (ItemNode* child = item->node->first_child)
+    destroyItem(child->data);
 }
 
 /* ----------------------------------------------------------------------------
@@ -318,12 +325,16 @@ static ItemNode* findStaticSizedParent(
  */
 void UI::updateTree(ItemNode* node, UpdateTreeContext& ctx)
 {
+  // INFO("update ", node, " (", node->data->name, ")\n");
+  // SCOPED_INDENT;
+
   gfx::Renderer& renderer = eng->renderer;
   Window&        window   = eng->window;
   InputMgr&      input    = eng->input;
 
   Item* item = node->data;
   Item* parent = (node->parent? node->parent->data : nullptr);
+
 
   vec2f init_scroll = item->scroll;
   item->scroll = min(vec2f(0.f,0.f), max(item->scroll, item->max_scroll));
@@ -349,9 +360,11 @@ void UI::updateTree(ItemNode* node, UpdateTreeContext& ctx)
   @@parent.style:lookup(overflow, margin, border)
 
 $ local tryUpdate = function(reason, cond, item)
-  if ($(item or "item")->update_triggers.test(UpdateReason::$(reason)) &&
-      ($(cond or "true")))
-    $(item or "item")->update(this, UpdateReason::$(reason));
+  ({
+    if ($(item or "item")->update_triggers.test(UpdateReason::$(reason)) &&
+        ($(cond or "true")))
+      $(item or "item")->update(this, UpdateReason::$(reason));
+  });
 $ end
 
   @tryUpdate(Start)
@@ -371,15 +384,24 @@ $ end
       else
         INFO("focused ", focused->name, "\n");
 
-      if (prev_focused && prev_focused != item)
+      if (prev_focused != item)
       {
-        @tryUpdate(FocusLost, true, prev_focused)
+        @tryUpdate(FocusGained)
+        if (prev_focused)
+        {
+          @tryUpdate(FocusLost, true, prev_focused)
+        }
       }
     }
 
     @tryUpdate(MouseReleased, input.anyMouseButtonReleased())
     @tryUpdate(MouseDown, input.anyMouseButtonDown())
     @tryUpdate(MouseScroll, input.scroll != 0.f)
+  }
+
+  if (focused == item)
+  {
+    @tryUpdate(FocusedKeyPress, input.anyKeyPressed());
   }
 
   // \@tryUpdate(MouseHoverChild, item->isHovered(this, Item::HoverKind::Child))
@@ -409,6 +431,11 @@ $ end
 
   @tryUpdate(Fin)
 
+  if (item == hovered && 
+      input.isKeyDown(Key::LCtrl) && 
+      input.wasMouseButtonPressed(MouseButton::Left))
+    platform::debugBreak();
+
   vec2f scoff;
   vec2f scext;
 
@@ -433,7 +460,8 @@ $ end
         @parent.style.border,
         parent->visible_size);
 
-    vec2f pext = ppos + psiz;
+    vec2f pext = 
+      min(ppos + psiz, parent->visible_start + parent->visible_size);
 
     scoff =
       max(
@@ -810,9 +838,9 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
 
     flex.is_container = true;
     flex.effective_size =
-      (is_horizontal?
-        @item.getPaddedWidth :
-        @item.getPaddedHeight);
+      is_horizontal
+      ? @item.getPaddedWidth 
+      : @item.getPaddedHeight;
     flex.ratio_sum = 0.f;
     flex.disp_horizontal = is_horizontal;
 
@@ -822,7 +850,7 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
             "width\n");
       return;
     }
-    else if (hauto)
+    else if (!is_horizontal && hauto)
     {
       ERROR("display set to flex and vertical, but sizing is set to auto "
             "height\n");
@@ -889,6 +917,23 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
         }
       }
     }
+
+    // Calculate how many item sizes will need to be ceil'd rather than 
+    // floored to properly fit inside the container.
+    f32 floored_sum = 0.f;
+    for (ItemNode* cnode = node->first_child; cnode; cnode = cnode->next)
+    {
+      Item* child = cnode->data;
+      @@child.style:lookup(size, sizing)
+
+      if (@child.style.sizing.test(flex))
+      {
+        floored_sum +=
+          floor((is_horizontal? @child.style.size.x : @child.style.size.y)
+          / flex.ratio_sum * flex.effective_size);
+      }
+    }
+    flex.n_ceils = flex.effective_size - floored_sum;
   }
 
   Item::AdjustedSize adjusted_size =
