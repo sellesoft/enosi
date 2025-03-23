@@ -61,7 +61,7 @@ struct Flags
 
   constexpr b8 testAny(Flags<T> x)
   {
-    return (flags & x.flags);
+    return 0 != (flags & x.flags);
   }
 
   template<T... args>
@@ -72,7 +72,7 @@ struct Flags
 
   constexpr b8 test(T x)
   {
-    return flags & ((FlagType)1 << (FlagType)x);
+    return 0 != (flags & ((FlagType)1 << (FlagType)x));
   }
 
   constexpr void set(T x)
