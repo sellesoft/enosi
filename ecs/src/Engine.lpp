@@ -246,18 +246,19 @@ b8 Engine::update()
   if (!input.update(*this))
     return ERROR("failed to update input\n");
 
-  gamemgr.update();
+  gamemgr.render();
 
   if (!ui.update(*this))
     return ERROR("failed to update ui\n");
 
+  gamemgr.update();
   // inspector->fps->dirty = true;
   //
   // io::StaticBuffer<255> fps;
   // io::format(&fps, 1.f / (TimePoint::now() - start).toSeconds());
   // inspector->fps->set(fps.asStr());
 
-  ui.root->dirty = true;
+  // ui.root->dirty = true;
 
   return true;
 }
