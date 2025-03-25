@@ -4,7 +4,6 @@
 
 local cmn = require "common"
 local ast = require "ast"
-local util = require "util"
 local diag = require "diag"
 
 local Type = cmn.LuaType.make()
@@ -123,9 +122,18 @@ defBuiltin("f64", 8, type.Floating, type.Signed)
 
 type.Scalar.castTo = function(self, to)
   if not to:is(type.Scalar) then
+    print(debug.traceback())
     return diag.attempt_to_cast_scalar_to_nonscalar
   end
   return true
+end
+
+local Boolean = type.builtin.b8:derive()
+type.Boolean = Boolean
+
+Boolean.new = function()
+  local o = {}
+  return setmetatable(o, Boolean)
 end
 
 local Pointer = type.builtin.u64:derive()
@@ -137,6 +145,23 @@ Pointer.new = function(subtype)
   local o = {}
   o.subtype = subtype
   return setmetatable(o, Pointer)
+end
+
+local Array = Type:derive(type.Sized)
+type.Array = Array
+
+local StaticArray = Array:derive()
+type.StaticArray = StaticArray
+
+StaticArray.new = function(subtype, len)
+  local o = {}
+  o.subtype = subtype
+  o.len = len
+  return setmetatable(o, StaticArray)
+end
+
+StaticArray.getTypeName = function(self)
+  return self.subtype:getTypeName()..'['..self.len..']'
 end
 
 local Record = Type:derive(type.Sized)

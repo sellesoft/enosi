@@ -39,3 +39,5 @@ lppls/build/
 luals.log/
 
 cgo/
+
+experimental/lamu/build/

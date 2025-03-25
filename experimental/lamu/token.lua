@@ -1,6 +1,5 @@
 local LuaType = require "Type"
-local List = require "list"
-local buffer = require "string.buffer"
+local List = require "List"
 
 --- A collection of characters of some kind as well as their location
 --- in the input file.
@@ -27,6 +26,7 @@ end
 
 Token.newVirtual = function(kind, raw)
   local o = {}
+  o.kind = kind
   o.raw = raw
   o.virtual = true
   return setmetatable(o, Token)
@@ -71,6 +71,7 @@ Token.punc = List
 {
   { "Colon", ":" },
   { "ThickArrow", "=>" },
+  { "DoubleEqual", "==" },
   { "Equal", "=" },
   { "Semicolon", ";" },
   { "LParen", "(" },
@@ -85,6 +86,8 @@ Token.punc = List
   { "RBrace", "}" },
   { "VerticalBar", "|" },
   { "Period", "." },
+  { "LSquare", "[" },
+  { "RSquare", "]" },
 }
 
 Token.punc:each(function(p)
@@ -96,6 +99,9 @@ Token.kw = List
   { "If", "if" },
   { "Else", "else" },
   { "Then", "then" },
+  { "Loop", "loop" },
+  { "Break", "break" },
+  { "Continue", "continue" },
   { "Struct", "struct" },
   { "True", "true" },
   { "False", "false" },

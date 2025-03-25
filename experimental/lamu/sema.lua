@@ -14,7 +14,7 @@ local co = require "coroutine"
 local Token = require "token"
 local type = require "type"
 local log = require "lamulog"
-local util = require "util"
+local util = require "Util"
 
 local Diag = diag.Diag
 
@@ -110,6 +110,7 @@ Scope.new = function(prev)
       o.transforms[k] = v
     end
     prev.queue = {}
+    o.is_loop = prev.is_loop
   end
   return setmetatable(o, Scope)
 end
@@ -308,7 +309,8 @@ Sema.handle(ast.Literal, function(self, literal)
   local tk = literal.start.kind
   local raw = self.parser.lex:getRaw(literal.start)
   if tk == Token.Kind.String then
-    cmn.fatal("TODO(sushi) handle string literals")
+    literal.semantics.type = type.StaticArray.new(type.builtin.u8, #raw)
+    literal.semantics.value = ffi.new("u8["..#raw.."]", raw)
   elseif tk == Token.Kind.Integer then
     literal.semantics.type = type.builtin.s64
     literal.semantics.value = ffi.new("s64", tonumber(raw))
@@ -373,6 +375,26 @@ Sema.handle(ast.BinOp, function(self, op)
 
     rhs:dump(self.parser)
     lhs:dump(self.parser)
+  end
+
+  local handleTypeTypeArithmetic = function()
+    if not op.kind:is(ast.BinOp.Kind.Equal) then
+      self:yield(diag.non_equality_op_on_types(op.start))
+    end
+
+    op.semantics.type = type.Boolean.new()
+    local are_equal = 
+      op.lhs.semantics.type.type == 
+      op.rhs.semantics.type.type
+
+    local folded_tok
+    if are_equal then
+      folded_tok = Token.newVirtual(Token.Kind.True, "true")
+    else
+      folded_tok = Token.newVirtual(Token.Kind.False, "false")
+    end
+
+    op.semantics.folded = ast.Literal { start = folded_tok }
   end
 
   local handleAssignmentToUnion = function()
@@ -472,7 +494,7 @@ Sema.handle(ast.BinOp, function(self, op)
     end
   end
 
-if op.kind == ast.BinOp.Kind.Assign then
+  if op.kind == ast.BinOp.Kind.Assign then
     if lhst:is(type.Union) then
       handleAssignmentToUnion()
     else
@@ -482,6 +504,8 @@ if op.kind == ast.BinOp.Kind.Assign then
     handlePointerScalarArithmetic()
   elseif lhst:is(type.Scalar) and rhst:is(type.Scalar) then
     handleScalarScalarArithmetic()
+  elseif lhst:is(type.TypeValue) and rhst:is(type.TypeValue) then
+    handleTypeTypeArithmetic()
   else
     self:yield(diag.binop_not_defined(op, lhst, rhst))
   end
@@ -490,6 +514,8 @@ if op.kind == ast.BinOp.Kind.Assign then
 end)
 
 Sema.handle(ast.Block, function(self, block)
+  self:enterScope()
+
   for stmt in block.statements:each() do
     self:complete(stmt)
   end
@@ -500,6 +526,8 @@ Sema.handle(ast.Block, function(self, block)
   else
     block.semantics.type = type.EmptyTuple
   end
+
+  self:leaveScope(block)
 
   return Sema.done
 end)
@@ -529,6 +557,8 @@ Sema.handle(ast.Closure, function(self, closure)
   for param in closure.params.elements:each() do
     param_map[param:getId(self.parser.lex)] = param
   end
+
+  closure.semantics.memoizations = cmn.List{}
 
   closure.semantics.instantiator = function(args)
     local initialized = 
@@ -580,6 +610,34 @@ Sema.handle(ast.Closure, function(self, closure)
       end
     end
 
+    local memoized_result
+    for memoized in closure.semantics.memoizations:each() do
+      local match = true
+      for i=1,memoized.args.list:len() do
+        local call_arg = args.elements[i]
+        local memo_arg = memoized.args.list[i].expr
+        -- util.dumpValue(call_arg, 2)
+        -- util.dumpValue(memo_arg, 2)
+
+        if call_arg:is(ast.IdRef) and memo_arg:is(ast.IdRef) then
+          if call_arg.decl ~= memo_arg.decl then
+            match = false
+            break
+          end
+        else
+          match = false
+        end
+      end
+      if match then
+        memoized_result = memoized
+      end
+    end
+
+    if memoized_result then
+      print("call was memoized")
+      return memoized_result.instantiation
+    end
+
     local resolved_params = {}
 
     local inst_params = closure.params:fork
@@ -628,6 +686,9 @@ Sema.handle(ast.Closure, function(self, closure)
       [ast.UnboundIdRef] = function(x)
         local name = self.parser.lex:getRaw(x.start)
         local param = resolved_params[name]
+        if not param then
+          cmn.fatal("unresolved param ", name, "\n")
+        end
 
         local ref = ast.IdRef
         {
@@ -651,6 +712,12 @@ Sema.handle(ast.Closure, function(self, closure)
     }
 
     instantiated:dump(self.parser)
+
+    closure.semantics.memoizations:push
+    {
+      args = initialized,
+      instantiation = instantiated,
+    }
 
     return instantiated
   end
@@ -743,6 +810,11 @@ Sema.handle(ast.Call, function(self, call)
         local field = callee_type.fields.list[i]
 
         if field.semantics.type ~= arg.semantics.type then
+          if arg.semantics.type:is(type.TypeValue) then
+            self:yield(
+              diag.type_value_as_field_initializer(field, arg))
+          end
+
           local cast = field.semantics.type:castTo(arg.semantics.type)
           if cast == true then
             arg.semantics.cast_to = field.semantics.type
@@ -759,19 +831,43 @@ Sema.handle(ast.Call, function(self, call)
   local handleClosureCall = function()
     self:complete(call.callee)
 
-    util.dumpValue(call.callee.semantics.type, 2)
-
     local closure = call.callee.semantics.type.expr
 
     local instantiated = 
       closure.semantics.instantiator(call.args)
+
+    local instantiated_type = instantiated.body.semantics.type
+
+    -- Assign a name to whatever the result of the call was.
+    if instantiated_type:is(type.TypeValue) and
+       instantiated_type.type:is(type.Record) and
+       not instantiated_type.type:is(type.Named)
+    then
+      local record = instantiated_type.type
+      if call.callee:is(ast.IdRef) then
+        local name = self.parser.lex:getRaw(call.callee.start)..'('
+        local first = true
+        for arg in call.args.elements:each() do
+          if not first then
+            name = name..";"
+          else
+            first = false
+          end
+          if arg:is(ast.IdRef) then
+            name = name..self.parser.lex:getRaw(arg.start)
+          end
+        end
+        name = name..")"
+        instantiated.body.semantics.type = 
+          type.TypeValue.new(type.NamedRecord.new(name, record))
+      end
+    end
 
     call.semantics.type = instantiated.body.semantics.type
   end
 
   -- Verify that this is something we can call.
   if calleet:is(type.TypeValue) then
-   
     handleTypeValueCall()
   elseif calleet:is(type.Closure) then
     handleClosureCall()
@@ -784,6 +880,8 @@ end)
 
 Sema.handle(ast.StructTuple, function(self, struct, scope)
   -- Enter a scope to capture declarations inside of this struct.
+
+  self:yield(Sema.lazy)
 
   local fields = {}
   local fields_list = cmn.List{}
@@ -843,7 +941,22 @@ Sema.handle(ast.VarDecl, function(self, decl)
     if not decl.type.semantics.type:is(type.TypeValue) then
       self:yield(diag.expected_type_value(decl.type.start))
     end
-    decl.semantics.type = decl.type.semantics.type.type
+    
+    local decl_type = decl.type.semantics.type.type
+    if decl_type:is(type.Union) then
+      local options = cmn.List{}
+      -- Remove any TypeValues contained in the Union.
+      for opt in decl_type.options:each() do
+        if opt:is(type.TypeValue) then
+          options:push(opt.type)
+        else
+          options:push(opt)
+        end
+      end
+      decl_type = type.Union.new(options)
+    end
+
+    decl.semantics.type = decl_type
   else
     -- Otherwise, ensure the expression matches the specified type.
     cmn.fatal("TODO(sushi) handle explicit var decl types with expr")
@@ -884,6 +997,9 @@ Sema.handle(ast.If, function(self, ifexpr)
 
   local is_is = cond:is(ast.IsExpr)
 
+  local body_is_reachable = true
+  local alt_is_reachable = true
+
   if is_is then
     self:complete(cond.lhs)
     if not cond.lhs:is(ast.IdRef) then
@@ -892,10 +1008,6 @@ Sema.handle(ast.If, function(self, ifexpr)
 
     local lhst = cond.lhs.semantics.type
 
-    if not lhst:is(type.Union) then
-      diag.is_lhs_not_union(cond.lhs.start):emit(self.parser)
-    end
-
     self:complete(cond.rhs)
 
     local rhst = cond.rhs.semantics.type
@@ -903,7 +1015,15 @@ Sema.handle(ast.If, function(self, ifexpr)
       self:yield(diag.rhs_of_is_is_not_type_val(cond.start))
     end
 
-    if not lhst.options_map[rhst.type] then
+    if not lhst:is(type.Union) then
+      -- diag.is_lhs_not_union(cond.lhs.start):emit(self.parser)
+      if lhst:is(type.TypeValue) then
+        lhst = lhst.type
+      end
+      if rhst:is(type.TypeValue) then
+        rhst = rhst.type
+      end
+    else 
       self:yield(diag.is_rhs_not_in_union(cond))
     end
 
@@ -918,41 +1038,64 @@ Sema.handle(ast.If, function(self, ifexpr)
     if not cond.semantics.type:is(type.Scalar) then
       self:yield(diag.if_cond_not_scalar(cond.start))
     end
+
+    local folded = cond.semantics.folded
+    if folded and folded:is(ast.Literal) then
+      if folded.start.kind == Token.Kind.False then
+        body_is_reachable = false
+      else
+        alt_is_reachable = false
+      end
+    end
+  end   
+
+  local body_type
+  if body_is_reachable then
+    self:printLine("completeing body")
+    self:complete(body)
+    print "hi"
+    body_type = body.semantics.type
   end
 
-  self:complete(body)
-
-  local body_type = body.semantics.type
+  print("alt: ", alt)
 
   local alt_type
-  if alt then
-    self:complete(alt)
-    alt_type = alt.semantics.type
-  else
-    alt_type = type.Nil
+  if alt_is_reachable then
+    self:printLine("completeing alt")
+    if alt then
+      self:complete(alt)
+      alt_type = alt.semantics.type
+    else
+      alt_type = type.Nil
+    end
   end
 
   local if_type
-  if alt_type then
-    if alt_type ~= body_type then
-      if_type = type.Union.new(cmn.List{body_type, alt_type})
+  if body_type then
+    if alt_type then
+      if alt_type ~= body_type then
+        if_type = 
+          type.Union.new(cmn.List{body_type, alt_type})
+      else
+        if_type = body_type
+      end
     else
       if_type = body_type
     end
   else
-    if_type = body_type
+    if_type = alt_type
   end
 
   ifexpr.semantics.type = if_type
 
-  self:leaveScope()
+  self:leaveScope(ifexpr)
 
   return Sema.done
 end)
 
 Sema.handle(ast.Access, function(self, access)
   self:complete(access.lhs)
-
+  
   local lhst = access.lhs.semantics.type
 
   if not lhst:is(type.Record) then
@@ -969,6 +1112,60 @@ Sema.handle(ast.Access, function(self, access)
   access.rhs.semantics.complete = true
 
   access.semantics.type = field.semantics.type
+
+  return Sema.done
+end)
+
+Sema.handle(ast.Loop, function(self, loop)
+  self:complete(loop.body)
+end)
+
+Sema.handle(ast.Break, function(self, node)
+  node.semantics.complete = true
+  node.semantics.type = type.Nil
+
+  return Sema.done
+end)
+
+Sema.handle(ast.Continue, function(self, node)
+  node.semantics.complete = true
+  node.semantics.type = type.Nil
+
+  return Sema.done
+end)
+
+Sema.handle(ast.Subscript, function(self, subscript)
+  self:complete(subscript.subject)
+  self:complete(subscript.script)
+
+  local subject_type = subscript.subject.semantics.type
+  if not subscript.subject.semantics.type:is(type.Array) then
+    self:yield(diag.subscript_not_on_array(subscript.start))
+  end
+
+  subscript.semantics.type = subject_type.subtype
+
+  return Sema.done
+end)
+
+Sema.handle(ast.Array, function(self, array)
+  local first_type
+
+  for elem in array.elements:each() do
+    self:complete(elem)
+    if not first_type then
+      first_type = elem.semantics.type
+    else
+      local cast = elem.semantics.type:castTo(first_type)
+      if cast == true then
+        elem.semantics.cast_to = first_type
+      else
+        self:yield(cast(elem.start))
+      end
+    end
+  end
+
+  array.semantics.type = type.StaticArray.new(first_type, #array.elements)
 
   return Sema.done
 end)

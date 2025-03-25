@@ -154,7 +154,8 @@ Lexer.nextToken = function(self)
       return self:pushToken(Token.Kind.Identifier, start, stop)
     end
 
-    cmn.fatal("unhandled lex at ", self.offset)
+    cmn.fatal("unhandled lex at ", self.offset, "\n",
+              self.buffer:sub(self.offset, self.offset + 10), "\n")
   end
 
   while true do

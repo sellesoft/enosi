@@ -2,4 +2,4 @@
 --- Shared logger.
 ---
 
-return require "logger" ("lamu", Verbosity.Info)
+return require "Logger" ("lamu", Verbosity.Info)

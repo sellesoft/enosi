@@ -1,4 +1,4 @@
-local log = require "logger" ("lamu", Verbosity.Notice)
+local log = require "Logger" ("lamu", Verbosity.Notice)
 
 local function printer(...)
   log:notice(debug.traceback(), "\n")
