@@ -207,8 +207,8 @@ b8 Window::update(Engine& engine)
         engine.input.real_char_count += 
           XLookupString(
             &event.xkey, 
-            (char*)engine.input.chars + engine.input.char_count,
-            sizeof(engine.input.chars) - engine.input.char_count,
+            (char*)engine.input.chars + engine.input.real_char_count,
+            sizeof(engine.input.chars) - engine.input.real_char_count,
             &unused,
             0);
       }
