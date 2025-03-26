@@ -313,10 +313,10 @@ u32 TextEdit::cursorMoveToEnd(b8 select)
 
 /* ----------------------------------------------------------------------------
  */
-void TextEdit::deleteSelection()
+u32 TextEdit::deleteSelection()
 {
   if (cursor.len == 0)
-    return;
+    return 0;
 
   if (cursor.len < 0)
   {
@@ -332,118 +332,103 @@ void TextEdit::deleteSelection()
 
   len = cursor.pos + tail_len;
 
+  u32 delta = cursor.len;
   cursor.len = 0;
+  return delta;
 }
 
 /* ----------------------------------------------------------------------------
  */
-void TextEdit::deleteRight()
+u32 TextEdit::deleteRight()
 {
   if (cursor.len != 0)
-  {
-    deleteSelection();
-    return;
-  }
+    return deleteSelection();
 
   if (cursor.pos == len)
-    return;
+    return 0;
 
   // Move the cursor right with selection then delete it.
   // Probably inefficient but idk this isn't happening constantly so 
   // whatever.
   cursorMoveRight(true);
-  deleteSelection();
+  return deleteSelection();
 }
 
 /* ----------------------------------------------------------------------------
  */
-void TextEdit::deleteRightWord()
+u32 TextEdit::deleteRightWord()
 {
   if (cursor.len != 0)
-  {
-    deleteSelection();
-    return;
-  }
+    return deleteSelection();
 
   if (cursor.pos == len)
-    return;
+    return 0;
 
   cursorMoveRightWord(true);
-  deleteSelection();
+  return deleteSelection();
 }
 
 /* ----------------------------------------------------------------------------
  */
-void TextEdit::deleteRightWordPart()
+u32 TextEdit::deleteRightWordPart()
 {
   if (cursor.len != 0)
-  {
-    deleteSelection();
-    return;
-  }
+    return deleteSelection();
 
   if (cursor.pos == len)
-    return;
+    return 0;
 
   cursorMoveRightWordPart(true);
-  deleteSelection();
+  return deleteSelection();
 }
 
 /* ----------------------------------------------------------------------------
  */
-void TextEdit::deleteLeft()
+u32 TextEdit::deleteLeft()
 {
   if (cursor.len != 0)
-  {
-    deleteSelection();
-    return;
-  }
+    return deleteSelection();
 
   if (cursor.pos == 0)
-    return;
+    return 0;
 
   cursorMoveLeft(true);
-  deleteSelection();
+  return deleteSelection();
 }
 
 /* ----------------------------------------------------------------------------
  */
-void TextEdit::deleteLeftWord()
+u32 TextEdit::deleteLeftWord()
 {
   if (cursor.len != 0)
-  {
-    deleteSelection();
-    return;
-  }
+    return deleteSelection();
 
   if (cursor.pos == 0)
-    return;
+    return 0;
 
   cursorMoveLeftWord(true);
-  deleteSelection();
+  return deleteSelection();
 }
 
 /* ----------------------------------------------------------------------------
  */
-void TextEdit::deleteLeftWordPart()
+u32 TextEdit::deleteLeftWordPart()
 {
   if (cursor.len != 0)
-  {
-    deleteSelection();
-    return;
-  }
+    return deleteSelection();
 
   if (cursor.pos == 0)
-    return;
+    return 0;
 
   cursorMoveLeftWordPart(true);
-  deleteSelection();
+  return deleteSelection();
 }
 
 /* ----------------------------------------------------------------------------
  */
-void TextEdit::insertString(String str)
+u32 TextEdit::insertString(String str)
 {
+  s64 initial_len = len;
   if (cursor.len != 0)
     deleteSelection();
 
@@ -466,6 +451,8 @@ void TextEdit::insertString(String str)
 
   cursor.pos += str.len;
   len += str.len;
+
+  return abs(initial_len - len);
 }
 
 /* ----------------------------------------------------------------------------

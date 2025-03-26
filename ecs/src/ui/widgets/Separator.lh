@@ -22,9 +22,11 @@ struct
 
   static Separator* make(UI& ui, String name = nil);
   
-  virtual void generate(UI* ui) override;
-  virtual void reportDrawCmds(
-    UI* ui, DrawCmdList& pre, DrawCmdList& post) override { pre.push(dc); }
+  void generate(UI* ui) override;
+  void reportDrawCmds(UI* ui, DrawCmdLists& lists) override 
+  { 
+    lists.pre_children.push(dc); 
+  }
 })
 
 }

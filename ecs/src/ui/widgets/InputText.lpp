@@ -16,6 +16,181 @@ namespace ui
 
 /* ----------------------------------------------------------------------------
  */
+b8 InputTextState::init(UI& ui, String init, String preview)
+{
+  String text_init = 
+    notnil(init)
+    ? init
+    : notnil(preview)
+      ? preview
+      : nil;
+
+  if (notnil(preview))
+    this->preview = preview.allocateCopy();
+
+  if (!text.init(text_init))
+  {
+    if (notnil(preview))
+      mem::stl_allocator.free(this->preview.ptr);
+    return false;
+  }
+
+  drawcmds.text = ui.drawcmds.add(); 
+  drawcmds.quads = ui.drawcmds.add();
+
+  drawcmds.quads->alloc(&ui, 2 * gfx::putFilledRectCounts());
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void InputTextState::deinit(UI& ui)
+{
+  if (notnil(preview))
+    mem::stl_allocator.free(preview.ptr);
+
+  drawcmds.text->remove(&ui);
+  drawcmds.quads->remove(&ui);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void InputTextState::draw(UI& ui, const DrawParams& params)
+{
+  String str = text.asStr();
+  if (str.isEmpty())
+    str = preview;
+
+  auto [vp, ip] = drawcmds.text->realloc(&ui, gfx::putTextCounts(str));
+  drawcmds.text->tex = params.font->r_texture.getData()->gfx_texture;
+
+  drawcmds.text->scissor = params.bounds;
+  drawcmds.quads->scissor = params.bounds;
+
+  drawcmds.text->counts_used = {};
+  drawcmds.quads->counts_used = {};
+
+  f32 cursor_x = -1.f;
+  vec2f cursor = params.bounds.xy();
+
+  if (text.asStr().isEmpty())
+  {
+    gfx::putText(
+      vp, ip, 
+      &drawcmds.text->counts_used,
+      params.bounds.xy(),
+      str,
+      params.font,
+      params.font_height,
+      2.f,
+      params.text_color,
+      nullptr);
+  }
+  else
+  {
+    while (!str.isEmpty())
+    {
+      if (str.ptr - text.ptr == text.cursor.pos)
+        cursor_x = cursor.x;
+
+      utf8::Codepoint cp = str.advance();
+
+      gfx::putGlyph(
+        vp, ip,
+        &drawcmds.text->counts_used,
+        params.font,
+        cp.codepoint,
+        &cursor,
+        params.text_color);
+    }
+  }
+
+  if (params.is_focused)
+  {
+    auto [vp, ip] = drawcmds.quads->getPtrs(&ui);
+
+    gfx::putFilledRect(
+      vp, ip,
+      &drawcmds.quads->counts_used,
+      {cursor_x == -1.f? cursor.x : cursor_x, params.bounds.y},
+      vec2f(1.f, params.font_height),
+      params.cursor_color);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 InputTextState::update(UI& ui, const UpdateParams& params)
+{
+  if (!params.is_focused || params.reason != UpdateReason::FocusedKeyPress)
+    return false;
+
+  InputMgr& input = ui.eng->input;
+
+  b8 state_changed = false;
+
+  if (input.wasKeyPressed(Key::Right))
+  {
+    if (input.isKeyDown(Key::LCtrl) || input.isKeyDown(Key::RCtrl))
+      state_changed |= text.cursorMoveRightWord();
+    else if (input.isKeyDown(Key::LAlt) || input.isKeyDown(Key::RAlt))
+      state_changed |= text.cursorMoveRightWordPart();
+    else
+      state_changed |= text.cursorMoveRight();
+  }
+
+  if (input.wasKeyPressed(Key::Left))
+  {
+    if (input.isKeyDown(Key::LCtrl) || input.isKeyDown(Key::RCtrl))
+      state_changed |= text.cursorMoveLeftWord();
+    else if (input.isKeyDown(Key::LAlt) || input.isKeyDown(Key::RAlt))
+      state_changed |= text.cursorMoveLeftWordPart();
+    else
+      state_changed |= text.cursorMoveLeft();
+  }
+
+  if (input.wasKeyPressed(Key::Backspace))
+  {
+    if (input.isKeyDown(Key::LCtrl) || input.isKeyDown(Key::RCtrl))
+      state_changed |= text.deleteLeftWord();
+    else if (input.isKeyDown(Key::LAlt) || input.isKeyDown(Key::RAlt))
+      state_changed |= text.deleteLeftWordPart();
+    else
+      state_changed |= text.deleteLeft();
+  }
+
+  if (input.wasKeyPressed(Key::Delete))
+  {
+    if (input.isKeyDown(Key::LCtrl) || input.isKeyDown(Key::RCtrl))
+      state_changed |= text.deleteRightWord();
+    else if (input.isKeyDown(Key::LAlt) || input.isKeyDown(Key::RAlt))
+      state_changed |= text.deleteRightWordPart();
+    else
+      state_changed |= text.deleteRight();
+  }
+
+  if (input.char_count != 0 && !iscntrl(input.chars[0]))
+  {
+    auto insert = String::from(input.chars, input.char_count);
+    text.insertString(insert);
+    state_changed = true;
+  }
+  
+  return state_changed;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void InputTextState::reportDrawCmds(UI& ui, DrawCmdLists& lists, b8 is_focused)
+{
+  lists.pre_children.push(drawcmds.text);
+  if (is_focused)
+    lists.pre_children.push(drawcmds.quads);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 InputText* InputText::make(UI& ui, String init, String preview, String id)
 {
   auto* input_text = ui.allocateAndInitItem<InputText>(id);
@@ -188,12 +363,6 @@ void InputText::generate(UI* ui)
  */
 void InputText::update(UI* ui, UpdateReason reason)
 {
-  if (dirty && reason == UpdateReason::FocusedKeyPress)
-  {
-    // Currently since UI will walk up the tree to find a 'statically' sized
-    // parent then reevaluate
-  }
-
   if (reason == UpdateReason::FocusGained ||
       reason == UpdateReason::FocusLost)
   {
@@ -246,7 +415,6 @@ void InputText::update(UI* ui, UpdateReason reason)
   if (input.char_count != 0 && !iscntrl(input.chars[0]))
   {
     text.insertString(String::from(input.chars, input.char_count));
-    onTextChanged();
   }
 
   dirty = true;

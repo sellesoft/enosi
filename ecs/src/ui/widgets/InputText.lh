@@ -14,6 +14,60 @@ namespace ui
 {
 
 /* ============================================================================
+ *  The actual state and functionality of an InputText to help reusability.
+ */
+struct InputTextState
+{
+  TextEdit   text;
+  gfx::Font* font;
+
+  String preview; // Owned.
+
+  struct 
+  {
+    DrawCmd* text;
+    DrawCmd* quads;
+  } drawcmds;
+
+  b8 init(UI& ui, String init = nil, String preview = nil);
+  void deinit(UI& ui);
+
+  struct DrawParams
+  {
+    vec4f      bounds;
+    gfx::Font* font;
+    b8         is_focused;
+    f32        font_height;
+    Color      cursor_color;
+    Color      text_color;
+  };
+  void draw(UI& ui, const DrawParams& params);
+
+  struct UpdateParams
+  {
+    vec2f        local_mouse;
+    gfx::Font*   font;
+    b8           is_focused;
+    f32          font_height;
+    UpdateReason reason;
+  };
+  b8 update(UI& ui, const UpdateParams& params);
+
+  void reportDrawCmds(UI& ui, DrawCmdLists& lists, b8 is_focused);
+
+  void set(String s)
+  {
+    text.clear();
+    text.insertString(s);
+  }
+
+  String asStr() const
+  {
+    return text.asStr();
+  }
+};
+
+/* ============================================================================
  */
 @ui.widget(InputText,
 schema
@@ -52,10 +106,10 @@ struct
   void update(UI* ui, UpdateReason reason) override;
   void cleanup() override;
 
-  void reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post) override
+  void reportDrawCmds(UI* ui, DrawCmdLists& lists) override
   {
-    pre.push(drawcmds.text);
-    pre.push(drawcmds.cursor);
+    lists.pre_children.push(drawcmds.text);
+    lists.pre_children.push(drawcmds.cursor);
   }
 
   AdjustedSize adjustItemSize(UI* ui, b8 auto_x, b8 auto_y) override;

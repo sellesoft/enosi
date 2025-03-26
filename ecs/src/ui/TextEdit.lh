@@ -57,23 +57,25 @@ struct TextEdit
   u32 cursorMoveToEnd(b8 select = false);
 
   // Text manipulation functions.
+  // These return the number of bytes deleted.
 
   // Deletes the current selection, if any.
-  void deleteSelection();
+  u32 deleteSelection();
   
   // Deletes text relative to the cursor. If a selection is active, then 
   // the selection will be deleted instead.
-  void deleteRight();
-  void deleteRightWord();
-  void deleteRightWordPart();
+  u32 deleteRight();
+  u32 deleteRightWord();
+  u32 deleteRightWordPart();
 
-  void deleteLeft();
-  void deleteLeftWord();
-  void deleteLeftWordPart();
+  u32 deleteLeft();
+  u32 deleteLeftWord();
+  u32 deleteLeftWordPart();
 
   // Inserts the given string at the cursor. If a selection is active, the 
   // selected text will be replaced by the string.
-  void insertString(String str);
+  // Returns the byte delta.
+  u32 insertString(String str);
 
   // Clears the entire text buffer, reseting the cursor and its selection to 0.
   void clear();

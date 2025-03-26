@@ -85,19 +85,15 @@ struct
 
   vec2f calcVisualArea() override;
 
-  void reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post) override
+  void reportDrawCmds(UI* ui, DrawCmdLists& lists) override
   {
-    pre.push(selected_option.dc);
-  }
-
-  void reportDrawCmdsTopMost(UI* ui, DrawCmdList& list) override
-  {
+    lists.pre_children.push(selected_option.dc);
     if (open)
     {
-      list.push(options_background);
-        
-      for (Option& option : options)
-        list.push(option.drawcmd);
+      lists.top_most.push(options_background);
+      
+      for (const Option& option : options)
+        lists.top_most.push(option.drawcmd);
     }
   }
 })

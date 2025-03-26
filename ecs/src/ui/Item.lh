@@ -26,7 +26,59 @@ struct UI;
 
 typedef Tree<Item> ItemTree;
 typedef ItemTree::Node ItemNode;
-typedef SmallArray<DrawCmd*, 8> DrawCmdList;
+
+/* ============================================================================
+ *  Some space in which an Item's DrawCmds are rendered.
+ */ 
+enum class ItemSpace
+{
+  Invalid,
+
+  // The DrawCmd is intended to have its origin where its padded area begins.
+  // This is the default space in which an Item's DrawCmds are rendered.
+  Padded,
+
+  // The DrawCmd is intended to have its origin where its bordered area begins.
+  Bordered,
+
+  // The DrawCmd is intended to have its origin where its margined area begins.
+  Margined,
+};
+
+/* ============================================================================
+ *  A DrawCmd along with some information about how the Item wants it drawn.
+ */
+struct ReportedDrawCmd
+{
+  DrawCmd* drawcmd;
+  ItemSpace space;
+
+  ReportedDrawCmd() : drawcmd(nullptr), space(ItemSpace::Invalid) {}
+
+  ReportedDrawCmd(DrawCmd* drawcmd) 
+    : drawcmd(drawcmd), 
+      space(ItemSpace::Padded) {}
+
+  ReportedDrawCmd(DrawCmd* drawcmd, ItemSpace space)
+    : drawcmd(drawcmd),
+      space(space) {}
+};
+
+typedef SmallArray<ReportedDrawCmd, 8> DrawCmdList;
+
+/* ============================================================================
+ */
+struct DrawCmdLists
+{
+  // DrawCmds intended to be emitted before or after the Item's children.
+  // These are drawn in the padded space of the Item.
+  DrawCmdList pre_children;
+  DrawCmdList post_children;
+
+  // DrawCmds to be emitted once the UI system completes updating the entire
+  // Item tree, eg. drawn over all Items.
+  DrawCmdList top_most;
+};
 
 /* ============================================================================
  *  The reason an update callback was called on an item.
@@ -320,17 +372,10 @@ struct
   // Cleans up any dynamic memory this item may have allocated in its lifetime.
   virtual void cleanup() {}
 
-  // Implemented by widgets that perform custom drawing, called just before 
-  // we decide what to send to the Renderer for this Item. DrawCmds stored in
-  // 'pre' will be emitted before any of its children's draw cmds while those
-  // in 'post' will be emitted after.
-  // 
-  // TODO(sushi) maybe pass in a callback and a context to gather these 
-  //             as copying out into a temp array kinda sucks when an Item
-  //             has a ton of draw commands.
-  virtual void reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post) { }
-  virtual void reportDrawCmdsPostSiblings(UI* ui, DrawCmdList& list) { }
-  virtual void reportDrawCmdsTopMost(UI* ui, DrawCmdList& list) { }
+  // Implemented by Items that perform custom drawing via DrawCmds. DrawCmds
+  // can be emitted in various ways. See DrawCmdLists for an explanation of
+  // each list.
+  virtual void reportDrawCmds(UI* ui, DrawCmdLists& lists) { }
 
   // Allows a widget to tell evaluate if it should place children or not.
   virtual b8 shouldPlaceChildren() { return true; }

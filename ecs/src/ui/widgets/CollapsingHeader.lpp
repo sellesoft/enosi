@@ -21,11 +21,13 @@ CollapsingHeader* CollapsingHeader::make(UI& ui, String init, String name)
   if (ch == nullptr)
     return nullptr;
 
-  if (!ch->header_text.init(&ui, init))
+  if (!ch->header_text.init(&ui, nil))
   {
     mem::stl_allocator.free(ch);
     return nullptr;
   }
+
+  io::formatv(&ch->header_text.buffer, "+ ", init);
 
   ch->update_triggers = UpdateReason::MouseReleased;
 
@@ -82,6 +84,9 @@ void CollapsingHeader::update(UI* ui, UpdateReason reason)
       {
         open = !open;
         dirty = true;
+
+        // extremely silly do better later.
+        header_text.buffer.ptr[0] = open? '-' : '+';
       }
     }
     break;
@@ -98,16 +103,20 @@ void CollapsingHeader::generate(UI* ui)
     header_height, 
     header_color, 
     header_text_align,
+    header_text_padding,
     content_background_color,
     font_height,
     text_color,
     border,
     margin)
 
-  vec2f cpos = 
-    @this.style.margin.top_left + @this.style.border.top_left;
-
+  vec2f cpos = {0.f, 0.f};
   vec2f csiz = @this.getBorderedArea;
+
+  f32 header_height = 
+    @this.style.header_height +
+    @this.style.header_text_padding.y + 
+    @this.style.header_text_padding.w;
 
   if (@this.style.header_color.a != 0)
   {
@@ -116,7 +125,7 @@ void CollapsingHeader::generate(UI* ui)
       header_bg = ui->drawcmds.add();
       header_bg->alloc(ui, gfx::putFilledRectCounts());
     }
-
+    
     auto [vp, ip] = header_bg->getPtrs(ui);
 
     vec2i sum = {};
@@ -134,8 +143,8 @@ void CollapsingHeader::generate(UI* ui)
         //             for like an hour and a half.
         //             There is a similar hack in telling the evaluator
         //             where to begin children.
-        cpos.yadd(-1),
-        vec2f(csiz.x, @this.style.header_height),
+        cpos,
+        vec2f(csiz.x, header_height),
         @this.style.header_color);
 
     header_bg->counts_used = sum;
@@ -177,11 +186,22 @@ void CollapsingHeader::generate(UI* ui)
 
   vec2f text_size = header_text.renderer->size;
 
+  auto text_area = vec2f(
+    size.x - 
+      @this.style.header_text_padding.x - 
+      @this.style.header_text_padding.z,
+    size.y - 
+      @this.style.header_text_padding.y - 
+      @this.style.header_text_padding.w);
+
   auto text_pos = vec2f(
-    cpos.x + @this.style.header_text_align.x * (csiz.x - text_size.x),
+    cpos.x + 
+      @this.style.header_text_padding.x +
+      @this.style.header_text_align.x * (text_area.x - text_size.x),
     cpos.y + 
+      @this.style.header_text_padding.y +
       @this.style.header_text_align.y * 
-      (@this.style.header_height - text_size.y));
+      (header_height - text_size.y));
   
   header_text.draw(ui,text_pos);
 }

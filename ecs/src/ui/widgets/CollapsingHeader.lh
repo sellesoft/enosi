@@ -24,6 +24,7 @@ schema
   header_color: Color = 0x000000ff;
   header_height: f32 = 11;
   header_text_align: vec2f = 0 0.5;
+  header_text_padding: vec4f = 0 0 0 0;
 
   content_background_color: Color = 0x00000000;
 
@@ -52,17 +53,14 @@ struct
   AdjustedSize adjustItemSize(UI* ui, b8 ax, b8 ay) override;
   vec2f calcVisualArea() override;
 
-  virtual void reportDrawCmds(
-      UI* ui, 
-      DrawCmdList& pre, 
-      DrawCmdList& post) override
+  void reportDrawCmds(UI* ui, DrawCmdLists& lists) override
   { 
     if (open && content_bg)
-      pre.push(content_bg);
+      lists.pre_children.push(content_bg);
     if (header_bg)
-      post.push(header_bg);
+      lists.post_children.push({header_bg, ItemSpace::Margined});
     if (header_text.dc)
-      post.push(header_text.dc);
+      lists.post_children.push({header_text.dc, ItemSpace::Margined});
   }
 })
 
