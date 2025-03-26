@@ -42,8 +42,7 @@ int main(int argc, const char** argv)
     else
     {
       flags = 
-          ShowCategoryName
-        | ShowVerbosity
+          ShowVerbosity
         | PrefixNewlines;
     }
 

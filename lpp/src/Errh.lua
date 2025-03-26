@@ -9,7 +9,6 @@ return function(errmsg)
     local info = debug.getinfo(fidx)
     if not info then break end
     if info.what ~= "C" and not lpp.stacktrace_func_filter[info.func] then 
-      print(info.currentline)
       table.insert(stack, 1,
         {
           src = info.source,

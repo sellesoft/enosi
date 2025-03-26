@@ -82,7 +82,7 @@ struct Driver
   LppConsumers consumers;
   LppVFS* vfs;
 
-  b8 use_full_filepaths;
+  b8 use_full_filepaths = false;
 
   struct InitParams
   {
