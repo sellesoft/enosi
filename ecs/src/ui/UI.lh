@@ -106,8 +106,10 @@ struct UI
 
 private:
 
+  Item* eval_break;
+
   // A type storing a DrawCmd to be drawn later than when it was reported.
-  // This happens in cases like top-most drawcmds and post-sibling drawcmds.
+  // This happens in cases like top-most drawcmds.
   struct DeferredDrawCmd
   {
     mat3x2 transform;
@@ -119,19 +121,14 @@ private:
   struct UpdateTreeContext
   {
     DeferredDrawCmdList* top_most_drawcmds = nullptr;
-    DeferredDrawCmdList* post_sibling_drawcmds = nullptr;
     const mat3x2* current_transform = nullptr;
     Item* hovered = nullptr;
-    Item* hovered_child = nullptr;
 
-    UpdateTreeContext inherit(
-      DeferredDrawCmdList* post_sibling_drawcmds,
-      const mat3x2* current_transform)
+    UpdateTreeContext inherit(const mat3x2* current_transform)
     {
       return
       {
         .top_most_drawcmds = top_most_drawcmds,
-        .post_sibling_drawcmds = post_sibling_drawcmds,
         .current_transform = current_transform,
       };
     }
@@ -156,8 +153,11 @@ private:
   void evalItemBranch(ItemNode* node, FlexContext* flex);
   void genItemBranch(ItemNode* node);
 
-  void emitDrawCmd(DrawCmd* drawcmd);
-  void emitDrawCmds(DrawCmdList& drawcmds);
+  void emitDrawCmd(
+    DrawCmd* drawcmd, 
+    Item* item, 
+    vec4f current_scissor);
+
   void emitDrawCmds(DeferredDrawCmdList& drawcmds);
 
   void onWindowResized(WindowResized& x);

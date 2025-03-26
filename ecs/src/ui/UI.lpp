@@ -197,7 +197,6 @@ b8 UI::update(Engine& engine)
   UpdateTreeContext ctx = 
   {
     .top_most_drawcmds = &top_most_drawcmds,
-    .post_sibling_drawcmds = nullptr,
     .current_transform = &base_transform,
   };
 
@@ -369,6 +368,11 @@ $ end
 
   @tryUpdate(Start)
 
+  if (item == hovered && 
+      eng->input.isKeyDown(Key::LCtrl) && 
+      eng->input.wasMouseButtonPressed(MouseButton::Left))
+    eval_break = item;
+
   if (hovered == item)
   {
     @tryUpdate(MouseHover)
@@ -431,26 +435,19 @@ $ end
 
   @tryUpdate(Fin)
 
-  if (item == hovered && 
-      input.isKeyDown(Key::LCtrl) && 
-      input.wasMouseButtonPressed(MouseButton::Left))
-    platform::debugBreak();
 
   vec2f scoff;
-  vec2f scext;
+  vec2f scsiz;
 
   if (parent && @parent.style.overflow != @Item.overflow.visible)
   {
-    vec2f cpos =
-      item->pos_screen +
-      @style.margin.top_left;
+    vec2f cpos = item->pos_screen + @style.margin.top_left;
     vec2f csiz = max(@item.getMarginedArea, item->calcVisualArea());
+    vec2f cext = cpos + csiz;
 
     vec2f ppos =
       parent->pos_screen +
-      parent->calcContentStart(
-        @parent.style.margin,
-        @parent.style.border);
+      parent->calcContentStart(@parent.style.margin, @parent.style.border);
 
     ppos = max(ppos, parent->visible_start);
 
@@ -463,42 +460,20 @@ $ end
     vec2f pext = 
       min(ppos + psiz, parent->visible_start + parent->visible_size);
 
-    scoff =
-      max(
-        vec2f(0,0),
-        max(
-          ppos,
-          min(
-            cpos,
-            pext)));
-    vec2f br =
-      max(
-        ppos,
-        min(
-          cpos + csiz,
-          pext));
-    scext = max(vec2f(0,0), br - scoff);
-    item->visible_start =
-      max(
-        vec2f(0,0),
-        max(
-          ppos,
-          min(
-            cpos,
-            pext)));
-    br =
-      max(
-        ppos,
-        min(
-          cpos + csiz,
-          pext));
+    scoff = max(vec2f(0,0), max(ppos, min( cpos, pext)));
 
+    vec2f br = max(ppos, min(cext, pext));
+
+    scsiz = max(vec2f(0,0), br - scoff);
+    br = max(ppos, min(cext, pext));
+
+    item->visible_start = max(vec2f(0,0), max(ppos, min(cpos, pext)));
     item->visible_size = br - item->visible_start;
   }
   else
   {
     scoff = max(vec2f(0,0), item->pos_screen);
-    scext =
+    scsiz =
       max(
         vec2f(0,0),
         min(
@@ -511,87 +486,107 @@ $ end
   TRACE("item ", item->name, ":",
     "\n     ps: ", item->pos_screen,
     "\n  scoff: ", scoff,
-    "\n  scext: ", scext,
-    "\n    adj: ", vec2i(scoff.x, window.size.y - (scoff.y+scext.y)),
+    "\n  scsiz: ", scsiz,
+    "\n    adj: ", vec2i(scoff.x, window.size.y - (scoff.y+scsiz.y)),
     "\n");
 
   // TODO(sushi) we can maybe pull some of these conditions into the
   //             calculations above to stop doing work much earlier.
   b8 item_in_view =
     scoff.x < window.size.x && scoff.y < window.size.y &&
-    scext.x != 0.f          && scext.y != 0.f          &&
-    scoff.x + scext.x > 0.f && scoff.y + scext.y > 0.f;
+    scsiz.x != 0.f          && scsiz.y != 0.f          &&
+    scoff.x + scsiz.x > 0.f && scoff.y + scsiz.y > 0.f;
 
   if (item_in_view)
   {
     const mat3x2& current_transform = *ctx.current_transform;
+
+    // Flip the scissor for OpenGL.
+    scoff = vec2f(scoff.x, window.size.y - (scoff.y + scsiz.y));
+
+    vec2f item_margined_pos = item->pos_local   + @style.margin.top_left;
+    vec2f item_bordered_pos = item_margined_pos + @style.border.top_left;
+    vec2f item_padded_pos   = item_bordered_pos + @style.padding.top_left;
 
     mat3x2 item_screen_transform = 
       current_transform.mul(
         mat3x2::createTransform(item->pos_local, 0.f));
 
     mat3x2 item_margined_transform = 
-      current_transform.mul(
-        mat3x2::createTransform(
-          item->pos_local + @style.margin.top_left, 0.f));
+      current_transform.mul(mat3x2::createTransform(item_margined_pos, 0.f));
 
-    vec2f item_content_pos = 
-      item->pos_local +
-      @style.margin.top_left +
-      @style.border.top_left +
-      @style.padding.top_left;
+    mat3x2 item_bordered_transform = 
+      current_transform.mul(mat3x2::createTransform(item_bordered_pos, 0.f));
 
-    mat3x2 item_content_transform = 
-      current_transform.mul(
-        mat3x2::createTransform(item_content_pos, 0.f));
+    mat3x2 item_padded_transform = 
+      current_transform.mul(mat3x2::createTransform(item_padded_pos, 0.f));
 
-    renderer.pushUniformMat3x2("model"_str, item_margined_transform);
+    ItemSpace current_space = ItemSpace::Invalid;
 
-    renderer.pushSetScissor(
-      vec2i(scoff.x, window.size.y - (scoff.y+scext.y)), scext);
+    auto pushTransform = [&](ItemSpace desired_space, b8 force = false)
+    {
+      assert(desired_space != ItemSpace::Invalid);
+
+      if (!force && desired_space == current_space)
+        return;
+
+      switch (current_space = desired_space)
+      {
+      case ItemSpace::Padded:
+        renderer.pushUniformMat3x2("model"_str, item_padded_transform);
+        break;
+      case ItemSpace::Bordered:
+        renderer.pushUniformMat3x2("model"_str, item_bordered_transform);
+        break;
+      case ItemSpace::Margined:
+        renderer.pushUniformMat3x2("model"_str, item_margined_transform);
+        break;
+      }
+    };
+
+    pushTransform(ItemSpace::Bordered);
+    renderer.pushSetScissor(scoff, scsiz);
 
     // Emit background if we have one.
     if (item->builtin.background)
-      emitDrawCmd(item->builtin.background);
+      emitDrawCmd(item->builtin.background, item, vec4f(scoff, scsiz));
 
-    renderer.pushUniformMat3x2("model"_str, item_content_transform);
+    pushTransform(ItemSpace::Margined);
+
+    DrawCmdLists drawcmd_lists;
 
     // Ask the Item if it has any drawcmds.
-    DrawCmdList precmds;
-    DrawCmdList postcmds;
-    item->reportDrawCmds(this, precmds, postcmds);
+    item->reportDrawCmds(this, drawcmd_lists);
 
-    DrawCmdList topmostcmds;
-    item->reportDrawCmdsTopMost(this, topmostcmds);
-
-    for (DrawCmd* cmd : topmostcmds)
+    for (ReportedDrawCmd& cmd : drawcmd_lists.top_most)
     {
       DeferredDrawCmd* deferred_cmd = ctx.top_most_drawcmds->push();
-      deferred_cmd->drawcmd = cmd;
-      deferred_cmd->transform = item_content_transform;
-    }
-
-    if (ctx.post_sibling_drawcmds != nullptr)
-    {
-      DrawCmdList postsibcmds;
-      item->reportDrawCmdsPostSiblings(this, postsibcmds);
-
-      for (DrawCmd* cmd : postsibcmds)
+      deferred_cmd->drawcmd = cmd.drawcmd;
+      switch (cmd.space)
       {
-        DeferredDrawCmd* deferred_cmd = ctx.post_sibling_drawcmds->push();
-        deferred_cmd->drawcmd = cmd;
-        deferred_cmd->transform = item_content_transform;
+      case ItemSpace::Padded:
+        deferred_cmd->transform = item_padded_transform;
+        break;
+      case ItemSpace::Bordered:
+        deferred_cmd->transform = item_bordered_transform;
+        break;
+      case ItemSpace::Margined:
+        deferred_cmd->transform = item_margined_transform;
+        break;
+      default:
+        assert(!"unhandled ItemSpace");
+        break;
       }
     }
 
     // Emit pre-children commands.
-    if (precmds.len != 0)
-      emitDrawCmds(precmds);
+    for (ReportedDrawCmd& cmd : drawcmd_lists.pre_children)
+    {
+      pushTransform(cmd.space);
+      emitDrawCmd(cmd.drawcmd, item, vec4f(scoff, scsiz));
+    }
 
-    DeferredDrawCmdList children_post_sibling_drawcmds;
-
-    UpdateTreeContext child_ctx = 
-      ctx.inherit(&children_post_sibling_drawcmds, &item_screen_transform);
+    UpdateTreeContext child_ctx = ctx.inherit(&item_screen_transform);
 
     // Update child branches if the Item wants us to.
     if (item->shouldPlaceChildren())
@@ -613,31 +608,29 @@ $ end
       ctx.hovered = child_ctx.hovered;
 
     // Children likely changed scissor, so we have to set it back.
-    renderer.pushSetScissor(
-      vec2i(scoff.x, window.size.y - (scoff.y+scext.y)), scext);
-
-    emitDrawCmds(children_post_sibling_drawcmds);
+    renderer.pushSetScissor(scoff, scsiz);
 
     // Child will have pushed a different transform so restore ours.
-    // This kinda sucks, but I'm not sure of a good way around it.
-    renderer.pushUniformMat3x2("model"_str, item_content_transform);
+    pushTransform(ItemSpace::Padded, true);
 
     // Emit post-children commands.
-    if (postcmds.len != 0)
-      emitDrawCmds(postcmds);
+    for (ReportedDrawCmd& cmd : drawcmd_lists.post_children)
+    {
+      pushTransform(cmd.space);
+      emitDrawCmd(cmd.drawcmd, item, vec4f(scoff, scsiz));
+    }
 
     // Draw scrollbars and border when appropriate.
     if (item->builtin.scrollbars && item->max_scroll != vec2f(0.f,0.f))
-      emitDrawCmd(item->builtin.scrollbars);
+    {
+      pushTransform(ItemSpace::Padded);
+      emitDrawCmd(item->builtin.scrollbars, item, vec4f(scoff, scsiz));
+    }
 
-    mat3x2 item_bordered_transform = 
-      item_margined_transform.mul(
-        mat3x2::createTransform(@style.border.top_left, 0.f));
-
-    renderer.pushUniformMat3x2("model"_str, item_bordered_transform);
+    pushTransform(ItemSpace::Bordered);
 
     if (item->builtin.borders)
-      emitDrawCmd(item->builtin.borders);
+      emitDrawCmd(item->builtin.borders, item, vec4f(scoff, scsiz));
   }
 
   // Handle scrollbar input for this Item if necessary.
@@ -702,6 +695,13 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
 
   Item* item = node->data;
   Item* parent = (node->parent? node->parent->data : nullptr);
+
+
+  if (item == eval_break)
+  {
+    eval_break = nullptr;
+    platform::debugBreak();
+  }
 
   item->dirty = false;
 
@@ -1013,8 +1013,8 @@ $   local style = child.style
     switch (@style.anchor)
     {
     case @schema.anchor.top_left:
-      child->pos_local.x += @style.pos.x;
-      child->pos_local.y += @style.pos.y;
+      child->pos_local.x += @child.style.pos.x;
+      child->pos_local.y += @child.style.pos.y;
       break;
 
     case @schema.anchor.top_right:
@@ -1110,7 +1110,51 @@ $ end
         break;
 
       case @schema.positioning.absolute:
-        @placeAnchorSwitch
+        switch (@child.style.anchor)
+        {
+        case @schema.anchor.top_left:
+          child->pos_local.x = @child.style.pos.x;
+          child->pos_local.y = @child.style.pos.y;
+          break;
+
+        case @schema.anchor.top_right:
+          if (!wauto)
+            child->pos_local.x = 
+              (@item.getPaddedWidth - child->size.x) - @child.style.pos.x;
+          else
+            ERROR("item's anchor is specified as top_right, but the item's"
+                  "width is set to auto\n");
+
+          child->pos_local.y = @child.style.pos.x;
+          break;
+
+        case @schema.anchor.bottom_right:
+          if (!wauto)
+            child->pos_local.x = 
+              (@item.getPaddedWidth - child->size.x) - @child.style.pos.x;
+          else
+            ERROR("item's anchor is specified as bottom_right, but the item's"
+                  "width is set to auto\n");
+
+          if (!hauto)
+            child->pos_local.y = 
+              (@item.getPaddedHeight - child->size.y) - @child.style.pos.y;
+          else
+            ERROR("item's anchor is specified as bottom_right, but the item's"
+                  "height is set to auto\n");
+          break;
+
+        case @schema.anchor.bottom_left:
+          if (!hauto)
+            child->pos_local.y = 
+              (@item.getPaddedHeight - child->size.y) - @child.style.pos.y;
+          else
+            ERROR("item's anchor is specified as bottom_left, but the item's"
+                  "height is set to auto\n");
+
+          child->pos_local.x = @child.style.pos.x;
+          break;
+        }
         break;
 
       // NOTE(sushi) fixed positioning is handled in gen item branch
@@ -1239,8 +1283,8 @@ void UI::genItemBranch(ItemNode* node)
         vp,
         ip,
         sum,
-        {0.f, 0.f},
-        item->size,
+        {@item.style.margin.left, @item.style.margin.top},
+        @item.getMarginedArea,
         @item.style.background_color);
 
     item->builtin.background->counts_used = sum;
@@ -1354,10 +1398,30 @@ void UI::genItemBranch(ItemNode* node)
 
 /* ----------------------------------------------------------------------------
  */
-void UI::emitDrawCmd(DrawCmd* drawcmd)
+void UI::emitDrawCmd(
+    DrawCmd* drawcmd, 
+    Item* item, 
+    vec4f current_scissor)
 {
   if (drawcmd->counts_used.y == 0)
     return;
+
+  b8 drawcmd_scissor = 
+    item != nullptr && 
+    drawcmd->scissor != vec4f(-1.f, -1.f, -1.f, -1.f);
+
+  if (drawcmd_scissor)
+  {
+    f32 scissor_x = item->pos_screen.x + max(0.f, drawcmd->scissor.x);
+    f32 scissor_y = item->pos_screen.y + max(0.f, drawcmd->scissor.y);
+    f32 scissor_w = min(item->size.x, drawcmd->scissor.z);
+    f32 scissor_h = min(item->size.y, drawcmd->scissor.w);
+    
+    scissor_y = eng->window.size.y - (scissor_y + scissor_h);
+
+    eng->renderer.pushSetScissor(
+      vec2i(scissor_x, scissor_y), vec2i(scissor_w, scissor_h));
+  }
 
   if (notnil(drawcmd->tex))
   {
@@ -1379,27 +1443,22 @@ void UI::emitDrawCmd(DrawCmd* drawcmd)
     drawcmd->index_offset,
     drawcmd->counts_used.y,
     drawcmd->vertex_offset);
+
+  if (drawcmd_scissor)
+  {
+    eng->renderer.pushSetScissor(current_scissor.xy(), current_scissor.zw());
+  }
 }
 
 /* ----------------------------------------------------------------------------
  */
-void UI::emitDrawCmds(DrawCmdList& drawcmds)
-{
-  TRACE("pushing draw cmds \n");
-
-  for (DrawCmd* drawcmd : drawcmds)
-    emitDrawCmd(drawcmd);
-}
-
-/* ----------------------------------------------------------------------------
- */
-void UI::emitDrawCmds(DeferredDrawCmdList& drawcmds)
+void UI::emitDrawCmds( DeferredDrawCmdList& drawcmds)
 {
   for (DeferredDrawCmd& cmd : drawcmds)
   {
     if (cmd.drawcmd->counts_used.x != 0)
       eng->renderer.pushUniformMat3x2("model"_str, cmd.transform);
-    emitDrawCmd(cmd.drawcmd);
+    emitDrawCmd(cmd.drawcmd, nullptr, {});
   }
 }
 
