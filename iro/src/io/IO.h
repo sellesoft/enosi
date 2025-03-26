@@ -252,6 +252,8 @@ struct SmallBuffer : public IO
 
   b8 isSmall() const { return ptr == stack; }
 
+  String asStr() const { return String::from(ptr, len); }
+
   void clear()
   {
     if (!isSmall())
@@ -286,6 +288,8 @@ struct SmallBuffer : public IO
 
     mem::copy(ptr + len, slice.ptr, slice.len);
     len += slice.len;
+
+    return slice.len;
   }
 
   s64 read(Bytes buffer) override
