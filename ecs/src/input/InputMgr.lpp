@@ -5,6 +5,8 @@ $ local cmn = require "common"
 
 @lpp.import "Engine.lh"
 
+@defFileLogger(inputmgr, Info)
+
 /* ----------------------------------------------------------------------------
  */
 b8 InputMgr::init(Engine& engine)

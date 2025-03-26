@@ -69,7 +69,7 @@ struct InputMgr
   }
   b8 anyKeyPressed()
   {
-    return keys_new.bitAnd(keys_old.bitNot()).testAny();
+    return char_count != 0 || keys_new.bitAnd(keys_old.bitNot()).testAny();
   }
   b8 wasKeyReleased(Key key)
   {
