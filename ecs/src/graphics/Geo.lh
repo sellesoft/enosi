@@ -8,9 +8,14 @@ $ local List = require "List"
 
 #include "math/vec.h"
 #include "Color.h"
+#include "iro/Unicode.h"
+
+using namespace iro;
 
 namespace gfx
 {
+
+struct Font;
 
 struct Vertex
 {
@@ -189,6 +194,28 @@ static vec2i putFilledRect(
     { 1.f, 0.f },
     { 0.f, 0.f },
     color);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static void putFilledRect(
+    Vertex* putverts,
+    Index*  putindices,
+    vec2i*  offsets,
+    vec2f   pos,
+    vec2f   dim,
+    Color   color)
+{
+  vec2i counts = 
+    putFilledRect(
+      putverts,
+      putindices,
+      *offsets,
+      pos,
+      dim,
+      color);
+
+  *offsets += counts;
 }
 
 /* ----------------------------------------------------------------------------
@@ -513,5 +540,78 @@ $$$
   }
 
 }
+
+/* ----------------------------------------------------------------------------
+ */
+static void putBorders(
+    Vertex* putverts,
+    Index*  putindices,
+    vec2i*  offsets,
+    vec4f   borders,
+    vec2f   pos,
+    vec2f   area,
+    Color   color)
+{
+  *offsets += 
+    putBorders(
+      putverts,
+      putindices,
+      *offsets,
+      borders,
+      pos,
+      area,
+      color);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static vec2i putTextCounts(String text) 
+{  
+  return s32(text.countCharacters()) * putFilledRectCounts();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void putGlyph(
+  Vertex* vp,
+  Index*  ip,
+  vec2i*  counts,
+  Font*   font,
+  u32     codepoint,
+  vec2f*  pos, 
+  Color   color);
+
+/* ----------------------------------------------------------------------------
+ */
+vec2f measureText(
+  String text,
+  Font*  font,
+  f32    font_height,
+  f32    tab_spaces);
+
+/* ----------------------------------------------------------------------------
+ */
+void putText(
+  Vertex* putverts,
+  Index*  putindices,
+  vec2i*  offsets,
+  vec2f   pos,
+  String  text,
+  Font*   font,
+  f32     font_height,
+  f32     tab_spaces,
+  Color   color,
+  vec2f*  size);
+
+/* ----------------------------------------------------------------------------
+ */
+/*enum class TextWrapping*/
+/*{*/
+/*  None,*/
+/*  Word,*/
+/*  Char,*/
+/*};*/
+
+
 
 }

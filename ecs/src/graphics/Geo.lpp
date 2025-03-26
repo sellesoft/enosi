@@ -1,0 +1,223 @@
+$ local cmn = require "common"
+
+@@lpp.import "graphics/Geo.lh"
+
+@@lpp.import "graphics/Font.lh"
+
+namespace gfx
+{
+
+/* ----------------------------------------------------------------------------
+ */
+static void putGlyph(
+    Vertex* vp,
+    Index* ip,
+    vec2i* counts,
+    const PackedChar& pc,
+    f32 font_size_x,
+    f32 font_size_y,
+    vec2f pos,
+    Color color)
+{
+
+  auto uv0 = vec2f(f32(pc.x0) / font_size_x, f32(pc.y0) / font_size_y);
+  auto uv1 = vec2f(f32(pc.x1) / font_size_x, f32(pc.y1) / font_size_y);
+
+  vec2i counts_drawn =
+    gfx::putFilledRect(
+      vp,  
+      ip, 
+      *counts, 
+      pos,
+      vec2f(pc.x1 - pc.x0, pc.y1 - pc.y0),
+      { uv0.x, uv1.y },
+      { uv1.x, uv1.y },
+      { uv1.x, uv0.y },
+      { uv0.x, uv0.y },
+      color);
+
+  counts->x += counts_drawn.x;
+  counts->y += counts_drawn.y;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void putGlyph(
+    Vertex* vp,
+    Index*  ip,
+    vec2i*  counts,
+    Font*   font,
+    u32     codepoint,
+    vec2f*  pos, 
+    Color   color)
+{
+  gfx::PackedChar pc;
+  font->getPackedChar(&pc, codepoint);
+
+  putGlyph(
+    vp, ip,
+    counts,
+    pc,
+    font->data->size_x,
+    font->data->size_y,
+    *pos,
+    color);
+
+  pos->x += pc.xadvance;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+vec2f measureText(
+    String text,
+    Font* font,
+    f32 font_height,
+    f32 tab_spaces)
+{
+  vec2f size = {};
+  vec2f cursor = {};
+  FontData* data = font->data;
+
+  // Cache off space width since its used in a couple places.
+  gfx::PackedChar space_char;
+  font->getPackedChar(&space_char, ' ');
+  f32 space_width = space_char.xadvance;
+
+  while (!text.isEmpty())
+  {
+    utf8::Codepoint cp = text.advance();
+    switch (cp.codepoint)
+    {
+    case '\n':
+      cursor.y += font_height;
+      cursor.x = 0.f;
+      break;
+
+    case '\t':
+      cursor.x += tab_spaces * space_width;
+      break;
+
+    default:
+      {
+        gfx::PackedChar pc;
+        font->getPackedChar(&pc, cp.codepoint);
+        cursor.x += pc.xadvance;
+      }
+      break;
+    }
+
+    size.x = max(size.x, cursor.x);
+    size.y = cursor.y + font_height;
+  }
+
+  return size;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void putText(
+    Vertex* putverts,
+    Index*  putindices,
+    vec2i*  offsets,
+    vec2f   pos,
+    String  text,
+    Font*   font,
+    f32     font_height,
+    f32     tab_spaces,
+    Color   color,
+    vec2f*  size)
+{
+  u32 nchars = text.countCharacters();
+  auto* vp = putverts;
+  auto* ip = putindices;
+
+  vec2f cursor = pos;
+  FontData* font_data = font->data;
+
+  // Cache off space width since its used in a couple places.
+  gfx::PackedChar space_char;
+  font->getPackedChar(&space_char, ' ');
+  f32 space_width = space_char.xadvance;
+
+  while (!text.isEmpty())
+  {
+    utf8::Codepoint cp = text.advance();
+
+    switch (cp.codepoint)
+    {
+    case '\n':
+      cursor.y += font_height;
+      cursor.x = pos.x;
+      break;
+
+    case '\t':
+      cursor.x += tab_spaces * space_width;
+      break;
+
+    default:
+      {
+        gfx::PackedChar pc;
+        font->getPackedChar(&pc, cp.codepoint);
+        putGlyph(
+          vp, 
+          ip, 
+          offsets, 
+          pc,
+          font_data->size_x,
+          font_data->size_y,
+          cursor, 
+          color);
+        cursor.x += pc.xadvance;
+      }
+      break;
+    }
+
+    if (size)
+    {
+      size->x = max(size->x, cursor.x - pos.x);
+      size->y = (cursor.y - pos.y) + font_height;
+    }
+  }
+}
+
+/*vec2i putWrappedText(*/
+/*    Vertex* putverts,*/
+/*    Index* putindices,*/
+/*    vec2i offsets,*/
+/*    vec2f pos,*/
+/*    String text,*/
+/*    Font* font,*/
+/*    f32 font_height,*/
+/*    f32 tab_spaces,*/
+/*    f32 max_width,*/
+/*    TextWrapping wrap,*/
+/*    Color color)*/
+/*{*/
+/*  if (wrap == TextWrapping::None)*/
+/*    return putText(*/
+/*      putverts,*/
+/*      putindices,*/
+/*      offsets,*/
+/*      pos,*/
+/*      text,*/
+/*      font,*/
+/*      font_height,*/
+/*      tab_spaces,*/
+/*      color);*/
+/**/
+/*  String scan = text;*/
+/**/
+/*  f32 width_since_last_word = 0.f;*/
+/**/
+/*  while (!scan.isEmpty())*/
+/*  {*/
+/*    utf8::Codepoint cp = scan.advance();*/
+/*    switch (cp.codepoint)*/
+/*    {*/
+/*    case '\n':*/
+/*      width_since_last_word = 0.f;*/
+/*    }*/
+/*  }*/
+/*}*/
+
+}
