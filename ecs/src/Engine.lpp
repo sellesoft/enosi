@@ -30,8 +30,13 @@ using namespace iro;
 @@lpp.import "asset/SourceDataFile.lh"
 @@lpp.import "asset/SourceDataParser.lh"
 
+@@lpp.import "asset/SourceDataEditor.lh"
+
 static Logger logger =
   Logger::create("ecs.eng"_str, Logger::Verbosity::Info);
+
+ui::Item* base;
+ui::SourceDataEditor* sdata_edit_test;
 
 /* ----------------------------------------------------------------------------
  */
@@ -142,32 +147,53 @@ $ end
 
   gfx::Font::compileBDF(params);
 
-  // inspector = ui::Inspector::create(ui, this);
+$ if true then
 
-  $ local inspector = ui.createItemContext("Inspector", "inspector")
-
-$ if false then
-
-  auto* base = ui::Item::begin(ui, "base"_str);
+  base = ui::Item::begin(ui, "base"_str);
   {
-    @ui.style(base, Item,
-    | size: 100 100
-    | pos: 10 10
-    | positioning: relative
-    | border: 2 2 2 2
-    | padding: 4 4 4 4
-    | background_color: 0x0011eeff)
+    @ui.style(base, Item, | size: 400 400)
 
-    auto* input_text = ui::InputText::make(ui, "hello"_str);
-    @ui.style(input_text, InputText, 
-    | size: 100% auto 
-    | padding: 5 2 5 2
-    | background_color: 0x111111ff)
+    sdata_edit_test = ui::SourceDataEditor::create(ui);
 
+    h_test =
+     source_data_file_reg.loadFromDisk("assets/maps/Test.map"_str);
+
+    sdata_edit_test->setSourceData(
+      ui, 
+      h_test.getFile()->returned_data,
+      h_test.getFile(),
+      "MapDef"_hashed);
+  }
+  ui.endItem();
+
+$ else
+
+  base = ui::Item::begin(ui, "base"_str);
+  {
+    @ui.style(base, Item, 
+    | size: 200 200
+    | display: flex
+    | background_color: 0xff0000ff)
+
+    auto* a = ui::Item::make(ui, "a"_str);
+    @ui.style(a, Item,
+    | size: 100% flex(1)
+    | background_color: 0x00ff00ff)
+
+    auto* c = ui::Item::make(ui, "c"_str);
+    @ui.style(c, Item,
+    | size: 100% 10
+    | background_color: 0xee00eeff)
+
+    auto* b = ui::Item::make(ui, "b"_str);
+    @ui.style(b, Item,
+    | size: 100% flex(2)
+    | background_color: 0x0000ffff)
   }
   ui.endItem();
 
 $ end
+
 
   INFO("done!\n");
 
@@ -252,6 +278,7 @@ b8 Engine::update()
     return ERROR("failed to update ui\n");
 
   gamemgr.update();
+
   // inspector->fps->dirty = true;
   //
   // io::StaticBuffer<255> fps;

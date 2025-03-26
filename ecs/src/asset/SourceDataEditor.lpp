@@ -2,14 +2,9 @@ $ local cmn = require "common"
 $ local ui = require "ui.UI"
 $ local glob = require "Glob"
 $ local Processor = require "reflect.Processor"
+$ local ast = require "reflect.AST"
 
 @@lpp.import "asset/SourceDataEditor.lh"
-
-@@lpp.import "asset/SourceData.lh"
-
-@@lpp.import "ui/UI.lh"
-@@lpp.import "ui/widgets/InputText.lh"
-@@lpp.import "ui/widgets/CollapsingHeader.lh"
 
 $$$
 local imported = cmn.buffer.new()
@@ -25,12 +20,1011 @@ end
 importPattern "**/*.defs.lh"
 importPattern "**/*.comp.lh"
 
-local p = Processor.new(imported:get())
+local p = Processor.new(tostring(imported))
 p:run()
+$$$
+
+@imported:get
+
+@@lpp.import "Engine.lh"
+
+@@lpp.import "asset/SourceData.lh"
+
+@@lpp.import "ui/UI.lh"
+@@lpp.import "ui/widgets/InputText.lh"
+@@lpp.import "ui/widgets/CollapsingHeader.lh"
+
+#include "math/util.h"
+
+$ local function removeTag(name)
+$   return name
+$     :gsub("struct ", "")
+$     :gsub("union ", "")
+$     :gsub("enum ", "")
+$ end
+
+$$$
+local function isExplicitlyFiltered(name)
+  name = removeTag(name)
+
+  if name:find "^iro::Log" or 
+     name:find "^iro::io" or
+     name:find "^iro::color" or
+     name:find "^iro::fs" or
+     name:find "^iro::mem" or
+     name == "iro::ScopedIndent" or 
+     name == "defer_dummy" or 
+     name == "defer_with_cancel_dummy"
+  then
+    return true
+  end
+end
+
+local eachDecl = function(f)
+  for decl in p.decls.list:each() do
+    local can_emit = false
+    local decl = decl.decl
+    if decl then
+local name = removeTag(decl.name)
+      if not isExplicitlyFiltered(name) then
+        if decl:is(ast.TemplateSpecialization) then
+          if decl.specialized_name == "Array" then
+            local subtype = decl.template_args[1]
+            local subdecl = subtype:getDecl()
+            if subdecl and not isExplicitlyFiltered(subdecl.name) then
+              can_emit = true
+            end
+          end
+        elseif decl:is(ast.Struct) then
+          can_emit = true
+        end
+      end
+    end
+    
+    if can_emit then
+      f(removeTag(decl.name), decl)
+    end
+  end
+end
 $$$
 
 namespace ui
 { 
+
+@defFileLogger(srcdataedit, Info)
+
+using DatumTextEditKind = SourceDataEditor::DatumTextEdit::Kind;
+
+/* ============================================================================
+ */
+static const struct 
+{
+  Color row_even = 0x45404fff;
+  Color row_odd  = 0x141b21ff;
+
+  Color input_text_bg = 0x2b363bff;
+} colors;
+
+const f32 row_height = 21.f;
+const f32 row_name_left_pad = 3.f;
+
+const f32 min_name_width = 60.f;
+const f32 name_value_spacing = 8.f;
+
+const f32 vec2_min_comp_width = 50.f;
+const f32 vec2_comp_spacing = 5.f;
+
+/* ============================================================================
+ *  Small (unecessary and probably compile-time killing) trick to make it 
+ *  easier to deal with this generated code in debugging. Without needing 
+ *  to actually include all the types to, say, have the template arg be a 
+ *  typename.
+ */
+template<int N>
+struct SL
+{
+  constexpr SL(const char (&str)[N])
+  {
+    for (int i = 0; i < N; ++i)
+      v[i] = str[i];
+  }
+
+  char v[N];
+};
+
+/* ============================================================================
+ */
+template<typename T>
+struct StructState;
+
+/* ============================================================================
+ */
+struct DatumState
+{
+  DatumState* parent = nullptr;
+  SourceData* data = nullptr;
+
+  vec2f pos = {};
+
+  DrawCmd* name = nullptr;
+  DrawCmd* bg = nullptr;
+
+  u32 datum_idx = 0;
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 init(
+      UI& ui, 
+      DatumState* parent, 
+      SourceData* data, 
+      SourceDataEditor* editor)
+  {
+    this->parent = parent;
+    this->data = data;
+
+    name = ui.drawcmds.add();
+    name->tex = editor->font_texture;
+
+    bg = ui.drawcmds.add();
+    bg->alloc(&ui, gfx::putFilledRectCounts());
+
+    return true;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void deinit(UI& ui)
+  {
+    ui.drawcmds.remove(name);
+    ui.drawcmds.remove(bg);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  struct EvalParams
+  {
+    String name;
+    SourceDataEditor* editor;
+    f32 x;
+    f32 y;
+    gfx::Font* font;
+    u32 datum_count = 0;
+  };
+
+  void evaluate(UI& ui, f32 x_offset, EvalParams& params)
+  {
+    vec2f text_size = 
+      gfx::measureText(params.name, params.editor->font, 11.f, 1.f);
+
+    pos = { params.x, params.y };
+
+    params.editor->max_name_width =
+      max(
+        params.editor->max_name_width, 
+        pos.x + text_size.x + row_name_left_pad + x_offset);
+
+    params.datum_count += 1;
+  }
+
+  void evaluate(UI& ui, EvalParams& params)
+  {
+    evaluate(ui, 0.f, params);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  struct DrawParams
+  {
+    SourceDataEditor* editor;
+    f32 x;
+    f32 y;
+    String name;
+    u32 datum_count = 0;
+  };
+
+  void generate(UI& ui, f32 x_offset, DrawParams& params)
+  {
+    auto [vp, ip] = name->realloc(&ui, gfx::putTextCounts(params.name));
+  
+    name->counts_used = {};
+
+    gfx::putText(
+      vp, ip,
+      &name->counts_used,
+      { pos.x + row_name_left_pad + x_offset, calcRowTextY() },
+      params.name,
+      params.editor->font,
+      11.f,
+      1.f,
+      {255, 255, 255, 255},
+      nullptr);
+
+    datum_idx = params.datum_count += 1;
+  }
+
+  void generate(UI& ui, DrawParams& params)
+  {
+    generate(ui, 0.f, params);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  f32 calcRowTextY() const
+  {
+    return ceil(pos.y + 0.5f * (row_height - 11.f));
+  }
+  /* --------------------------------------------------------------------------
+   */
+  f32 calcInlineValueX(f32 max_name_width) const
+  {
+    return max(max_name_width + name_value_spacing, min_name_width);
+  }
+
+  struct DatumTextBox
+  {
+    SourceData*       data;
+    vec2f             pos;
+    vec2f             size;
+    DatumTextEditKind kind;
+
+    struct 
+    {
+      DrawCmd* text;
+      DrawCmd* decor;
+    } dc;
+    
+    b8 init(
+        UI& ui, 
+        SourceData* data, 
+        DatumTextEditKind kind, 
+        SourceDataEditor* editor)
+    {
+      this->data = data;
+      this->kind = kind;
+
+      dc.text = ui.drawcmds.add();
+      dc.text->tex = editor->font_texture;
+
+      dc.decor = ui.drawcmds.add();
+      dc.decor->alloc(
+        &ui, gfx::putFilledRectCounts() + gfx::putBordersCounts());
+
+      return true;
+    }
+
+    void deinit(UI& ui)
+    {
+      dc.text->remove(&ui);
+      dc.decor->remove(&ui);
+    }
+
+    vec4f calcTextPosAndSize() const
+    {
+      return vec4f(
+        pos + vec2f(6.f, ceil(0.5f * (size.y - 11.f))),
+        vec2f(size.x - 12.f, 11.f));
+    }
+
+    vec2f draw(UI& ui, vec2f pos, vec2f size, DrawParams& params)
+    {
+      this->pos = pos;
+      this->size = size;
+
+      String text;
+      switch (kind)
+      {
+      case DatumTextEditKind::Name:
+        text = data->name;
+        break;
+      case DatumTextEditKind::Type:
+        text = data->type;
+        break;
+      case DatumTextEditKind::Value:
+        text = data->val.str;
+        break;
+      }
+
+      if (params.editor->isEditingDatumText(data, kind))
+        return gfx::measureText(text, params.editor->font, 11.f, 1.f);
+
+      auto rect = calcTextPosAndSize();
+      vec2f text_size;
+
+      {
+        auto [vp, ip] = dc.text->realloc(&ui, gfx::putTextCounts(text));
+        dc.text->counts_used = {};
+
+        gfx::putText(
+          vp, ip,
+          &dc.text->counts_used,
+          rect.xy(),
+          text,
+          params.editor->font,
+          11.f, 
+          1.f, 
+          {255, 255, 255, 255},
+          &text_size);
+      }
+
+      {
+        auto [vp, ip] = dc.decor->getPtrs(&ui);
+        dc.decor->counts_used = {};
+
+        vec2f decor_pos = vec2f(pos.x, pos.y + 2.f);
+        vec2f decor_size = vec2f(size.x, size.y - 4.f);
+
+        gfx::putFilledRect(
+          vp, ip,
+          &dc.decor->counts_used,
+          decor_pos,
+          decor_size,
+          0x323349ff);
+
+        gfx::putBorders(
+          vp, ip,
+          &dc.decor->counts_used,
+          {-1.f,- 1.f, -1.f, -1.f},
+          decor_pos,
+          decor_size,
+          0x7986a4ff);
+      }
+      
+      return text_size;
+    }
+
+    void update(UI& ui, UpdateReason reason, SourceDataEditor* editor)
+    {
+      if (reason == UpdateReason::MouseReleased)
+      {
+        vec2f local_cursor = ui.eng->input.mouse.window - editor->pos_screen;
+        if (math::pointInRect(local_cursor, pos, size))
+        {
+          auto rect = calcTextPosAndSize();
+          editor->beginEditDatumText(ui, data, kind, rect.xy(), rect.zw());
+        }
+        else
+          editor->endEditDatumText(data, kind);
+      }
+    }
+
+    void reportDrawCmds(UI& ui, DrawCmdLists& lists, SourceDataEditor* editor)
+    {
+      lists.pre_children.push(dc.decor);
+
+      if (editor->isEditingDatumText(data, kind))
+        return;
+
+      lists.pre_children.push(dc.text);
+    }
+  };  
+
+  /* --------------------------------------------------------------------------
+   */
+  f32 drawInlineValueText(
+      UI& ui,
+      String s, 
+      f32 x_offset, 
+      DrawCmd* dc, 
+      DrawParams& params)
+  {
+    auto [vp, ip] = dc->realloc(&ui, gfx::putTextCounts(s));
+    
+    vec2f size;
+    gfx::putText(
+      vp, ip,
+      &dc->counts_used,
+      vec2f(
+        calcInlineValueX(params.editor->max_name_width) + x_offset,
+        calcRowTextY()),
+      s,
+      params.editor->font,
+      11.f,
+      1.f,
+      {255, 255, 255, 255},
+      &size);
+
+    return size.x;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void drawBackground(UI& ui, DrawParams& params)
+  {
+    auto [vp, ip] = bg->getPtrs(&ui);
+
+    bg->counts_used = {};
+
+    bg->counts_used += 
+      gfx::putFilledRect(
+        vp, ip,
+        bg->counts_used,
+        pos,
+        vec2f(params.editor->size.x, params.y - pos.y),
+        datum_idx % 2 
+        ? colors.row_odd
+        : colors.row_even);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void reportDrawCmds(UI& ui, DrawCmdLists& lists, SourceDataEditor* editor)
+  {
+    lists.pre_children.push(bg);
+    lists.pre_children.push(name);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void update(UI& ui, UpdateReason reason, SourceDataEditor* editor)
+  {
+  }
+};
+
+/* ============================================================================
+ */
+struct ValueState : DatumState
+{
+  InputTextState input_text;
+  DatumTextBox value_box;
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 init(
+      UI& ui, 
+      DatumState* parent, 
+      SourceData* data,
+      SourceDataEditor* editor)
+  {
+    if (!DatumState::init(ui, parent, data, editor))
+      return false;
+
+    if (!value_box.init(ui, data, DatumTextEditKind::Value, editor))
+      return false;
+
+    return true;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void deinit(UI& ui)
+  {
+    value_box.deinit(ui);
+    DatumState::deinit(ui);
+  }
+  
+  /* --------------------------------------------------------------------------
+   */
+  void evaluate(UI& ui, EvalParams& params)
+  {
+    DatumState::evaluate(ui, params);
+
+    params.y += row_height;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void generate(UI& ui, DrawParams& params)
+  {
+    DatumState::generate(ui, params);
+
+    f32 inline_x = calcInlineValueX(params.editor->max_name_width);
+
+    value_box.draw(
+      ui,
+      vec2f(inline_x, params.y),
+      vec2f(params.editor->size.x - inline_x - 6.f, row_height),
+      params);
+
+    params.y += row_height;
+
+    drawBackground(ui, params);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void update(UI& ui, UpdateReason reason, SourceDataEditor* editor)
+  {
+    DatumState::update(ui, reason, editor);
+    value_box.update(ui, reason, editor);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void reportDrawCmds(UI& ui, DrawCmdLists& lists, SourceDataEditor* editor)
+  {
+    DatumState::reportDrawCmds(ui, lists, editor);
+    value_box.reportDrawCmds(ui, lists, editor);
+  }
+};
+
+/* ============================================================================
+ */
+struct ObjectState : DatumState
+{
+  b8 open = false;
+
+  /* --------------------------------------------------------------------------
+   */
+  void evaluate(UI& ui, EvalParams& params)
+  {
+    DatumState::evaluate(ui, 12.f, params);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void generate(UI& ui, DrawParams& params)
+  {
+    DatumState::generate(ui, 12.f, params);
+
+    auto [vp, ip] = name->realloc(
+      &ui, 
+      gfx::putTextCounts(params.name) + gfx::putTextCounts("+"_str));
+
+    auto state_pos = vec2f(pos.x + row_name_left_pad, calcRowTextY());
+    gfx::putGlyph(
+      vp, ip,
+      &name->counts_used,
+      params.editor->font,
+      (open? '-' : '+'),
+      &state_pos,
+      0xffffffff);
+  }
+  
+  /* --------------------------------------------------------------------------
+   */
+  void update(UI& ui, UpdateReason reason, SourceDataEditor* editor)
+  {
+    DatumState::update(ui, reason, editor);
+
+    if (reason == UpdateReason::MouseReleased)
+    {
+      vec2f local_cursor = 
+        ui.eng->input.mouse.window - editor->pos_screen;
+
+      f32 name_extent = calcInlineValueX(editor->max_name_width);
+
+      if (math::pointInRect(local_cursor, pos, { name_extent, row_height }))
+      {
+        open = !open;
+        editor->dirty = true;
+      }
+    }
+  }
+};
+
+/* ============================================================================
+ */
+struct Vec2State : DatumState
+{
+  DrawCmd* component_names;
+
+  DatumTextBox x_box;
+  DatumTextBox y_box;
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 init(
+      UI& ui, 
+      DatumState* parent, 
+      SourceData* data,
+      SourceDataEditor* editor)
+  {
+    if (!DatumState::init(ui, parent, data, editor))
+      return false;
+
+    SourceData* x = data? data->findChildByName("x"_str) : nullptr;
+    SourceData* y = data? data->findChildByName("y"_str) : nullptr;
+
+    if (!x_box.init(ui, x, DatumTextEditKind::Value, editor))
+      return false;
+
+    if (!y_box.init(ui, y, DatumTextEditKind::Value, editor))
+      return false;
+    
+    component_names = ui.drawcmds.add();
+    component_names->alloc(&ui, 2 * gfx::putFilledRectCounts());
+    component_names->tex = editor->font_texture;
+
+    return true;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void deinit(UI& ui)
+  {
+    x_box.deinit(ui);
+    y_box.deinit(ui);
+    component_names->remove(&ui);
+    DatumState::deinit(ui);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void evaluate(UI& ui, EvalParams& params)
+  {
+    DatumState::evaluate(ui, params);
+
+    params.y += row_height;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void generate(UI& ui, DrawParams& params)
+  {
+    DatumState::generate(ui, params);
+
+    f32 x_start = calcInlineValueX(params.editor->max_name_width);
+    f32 row_text_y = calcRowTextY();
+
+    // Component values.
+    {
+      auto [vp, ip] = component_names->getPtrs(&ui);
+      component_names->counts_used = {};
+
+      f32 pos_x = 0.f;
+
+      pos_x += 
+        drawInlineValueText(
+          ui,
+          "x"_str, 
+          0.f, 
+          component_names,
+          params);
+
+      pos_x += 6.f;
+      x_box.draw(
+        ui, 
+        vec2f(x_start + pos_x, params.y), 
+        vec2f(vec2_min_comp_width, row_height),
+        params);
+
+      pos_x += vec2_min_comp_width + vec2_comp_spacing;
+
+      pos_x += 
+        drawInlineValueText(
+          ui,
+          "y"_str,
+          pos_x, 
+          component_names,
+          params);
+
+      pos_x += 6.f;
+      y_box.draw(
+        ui,
+        vec2f(x_start + pos_x, params.y),
+        vec2f(vec2_min_comp_width, row_height),
+        params);
+    }
+
+    params.y += row_height;
+
+    drawBackground(ui, params);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void update(UI& ui, UpdateReason reason, SourceDataEditor* editor)
+  {
+    DatumState::update(ui, reason, editor);
+    x_box.update(ui, reason, editor);
+    y_box.update(ui, reason, editor);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void reportDrawCmds(UI& ui, DrawCmdLists& lists, SourceDataEditor* editor)
+  {
+    DatumState::reportDrawCmds(ui, lists, editor);
+    lists.pre_children.push(component_names);
+    x_box.reportDrawCmds(ui, lists, editor);
+    y_box.reportDrawCmds(ui, lists, editor);
+  }
+};
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function getDeclDatumType(decl)
+$   if decl:is(ast.TemplateSpecialization) then
+$     if decl.specialized_name == "vec2" then
+$       return "Vec2State"
+$     elseif decl.specialized_name == "Array" then
+$       local subtype = decl.template_args[1]
+$       local subdecl = subtype:getDecl()
+$       if subdecl then
+$         return "ArrayState<"..removeTag(subdecl.name)..">"
+$       end
+$     end
+$   elseif decl:is(ast.Struct) then
+$     return "StructState<"..removeTag(decl.name)..">"
+$   end
+$   return "ValueState"
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function getTypeDatumType(type)
+$   if type.name == "String" then
+$     return "ValueState"
+$   end
+$  
+$  type = type:getDesugared()
+$  if type:is(ast.Builtin) then
+$    return "ValueState"
+$  end
+$ 
+$  if type:is(ast.TagType) then
+$    local decl = type:getDecl()
+$    return getDeclDatumType(decl)
+$  end
+$  return "ValueState"
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putStructState(name, decl)
+/* ============================================================================
+ */
+template<>
+struct StructState<$(name)> : ObjectState
+{
+$   for field,i in decl:eachFieldWithIndex() do
+  // $(field.name): $(field.type:tostring())
+  $(getTypeDatumType(field.type)) member$(i);
+$   end
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 init(
+      UI& ui, 
+      DatumState* parent,  
+      SourceData* data, 
+      SourceDataEditor* editor)
+  {
+    if (!ObjectState::init(ui, parent, data, editor))
+      return false;
+
+    if (parent == nullptr)
+      open = true;
+
+$ for field,i in decl:eachFieldWithIndex() do
+    member$(i).init(
+      ui, 
+      this, 
+      data? data->findChildByName("$(field.name)"_str) : nullptr, 
+      editor);
+$ end
+
+    return true;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void deinit(UI& ui)
+  {
+$ for field,i in decl:eachFieldWithIndex() do
+    member$(i).deinit(ui);
+$ end
+
+    ObjectState::deinit(ui);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void evaluate(UI& ui, EvalParams& params)
+  {
+    ObjectState::evaluate(ui, params);
+
+    if (parent != nullptr)
+      params.y += row_height;
+
+    if (open)
+    {
+      if (parent != nullptr)
+        params.x += 6.f;
+
+$ for field,i in decl:eachFieldWithIndex() do
+      params.name = "$(field.name)"_str;
+      member$(i).evaluate(ui, params);
+$ end
+      if (parent != nullptr)
+        params.x -= 6.f;
+    }
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void generate(UI& ui, DrawParams& params)
+  {
+    ObjectState::generate(ui, params);
+
+    if (parent != nullptr)
+    params.y += row_height;
+
+    if (open)
+    {
+      if (parent != nullptr)
+        params.x += 6.f;
+
+$ for field,i in decl:eachFieldWithIndex() do
+      params.name = "$(field.name)"_str;
+      member$(i).generate(ui, params);
+$ end
+
+      if (parent != nullptr)
+        params.x -= 6.f;
+    }
+
+    drawBackground(ui, params);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void update(UI& ui, UpdateReason reason, SourceDataEditor* editor)
+  {
+    ObjectState::update(ui, reason, editor);
+    if (open)
+    {
+$ for field,i in decl:eachFieldWithIndex() do
+      member$(i).update(ui, reason, editor);
+$ end
+    }
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void reportDrawCmds(UI& ui, DrawCmdLists& lists, SourceDataEditor* editor)
+  {
+    ObjectState::reportDrawCmds(ui, lists, editor);
+    if (open)
+    {
+$ for _,i in decl:eachFieldWithIndex() do
+      member$(i).reportDrawCmds(ui, lists, editor);
+$ end
+    }
+  }
+};
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+template<typename T>
+struct ArrayState;
+
+$ local function putArrayState(name, decl)
+$   local subtype = decl.template_args[1]
+$   local subdecl = subtype:getDecl()
+$   if not subdecl then return end
+/* ============================================================================
+ */
+template<>
+struct ArrayState<$(removeTag(subdecl.name))> : ObjectState
+{
+  Array<$(getTypeDatumType(subtype))> arr;
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 init(
+      UI& ui, 
+      DatumState* parent,
+      SourceData* data,
+      SourceDataEditor* editor)
+  {
+    if (!ObjectState::init(ui, parent, data, editor))
+      return false;
+
+    if (!arr.init(data? data->children.len() : 8))
+      return false;
+
+    if (data)
+    {
+      for (u32 i = 0; i < data->children.len(); ++i)
+      {
+        auto* sub = arr.push();
+        if (!sub->init(ui, this, data->children[i], editor))
+          return false;
+      }
+    }
+
+    return true;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void deinit(UI& ui)
+  {
+    for (auto& state : arr)
+      state.deinit(ui);
+
+    arr.destroy();
+
+    ObjectState::deinit(ui);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void evaluate(UI& ui, EvalParams& params)
+  {
+    ObjectState::evaluate(ui, params);
+
+    params.y += row_height;
+
+    if (open)
+    {
+      params.x += 6.f;
+      for (auto& state : arr)
+        state.evaluate(ui, params);
+      params.x -= 6.f;
+    }
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void generate(UI& ui, DrawParams& params)
+  {
+    ObjectState::generate(ui, params);
+    params.y += row_height;
+
+    if (open)
+    {
+      params.x += 6.f;
+
+      io::SmallBuffer<8> idx_name;
+      for (u32 i = 0; i < arr.len(); ++i)
+      {
+        io::format(&idx_name, i);
+        params.name = idx_name.asStr();
+
+        arr[i].generate(ui, params);
+
+        idx_name.clear();
+      }
+
+      params.x -= 6.f;
+      params.name = nil;
+    }
+
+    drawBackground(ui, params);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void update(UI& ui, UpdateReason reason, SourceDataEditor* editor)
+  {
+    ObjectState::update(ui, reason, editor);
+
+    if (open)
+    {
+      for (auto& state : arr)
+        state.update(ui, reason, editor);
+    }
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void reportDrawCmds(UI& ui, DrawCmdLists& lists, SourceDataEditor* editor)
+  {
+    ObjectState::reportDrawCmds(ui, lists, editor);
+
+    if (open)
+    {
+      for (auto& state : arr)
+        state.reportDrawCmds(ui, lists, editor);
+    }
+  }
+};
+$end
+
+$ -- * ------------------------------------------------------------------------
+
+$ eachDecl(function(name, decl)
+$   if decl:is(ast.TemplateSpecialization) then
+$     if decl.specialized_name == "Array" then
+$       putArrayState(name, decl)
+$     end
+$   elseif decl:is(ast.Struct) then
+$     putStructState(name, decl)
+$   end
+$ end)
 
 /* ============================================================================
  */
@@ -70,6 +1064,12 @@ SourceDataEditor* SourceDataEditor::create(UI& ui)
   if (editor == nullptr)
     return nullptr;
 
+  if (!editor->datum_text_edit.input_text.init(ui, nil, nil))
+  {
+    ui.destroyItem(editor);
+    return nullptr;
+  }
+
   ui.beginItem(editor);
 
   @ui.style(editor, SourceDataEditor,
@@ -79,6 +1079,19 @@ SourceDataEditor* SourceDataEditor::create(UI& ui)
   auto* default_text = ui::Text::make(ui, "No source data selected.."_str);
   @ui.style(default_text, Text, alignment: 0.5 0.5)
 
+  editor->font = 
+    gfx::Font::load(
+      "assets/fonts/gohu"_str,
+      ui.eng->assetmgr,
+      ui.eng->renderer);
+
+  editor->font_texture = editor->font->r_texture.getData()->gfx_texture;
+
+  editor->update_triggers = 
+      UpdateReason::MouseReleased
+    | UpdateReason::FocusedKeyPress
+    | UpdateReason::FocusLost;
+
   ui.endItem();
 
   return editor;
@@ -86,28 +1099,74 @@ SourceDataEditor* SourceDataEditor::create(UI& ui)
 
 /* ----------------------------------------------------------------------------
  */
-void SourceDataEditor::setSourceData(UI& ui, SourceData* data)
+void SourceDataEditor::setSourceData(
+    UI& ui, 
+    SourceData* data, 
+    SourceDataFile* file,
+    u64 type_id)
 {
   ui.destroyItemChildren(this);
 
   sdata = data;
+  sfile = file;
 
   assert(data->hasObjectData());
 
-  ui.beginItem(this);
+  if (current_datum)
   {
-    if (notnil(data->name))
+    current_datum->deinit(ui);
+    mem::stl_allocator.free(current_datum);
+    current_datum = nullptr;
+  }
+
+  ui.beginItem(this);
+
+  this->type_id = type_id;
+  switch (type_id)
+  {
+  case 0:
     {
-      placeSourceDataItems(ui, sdata);
-    }
-    else
-    {
-      for (SourceData* child : data->children)
+      if (notnil(data->name))
       {
-        placeSourceDataItems(ui, child);
+        placeSourceDataItems(ui, sdata);
+      }
+      else
+      {
+        for (SourceData* child : data->children)
+        {
+          placeSourceDataItems(ui, child);
+        }
       }
     }
+    break;
+
+  default:
+    WARN("SourceDataEditor::setSourceData passed an unknown type id (", 
+         type_id, ")\n");
+    break;
+
+$ eachDecl(function(name, decl)
+$   local datum_type = getDeclDatumType(decl)
+  case "$(name)"_hashed:
+    {
+      current_datum = 
+        mem::stl_allocator.construct<$(datum_type)>();
+
+      if (!(($(datum_type)*)current_datum)->init(
+          ui, 
+          nullptr, 
+          data,
+          this))
+      {
+        ERROR("failed to initialize datum state for $(name)\n");
+        mem::stl_allocator.free(current_datum);
+        current_datum = nullptr;
+      }
+    }
+    break;
+$ end)
   }
+
   ui.endItem();
 }
 
@@ -154,14 +1213,238 @@ void SourceDataEditor::placeSourceDataItems(UI& ui, SourceData* data)
  */
 void SourceDataEditor::evaluate(UI* ui)
 {
+  if (current_datum)
+  {
+    max_name_width = 0.f;
 
+    DatumState::EvalParams params = 
+    {
+      .name = nil,
+      .editor = this,
+      .x = 0.f,
+      .y = 0.f, 
+      .datum_count = 0,
+    };
+
+    switch (type_id)
+    {
+$ eachDecl(function(name, decl)
+    case "$(name)"_hashed:
+      (($(getDeclDatumType(decl))*)current_datum)->evaluate(*ui, params);
+      break;
+$ end)
+    }
+
+    size.y = params.y;
+  }
 }
 
 /* ----------------------------------------------------------------------------
  */
 void SourceDataEditor::generate(UI* ui)
 {
+  if (current_datum)
+  {
+    if (datum_text_edit.datum != nullptr)
+    {
+      InputTextState::DrawParams text_edit_params = 
+      {
+        .bounds = vec4f(datum_text_edit.pos, datum_text_edit.size),
+        .font = font,
+        .is_focused = true,
+        .font_height = 11.f,
+        .cursor_color = {255, 255, 255, 255},
+        .text_color = {255,255,255,255},
+      };
 
+      datum_text_edit.input_text.draw(*ui, text_edit_params);
+    }
+
+    DatumState::DrawParams params = 
+    {
+      .editor = this,
+      .x = 0.f,
+      .y = 0.f,
+      .name = nil,
+    };
+
+    switch(type_id)
+    {
+$ eachDecl(function(name, decl)
+    case "$(name)"_hashed:
+      (($(getDeclDatumType(decl))*)current_datum)->generate(*ui, params);
+      break;
+$ end)
+    }
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SourceDataEditor::reportDrawCmds(UI* ui, DrawCmdLists& lists)
+{
+  if (current_datum)
+  {
+    switch(type_id)
+    {
+$ eachDecl(function(name, decl)
+    case "$(name)"_hashed:
+      (($(getDeclDatumType(decl))*)current_datum)->reportDrawCmds(
+        *ui, lists, this);
+      break;
+$ end)
+    }
+
+    if (datum_text_edit.datum != nullptr)
+      datum_text_edit.input_text.reportDrawCmds(*ui, lists, true);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SourceDataEditor::DatumTextEdit::update(
+    UI& ui, 
+    UpdateReason reason,
+    SourceDataEditor* editor)
+{
+  if (reason == UpdateReason::FocusLost)
+    onFocusLost(editor->sfile);
+
+  if (datum == nullptr || reason != UpdateReason::FocusedKeyPress)
+    return;
+
+  b8 state_changed = input_text.update(ui,
+  {
+    .local_mouse = 
+      ui.eng->input.mouse.window - (editor->pos_screen + pos),
+    .font = editor->font,
+    .is_focused = true,
+    .font_height = 11.f,
+    .reason = reason,
+  });
+
+  if (state_changed)
+  {
+    switch (kind)
+    {
+    case Kind::Name:
+      datum->name = input_text.asStr();
+      break;
+
+    case Kind::Type:
+      datum->type = input_text.asStr();
+      break;
+
+    case Kind::Value:
+      datum->val.str = input_text.asStr();
+      break;
+    }
+
+    editor->dirty = true;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SourceDataEditor::DatumTextEdit::onFocusLost(SourceDataFile* file)
+{
+  if (datum == nullptr)
+    return;
+
+  // Give the new text up to the source data file.
+  switch (kind)
+  {
+  case DatumTextEditKind::Name:
+    datum->name = datum->name.allocateCopy(&file->string_cache);
+    break;
+  case DatumTextEditKind::Type:
+    datum->type = datum->type.allocateCopy(&file->string_cache);
+    break;
+  case DatumTextEditKind::Value:
+    datum->val.str = datum->val.str.allocateCopy(&file->string_cache);
+    break;
+  }
+
+  datum = nullptr;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SourceDataEditor::update(UI* ui, UpdateReason reason)
+{
+  if (current_datum)
+  {
+    datum_text_edit.update(*ui, reason, this);
+
+    switch (type_id)
+    {
+$ eachDecl(function(name, decl)
+    case "$(name)"_hashed:
+      (($(getDeclDatumType(decl))*)current_datum)->update(*ui, reason, this);
+      break;
+$ end)
+    }
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SourceDataEditor::beginEditDatumText(
+    UI& ui,
+    SourceData* datum,
+    DatumTextEdit::Kind kind,
+    vec2f pos,
+    vec2f size)
+{
+  if (!isEditingDatumText(datum, kind))
+  {
+    datum_text_edit.onFocusLost(sfile);
+
+    switch (kind)
+    {
+    case DatumTextEdit::Kind::Name:
+      datum_text_edit.input_text.set(datum->name);
+      datum->name = datum_text_edit.input_text.asStr();
+      break;
+    case DatumTextEdit::Kind::Type:
+      datum_text_edit.input_text.set(datum->type);
+      datum->type = datum_text_edit.input_text.asStr();
+      break;
+    case DatumTextEdit::Kind::Value:
+      datum_text_edit.input_text.set(datum->val.str);
+      datum->val.str = datum_text_edit.input_text.asStr();
+      break;
+    }
+    
+    datum_text_edit.pos = pos;
+    datum_text_edit.size = size;
+    datum_text_edit.datum = datum;
+    datum_text_edit.kind = kind;
+
+    dirty = true;
+  }
+}
+
+/* --------------------------------------------------------------------------
+ */
+b8 SourceDataEditor::isEditingDatumText(
+    SourceData* datum,
+    DatumTextEditKind kind) const
+{
+  return datum_text_edit.datum == datum && datum_text_edit.kind == kind;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SourceDataEditor::endEditDatumText(
+    SourceData* datum, 
+    DatumTextEditKind kind)
+{
+  if (isEditingDatumText(datum, kind))
+  {
+    datum_text_edit.onFocusLost(sfile);
+    dirty = true;
+  }
 }
 
 }

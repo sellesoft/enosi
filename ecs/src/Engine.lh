@@ -60,6 +60,8 @@ struct Engine
 
   GameMgr gamemgr;
 
+  SourceDataFileHandle h_test;
+
   b8 init();
   void deinit();
 
