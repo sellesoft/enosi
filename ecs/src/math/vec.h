@@ -304,6 +304,12 @@ struct vec4
   template<typename X>
   vec4(const vec4<X>& in) { x = in.x; y = in.y; z = in.z; w = in.w; }
 
+  template<typename X>
+  vec4(const vec2<X>& l, const vec2<X>& r) 
+  {
+    x = l.x; y = l.y; z = r.x; w = r.y;
+  }
+
   /* --------------------------------------------------------------------------
    */
 #define swizzler2(a,b) \
@@ -399,6 +405,13 @@ struct vec4
   inline vec4 operator- () const
   {
     return { -x, -y, -z, -w };
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  inline bool operator == (const vec4& rhs) const
+  {
+    return x == rhs.x && y == rhs.y && z == rhs.z && w == rhs.w;
   }
 
   /* --------------------------------------------------------------------------
