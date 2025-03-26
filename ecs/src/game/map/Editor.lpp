@@ -204,15 +204,15 @@ struct TextureDisplay : public Item
 
   /* --------------------------------------------------------------------------
    */
-  void reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post) override
+  void reportDrawCmds(UI* ui, DrawCmdLists& lists) override
   {
     if (displayed_kind == TileKind::COUNT)
       return;
 
     for (auto drawcmd : kind_drawcmds[displayed_kind])
-      pre.push(drawcmd);
+      lists.pre_children.push(drawcmd);
 
-    pre.push(selected_border);
+    lists.pre_children.push(selected_border);
   }
 
   /* --------------------------------------------------------------------------
@@ -938,9 +938,9 @@ void MapEditor::onPostRender(PostRender& event)
 
 /* ----------------------------------------------------------------------------
  */
-void MapEditor::reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post)
+void MapEditor::reportDrawCmds(UI* ui, DrawCmdLists& lists)
 {
-  pre.push(map_render);
+  lists.pre_children.push(map_render);
 }
 
 }
