@@ -189,6 +189,8 @@ b8 UI::update(Engine& engine)
 
   temp_alloc.init();
 
+  focus_consumed = false;
+
   auto base_transform = 
     mat3x2::createTransform({0.f,0.f}, 0.f);
 
@@ -359,10 +361,16 @@ void UI::updateTree(ItemNode* node, UpdateTreeContext& ctx)
   @@parent.style:lookup(overflow, margin, border)
 
 $ local tryUpdate = function(reason, cond, item)
+$   item = item or "item"
+$   cond = cond or "true"
   ({
-    if ($(item or "item")->update_triggers.test(UpdateReason::$(reason)) &&
-        ($(cond or "true")))
-      $(item or "item")->update(this, UpdateReason::$(reason));
+    if ($(item)->update_triggers.test(UpdateReason::$(reason)) &&
+        ($(cond)))
+    {
+      updating_item = $(item);
+      update_reason = UpdateReason::$(reason);
+      $(item)->update(this, UpdateReason::$(reason));
+    }
   });
 $ end
 
@@ -434,7 +442,6 @@ $ end
   }
 
   @tryUpdate(Fin)
-
 
   vec2f scoff;
   vec2f scsiz;
@@ -1394,6 +1401,25 @@ void UI::genItemBranch(ItemNode* node)
 
     item->builtin.scrollbars->counts_used = sum;
   }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 UI::testFocusableRegion(vec2f pos, vec2f size)
+{
+  if (focus_consumed)
+    return false;
+
+  if (math::pointInRect(
+        eng->input.mouse.window,
+        updating_item->pos_screen + pos,
+        size))
+  {
+    focus_consumed = true;
+    return true;
+  }
+
+  return false;
 }
 
 /* ----------------------------------------------------------------------------

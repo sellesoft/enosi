@@ -104,7 +104,15 @@ struct UI
   template<typename TItem>
   void end() { endItem(); }
 
+  // In Items which perform custom drawing, this helper can be used to 
+  // test if a region of the Item was clicked during its update callback.
+  b8 testFocusableRegion(vec2f pos, vec2f size);
+
 private:
+
+  b8 focus_consumed = false;
+  Item* updating_item = nullptr;
+  UpdateReason update_reason = UpdateReason::Fin;
 
   Item* eval_break;
 
