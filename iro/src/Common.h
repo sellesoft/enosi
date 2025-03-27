@@ -44,7 +44,7 @@ static const f64 MAX_F64 = 1.79769313486231e+308;
 static const f64 MIN_F64 = -MAX_F64;
 
 // TODO(sushi) move these string things elsewhere
-consteval s64 constevalStrlen(const char* s) 
+consteval s64 constevalStrlen(const char* s)
 {
     s64 i = 0;
     while(s[i])
@@ -105,12 +105,12 @@ inline b8 matchSeqRev(V* v, T... args)
 
 // Useful to be able to call normally-inlined functions from a debugger
 #if IRO_DEBUG
-#define release_inline 
+#define release_inline
 #else
 #define release_inline inline
 #endif
 
-// TODO(sushi) eventually this would be better placed in platform.h, but I don't really like the 
+// TODO(sushi) eventually this would be better placed in platform.h, but I don't really like the
 //             idea of having to include all of platform.h into anything that uses this,
 //             so if I eventually reorganize platform to be more modular, move this there
 //         and well, ideally this could be replaced by something in lpp anyways.
@@ -119,7 +119,7 @@ inline b8 matchSeqRev(V* v, T... args)
 // NOTE(sushi) in order for this to work properly with executables (my use case of it) the obj
 //             files need to be compiled with the linker flag -fvisiblity=hidden and the executable
 //             then must be linked with the flag -E (aka --export-dynamic).
-//             Windows actually does better here.. __declspec(dllexport) works regardless of if 
+//             Windows actually does better here.. __declspec(dllexport) works regardless of if
 //             a shared lib or executable is being linked.
 #define EXPORT_DYNAMIC __attribute__((visibility("default")))
 #elif IRO_WIN32
@@ -133,28 +133,28 @@ inline b8 matchSeqRev(V* v, T... args)
 
 #ifndef defer
 
-template <class F> 
-struct deferrer 
-{ 
-  F f; 
-  ~deferrer() { f(); } 
+template <class F>
+struct deferrer
+{
+  F f;
+  ~deferrer() { f(); }
 };
 struct defer_dummy {};
 
-template <class F> 
+template <class F>
 deferrer<F> operator*(defer_dummy, F f) { return {f}; }
 
-template<typename F> 
-struct deferrer_with_cancel 
-{ 
-  b8 canceled; 
-  F f; 
-  ~deferrer_with_cancel() { if (!canceled) f(); }  
-  void cancel() { canceled = true; } 
+template<typename F>
+struct deferrer_with_cancel
+{
+  b8 canceled;
+  F f;
+  ~deferrer_with_cancel() { if (!canceled) f(); }
+  void cancel() { canceled = true; }
 };
 struct defer_with_cancel_dummy {};
 
-template <class F> 
+template <class F>
 deferrer_with_cancel<F> operator*(defer_with_cancel_dummy, F f) { return {false, f}; }
 
 #  define DEFER_(LINE) zz_defer##LINE
@@ -186,5 +186,8 @@ inline u64 gigabytes(u64 x) { return x << 30; }
 inline u64 terabytes(u64 x) { return x << 40; }
 
 }
+
+#define assertpointer(x, ...) assert((x) != nullptr)
+#define assertrange(x, min, max, ...) assert((x) >= (min) && (x) < (max))
 
 #endif // _iro_common_h
