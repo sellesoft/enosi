@@ -96,6 +96,12 @@ Style.parse = function(widget, text)
 
     if parser:checkToken "inherit" then
       style[propname] = "inherit"
+    elseif parser:checkToken "%$" then
+      local exp = 
+        parser:expectPattern("%b()", 
+        "parenthesized expression for interpolation")
+
+      style[propname] = {property=property, value=exp:sub(2,-2)}
     else
       local result
       if not property.valueParser then

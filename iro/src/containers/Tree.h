@@ -67,6 +67,41 @@ struct Tree
     }
 
     /* ------------------------------------------------------------------------
+     *  Removes this node from the tree.
+     */
+    void remove()
+    {
+      if (Node* child = first_child)
+      {
+        for (
+            Node* next_child = child->next; 
+            child; 
+            child = next_child, child && (next_child = child->next))
+          child->changeParent(parent);
+      }
+      
+      if (parent)
+      {
+        if (parent->child_count > 1)
+        {
+          if (this == parent->first_child)
+            parent->first_child = next;
+          if (this == parent->last_child)
+            parent->last_child = prev;
+        }
+        else
+        {
+          parent->first_child = nullptr;
+          parent->last_child = nullptr;
+        }
+      }
+
+      parent = nullptr;
+
+      removeHorizontally();
+    }
+
+    /* ------------------------------------------------------------------------
      *  Inserts this node as the last child of 'x'.
      */
     void insertLast(Node* x)
@@ -177,7 +212,7 @@ struct Tree
   {
     Node* nu = pool.add();
     nu->data = data;
-    if (!root)
+    if (root == nullptr)
       root = nu;
     return *nu;
   }
@@ -226,6 +261,13 @@ struct Tree
     return *nu;
   }
 
+  /* --------------------------------------------------------------------------
+   */
+  void remove(Node* x)
+  {
+    x->remove();
+    pool.remove(x);
+  }
 };
 
 }

@@ -223,6 +223,10 @@ Processor.resolveDecl = function(self, cdecl)
     -- self:recordDecl(decl)
   end
 
+  if decl then
+    decl.type = self:resolveType(ctype)
+  end
+
   return decl
 end
 

@@ -1,0 +1,46 @@
+$ local cmn = require "common"
+$ local ui = require "ui.UI"
+$ local Comp = require "game.component.Component"
+$ local glob = require "Glob"
+$ local buffer = require "string.buffer"
+$ local List = require "List"
+
+#include "iro/Logger.h"
+#include "iro/containers/LinkedPool.h"
+
+using namespace iro;
+
+static Logger logger =
+  Logger::create("cmp"_str, Logger::Verbosity::Info);
+
+@@lpp.import "game/component/Component.lh"
+
+$ local buf = buffer.new()
+$ glob "src/game/**/*.comp.lh" :each(function(path)
+$   local result = lpp.import(path:sub(#"src/"+1))
+$   if result then
+$     buf:put(result)
+$   end
+$ end)
+$(buf:get())
+
+$ Comp.sort()
+
+$ for comp,i in Comp.components.list:eachWithIndex() do
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+u64 getComponentKind<$(comp.name)>()
+{
+  return $(i);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 $(comp.name)::init()
+{
+  return Component::init($(i)); 
+}
+
+$ end

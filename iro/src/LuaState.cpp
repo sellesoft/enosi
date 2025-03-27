@@ -1,5 +1,6 @@
 #include "LuaState.h"
 
+#include "Common.h"
 #include "Logger.h"
 #include "Unicode.h"
 #include "fs/File.h"
@@ -33,6 +34,7 @@ b8 LuaState::init()
   setglobal(STRINGIZE(name));
 
   addGlobalCFunc(iro__lua_inspect);
+  addGlobalCFunc(iro__lua_inspect_string);
 
 #undef addGlobalCFunc
 
@@ -126,6 +128,13 @@ void LuaState::setfield(s32 idx, const char* k)
 void LuaState::rawgeti(s32 tblidx, s32 idx)
 {
   lua_rawgeti(L, tblidx, idx);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 LuaState::rawequal(s32 idx1, s32 idx2)
+{
+  return 0 != lua_rawequal(L, idx1, idx2);
 }
 
 /* ----------------------------------------------------------------------------
@@ -429,6 +438,13 @@ b8 LuaState::isnumber(s32 idx)
 
 /* ----------------------------------------------------------------------------
  */
+b8 LuaState::isfunction(s32 idx)
+{
+  return lua_isfunction(L, idx);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 LuaState::equal(s32 lhs, s32 rhs)
 {
   return lua_equal(L, lhs, rhs);
@@ -725,6 +741,42 @@ int iro__lua_inspect(lua_State* L)
   }
 
   return 0;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+EXPORT_DYNAMIC
+int iro__lua_inspect_string(lua_State* L)
+{
+  LuaState lua = LuaState::fromExistingState(L);
+
+  if (lua.isnil(1))
+  {
+    ERROR("iro_lua_inspect(): expected a value as first argument \n");
+    return 0;
+  }
+
+  s32 max_depth = 1;
+  if (lua.isnumber(2))
+    max_depth = lua.tonumber(2);
+
+  io::Memory buffer;
+  buffer.open();
+  defer { buffer.close(); };
+    
+  if (lua.istable(1))
+  {
+    tryWriteTableMetaTypename(&lua, &buffer, 1);
+    writeLuaTable(&lua, &buffer, 1, 1, max_depth);
+  }
+  else
+  {
+    writeLuaValue(&lua, &buffer, 1);
+  }
+
+  lua.pushstring(buffer.asStr());
+
+  return 1;
 }
 
 }

@@ -17,35 +17,41 @@ namespace gfx
 
 @defFileLogger(font.ttf, Info)
 
-typedef io::StaticBuffer<512> PathBuffer;
-
 /* ----------------------------------------------------------------------------
  */
 b8 Font::compileTTF(CompileParams& params)
 {
-  if (!AssetMgr::checkNeedsCompiled(params.asset_path, params.data_path))
+  PathBuffer asset_path_buffer;
+  io::formatv(&asset_path_buffer, params.name, ".bdf"_str);
+  String asset_path = asset_path_buffer.asStr();
+
+  PathBuffer data_path_buffer;
+  io::formatv(&data_path_buffer, 
+    params.assetmgr->getDataDir(), '/', params.name, ".cmp_font"_str);
+  String data_path = data_path_buffer.asStr();
+
+  if (!AssetMgr::checkNeedsCompiled(asset_path, data_path))
     return true;
 
-  INFO("compiling '", params.data_path, "'\n");
+  INFO("compiling '", data_path, "'\n");
 
   using namespace fs;
 
   mem::Allocator* allocator = params.allocator;
 
   // Ensure the data directories exist.
-  String data_dir = Path::removeBasename(params.data_path);
+  String data_dir = Path::removeBasename(data_path);
 
   if (!platform::makeDir(data_dir, true))
     return ERROR("failed to make directory for data at '", 
-                 params.data_path, "'\n");
-
+                 data_path, "'\n");
   
   const u32 font_size = 22; // TODO(sushi) FIX HARDCODING
 
   // Load the asset's data from disk.
-  auto file = File::from(params.asset_path, OpenFlag::Read);
+  auto file = File::from(asset_path, OpenFlag::Read);
   if (isnil(file))
-    return ERROR("failed to open font asset file at '", params.asset_path, 
+    return ERROR("failed to open font asset file at '", asset_path, 
                  "'\n");
   defer { file.close(); };
 
@@ -60,7 +66,7 @@ b8 Font::compileTTF(CompileParams& params)
 
   if (bytes_consumed != file_size)
     return ERROR("failed to read entire font asset file at '", 
-                 params.asset_path, "'\n");
+                 asset_path, "'\n");
   
   const unsigned char* raw = data.ptr;
 
@@ -185,12 +191,12 @@ $ end
 
   FontData fdata;
 
-  fdata.count = glyph_count;
-  fdata.size_x = tex_size_x;
-  fdata.size_y = tex_size_y;
-  fdata.ascent = ascent;
-  fdata.descent = descent;
-  fdata.line_gap = line_gap;
+  fdata.count      = glyph_count;
+  fdata.size_x     = tex_size_x;
+  fdata.size_y     = tex_size_y;
+  fdata.ascent     = ascent;
+  fdata.descent    = descent;
+  fdata.line_gap   = line_gap;
   fdata.num_ranges = $(ranges:len());
 
   // Translate from stbtt's ranges to ours.
@@ -209,19 +215,19 @@ $ end
   fdata.ranges = fdata_ranges;
 
   auto data_file = 
-    File::from(params.data_path, 
+    File::from(data_path, 
         OpenFlag::Write 
       | OpenFlag::Truncate
       | OpenFlag::Create);
 
   if (isnil(data_file))
     return ERROR(
-        "failed to open data file for writing at '", params.data_path, "'\n");
+        "failed to open data file for writing at '", data_path, "'\n");
   defer { data_file.close(); };
 
   if (!fdata.serialize(&data_file))
     return ERROR("failed to serialize font data to path '", 
-                 params.data_path, "'\n");
+                 data_path, "'\n");
 
   PathBuffer texture_data_path;
   gfx::CompiledTexture::writeDataPath(
@@ -231,7 +237,6 @@ $ end
   gfx::CompiledTexture::CompileParams tparams = 
   {
     .name         = params.name,
-    .data_path    = texture_data_path.asStr(),
     .width        = tex_size_x,
     .height       = tex_size_y,
     .format       = gfx::ImageFormat::BW,

@@ -1,8 +1,12 @@
 $ local cmn = require "common"
 
 @@lpp.import "asset/SourceData.lh"
+@@lpp.import "asset/SourceDataFile.lh"
 
+#include "iro/io/IO.h"
 #include "iro/fs/File.h"
+
+using namespace iro;
 
 /* ----------------------------------------------------------------------------
  */
@@ -65,4 +69,63 @@ void SourceData::dump(u32 depth) const
 {
   dump(&fs::stdout, depth);
   io::format(&fs::stdout, '\n');
+}
+
+/* ----------------------------------------------------------------------------
+ */
+SourceData* SourceData::addObject(SourceDataFile& file, String name)
+{
+  SourceData* child = file.allocateSourceData();
+  child->children.init();
+
+  children.push(child);
+
+  child->name = name;
+
+  return child;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SourceData::setVec2(SourceDataFile& file, vec2f v)
+{
+  if (hasObjectData())
+    children.clear();
+  else
+    children.init();
+
+  SourceData* x = file.allocateSourceData();
+  SourceData* y = file.allocateSourceData();
+
+  x->name = "x"_str;
+  y->name = "y"_str;
+
+  children.push(x);
+  children.push(y);
+
+  io::StaticBuffer<255> buffer;
+
+  io::format(&buffer, v.x);
+  x->val.kind = Value::Kind::Number;
+  x->val.str = buffer.asStr().allocateCopy(&file.string_cache);
+
+  buffer.clear();
+
+  io::format(&buffer, v.y);
+  y->val.kind = Value::Kind::Number;
+  y->val.str = buffer.asStr().allocateCopy(&file.string_cache);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+SourceData* SourceData::addVec2(SourceDataFile& file, String name, vec2f v)
+{
+  SourceData* child = file.allocateSourceData();
+
+  children.push(child);
+
+  child->name = name;
+  child->setVec2(file, v);
+
+  return child;
 }

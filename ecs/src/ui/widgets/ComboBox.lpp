@@ -1,0 +1,213 @@
+$ require "common"
+$ local ui = require "ui.UI"
+
+@@lpp.import "ui/widgets/ComboBox.lh"
+@@lpp.import "ui/UI.lh"
+@@lpp.import "Engine.lh"
+
+namespace ui
+{
+
+@defFileLogger(ui.combobox, Info);
+
+/* ----------------------------------------------------------------------------
+ */
+ComboBox* ComboBox::make(
+    UI& ui, 
+    void* context,
+    OnOptionSelected onOptionSelected,
+    Slice<String> options,
+    String name)
+{
+  auto* cb = ui.allocateAndInitItem<ComboBox>(name);
+  if (cb == nullptr)
+    return nullptr;
+
+  cb->open = false;
+  cb->context = context;
+  cb->onOptionSelected = onOptionSelected;
+
+  cb->options_background = ui.drawcmds.add();
+  cb->options_background->alloc(&ui, gfx::putFilledRectCounts());
+
+  if (!cb->selected_option.init(&ui, options[0]))
+  {
+    // TODO(sushi) a standard dealloc and deinit function on UI.
+    mem::stl_allocator.deconstruct(cb);
+    return nullptr;
+  }
+
+  cb->update_triggers = 
+      UpdateReason::MouseReleased
+    | UpdateReason::FocusLost;
+
+  cb->options = Array<Option>::create(options.len);
+
+  for (String& option : options)
+  {
+    Option* opt = cb->options.push();
+    opt->name = option.allocateCopy();
+    opt->drawcmd = ui.drawcmds.add();
+  }
+
+  return cb;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void ComboBox::update(UI* ui, UpdateReason reason)
+{
+  $ local this = ui.createItemContext("ComboBox", "this")
+
+  INFO("ComboBox update ", (u32)reason, "\n");
+
+  dirty = true;
+
+  if (reason == UpdateReason::FocusLost)
+  {
+    open = false;
+    return;
+  }
+
+  if (open)
+  {
+    vec2f cursor_local = ui->eng->input.mouse.window - pos_screen;
+    
+    @@this.style:lookup(box_height, option_height)
+
+    if (cursor_local.y > @this.style.box_height)
+    {
+      u32 yoff = cursor_local.y - @this.style.box_height;
+      u32 selection = yoff / u32(@this.style.option_height);
+
+      selection = min<u32>(selection, options.len()-1);
+
+      onOptionSelected(context, selection);
+
+      Option* selected = &options[selection];
+      selected_option.set(selected->name);
+    }
+ 
+    open = false;
+  }
+  else
+    open = true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void ComboBox::evaluate(UI* ui)
+{
+  size.y = 15;
+
+  $ local this = ui.createItemContext("ComboBox", "this")
+  @@this.style:lookup(font, option_height)
+
+  if (open)
+  {
+    // size.y += @this.style.option_height * options.len();
+  }
+
+  selected_option.checkFont(@this.style.font, ui);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void ComboBox::generate(UI* ui)
+{
+  $ local this = ui.createItemContext("ComboBox", "this")
+
+  @@this.style:lookup(
+    size,
+    option_height,
+    box_height,
+    font,
+    font_height,
+    text_color,
+    border,
+    margin,
+    background_color)
+
+  selected_option.cacheRenderer();
+  defer { selected_option.freeRenderer(); };
+
+  selected_option.initRenderer(
+    @this.style.font_height,
+    1.f,
+    999.f,
+    0,
+    @this.style.text_color);
+
+  selected_option.draw(ui, {0.f, 0.f});
+
+  if (open)
+  {
+    gfx::Font* font = 
+      gfx::Font::load(
+        @this.style.font, 
+        ui->eng->assetmgr,
+        ui->eng->renderer);
+
+    vec2f cursor = {0.f, @this.style.box_height};
+
+    options_background->realloc(
+      ui, 
+      gfx::putFilledRectCounts() * options.len());
+
+    options_background->counts_used = {};
+    auto [vp,ip] = options_background->getPtrs(ui);
+
+    for (Option& option : options)
+    {
+      Color option_bg_color;
+      if ((&option-options.arr) % 2)
+        option_bg_color = @this.style.background_color;
+      else
+        option_bg_color = 0.5f * @this.style.background_color;
+
+      options_background->counts_used +=
+        gfx::putFilledRect(
+            vp, ip,
+            options_background->counts_used,
+            cursor,
+            {size.x, @this.style.option_height},
+            option_bg_color);
+
+      TextRenderer option_renderer;
+      option_renderer.init(
+        option.name, 
+        font,
+        @this.style.font_height,
+        1.f,
+        999.f,
+        0,
+        @this.style.text_color);
+
+      option_renderer.draw(ui, cursor, option.drawcmd);
+
+      option_renderer.deinit();
+
+      cursor.y += @this.style.option_height;
+    }
+  }
+
+}
+
+/* ----------------------------------------------------------------------------
+ */
+vec2f ComboBox::calcVisualArea()
+{
+  $ local this = ui.createItemContext("ComboBox", "this")
+
+  if (open)
+  {
+    @@this.style:lookup(option_height)
+
+    return {size.x, size.y + @this.style.option_height * options.len()};
+  }
+  else
+    return size;
+}
+
+}
+

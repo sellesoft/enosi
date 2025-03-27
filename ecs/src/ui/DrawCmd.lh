@@ -27,8 +27,11 @@ struct DrawCmd
 
   gfx::Texture tex = nil;
 
-  b8 freed = false;
-  
+  // Ignored when no component is in bounds of the screen.
+  vec4f scissor = {-1.f,-1.f,-1.f,-1.f};
+
+  void resetScissor() { scissor = {-1.f, -1.f, -1.f, -1.f}; }
+
   Pair<s32, b8> findVertex(UI* ui);
   Pair<s32, b8> findIndex(UI* ui);
 

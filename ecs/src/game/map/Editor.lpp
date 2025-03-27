@@ -10,7 +10,7 @@ local imported = cmn.buffer.new()
 
 imported:put(
   lpp.import "Editor.lh",
-  lpp.import "game/map/Map.schema.lh")
+  lpp.import "game/map/Map.defs.lh")
 
 local p = Processor.new(tostring(imported))
 p:run()
@@ -26,6 +26,7 @@ $ }
 @@lpp.import "Engine.lh"
 @@lpp.import "game/map/Map.lh"
 @@lpp.import "asset/Packing.lh"
+@@lpp.import "ui/widgets/Separator.lh"
 
 #include "iro/Platform.h"
 #include "math/util.h"
@@ -35,6 +36,228 @@ namespace ui
 
 @defFileLogger(map.editor, Info)
 
+const f32 layer_border_thickness = 0.25f;
+
+/* ============================================================================
+ *  Helper for displaying textures.
+ */
+struct TextureDisplay : public Item
+{
+  TileKind displayed_kind = TileKind::COUNT;
+
+  EnumArray<TileKind, Array<DrawCmd*>> kind_drawcmds;
+  const EnumArray<TileKind, Array<gfx::CompiledTexture*>>* kind_textures;
+
+  const f32 texture_size = 64.f;
+  const f32 texture_padding = 4.f;
+  const f32 texture_stride = texture_size + texture_padding;
+
+  u32 selected_texture = 0;
+
+  DrawCmd* selected_border;
+
+  /* --------------------------------------------------------------------------
+   */
+  static TextureDisplay* create(UI& ui, String id)
+  {
+    auto* td = ui.allocateAndInitItem<TextureDisplay>(id);
+    if (td == nullptr)
+      return nullptr;
+
+    for (auto& arr : td->kind_drawcmds)
+      arr.init();
+
+    td->update_triggers = UpdateReason::MouseReleased;
+
+    td->selected_border = ui.drawcmds.add();
+    td->selected_border->alloc(&ui, gfx::putBordersCounts());
+
+    return td;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  String getSelectedTextureName() const
+  {
+    return 
+      fs::Path::removeFirstDir(
+        fs::Path::removeExtension(
+          (*kind_textures)[displayed_kind][selected_texture]->name));
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void setFromTileKindDefs(UI& ui, const MapTileKindDefs& defs)
+  {
+    // Clear any previous draw commands.
+    for (auto& arr : kind_drawcmds)
+    {
+      for (DrawCmd* cmd : arr)
+        cmd->remove(&ui);
+      arr.clear();
+    }
+
+    for (auto& arr : defs.tile_kinds)
+    {
+      if (arr.isEmpty())
+        continue;
+
+      TileKind kind = (TileKind)(&arr - defs.tile_kinds.arr);
+
+      auto& display_arr = kind_drawcmds[kind];
+
+      for (auto tex : arr)
+      {
+        DrawCmd* cmd = ui.drawcmds.add();
+
+        cmd->alloc(&ui, gfx::putFilledRectCounts());
+        cmd->tex = tex->gfx_texture;
+
+        display_arr.push(cmd);
+      }
+    }
+
+    kind_textures = &defs.tile_kinds;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void evaluate(UI* ui) override
+  {
+    if (displayed_kind == TileKind::COUNT)
+    {
+      size = {0.f,0.f};
+      return;
+    }
+
+    auto& displayed_arr = kind_drawcmds[displayed_kind];
+
+    u32 num_textures = displayed_arr.len();
+    u32 rows = ceil((num_textures * texture_stride) / size.x);
+    u32 per_row = num_textures / rows;
+
+    size.y = rows * texture_stride - texture_padding;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void generate(UI* ui) override
+  {
+    if (displayed_kind == TileKind::COUNT)
+      return;
+
+    auto& displayed_arr = kind_drawcmds[displayed_kind];
+
+    u32 num_textures = displayed_arr.len();
+    u32 rows = ceil((num_textures * texture_stride) / size.x);
+    u32 per_row = num_textures / rows;
+
+    u32 row_width = (per_row * texture_stride - texture_padding);
+
+    f32 cursor_start_x = 0.5f * (size.x - row_width);
+    vec2f cursor = {cursor_start_x, 0.f};
+
+    for (auto drawcmd : displayed_arr)
+    {
+      auto [vp,ip] = drawcmd->getPtrs(ui);
+
+      drawcmd->counts_used = {};
+
+      drawcmd->counts_used +=
+        gfx::putFilledRect(
+          vp, ip,
+          drawcmd->counts_used,
+          cursor,
+          {texture_size, texture_size},
+          {0.f, 0.f},
+          {1.f, 0.f},
+          {1.f, 1.f},
+          {0.f, 1.f},
+          {255,255,255,255});
+
+      cursor.x += texture_stride;
+
+      if (cursor.x + texture_stride > size.x)
+      {
+        cursor.x = cursor_start_x;
+        cursor.y += texture_stride;
+      }
+    }
+
+    u32 selected_row = selected_texture / per_row;
+    u32 selected_col = selected_texture % per_row;
+
+    vec2f border_pos = texture_stride * vec2f(selected_col, selected_row);
+    border_pos.x += cursor_start_x;
+
+    auto [vp, ip] = selected_border->getPtrs(ui);
+    selected_border->counts_used = {};
+    selected_border->counts_used +=
+      gfx::putBorders(
+        vp, ip,
+        selected_border->counts_used,
+        {2,2,2,2},
+        border_pos,
+        vec2f(texture_size, texture_size),
+        {255,255,255,255});
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void reportDrawCmds(UI* ui, DrawCmdLists& lists) override
+  {
+    if (displayed_kind == TileKind::COUNT)
+      return;
+
+    for (auto drawcmd : kind_drawcmds[displayed_kind])
+      lists.pre_children.push(drawcmd);
+
+    lists.pre_children.push(selected_border);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void update(UI* ui, UpdateReason reason) override
+  {
+    if (displayed_kind == TileKind::COUNT)
+      return;
+  
+    auto& displayed_arr = kind_drawcmds[displayed_kind];
+
+    u32 num_textures = displayed_arr.len();
+    u32 rows = ceil((num_textures * texture_stride) / size.x);
+    u32 per_row = num_textures / rows;
+
+    u32 row_width = (per_row * texture_stride - texture_padding);
+
+    f32 texture_start_x = 0.5f * (size.x - row_width);
+
+    f32 texture_extent_x = 
+      texture_start_x + texture_stride * per_row - texture_padding;
+
+    vec2f cursor_local = ui->eng->input.mouse.window - pos_screen;
+
+    if (cursor_local.x < texture_start_x || cursor_local.x > texture_extent_x)
+      return;
+
+    vec2f cursor_grid_local = cursor_local.xadd(-texture_start_x);
+
+    u32 hovered_col = cursor_grid_local.x / texture_stride;
+    u32 hovered_row = cursor_grid_local.y / texture_stride;
+
+    vec2f cursor_texture_local = 
+      cursor_grid_local - texture_stride * vec2f(hovered_col, hovered_row);
+
+    if (cursor_texture_local.x > texture_size || 
+        cursor_texture_local.y > texture_size)
+      return;
+
+    selected_texture = hovered_col + hovered_row * per_row;
+
+    dirty = true;
+  }
+};
+
 /* ----------------------------------------------------------------------------
  */
 MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
@@ -43,9 +266,10 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
   if (editor == nullptr)
     return nullptr;
 
-  @ui.style(editor, MapEditor,
+  ui.beginItem(editor);
+
+  @ui.style(editor, MapEditor, 
   | size: 100% 100%
-  | border: 2
   | display: hidden
   | background_color: 0x000000ff)
 
@@ -88,8 +312,6 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
     return nullptr;
   }
 
-  editor->world_pos = Text::make(ui, "map.editor.world_pos"_str);
-
   Engine& eng = *ui.eng;
 
   eng.subscribeToBroadcast<PreMapRender>(
@@ -101,53 +323,97 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
   eng.subscribeToBroadcast<PostRender>(
     editor, &MapEditor::onPostRender);
 
-  editor->left_panel = Item::begin(ui);
+  editor->left_panel = Item::begin(ui, "left_panel"_str);
   {
+    editor->world_pos = Text::make(ui, "world_pos"_str);
+
     @ui.style(editor->left_panel, Item,
-    | size: 250 100%
+    | size: 300 100%
     | border: 2
+    | padding: 3
     | background_color: 0x111111ff)
 
-$ local toolButton = function(toolname)
+    $ local ToolEnum = decls.editor.members.map.Tool.type.decl
+
+    String options[] = 
     {
-      auto* button = editor->select_button.$(toolname:lower()) =
-        ui::Button::begin<MapEditor>(
+$   for elem in ToolEnum.elems:each() do
+      "$(elem)"_str,
+$   end
+    };
+
+    editor->tool_selection = 
+      ComboBox::make<MapEditor>(
+        ui,
+        editor,
+        [](MapEditor* editor, u32 selected)
+        {
+          Tool selected_tool = (Tool)selected;
+
+          if (editor->tool == Tool::Add)
+          {
+            @ui.style(editor->add_options, Item, display: hidden)
+          }
+
+          if (selected_tool == Tool::Add)
+          {
+            @ui.style(editor->add_options, Item, display: 0)
+          }
+
+          editor->tool = (Tool)selected;
+        },
+        Slice<String>::from(options),
+        "tool_selection"_str);
+
+    @ui.style(editor->tool_selection, ComboBox, 
+    | size: 100% auto
+    | background_color: 0x570000ff)
+
+    auto* separator = Separator::make(ui);
+    
+    @ui.style(separator, Separator, 
+    | size: 100% 1
+    | margin: 0 5 0 5)
+
+    editor->add_options = Item::begin(ui, "add_options"_str);
+    {
+      @ui.style(editor->add_options, Item,
+      | size: 100% auto
+      | display: hidden)
+
+      String add_type_options[] = 
+      {
+$     for elem in decls.tile_kind.elems:each() do
+        "$(elem)"_str,
+$     end
+      };
+      
+      editor->add_tile_type = 
+        ComboBox::make<MapEditor>(
           ui,
           editor,
-          [] (Button*          button,
-              MapEditor*       editor,
-              ButtonActivation activation)
+          [](MapEditor* editor,u32 selected) 
           {
-            editor->tool = Tool::$(toolname);
-            editor->selected_tool->set("$(toolname)"_str);
-            editor->selected_tool->dirty = true;
+            editor->texture_display->displayed_kind = (TileKind)selected;
           },
-          "game.map.editor.select_tool_$(toolname:lower())"_str);
+          Slice<String>::from(add_type_options),
+          "tile_kind"_str);
 
-      @ui.style(button, Button,
-      | size: 100 auto
-      | background_color: 0x224422ff
-      | border: 0 0 0 2
-      | triggers: Released)
+      @ui.style(editor->add_tile_type, ComboBox, 
+      | size: 100% auto
+      | background_color: 0x570000ff)
 
-      Text::make(ui, ""_str, "$(toolname)"_str);
+      editor->texture_display = 
+        TextureDisplay::create(ui, "texture_display"_str);
 
-      ui.endItem();
-    }
-$ end
-
-    @toolButton(None)
-    @toolButton(Add)
-    @toolButton(Remove)
-
-    editor->selected_tool = Text::make(ui, ""_str, "None"_str);
-
-    editor->add_options = Item::begin(ui, "game.map.editor.add_options"_str);
-    {
-
+      @ui.style(editor->texture_display, Item, 
+      | size: 100% auto
+      | margin: 0 5 0 5)
     }
     ui.endItem();
   }
+  ui.endItem();
+
   ui.endItem();
 
   // Initial render.
@@ -168,9 +434,28 @@ void MapEditor::destroy()
 
 /* ----------------------------------------------------------------------------
  */
-void MapEditor::selectMap(SourceDataFileHandle& h_map)
+void MapEditor::selectMap(
+    SourceDataFileHandle& h_map,
+    SourceDataFileHandle& h_map_tile_kinds,
+    UI& ui,
+    AssetMgr& assetmgr,
+    gfx::Renderer& renderer)
 {
   h_selected_map = h_map;
+  h_selected_map_tile_kinds = h_map_tile_kinds;
+
+  PackContext pack_context = 
+  {
+    .assetmgr  = &assetmgr,
+    .renderer  = &renderer,
+  };
+
+  packSourceDataIntoType(
+    *h_selected_map_tile_kinds.getFile()->returned_data,
+    &maptiledefs,
+    pack_context);
+
+  texture_display->setFromTileKindDefs(ui, maptiledefs);
 }
 
 /* ----------------------------------------------------------------------------
@@ -243,6 +528,8 @@ void MapEditor::update(UI* ui, UpdateReason reason)
   vec2f mvp = input.mouse.window - pos_screen;
   vec2f mw = eye.screenToWorld(mvp, size);
 
+  cursor_world = mw;
+
   SourceDataFile* sdfile = h_selected_map.getFile();
 
   switch (control_state)
@@ -250,42 +537,104 @@ void MapEditor::update(UI* ui, UpdateReason reason)
   case ControlState::None:
     if (input.wasMouseButtonPressed(MouseButton::Left))
     {
-      switch (tool)
+      if (tool == Tool::None)
       {
-      case Tool::None:
+        for (Layer& layer : map.layers)
+        {
+          vec2f border_pos;
+          border_pos.x = layer.def->pos.x - layer_border_thickness;
+          border_pos.y = layer.def->pos.y - layer_border_thickness;
+
+          vec2f border_ext;
+          border_ext.x = 
+            layer.def->pos.x + layer.def->size.x + layer_border_thickness;
+          border_ext.y = 
+            layer.def->pos.y + layer.def->size.y + layer_border_thickness;
+
+          border_flags.clear();
+
+          if (math::pointInRect(mw, border_pos, border_ext-border_pos))
+          {
+            INFO("in border\n");
+
+            if (mw.x < border_pos.x + layer_border_thickness)
+              border_flags.set(Border::Left);
+            else if (mw.x > border_ext.x - layer_border_thickness)
+              border_flags.set(Border::Right);
+
+            if (mw.y < border_pos.y + layer_border_thickness)
+              border_flags.set(Border::Top);
+            else if (mw.y > border_ext.y - layer_border_thickness)
+              border_flags.set(Border::Bottom);
+          }
+
+
+          if (!border_flags.isNone())
+          {
+            control_state = ControlState::DraggingBorder;
+            resizing_layer = &layer - map.layers.arr;
+            break;
+          }
+        }
+
+        if (control_state == ControlState::None)
         {
           drag_start_viewport = mvp;
           drag_start_eye = eye.pos;
           control_state = ControlState::Dragging;
         }
-        break;
-
-      case Tool::Add:
-        {
-
-        }
-        break;
       }
-
-      Tile* tile;
-      Layer* layer;
-      if (map.getTileAndLayerAtPos(&layer, &tile, mw))
+      else
       {
-        u32 layer_idx = layer - map.layers.arr;
-        u32 tile_idx = tile - layer->tiles.arr;
+        Tile* tile;
+        Layer* layer;
+        if (map.getTileAndLayerAtPos(&layer, &tile, mw))
+        {
+          u32 layer_idx = layer - map.layers.arr;
+          u32 tile_idx = tile - layer->tiles.arr;
 
-        INFO(
-          "selected layer ", layer_idx, " ",
-          "and tile ", tile_idx, "\n");
+          INFO(
+            "selected layer ", layer_idx, " ",
+            "and tile ", tile_idx, "\n");
 
-        SourceData* map_data = h_selected_map.getFile()->returned_data;
-        SourceData* layers_data = map_data->findChildByName("layers"_str);
-        SourceData* layer_data = layers_data->children[layer_idx];
-        SourceData* tiles_data = layer_data->findChildByName("tiles"_str);
-        SourceData* tile_data = tiles_data->children[tile_idx];
-        tile_data->dump();
+          SourceData* map_data = sdfile->returned_data;
+          SourceData* layers_data = map_data->findChildByName("layers"_str);
+          SourceData* layer_data = layers_data->children[layer_idx];
+          SourceData* tiles_data = layer_data->findChildByName("tiles"_str);
+          SourceData* tile_data = tiles_data->children[tile_idx];
+          tile_data->dump();
 
-        // tile_data->children.clear();
+          // tile_data->children.clear();
+
+          switch (tool)
+          {
+          case Tool::Add:
+            {
+              auto* kind = sdfile->allocateSourceData();
+              auto* texture = sdfile->allocateSourceData();
+
+              kind->name = "kind"_str;
+              kind->val.str = 
+                add_tile_type->getSelectedOptionName()
+                  .allocateCopy(&sdfile->string_cache);
+
+              texture->name = "texture"_str;
+              texture->val.str = texture_display->getSelectedTextureName();
+
+              tile_data->children.push(kind);
+              tile_data->children.push(texture);
+            }
+            break;
+
+          case Tool::Remove:
+            {
+              tile_data->children.clear();
+            }
+            break;
+          }
+        }
+
+        need_render = true;
       }
     }
     break;
@@ -303,6 +652,62 @@ void MapEditor::update(UI* ui, UpdateReason reason)
 
       if (input.wasMouseButtonReleased(MouseButton::Left))
         control_state = ControlState::None;
+    }
+    break;
+
+  case ControlState::DraggingBorder:
+    {
+      need_render = true;
+      if (input.wasMouseButtonReleased(MouseButton::Left))
+      {
+        control_state = ControlState::None;
+
+        Layer& layer = map.layers[resizing_layer];
+
+        vec2f old_pos = layer.def->pos;
+        vec2f old_ext = layer.def->pos + layer.def->size;
+
+        vec2f new_pos = old_pos;
+        vec2f new_ext = old_ext;
+
+        calcNewDraggedLayerBorder(mw, &new_pos, &new_ext);
+
+        SourceData* old_layer = getLayerSourceData(resizing_layer);
+        SourceData* old_tiles = old_layer->findChildByName("tiles"_str);
+
+        SourceData* new_layer = sdfile->allocateSourceData();
+
+        new_layer->children.init();
+
+        new_layer->addVec2(*sdfile, "pos"_str, new_pos);
+        new_layer->addVec2(*sdfile, "size"_str, new_ext-new_pos);
+
+        SourceData* new_tiles = new_layer->addObject(*sdfile, "tiles"_str);
+
+        for (s32 y = new_pos.y; y < new_ext.y; ++y)
+        {
+          for (s32 x = new_pos.x; x < new_ext.x; ++x)
+          {
+            if (x >= old_pos.x && x < old_ext.x &&
+                y >= old_pos.y && y < old_ext.y)
+            {
+              new_tiles->children.push(
+                getTileSourceData(
+                  old_tiles,
+                  layer.def->size,
+                  vec2i(x-old_pos.x, y-old_pos.y)));
+            }
+            else
+            {
+              new_tiles->addObject(*sdfile, nil);
+            }
+          }
+        }
+
+        setLayerSourceData(resizing_layer, new_layer);
+
+        new_layer->dump();
+      }
     }
     break;
   }
@@ -345,6 +750,58 @@ void MapEditor::update(UI* ui, UpdateReason reason)
 
 /* ----------------------------------------------------------------------------
  */
+void MapEditor::calcNewDraggedLayerBorder(vec2f mw, vec2f* pos, vec2f* ext)
+{
+  vec2f layer_pos = *pos;
+  vec2f layer_ext = *ext;
+
+  if (border_flags.test(Border::Top))
+    layer_pos.y = min(mw.y, layer_ext.y);
+  else if (border_flags.test(Border::Bottom))
+    layer_ext.y = max(mw.y, layer_pos.y);
+
+  if (border_flags.test(Border::Left))
+    layer_pos.x = min(mw.x, layer_ext.x);
+  else if (border_flags.test(Border::Right))
+    layer_ext.x = max(mw.x, layer_pos.x);
+
+  layer_pos = round(layer_pos);
+  layer_ext = round(layer_ext);
+
+  *pos = layer_pos;
+  *ext = layer_ext;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+SourceData* MapEditor::getLayerSourceData(u32 idx)
+{
+  SourceData* map_data = h_selected_map.getFile()->returned_data;
+  SourceData* layers_data = map_data->findChildByName("layers"_str);
+  return layers_data->children[idx];
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void MapEditor::setLayerSourceData(u32 idx, SourceData* data)
+{
+  SourceData* map_data = h_selected_map.getFile()->returned_data;
+  SourceData* layers_data = map_data->findChildByName("layers"_str);
+  layers_data->children[idx] = data;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+SourceData* MapEditor::getTileSourceData(
+    SourceData* tiles, 
+    vec2i size,
+    vec2i pos)
+{
+  return tiles->children[pos.x + size.x * pos.y];
+}
+
+/* ----------------------------------------------------------------------------
+ */
 void MapEditor::renderMap(UI& ui)
 {
   if (!need_render)
@@ -367,11 +824,16 @@ void MapEditor::renderMap(UI& ui)
 
   renderer->bindFramebuffer(framebuffer);
 
+  PackContext pack_context = 
+  {
+    .assetmgr = &assetmgr,
+    .renderer = renderer,
+  };
+
   packSourceDataIntoType(
     *h_selected_map.getFile()->returned_data,
     &mapdef,
-    assetmgr,
-    *renderer);
+    pack_context);
 
   Map::InitParams map_params =
   {
@@ -457,13 +919,24 @@ void MapEditor::onPreSpriteRender(PreSpriteRender& event)
   {
     for (const Layer& layer : map.layers)
     {
+      u32 layer_idx = &layer - map.layers.arr;
+
+      vec2f layer_pos = layer.def->pos;
+      vec2f layer_ext = layer.def->pos + layer.def->size;
+
+      if (control_state == ControlState::DraggingBorder &&
+          layer_idx == resizing_layer)
+      {
+        calcNewDraggedLayerBorder(cursor_world, &layer_pos, &layer_ext);
+      }
+
       rendersys.external_counts +=
         gfx::putBorders(
           vp, ip,
           rendersys.external_counts,
-          {0.1f,0.1f,0.1f,0.1f},
-          layer.def->pos,
-          layer.def->size,
+          layer_border_thickness * vec4f(1,1,1,1),
+          layer_pos,
+          layer_ext - layer_pos,
           0xdf99f0);
     }
   }
@@ -477,9 +950,9 @@ void MapEditor::onPostRender(PostRender& event)
 
 /* ----------------------------------------------------------------------------
  */
-void MapEditor::reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post)
+void MapEditor::reportDrawCmds(UI* ui, DrawCmdLists& lists)
 {
-  pre.push(map_render);
+  lists.pre_children.push(map_render);
 }
 
 }

@@ -106,7 +106,7 @@ struct mat3x2
 
   /* --------------------------------------------------------------------------
    */
-  void to_mat3(f32 out[9]) const
+  void toMat3(f32 out[9]) const
   {
     out[0] = arr[0]; out[1] = arr[1]; out[2] = arr[2];
     out[3] = arr[3]; out[4] = arr[4]; out[5] = arr[5];

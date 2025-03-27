@@ -11,8 +11,8 @@ local common = {}
 --- Common libraries.
 common.buffer = require "string.buffer"
 common.LuaType = require "Type"
-common.List = require "list"
-common.Twine = require "twine"
+common.List = require "List"
+common.Twine = require "Twine"
 
 --- Emits the given message and then exits the program.
 common.fatal = function(...)

@@ -156,6 +156,9 @@ Pair<gfx::Vertex*, gfx::Index*> DrawCmd::realloc(UI* ui, vec2i counts)
     return getPtrs(ui);
 
   auto restore_texture = tex;
+  auto restore_counts_used = counts_used;
+
+  auto [ovp, oip] = getPtrs(ui);
 
   // The given drawcmd needs to release its drawinfo but still be usable
   // by whatever is calling this function, so we make a copy of it, 
@@ -169,8 +172,15 @@ Pair<gfx::Vertex*, gfx::Index*> DrawCmd::realloc(UI* ui, vec2i counts)
 
   *this = {};
   tex = restore_texture;
+  counts_used = restore_counts_used;
 
   alloc(ui, counts);
+  
+  auto [nvp, nip] = getPtrs(ui);
+
+  mem::copy(nvp, ovp, sizeof(gfx::Vertex) * counts_used.x);
+  mem::copy(nip, oip, sizeof(gfx::Index) * counts_used.y);
+
   return getPtrs(ui);
 }
 

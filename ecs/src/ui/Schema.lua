@@ -637,27 +637,31 @@ Flags.set = function(self, property, val)
 
   local first = true
 
-  for name in val:gmatch("[^|]+") do
-    if not first then
-      buf:put("|")
+  if val == "0" then
+    buf:put("0")
+  else
+    for name in val:gmatch("[^|]+") do
+      if not first then
+        buf:put("|")
+      end
+
+      name = name:match("%S+")
+
+      local elem = self.elems.map[name]
+
+      if not elem then
+        elem = property.values[name]
+      end
+
+      if not elem then
+        error("no element or value named '"..name.."' in property "..
+              property.name)
+      end
+
+      buf:put("(", elem, ")")
+
+      first = false
     end
-
-    name = name:match("%S+")
-
-    local elem = self.elems.map[name]
-
-    if not elem then
-      elem = property.values[name]
-    end
-
-    if not elem then
-      error("no element or value named '"..name.."' in property "..
-            property.name)
-    end
-
-    buf:put("(", elem, ")")
-
-    first = false
   end
 
   buf:put(")")
@@ -685,6 +689,10 @@ Flags.valueParser = function(self, property, parser)
     local elem
     if first then
       elem = parser:expectIdentifier()
+      if elem == "0" then
+        buf:put "0"
+        break
+      end
     else
       elem = parser:checkIdentifier()
       if not elem then

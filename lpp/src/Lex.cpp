@@ -12,7 +12,6 @@ namespace lpp
 static Logger logger = 
   Logger::create("lpp.lexer"_str, Logger::Verbosity::Notice);
 
-
 /* ----------------------------------------------------------------------------
  */
 void Lexer::ScopedLexStage::onEnter(const char* funcname)
@@ -128,16 +127,6 @@ void Lexer::advance(s32 n)
       errorHere("encountered invalid codepoint!");
       longjmp(err_handler, 0);
     }
-
-    if (at('\n'))
-    {
-      in_indentation = true;
-    }
-    else if (in_indentation)
-    {
-      if (not isspace(current()))
-        in_indentation = false;
-    }
   }
 }
 
@@ -145,8 +134,27 @@ void Lexer::advance(s32 n)
  */
 template<typename... T>
 b8 Lexer::errorAt(s32 line, s32 column, T... args)
-{
-  ERROR(source->name, ":", line, ":", column, ": ", args..., "\n");
+{ 
+  if (consumer)
+  {
+    // TODO(sushi) this sucks
+    io::Memory message;
+    message.open();
+    io::formatv(&message, args...);
+
+    LexerDiagnostic diag = {};
+    diag.line = line;
+    diag.column = column;
+    diag.message = message.asStr();
+    diag.source = source;
+    consumer->consumeDiag(*this, diag);
+
+    message.close();
+  }
+  else
+  {
+    ERROR(source->name, ":", line, ":", column, ": ", args..., "\n");
+  }
   return false;
 }
 
@@ -186,7 +194,10 @@ void Lexer::skipWhitespace(b8 suppress_token)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Lexer::init(io::IO* input_stream, Source* src)
+b8 Lexer::init(
+    io::IO* input_stream, 
+    Source* src, 
+    LexerConsumer* consumer)
 {
   assert(input_stream and src);
 
@@ -198,6 +209,7 @@ b8 Lexer::init(io::IO* input_stream, Source* src)
   at_end = false;
   current_offset = 0;
   current_codepoint = nil;
+  this->consumer = consumer;
 
   // prep buffer and current
   readStreamIfNeeded(false);
@@ -310,13 +322,11 @@ b8 Lexer::lexLuaLineOrInlineOrBlock()
   {
     if (advance(), at('$'))
       return lexLuaBlock();
-    else
-      return errorHere("$$ has no meaning yet."_str);
+    return errorHere("$$ has no meaning yet."_str);
   }
-  else if (at('(') or at('<'))
+  if (at('(') or at('<'))
     return lexLuaInline();
-  else
-    return lexLuaLine();
+  return lexLuaLine();
 }
 
 /* ----------------------------------------------------------------------------
@@ -374,8 +384,7 @@ b8 Lexer::lexLuaInline()
       {
         if (nesting == 1)
           break;
-        else 
-          nesting -= 1;
+        nesting -= 1;
       }
     }
 
@@ -630,6 +639,9 @@ void Lexer::finishCurt(Token::Kind kind, s32 len_offset)
 
     DEBUG("finished ", curt, "\n");
     TRACE("==| ", io::SanitizeControlCharacters(curt.getRaw(source)), "\n");
+
+    if (consumer)
+      consumer->consumeToken(*this, curt);
   }
 }
 

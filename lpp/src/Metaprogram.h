@@ -13,6 +13,7 @@
 #include "iro/fs/Path.h"
 
 #include "Source.h"
+#include "Parser.h"
 
 namespace lpp
 {
@@ -25,6 +26,7 @@ using namespace iro;
 struct Section;
 struct Cursor;
 struct Expansion;
+struct Metaprogram;
 
 typedef SLinkedPool<io::Memory> BufferPool;
 
@@ -40,35 +42,40 @@ struct Section
   {
     Invalid,
     Document,
+    DocumentSpan,
     Macro,
+    MacroImmediate,
   };
 
   Kind kind = Kind::Invalid;
 
-  u64 start_offset = -1;
+  // The Token at which this section starts. More detail about what this 
+  // section came from is attainable from the kind of Token that started it.
+  u64 token_idx = -1;
 
   io::Memory* buffer = nullptr;
 
   SectionNode* node = nullptr;
 
   u64 macro_idx = -1;
-  String macro_indent = nil;
-
-
-  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-  =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
-
 
   b8 initDocument(
-      u64 start_offset, 
+      u64 token_idx,
       String raw, 
       SectionNode* node,
       io::Memory* buffer);
 
+  b8 initDocumentSpan(
+    u64 token_idx,
+    SectionNode* node);
+
   b8 initMacro(
-      u64 start_offset, 
-      String macro_indent, 
+      u64 token_idx,
       u64 macro_idx, 
+      SectionNode* node);
+
+  b8 initMacroImmediate(
+      u64 token_idx,
       SectionNode* node);
 
   void deinit();
@@ -124,6 +131,7 @@ struct Expansion
 {
   u64 from;
   u64 to;
+  Array<u64> invoking_macros;
 };
 
 /* ============================================================================
@@ -141,6 +149,8 @@ struct Scope
   // Null when this is the global scope.
   Section* macro_invocation;
 
+  u64 global_offset = 0;
+
   // NOTE(sushi) its assumed the passed buffer is already open.
   b8   init(Scope* prev, io::Memory* buffer, Section* macro_invocation);
   void deinit();
@@ -148,6 +158,38 @@ struct Scope
   void writeBuffer(Bytes bytes) { buffer->write(bytes); }
 };
 typedef SLinkedPool<Scope> ScopePool;
+
+/* ============================================================================
+ */
+struct MetaprogramDiagnostic
+{
+  Source* source;
+  u64     loc;
+  String  message;
+};
+
+/* ============================================================================
+ */
+struct MetaprogramConsumer
+{
+  virtual void consumeDiag(
+    const Metaprogram& mp, 
+    const MetaprogramDiagnostic& diag) {}
+
+  virtual void consumeSection(
+    const Metaprogram& mp,
+    const Section& section,
+    u64 expansion_start,
+    u64 expansion_end) {}
+
+  virtual void consumeExpansions(
+    const Metaprogram& mp,
+    const ExpansionList& exps) {}
+
+  virtual void consumeMetafile(
+    const Metaprogram& mp,
+    String metafile) {}
+};
 
 /* ============================================================================
  */
@@ -160,37 +202,35 @@ struct Metaprogram
   BufferPool buffers;
 
   SectionPool   sections;
-  CursorPool    cursors;
   ExpansionList expansions;
 
   ScopePool scope_stack;
 
+  struct Capture
+  {
+    u64 token_idx;
+    u64 start;
+  };
+
+  Array<Capture> captures;
+
   io::IO* instream;
   Source* input;
   Source* output;
+  Source meta;
 
   SectionNode* current_section;
+
+  Parser parser;
 
   // A mapping from a line in the generated metaprogram 
   // to the corresponding line in the original input. 
   // This lets us display the proper location of an error
   // in the input file when something goes wrong in lua.
-  // TODO(sushi) the way this is generated is extremely inefficient
-  //             and might be a big performance hog when lpp starts
-  //             processing larger/more files. A lot of the work done 
-  //             in the parser to get the initial byte offset mappings 
-  //             that span multiple lines should be moved to the Lexer 
-  //             if possible. The generation of this mapping is also 
-  //             pretty bad and could probably be lazy so that it only 
-  //             happens *if* there's an error to begin with.
+  // 
+  // This is only generated when needed through generateInputLineMap.
   struct InputLineMapping { s32 metaprogram; s32 input; };
   typedef Array<InputLineMapping> InputLineMap;
-  InputLineMap input_line_map;
-
-
-  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-  =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- */
-
 
   b8 init(
     Lpp*         lpp, 
@@ -208,7 +248,21 @@ struct Metaprogram
   Scope* getCurrentScope();
 
   void addDocumentSection(u64 start, String s);
-  void addMacroSection(s64 start, String indent, u64 macro_idx);
+  void addDocumentSpanSection(u64 token_idx);
+  void addMacroSection(s64 start, u64 macro_idx);
+  void addMacroImmediateSection(u64 start);
+
+  struct StackEnt
+  {
+    String src;
+    s32 line;
+    String name;
+    Metaprogram* mp;
+  };
+
+  StackEnt getStackEnt(s32 stack_idx, s32 ent_idx);
+
+  void emitError(s32 stack_idx, Scope* scope);
 
   b8 processScopeSections(Scope* scope);
 
@@ -216,8 +270,10 @@ struct Metaprogram
 
   s32 mapMetaprogramLineToInputLine(s32 line);
 
-  template<typename... T>
-  b8 errorAt(s32 loc, T... args);
+  // Lazily generates the input line map and returns a pointer to it.
+  void generateInputLineMap(InputLineMap* out_map);
+
+  void pushExpansion(u64 from, u64 to);
 
   // Indexes on the lua stack where important stuff is.
   // Eventually if lpp is ever 'stable' this should be 

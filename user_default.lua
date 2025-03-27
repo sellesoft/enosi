@@ -22,6 +22,7 @@ return
     "lppclang",
     "iro",
     "lpp",
+    --"lppls",
     "elua",
     "lake",
     --"hreload",
@@ -50,7 +51,8 @@ return
       {
         compiler = "clang++",
         linker = "lld",
-        disabled_linker_warnings = {
+        disabled_linker_warnings = 
+        {
           "4099",
         },
       }

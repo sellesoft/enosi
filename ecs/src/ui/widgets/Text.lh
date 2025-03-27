@@ -61,6 +61,7 @@ struct TextRenderer
     this->max_width = max_width;
     this->wrap = wrap;
     this->color = color;
+    breaks.init();
   }
 
   void deinit()
@@ -130,7 +131,6 @@ struct TextState
   }
 };
 
-
 /* ============================================================================
  */
 @ui.widget(Text,
@@ -162,7 +162,7 @@ struct
     state.set(s);
   }
 
-  static Text* make(UI& ui, String id = nil, String init = nil);
+  static Text* make(UI& ui, String init = nil, String id = nil);
 
   virtual void evaluate(UI* ui) override;
 
@@ -172,13 +172,10 @@ struct
 
   virtual void cleanup() override;
 
-  virtual void reportDrawCmds(
-      UI* ui, 
-      DrawCmdList& pre, 
-      DrawCmdList& post) override 
+  void reportDrawCmds(UI* ui, DrawCmdLists& lists) override 
   { 
     if (state.dc)
-      pre.push(state.dc); 
+      lists.pre_children.push(state.dc); 
   }
 })
 

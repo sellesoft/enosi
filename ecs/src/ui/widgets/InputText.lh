@@ -1,0 +1,127 @@
+/*
+ *  Widget for creating a text box that supports typing.
+ */
+
+$ require "common"
+$ local ui = require "ui.UI"
+
+@@lpp.import "ui/Item.lh"
+@@lpp.import "ui/TextEdit.lh"
+
+@@lpp.import "graphics/Font.lh"
+
+namespace ui
+{
+
+/* ============================================================================
+ *  The actual state and functionality of an InputText to help reusability.
+ */
+struct InputTextState
+{
+  TextEdit   text;
+  gfx::Font* font;
+
+  String preview; // Owned.
+
+  struct 
+  {
+    DrawCmd* text;
+    DrawCmd* quads;
+  } drawcmds;
+
+  b8 init(UI& ui, String init = nil, String preview = nil);
+  void deinit(UI& ui);
+
+  struct DrawParams
+  {
+    vec4f      bounds;
+    gfx::Font* font;
+    b8         is_focused;
+    f32        font_height;
+    Color      cursor_color;
+    Color      text_color;
+  };
+  void draw(UI& ui, const DrawParams& params);
+
+  struct UpdateParams
+  {
+    vec2f        local_mouse;
+    gfx::Font*   font;
+    b8           is_focused;
+    f32          font_height;
+    UpdateReason reason;
+  };
+  b8 update(UI& ui, const UpdateParams& params);
+
+  void reportDrawCmds(UI& ui, DrawCmdLists& lists, b8 is_focused);
+
+  void set(String s)
+  {
+    text.clear();
+    text.insertString(s);
+  }
+
+  String asStr() const
+  {
+    return text.asStr();
+  }
+};
+
+/* ============================================================================
+ */
+@ui.widget(InputText,
+schema
+{
+  font        = inherit;
+  font_height = inherit;
+  text_color  = inherit;
+
+  cursor_color: Color = 0xaaaaaaff;
+},
+struct
+{
+  TextEdit text;
+
+  gfx::Font* font;
+
+  struct
+  {
+    DrawCmd* text;
+    DrawCmd* cursor;
+    DrawCmd* selection;
+  } drawcmds;
+
+  String preview; // Owned.
+
+  static InputText* make(
+      UI& ui, 
+      String init = nil, 
+      String preview = nil,
+      String id = nil);
+
+  b8 init(UI& ui, String init = nil, String preview = nil);
+
+  void evaluate(UI* ui) override;
+  void generate(UI* ui) override;
+  void update(UI* ui, UpdateReason reason) override;
+  void cleanup() override;
+
+  void reportDrawCmds(UI* ui, DrawCmdLists& lists) override
+  {
+    lists.pre_children.push(drawcmds.text);
+    lists.pre_children.push(drawcmds.cursor);
+  }
+
+  AdjustedSize adjustItemSize(UI* ui, b8 auto_x, b8 auto_y) override;
+
+  // Callbacks to support custom functionality when certain things happen.
+  // This is experimental as I'm not sure if its a good idea yet (I don't
+  // like to overuse virtual stuff) but it seems like a better alternative to
+  // traditional C function pointers and void* context and polling the 
+  // InputText constantly for buffer changes.
+
+  virtual void onTextChanged() {}
+  virtual void onFocusLost() {}
+})
+
+}

@@ -1,0 +1,64 @@
+
+$ local cmn = require "common"
+$ local Schema = require "asset.Schema"
+
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+#include "iro/containers/Array.h"
+#include "iro/containers/Slice.h"
+#include "iro/containers/EnumArray.h"
+#include "math/vec.h"
+
+using namespace iro;
+
+struct EntityDef;
+
+namespace gfx
+{
+  struct CompiledTexture;
+}
+
+/* ============================================================================
+ */
+enum class TileKind
+{
+  Empty,
+  Wall,
+  Floor,
+
+  COUNT,
+};
+
+/* ============================================================================
+ */
+struct MapTileDef
+{
+  TileKind kind;
+  gfx::CompiledTexture* texture;
+  Array<EntityDef> entities;
+};
+
+/* ============================================================================
+ */
+struct MapLayerDef
+{
+  vec2i size;
+  vec2i pos;
+  Array<MapTileDef> tiles;
+};
+
+/* ============================================================================
+ */
+@Schema.def(MapDef,
+{
+  String name;
+  vec2i size;
+  Array<MapLayerDef> layers;
+})
+
+/* ============================================================================
+ */
+@Schema.def(MapTileKindDefs,
+{
+  EnumArray<TileKind, Array<gfx::CompiledTexture*>> tile_kinds;
+})

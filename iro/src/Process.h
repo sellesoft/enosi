@@ -8,6 +8,7 @@
 #include "Common.h"
 #include "Unicode.h"
 #include "containers/Slice.h"
+#include "io/IO.h"
 
 #include "traits/Nil.h"
 
@@ -38,11 +39,16 @@ struct Process
   static Process spawn(
       String        file, 
       Slice<String> args, 
-      String        cwd);
+      String        cwd,
+      b8            non_blocking = true,
+      b8            redirect_err_to_out = true);
 
   b8 hasOutput() const;
+  b8 hasErrOutput() const;
 
   u64 read(Bytes buffer) const;
+  u64 readstderr(Bytes buffer) const;
+  u64 write(Bytes buffer) const;
 
   // Checks the status of this Process and updates status/exit_code
   // if it has exited.
@@ -53,9 +59,29 @@ struct Process
   b8 close();
 };
 
+/* ============================================================================
+ */
+struct ProcessIO : io::IO
+{
+  Process& proc;
+
+  ProcessIO(Process& proc) : proc(proc) {}
+
+  s64 read(Bytes buffer) override
+  {
+    return proc.read(buffer);
+  }
+
+  s64 write(Bytes buffer) override
+  {
+    return proc.write(buffer);
+  }
+};
+
 }
 
 DefineNilValue(iro::Process, {nullptr}, { return x.handle == nullptr; });
 DefineMove(iro::Process, { to.handle = from.handle; });
+
 
 #endif

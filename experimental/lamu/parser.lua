@@ -7,7 +7,7 @@ local Token = require "token"
 local log = require "lamulog"
 local errh = require "errhandler"
 local Sema = require "sema"
-local util = require "util"
+local util = require "Util"
 
 --- Parses tokens created by the Lexer.
 ---@class lamu.Parser
@@ -71,7 +71,7 @@ Parser.decIndent = function(self)
 end
 
 Parser.printLine = function(self, ...)
-  if false then
+  if true then
     self:printIndent()
     log:info(...)
     log:info("\n")
@@ -306,16 +306,56 @@ Parser.stage.parseTypeExpr = function(self)
     if not id then
       self:yield(diag.expected_value_or_type(self.curt))
     end
-    unioned:push(
-      ast.IdRef
-      {
-        start = id,
-        decl = self.sema:requireSymbol(self.lex, id)
-      })
+    
+    local decl = self.sema:requireSymbol(self.lex, id)
+    if decl:is(ast.UnboundClosureParam) then
+      local ref = ast.UnboundIdRef { start = id }
+      if self:at(Token.Kind.LParen) then
+        local tuple = self:parseValueTuple()
+        unioned:push(
+          ast.Call
+          {
+            callee = ref,
+            args = tuple
+          })
+      else
+        unioned:push(ref)
+      end
+
+    else
+      if decl.expr and decl.expr:is(ast.Closure) then
+        if not self:at(Token.Kind.LParen) then
+          self:yield(diag.closure_type_expr_must_be_called(id))
+        end
+        local tuple = self:parseTuple()
+        unioned:push(
+          ast.Call
+          {
+            callee = 
+              ast.IdRef
+              {
+                start=id,
+                decl=decl,
+              },
+            args = tuple
+          })
+      else
+        unioned:push(
+          ast.IdRef
+          {
+            start = id,
+            decl = decl
+          })
+      end
+    end
 
     if not self:check(Token.Kind.VerticalBar) then
       break
     end
+  end
+  
+  if 0 == #unioned then
+    cmn.fatal("failed to find any types")
   end
 
   if 1 == #unioned then
@@ -332,6 +372,8 @@ end
 Parser.stage.parseExpr = function(self)
   if self:at(Token.Kind.If) then
     return (self:parseIf())
+  elseif self:at(Token.Kind.Loop) then
+    return (self:parseLoop())
   else
     return (self:parseSubExpr(0))
   end
@@ -378,6 +420,24 @@ Parser.stage.parseIf = function(self)
   self.sema:leaveScope(node)
 
   return node
+end
+
+Parser.stage.parseLoop = function(self)
+  if not self:check(Token.Kind.Loop) then
+    self:yield(diag.expected_loop(self.curt))
+  end
+
+  local scope = self.sema:enterScope()
+  scope.is_loop = true
+
+  local loop = ast.Loop
+  {
+    body = self:parseExpr()
+  }
+
+  self.sema:leaveScope(loop)
+
+  return loop
 end
 
 Parser.stage.parseBlock = function(self)
@@ -510,6 +570,20 @@ Parser.stage.parseSimpleExpr = function(self)
     local literal = ast.Literal { start = self.curt }
     self:nextToken()
     return literal
+  elseif self:at(Token.Kind.Break) then
+    if not self.sema.scope or not self.sema.scope.is_loop then
+      self:yield(diag.break_used_outside_of_loop(self.curt))
+    end
+    local node = ast.Break { start = self.curt, stop = self.curt }
+    self:nextToken()
+    return node
+  elseif self:at(Token.Kind.Continue) then
+    if not self.sema.scope or not self.sema.scope.is_loop then
+      self:yield(diag.continue_used_outside_of_loop(self.curt))
+    end
+    local node = ast.Continue { start = self.curt, stop = self.curt }
+    self:nextToken()
+    return node
   else
     return (self:parsePrimaryExpr())
   end
@@ -549,6 +623,9 @@ Parser.stage.parsePrimaryExpr = function(self)
   [Token.Kind.LBrace] = function()
     primary = self:parseBlock()
   end,
+  [Token.Kind.LSquare] = function()
+    primary = self:parseArray()
+  end,
   [Token.Kind.Struct] = function()
     self.sema:enterScope()
     primary = self:parseStructTuple()
@@ -572,6 +649,18 @@ Parser.stage.parsePrimaryExpr = function(self)
         callee = suffix,
         args = tuple,
       }
+    end,
+    [Token.Kind.LSquare] = function()
+      self:nextToken()
+      suffix = ast.Subscript
+      {
+        subject = suffix,
+        script = self:parseExpr()
+      }
+      if not self:at(Token.Kind.RSquare) then
+        self:yield(diag.subscript_missing_rsquare(self.curt))
+      end
+      self:nextToken()
     end,
     [Token.Kind.Period] = function()
       -- Field access.
@@ -683,6 +772,8 @@ Parser.stage.parseTupleImpl = function(self, TupleAST, parseElem)
   local stop
   self:nextToken()
 
+  local elems = cmn.List{}
+
   if self:at(Token.Kind.RParen) then
     stop = self.curt
     self:nextToken()
@@ -691,10 +782,9 @@ Parser.stage.parseTupleImpl = function(self, TupleAST, parseElem)
       {
         start = start,
         stop = stop,
+        elements = elems,
       })
   end
-
-  local elems = cmn.List{}
 
   while true do 
     elems:push(parseElem())
@@ -728,6 +818,8 @@ Parser.stage.parseClosure = function(self)
 
   local params = cmn.List{}
 
+  local tuple_start = self.curt
+
   while true do
     if self:check(Token.Kind.RParen) then
       break  
@@ -753,6 +845,8 @@ Parser.stage.parseClosure = function(self)
     end
   end
 
+  local tuple_stop = self.curt
+
   if not self:check(Token.Kind.ThickArrow) then
     self:yield(diag.expected_closure_arrow(self.curt))
   end
@@ -768,6 +862,8 @@ Parser.stage.parseClosure = function(self)
       idrefs = ctx.idrefs,
       params = ast.DeclTuple
       {
+        start = tuple_start,
+        stop = tuple_stop,
         elements = params
       },
       body = expr
@@ -794,6 +890,7 @@ Parser.stage.parseTupleOrClosureOrParenthesizedExpr = function(self)
     return (self:parseClosure())
   end
 
+  self:backtrackTo(rollback)
   local tuple = self:parseTuple()
   if tuple:is(ast.ValueTuple) then
     if 1 == #tuple.elements then
@@ -807,6 +904,49 @@ Parser.stage.parseTupleOrClosureOrParenthesizedExpr = function(self)
     end
   end
   return tuple
+end
+
+Parser.stage.parseArray = function(self)
+  if not self:at(Token.Kind.LSquare) then
+    self:yield(diag.expected_array(self.curt))
+  end
+
+  local elems = cmn.List{}
+  local start = self.curt  
+
+  self:nextToken()
+
+  if self:at(Token.Kind.RSquare) then
+    local stop = self.curt
+    self:nextToken()
+    return (ast.Array
+    {
+      start = start,
+      stop = stop,
+      elements = elems
+    })
+  end
+
+  local stop
+  while true do
+    elems:push(self:parseExpr())
+
+    if self:check(Token.Kind.Semicolon) then
+      -- Continue to parse more elements.
+    elseif self:check(Token.Kind.RSquare) then
+      stop = self.curt
+      break
+    else
+      self:yield(diag.array_expected_semi_or_rsquare(self.curt))
+    end
+  end
+
+  return (ast.Array
+  {
+    start = start,
+    stop = stop,
+    elements = elems
+  })
 end
 
 return Parser

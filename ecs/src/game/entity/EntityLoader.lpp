@@ -1,0 +1,184 @@
+$ local cmn = require "common"
+$ local Comp = require "game.component.Component"
+$ local glob = require "Glob"
+$ local List = require "List"
+
+@@lpp.import "game/entity/EntityLoader.lh"
+
+@@lpp.import "asset/Packing.lh"
+@@lpp.import "asset/AssetMgr.lh"
+@@lpp.import "asset/SourceDataFile.lh"
+
+@@lpp.import "graphics/Renderer.lh"
+
+@@lpp.import "game/entity/EntityMgr.lh"
+@@lpp.import "game/entity/Entity.defs.lh"
+
+@@lpp.import "game/component/Component.lh"
+
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+#include "iro/Logger.h"
+
+@cmn.defFileLogger(ent.loader, Info);
+
+$ local buf = cmn.buffer.new()
+$ glob "src/game/**/*.comp.lh" :each(function(path)
+$   local result = lpp.import(path:sub(#"src/"+1))
+$   if result then
+$     buf:put(result)
+$   end
+$ end)
+@buf:get
+
+$ Comp.sort()
+
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
+b8 loadComponentType(
+    const SourceData& data, 
+    EntityId       ent,
+    EntityMgr&     entmgr,
+    ComponentMgr&  cmpmgr,
+    AssetMgr&      assetmgr,
+    gfx::Renderer& renderer);
+
+$ for comp in Comp.components.list:each() do
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 loadComponentType<$(comp.name)>(
+    const SourceData& data, 
+    EntityId       ent,
+    EntityMgr&     entmgr,
+    ComponentMgr&  cmpmgr,
+    AssetMgr&      assetmgr,
+    gfx::Renderer& renderer)
+{
+  using TComp = $(comp.name);
+
+  TComp* comp = cmpmgr.allocateComponent<TComp>();
+
+  if (comp == nullptr)
+    return ERROR("failed to allocate $(comp.name) component\n");
+
+  PackContext pack_context = 
+  {
+    .assetmgr  = &assetmgr,
+    .renderer  = &renderer,
+  };
+
+  if (!packSourceDataIntoType(data, comp, pack_context))
+    return false;
+
+  entmgr.addComp(ent, comp);
+
+  return true;
+}
+$ end
+
+/* ----------------------------------------------------------------------------
+ */
+b8 loadComponent(
+    const SourceData& data, 
+    EntityId       ent,
+    EntityMgr&     entmgr,
+    ComponentMgr&  cmpmgr,
+    AssetMgr&      assetmgr,
+    gfx::Renderer& renderer)
+{
+  switch (data.type.hash())
+  {
+$ for comp in Comp.components.list:each() do
+  case "$(comp.name)"_hashed:
+    return 
+      loadComponentType<$(comp.name)>(
+        data, 
+        ent, 
+        entmgr, 
+        cmpmgr, 
+        assetmgr,
+        renderer);
+$ end
+  default: 
+    return ERROR("no component named ", data.type, "\n");
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+EntityId loadEntity(
+    const EntityDef& def, 
+    EntityMgr& entmgr,
+    AssetMgr& assetmgr,
+    gfx::Renderer& renderer)
+{
+  ComponentMgr& cmpmgr = entmgr.cmpmgr;
+
+  if (isnil(def.name))
+  {
+    ERROR("all entities must have a name\n");
+    return nil;
+  }
+
+  EntityId entid = entmgr.createEntity(def.name);
+  if (isnil(entid))
+  {
+    ERROR("EntityMgr failed to create entity '", def.name, "'\n");
+    return nil;
+  }
+
+  Entity* ent = entmgr.getEntity(entid);
+
+  for (Component* defcomp : def.components)
+  {
+    switch (defcomp->kind)
+    {
+$ for comp, i in Comp.components.list:eachWithIndex() do
+$  print(comp.name)
+    case $(i):
+      {
+        auto* comp = 
+          cmpmgr.allocateComponentFromInitialData(
+            *($(comp.name)*)defcomp);
+        entmgr.addComp(ent, comp);
+      }
+      break;
+$ end
+    }
+  }
+
+  if (nullptr == ent->tryComp<Transform>())
+  {
+    // All entities must have a transform.
+    entmgr.addComp(ent, cmpmgr.allocateComponent<Transform>());
+  }
+
+  return entid;
+
+}
+
+/* ----------------------------------------------------------------------------
+ */
+EntityId loadEntity(
+    const SourceDataFile& sfile, 
+    EntityMgr& entmgr,
+    AssetMgr& assetmgr,
+    gfx::Renderer& renderer)
+{
+  EntityDef def;
+
+  PackContext pack_context = 
+  {
+    .assetmgr = &assetmgr,
+    .renderer = &renderer,
+  };
+
+  packSourceDataIntoType(
+    *sfile.returned_data,
+    &def,
+    pack_context);
+
+  return loadEntity(def, entmgr, assetmgr, renderer);
+}

@@ -4,7 +4,7 @@ $ require "common"
 #include "math/vec.h"
 #include "math/mat.h"
 
-@@lpp.import "game/EntityId.lh"
+@@lpp.import "game/entity/EntityId.lh"
 
 struct GameMgr;
 

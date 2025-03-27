@@ -1,0 +1,49 @@
+/*
+ *  Base of Components.
+ */
+
+$ local cmn = require "common"
+$ local ui = require "ui.UI"
+
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+#include "iro/containers/LinkedPool.h"
+
+using namespace iro;
+
+@@lpp.import "game/entity/EntityId.lh"
+
+
+/* ============================================================================
+ */
+struct Component
+{
+  u64 kind = 0;
+  EntityId owner = nil;
+  // TODO(sushi) this kiiinda sucks, we really need to make an intrisic pool
+  //             so that we stop having to do this where its not needed.
+  // TODO(sushi) to remove at least one pointer we can prob just store a 
+  //             pointer to the prev Component in the list here and return to
+  //             using an SLinkedList?
+  void* node = nullptr;
+  
+  static u64 getKind(const Component* cmp) { return cmp->kind; }
+
+  b8 is(u64 kind) const { return this->kind == kind; }
+
+  b8 init(u64 kind)
+  {
+    assert(kind != 0);
+
+    this->kind = kind;
+    
+    return true;
+  }
+};
+
+DefineNilValue(Component, {0}, { return x.kind == 0; });
+
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
+u64 getComponentKind();

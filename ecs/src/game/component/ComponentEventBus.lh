@@ -1,0 +1,23 @@
+/*
+ *  System for subscribing to events that occur on Entities containing
+ *  some kind of component.
+ */
+
+$ require "common"
+
+@@lpp.import "game/entity/EntityId.lh"
+@@lpp.import "game/entity/Entity.lh"
+
+struct ComponentEventBus
+{
+  struct CompSubLists* sub_lists;
+
+  template<typename TComp, typename TEvent>
+  void subscribeTo(void* subscriber, void (*cb)(void*, TComp&, TEvent&));
+
+  template<typename TEvent>
+  void raise(EntityId id, TEvent&& event) const { raise<TEvent>(id, event); }
+
+  template<typename TEvent>
+  void raise(EntityId id, TEvent& event);
+};

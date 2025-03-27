@@ -117,7 +117,7 @@ cmd.CppObj.getIOIndependentFlags = function(params)
       params.pic and "-fPIC",
       "-std="..(params.std or "c++20"),
       params.nortti and "-fno-rtti",
-      params.debug_info and "-g" ,
+      params.debug_info and "-g",
       params.address_sanitizer and "-fsanitize=address",
       not params.export_all and "-fvisibility=hidden",
       --"-fpatchable-function-entry=16",
@@ -274,7 +274,7 @@ cmd.LppObj.complete = function(self, input, cppout, objout, depfile, metafile)
       input,
       "-o",
       cppout,
-      metafile and { "-om", metafile },
+      metafile and { "-M", metafile },
       depfile and { "-D", depfile }),
     self.cpp:complete(cppout, objout)
 end

@@ -1,0 +1,38 @@
+/*
+ *  Creates an entity from a source data file.
+ */
+
+$ local cmn = require "common"
+
+struct EntityId;
+struct SourceDataFile;
+struct SourceData;
+struct EntityMgr;
+struct ComponentMgr;
+struct AssetMgr;
+struct EntityDef;
+
+namespace gfx
+{
+struct Renderer;
+}
+
+/* ----------------------------------------------------------------------------
+ *  Load an Entity or Entities from a given SourceData file.
+ *
+ *  TODO(sushi) handle loading an array of entities.
+ */
+EntityId loadEntity(
+  const SourceDataFile& sfile, 
+  EntityMgr& entmgr, 
+  AssetMgr& assetmgr,
+  gfx::Renderer& renderer);
+
+/* ----------------------------------------------------------------------------
+ *  Load an Entity from some SourceData.
+ */
+EntityId loadEntity(
+  const EntityDef& def,
+  EntityMgr& entmgr, 
+  AssetMgr& assetmgr,
+  gfx::Renderer& renderer);

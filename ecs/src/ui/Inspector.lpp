@@ -254,11 +254,11 @@ struct MemberState
     wdata->value_render.draw(ui, pos, value);
   }
 
-  void reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post)
+  void reportDrawCmds(UI* ui, DrawCmdLists& lists)
   {
-    pre.push(bg);
-    pre.push(name);
-    pre.push(value);
+    lists.pre_children.push(bg);
+    lists.pre_children.push(name);
+    lists.pre_children.push(value);
   }
 
   void update(
@@ -345,11 +345,11 @@ struct RecordMemberState : public MemberState
       state.generate(ui, tree);
   }
 
-  void reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post)
+  void reportDrawCmds(UI* ui, DrawCmdLists& lists)
   {
-    MemberState::reportDrawCmds(ui, pre, post);
+    MemberState::reportDrawCmds(ui, lists);
     if (open)
-      state.reportDrawCmds(ui, pre, post);
+      state.reportDrawCmds(ui, lists);
   }
 
   void update(
@@ -609,10 +609,10 @@ $ for field,i in record:eachFieldWithIndex() do
 $ end
   }
 
-  void reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post)
+  void reportDrawCmds(UI* ui, DrawCmdLists& lists)
   {
 $ for field,i in record:eachFieldWithIndex() do
-    member$(i).reportDrawCmds(ui, pre, post);
+    member$(i).reportDrawCmds(ui, lists);
 $ end
   }
 

@@ -24,6 +24,7 @@ schema
   header_color: Color = 0x000000ff;
   header_height: f32 = 11;
   header_text_align: vec2f = 0 0.5;
+  header_text_padding: vec4f = 0 0 0 0;
 
   content_background_color: Color = 0x00000000;
 
@@ -38,33 +39,28 @@ struct
 
   TextState header_text;
 
-  static CollapsingHeader* make(UI& ui, String name = nil, String init = nil);
-  static CollapsingHeader* begin(UI& ui, String name = nil, String init = nil);
+  static CollapsingHeader* make(UI& ui, String init = nil, String name = nil);
+  static CollapsingHeader* begin(UI& ui, String init = nil, String name = nil);
 
-  virtual void  update(UI* ui, UpdateReason reason) override;
-  virtual void  evaluate(UI* ui) override;
-  virtual vec2f getMinSize(UI* ui) override;
-  virtual void  generate(UI* ui) override;
-  virtual vec2f adjustCursorStart(UI* ui, vec2f norm) override;
-  virtual AdjustedSize adjustItemSize(UI* ui, b8 ax, b8 ay) override;
-  virtual b8    shouldPlaceChildren() override { return open; }
-  virtual vec2f calcContentStart(vec4f margin, vec4f border) override;
-  virtual vec2f calcContentArea(
-    vec4f margin, 
-    vec4f border, 
-    vec2f size) override;
+  void  update(UI* ui, UpdateReason reason) override;
+  void  evaluate(UI* ui) override;
+  vec2f getMinSize(UI* ui) override;
+  void  generate(UI* ui) override;
+  vec2f adjustCursorStart(UI* ui, vec2f norm) override;
+  b8    shouldPlaceChildren() override { return open; }
+  vec2f calcContentStart(vec4f margin, vec4f border) override;
+  vec2f calcContentArea(vec4f margin, vec4f border, vec2f size) override;
+  AdjustedSize adjustItemSize(UI* ui, b8 ax, b8 ay) override;
+  vec2f calcVisualArea() override;
 
-  virtual void reportDrawCmds(
-      UI* ui, 
-      DrawCmdList& pre, 
-      DrawCmdList& post) override
+  void reportDrawCmds(UI* ui, DrawCmdLists& lists) override
   { 
     if (open && content_bg)
-      pre.push(content_bg);
+      lists.pre_children.push(content_bg);
     if (header_bg)
-      post.push(header_bg);
+      lists.post_children.push({header_bg, ItemSpace::Margined});
     if (header_text.dc)
-      post.push(header_text.dc);
+      lists.post_children.push({header_text.dc, ItemSpace::Margined});
   }
 })
 

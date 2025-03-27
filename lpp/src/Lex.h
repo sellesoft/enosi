@@ -22,7 +22,7 @@ struct Lpp;
  */
 struct Token
 {
-  enum class Kind
+  enum class Kind : u8
   {
     Invalid,
 
@@ -44,8 +44,6 @@ struct Token
     // are preprocessing a C file, this is C code.
     Document, 
 
-    DollarSign,
-
     Whitespace,
   };
 
@@ -54,18 +52,14 @@ struct Token
   s32 loc = 0;
   s32 len = 0;
 
-  s32 macro_indent_loc = 0;
-  s32 macro_indent_len = 0;
-
   s32 method_colon_offset = 0;
 
   // Retrieve the raw string this token encompasses from the given Source
-  String getRaw(Source* src) 
+  String getRaw(Source* src) const
   { 
     if (kind == Kind::MacroHereDocArg)
       return src->getVirtualStr(loc, len);
-    else
-      return src->getStr(loc, len); 
+    return src->getStr(loc, len); 
   }
 };
 
@@ -76,6 +70,26 @@ DefineNilValue(lpp::Token, {},
 
 namespace lpp
 {
+
+struct Lexer;
+
+/* ============================================================================
+ */
+struct LexerDiagnostic
+{
+  Source* source;
+  u32     line;
+  u32     column;
+  String  message;
+};
+
+/* ============================================================================
+ */
+struct LexerConsumer
+{
+  virtual void consumeDiag(const Lexer& lexer, const LexerDiagnostic& diag) {}
+  virtual void consumeToken(const Lexer& lexer, const Token& token) {}
+};
 
 /* ============================================================================
  *
@@ -101,16 +115,20 @@ struct Lexer
 
   TokenArray tokens;
 
-  b8 in_indentation;
   b8 at_end;
 
   jmp_buf err_handler; // this is 200 bytes !!!
 
-  b8   init(io::IO* input_stream, Source* src);
+  LexerConsumer* consumer = nullptr;
+
+  b8 init(
+      io::IO* input_stream, 
+      Source* src, 
+      LexerConsumer* consumer);
+
   void deinit();
         
   b8 run();
-
 
 private:
 
@@ -225,7 +243,6 @@ static s64 format(io::IO* io, lpp::Token::Kind& kind)
   c(MacroStringArg);
   c(MacroHereDocArg);
   c(Document);
-  c(DollarSign);
   c(Whitespace);
 #undef c
     default: assert(!"invalid token kind"); return 0;

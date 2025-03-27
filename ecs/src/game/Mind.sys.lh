@@ -2,7 +2,7 @@ $ local cmn = require "common"
 
 #include "iro/Common.h"
 
-@@lpp.import "game/EntityId.lh"
+@@lpp.import "game/entity/EntityId.lh"
 
 struct GameMgr;
 

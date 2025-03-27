@@ -26,7 +26,59 @@ struct UI;
 
 typedef Tree<Item> ItemTree;
 typedef ItemTree::Node ItemNode;
-typedef SmallArray<DrawCmd*, 8> DrawCmdList;
+
+/* ============================================================================
+ *  Some space in which an Item's DrawCmds are rendered.
+ */ 
+enum class ItemSpace
+{
+  Invalid,
+
+  // The DrawCmd is intended to have its origin where its padded area begins.
+  // This is the default space in which an Item's DrawCmds are rendered.
+  Padded,
+
+  // The DrawCmd is intended to have its origin where its bordered area begins.
+  Bordered,
+
+  // The DrawCmd is intended to have its origin where its margined area begins.
+  Margined,
+};
+
+/* ============================================================================
+ *  A DrawCmd along with some information about how the Item wants it drawn.
+ */
+struct ReportedDrawCmd
+{
+  DrawCmd* drawcmd;
+  ItemSpace space;
+
+  ReportedDrawCmd() : drawcmd(nullptr), space(ItemSpace::Invalid) {}
+
+  ReportedDrawCmd(DrawCmd* drawcmd) 
+    : drawcmd(drawcmd), 
+      space(ItemSpace::Padded) {}
+
+  ReportedDrawCmd(DrawCmd* drawcmd, ItemSpace space)
+    : drawcmd(drawcmd),
+      space(space) {}
+};
+
+typedef SmallArray<ReportedDrawCmd, 8> DrawCmdList;
+
+/* ============================================================================
+ */
+struct DrawCmdLists
+{
+  // DrawCmds intended to be emitted before or after the Item's children.
+  // These are drawn in the padded space of the Item.
+  DrawCmdList pre_children;
+  DrawCmdList post_children;
+
+  // DrawCmds to be emitted once the UI system completes updating the entire
+  // Item tree, eg. drawn over all Items.
+  DrawCmdList top_most;
+};
 
 /* ============================================================================
  *  The reason an update callback was called on an item.
@@ -43,6 +95,11 @@ enum class UpdateReason
   MouseReleased,
   MouseDown,
   MouseScroll,
+
+  FocusGained,
+  FocusLost,
+
+  FocusedKeyPress,
 
   // Last update callback ever invoked on an Item.
   Fin,
@@ -72,52 +129,46 @@ schema
     parseValue
     {
       -- Special because we could encounter a percentage or keyword.
-      local x, xperc
+      local sizing = ""
+
+      local addSizing = function(s)
+        if 0 ~= #sizing then
+          sizing = sizing.."|"
+        end
+        sizing = sizing..s
+      end
+
+      local x, xperc, xflex
       if parser:checkToken "auto" then
-        x = "auto"
+        addSizing "auto_x"
+      elseif parser:checkToken "flex" then
+        x = parser:expectPattern "%b()" :sub(2,-2)
+        addSizing "flex"
       else
         x = parser:expectNumber()
-        xperc = parser:checkToken "%%"
+        if parser:checkToken "%%" then
+          addSizing "percent_x"
+        end
       end
 
       local y, yperc
       if parser:checkToken "auto" then
-        y = "auto"
+        addSizing "auto_y"
+      elseif parser:checkToken "flex" then
+        y = parser:expectPattern "%b()" :sub(2,-2)
+        addSizing "flex"
       else
         y = parser:expectNumber()
-        yperc = parser:checkToken "%%"
-      end
-
-      local sizing = ""
-      local sizing_count = 0
-
-      local addSizing = function(s)
-        if sizing_count > 0 then
-          sizing = sizing.."|"
+        if parser:checkToken "%%" then
+          addSizing "percent_y"
         end
-        sizing = sizing..s
-        sizing_count = sizing_count + 1
       end
 
-      if x == "auto" then
-        x = 0
-        addSizing "auto_x"
-      elseif xperc then
-        addSizing "percent_x"
-      end
-
-      if y == "auto" then
-        y = 0
-        addSizing "auto_y"
-      elseif yperc then
-        addSizing "percent_y"
-      end
-
-      if sizing_count > 0 then
+      if #sizing ~= 0 then
         style.set.sizing(sizing)
       end
 
-      return "{"..x..","..y.."}"
+      return "{"..(x or 0)..","..(y or 0).."}"
     };
 
   sizing: flags
@@ -181,7 +232,7 @@ schema
 
   background_color: Color = 0x00000000;
 
-  font:        String = "gohu";
+  font:        String = "assets/fonts/gohu";
   font_height: f32    = 11;
   text_color:  Color  = 0xc5c9c5ff;
 
@@ -303,7 +354,8 @@ struct
   //             list of dirty Items on UI that we check every update.
   b8 dirty;
 
-  b8 init(UI& ui, String name);  
+  b8 init(UI& ui, String name);
+  void deinit();
 
   static Item* make(UI& ui, String name = nil);
   static Item* begin(UI& ui, String name = nil);
@@ -320,15 +372,10 @@ struct
   // Cleans up any dynamic memory this item may have allocated in its lifetime.
   virtual void cleanup() {}
 
-  // Implemented by widgets that perform custom drawing, called just before 
-  // we decide what to send to the Renderer for this Item. DrawCmds stored in
-  // 'pre' will be emitted before any of its children's draw cmds while those
-  // in 'post' will be emitted after.
-  // 
-  // TODO(sushi) maybe pass in a callback and a context to gather these 
-  //             as copying out into a temp array kinda sucks when an Item
-  //             has a ton of draw commands.
-  virtual void reportDrawCmds(UI* ui, DrawCmdList& pre, DrawCmdList& post) { }
+  // Implemented by Items that perform custom drawing via DrawCmds. DrawCmds
+  // can be emitted in various ways. See DrawCmdLists for an explanation of
+  // each list.
+  virtual void reportDrawCmds(UI* ui, DrawCmdLists& lists) { }
 
   // Allows a widget to tell evaluate if it should place children or not.
   virtual b8 shouldPlaceChildren() { return true; }
@@ -386,6 +433,12 @@ struct
   // Calculates the visual area that the content of this Item is placed in.
   // 'size' is the content area that would normally be computed for this Item.
   virtual vec2f calcContentArea(vec4f margin, vec4f border, vec2f size)
+  {
+    return size;
+  }
+
+  // Calculates the visual area that this item takes up for hit testing.
+  virtual vec2f calcVisualArea()
   {
     return size;
   }

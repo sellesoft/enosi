@@ -202,6 +202,15 @@ b8 Window::update(Engine& engine)
         KeySym ks = XLookupKeysym(&event.xkey, 0);
         Key key = keysymToKey(ks);
         engine.input.keys_real.set(key);
+
+        KeySym unused;
+        engine.input.real_char_count += 
+          XLookupString(
+            &event.xkey, 
+            (char*)engine.input.chars + engine.input.real_char_count,
+            sizeof(engine.input.chars) - engine.input.real_char_count,
+            &unused,
+            0);
       }
       break;
 

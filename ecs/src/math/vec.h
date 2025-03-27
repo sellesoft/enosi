@@ -304,6 +304,12 @@ struct vec4
   template<typename X>
   vec4(const vec4<X>& in) { x = in.x; y = in.y; z = in.z; w = in.w; }
 
+  template<typename X>
+  vec4(const vec2<X>& l, const vec2<X>& r) 
+  {
+    x = l.x; y = l.y; z = r.x; w = r.y;
+  }
+
   /* --------------------------------------------------------------------------
    */
 #define swizzler2(a,b) \
@@ -403,6 +409,13 @@ struct vec4
 
   /* --------------------------------------------------------------------------
    */
+  inline bool operator == (const vec4& rhs) const
+  {
+    return x == rhs.x && y == rhs.y && z == rhs.z && w == rhs.w;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
   inline vec4& set(f32 x, f32 y, f32 z, f32 w)
   {
     *this = { x, y, z, w };
@@ -438,6 +451,14 @@ struct vec4
 typedef vec4<s32> vec4i;
 typedef vec4<u32> vec4u;
 typedef vec4<f32> vec4f;
+
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
+vec4<T> operator * (const T& lhs, const vec4<T>& rhs)
+{
+  return vec4<T>(lhs * rhs.x, lhs * rhs.y, lhs * rhs.z, lhs * rhs.w);
+}
 
 namespace iro::io
 {

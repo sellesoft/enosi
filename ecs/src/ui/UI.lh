@@ -47,6 +47,9 @@ struct UI
   // The currently hovered item or nullptr if none.
   Item* hovered;
 
+  // The currently focused item, eg. the last item clicked on.
+  Item* focused;
+
   // TODO(sushi) the stack prob does not need to be a whole list!
   SList<Item> item_stack;
 
@@ -80,7 +83,7 @@ struct UI
   mem::LenientBump temp_alloc;
 
 
-  b8 init(Engine& engine);
+  b8   init(Engine& engine);
   void deinit();
 
   b8 update(Engine& engine);
@@ -92,7 +95,7 @@ struct UI
   {
     auto* item = (T*)mem::stl_allocator.construct<T>();
 
-    if (!item->init(*this, id))
+    if (!item->Item::init(*this, id))
     {
       mem::stl_allocator.deconstruct(item);
       return nullptr;
@@ -101,7 +104,8 @@ struct UI
     return item;
   }
 
-  Item* allocateAndInitItem(u64 size, String id);
+  void destroyItem(Item* item);
+  void destroyItemChildren(Item* item);
 
   void beginItem(Item* item);
   void endItem();
@@ -109,9 +113,45 @@ struct UI
   template<typename TItem>
   void end() { endItem(); }
 
+  // In Items which perform custom drawing, this helper can be used to 
+  // test if a region of the Item was clicked during its update callback.
+  b8 testFocusableRegion(vec2f pos, vec2f size);
+
 private:
 
-  void updateTree(ItemNode* node, const mat3x2& current_transform);
+  b8 focus_consumed = false;
+  Item* updating_item = nullptr;
+  UpdateReason update_reason = UpdateReason::Fin;
+
+  Item* eval_break;
+
+  // A type storing a DrawCmd to be drawn later than when it was reported.
+  // This happens in cases like top-most drawcmds.
+  struct DeferredDrawCmd
+  {
+    mat3x2 transform;
+    DrawCmd* drawcmd;
+  };
+
+  typedef SmallArray<DeferredDrawCmd, 4> DeferredDrawCmdList;
+
+  struct UpdateTreeContext
+  {
+    DeferredDrawCmdList* top_most_drawcmds = nullptr;
+    const mat3x2* current_transform = nullptr;
+    Item* hovered = nullptr;
+
+    UpdateTreeContext inherit(const mat3x2* current_transform)
+    {
+      return
+      {
+        .top_most_drawcmds = top_most_drawcmds,
+        .current_transform = current_transform,
+      };
+    }
+  };
+
+  void updateTree(ItemNode* node, UpdateTreeContext& ctx);
 
   struct FlexContext
   {
@@ -130,7 +170,12 @@ private:
   void evalItemBranch(ItemNode* node, FlexContext* flex);
   void genItemBranch(ItemNode* node);
 
-  b8 findHoveredItem(ItemTree::Node* node);
+  void emitDrawCmd(
+    DrawCmd* drawcmd, 
+    Item* item, 
+    vec4f current_scissor);
+
+  void emitDrawCmds(DeferredDrawCmdList& drawcmds);
 
   void onWindowResized(WindowResized& x);
 

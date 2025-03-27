@@ -1,18 +1,12 @@
-/* ----------------------------------------------
- *
- *  lpp state and interface used throughout the 
- *  project.
- *
- *  TODO(sushi) add a lpp api function for quitting execution entirely via a longjmp 
- *              or something. When an error occurs in nested metaprograms 
- *              (like via an import macro or sometinhg) it will currently 
- *              report that every single file failed, whne we only want to show info
- *              about the failing file 
+/* 
+ *  Lpp state.
  */
 
 #ifndef _lpp_Lpp_h
 #define _lpp_Lpp_h
 
+#include "Lex.h"
+#include "Metaprogram.h"
 #include "iro/Common.h"
 #include "iro/containers/LinkedPool.h"
 #include "iro/LuaState.h"
@@ -29,8 +23,31 @@ using namespace iro;
 namespace lpp
 {
 
-struct Metaprogram;
+/* ============================================================================
+ *  Set of consumer interfaces for getting information from lpp's systems 
+ *  throughout the preprocessing process.
+ */
+struct LppConsumers
+{
+  LexerConsumer* lex_diag_consumer = nullptr;
+  MetaprogramConsumer* meta = nullptr;
+};
 
+/* ============================================================================
+ *  An interface for overlaying files onto the actual file system. When lpp
+ *  goes to open a file, and this is available, it will first ask whatever
+ *  this is for the contents first. If a nil String is returned, the 
+ *  actual file is opened. The path given is an absolute path to the file 
+ *  to be opened.
+ */
+struct LppVFS
+{
+  virtual String open(String path) = 0;
+
+};
+
+/* ============================================================================
+ */
 struct Lpp
 {
   LuaState lua;
@@ -38,30 +55,53 @@ struct Lpp
   DLinkedPool<Metaprogram> metaprograms;
   DLinkedPool<Source> sources;
 
-  b8 initialized;
+  // A stream which information is read from or written to. The String and
+  // IO are not owned by Lpp and are expected to be kept around until it 
+  // is deinitialized.
+  struct Stream
+  {
+    String name;
+    io::IO* io;
+  };
 
-  String input;
-  String output;
+  struct Streams
+  {
+    Stream in;
+    Stream out;
+    Stream dep;
+    Stream meta;
+  };
 
-  b8  generate_depfile;
-  String depfile_output;
+  Streams streams;
 
-  b8 output_metafile;
-  String metafile_output;
+  LppConsumers consumers;
 
-  // True when we should run in lsp mode (--lsp).
-  b8 lsp;
-  // Print lua metaprograms (--print-meta)
-  b8 print_meta;
+  LppVFS* vfs;
 
-  b8   init();
+  b8 use_full_filepaths;
+
+  struct InitParams
+  {
+    Streams streams;
+
+    // Args passed through to the metaprograms.
+    Slice<String> args;
+
+    Slice<String> require_dirs;
+    Slice<String> cpath_dirs;
+    Slice<String> include_dirs;
+
+    LppConsumers consumers;
+    LppVFS* vfs;
+
+    b8 use_full_filepaths;
+  };
+
+  b8   init(const InitParams& params);
   void deinit();
 
   b8 run();
-
-  b8 processArgv(int argc, const char** argv);
   b8 processStream(String name, io::IO* instream, io::IO* outstream);
-  b8 writeAuxFile(String extension, String text);
 }; 
 
 }

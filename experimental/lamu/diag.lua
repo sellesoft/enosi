@@ -1,9 +1,7 @@
 local cmn = require "common"
-local log = require "lamulog"
 local buffer = require "string.buffer"
 local LuaType = require "Type"
 local log = require "lamulog"
-local util = require "util"
 
 --- Diag type
 local Diag = LuaType.make()
@@ -294,7 +292,7 @@ diagdef.expected_rbrace_or_semicolon
 diagdef.is_lhs_not_union
   .severity.Warning
   .new(getTok)
-  .emit(message "redundant if ..is expression, subject is not a union")
+  .emit(message "redundant if .. is expression, subject type is not a union")
 
 diagdef.is_rhs_not_in_union
   .severity.Error
@@ -353,6 +351,83 @@ diagdef.binop_not_defined
   .emit(emitWrap(function(self, parser, buf)
     buf:put("binop ", tostring(self.op.kind), " not defined between ",
             self.lhst:getTypeName(), " and ", self.rhst:getTypeName())
+  end))
+
+diagdef.expected_type_value
+  .severity.Error
+  .new(function(self, id)
+    self.tok = id
+  end)
+  .emit(emitWrap(function(self, parser, buf)
+    buf:put("expected a type value")
+  end))
+
+diagdef.closure_type_expr_must_be_called
+  .severity.Error
+  .new(getTok)
+  .emit(emitWrap(function(self, parser, buf)
+    buf:put("a closure used as a type expression must be called")
+  end))
+
+diagdef.is_lhst_never_eq_rhst
+  .severity.Error
+  .new(function(self, lhs, rhs)
+    self.tok = lhs.start
+    self.lhs = lhs
+    self.rhs = rhs
+  end)
+  .emit(emitWrap(function(self, parser, buf)
+    local lhst = self.lhs.semantics.type
+    local rhst = self.rhs.semantics.type
+    if rhst:is(require "type".TypeValue) then
+      rhst = rhst.type
+    end
+    buf:put(
+      "type ", lhst:getTypeName(), " of ", 
+       parser.lex:getRaw(self.lhs.decl.id.start), " is never equal to ", 
+       rhst:getTypeName())
+  end))
+
+diagdef.type_value_as_field_initializer
+  .severity.Error
+  .new(function(self, field, arg)
+    self.tok = arg.start
+    self.field = field
+    self.arg = arg
+  end)
+  .emit(emitWrap(function(self, parser, buf)
+    buf:put(
+      "cannot pass type value ", 
+      self.arg.semantics.type.type:getTypeName(), " as ",
+      "initializer argument for field ", 
+      parser.lex:getRaw(self.field.id.start))
+  end))
+
+diagdef.non_equality_op_on_types
+  .severity.Error
+  .new(getTok)
+  .emit(emitWrap(function(self, parser, buf)
+    buf:put(
+      "only equality operations (== or !=) may be performed between types")
+  end))
+
+diagdef.expected_then_or_block
+  .severity.Error
+  .new(getTok)
+  .emit(expected "then or block")
+
+diagdef.break_used_outside_of_loop
+  .severity.Error
+  .new(getTok)
+  .emit(emitWrap(function(self, parser, buf)
+    buf:put "break used outside of a loop"
+  end))
+
+diagdef.subscript_not_on_array
+  .severity.Error
+  .new(getTok)
+  .emit(emitWrap(function(self, parser, buf)
+    buf:put "subscript subject is not an array"
   end))
 
 diag.Diag = Diag

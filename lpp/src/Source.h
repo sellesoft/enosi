@@ -3,6 +3,10 @@
  *  
  *  Handles translating source locations (byte offsets) to other information
  *  such as raw strings and line+columns as well as caching useful information.
+ *
+ *  TODO(sushi) this should probably be expanded to manage all of the 
+ *              information related to some 'source', eg. its lexer, parser,
+ *              tokens, metaprogram, each intermediate buffer we need, etc.
  */
 
 #ifndef _lpp_Source_h
@@ -63,7 +67,7 @@ struct Source
 
   // Translate a byte offset into this source to 
   // a line and column.
-  Loc getLoc(u64 offset);
+  Loc getLoc(u64 offset) const;
 };
 
 #endif // _lpp_source_h

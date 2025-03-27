@@ -31,7 +31,8 @@ Diagnostics:
         'bugprone-easily-swappable-parameters',
         'misc-no-recursion',
         'readability-uppercase-literal-suffix',
-        'modernize-use-std-numbers'
+        'modernize-use-std-numbers',
+        'modernize-raw-string-literal'
       ]
     FastCheckFilter: None
 

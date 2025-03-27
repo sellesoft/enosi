@@ -1,4 +1,5 @@
 #include "Parser.h"
+#include "Lex.h"
 #include "iro/LineMap.h"
 #include "iro/fs/File.h"
 
@@ -8,31 +9,32 @@ namespace lpp
 {
 
 static Logger logger = 
-  Logger::create("lpp.parser"_str, Logger::Verbosity::Info);
+  Logger::create("lpp.parser"_str, Logger::Verbosity::Notice);
 
 /* ----------------------------------------------------------------------------
  */
 b8 Parser::init(
     Source* src,
     io::IO* instream, 
-    io::IO* outstream)
+    io::IO* outstream,
+    LexerConsumer* lex_diag_consumer)
 {
   assert(instream && outstream);
 
   TRACE("initializing on stream '", src->name, "'\n");
 
-  tokens = Array<Token>::create();
   locmap = Array<LocMapping>::create();
   in = instream;
   out = outstream;
   source = src;
 
-  if (!lexer.init(in, src))
+  if (!lexer.init(in, src, lex_diag_consumer))
     return false;
 
   if (setjmp(lexer.err_handler))
   {
     lexer.deinit();
+    locmap.destroy();
     return false;
   }
 
@@ -50,7 +52,6 @@ b8 Parser::init(
 void Parser::deinit()
 {
   locmap.destroy();
-  tokens.destroy();
   lexer.deinit();
   *this = {};
 }
@@ -90,6 +91,13 @@ b8 Parser::run()
 
   nextToken();
 
+  writeOut(
+    "local __metaenv_docspan = __metaenv.docspan\n",
+    "local __metaenv_doc = __metaenv.doc\n",
+    "local __metaenv_val = __metaenv.val\n",
+    "local __metaenv_macro = __metaenv.macro\n",
+    "local __metaenv_macro_immediate = __metaenv.macro_immediate\n");
+
   for (;;)
   {
     using enum Token::Kind;
@@ -105,15 +113,9 @@ b8 Parser::run()
       case Invalid:
         return false;
 
-      case DollarSign: // included for lsp stuff
-        nextToken();
-        break;
-
       case Whitespace:
         writeOut(
-          "__metaenv.doc("_str, curt->loc, ",\""_str);
-        writeTokenSanitized();
-        writeOut("\")\n"_str);
+          "__metaenv_docspan("_str, curtIdx(), ")\n");
         nextToken();
         break;
 
@@ -123,20 +125,8 @@ b8 Parser::run()
 
         TRACE("placing document text: '", 
               io::SanitizeControlCharacters(getRaw()), "'\n");
-        {
-          String raw = getRaw();
-          u64 from = curt->loc;
-          locmap.push({.from = bytes_written, .to = curt->loc});
-          for (s32 i = 0; i < raw.len; ++i)
-          {
-            if (i && raw.ptr[i-1] == '\n' && i != raw.len-1)
-              locmap.push({.from = bytes_written+i, .to = curt->loc+i});
-          }
-        }
 
-        writeOut("__metaenv.doc("_str, curt->loc, ",\""_str);
-        writeTokenSanitized();
-        writeOut("\")\n"_str);
+        writeOut("__metaenv_docspan("_str, curtIdx(), ")\n");
         nextToken();
         break;
 
@@ -145,11 +135,11 @@ b8 Parser::run()
               io::SanitizeControlCharacters(getRaw()), "'\n");
         {
           String raw = getRaw();
-          locmap.push({.from = bytes_written, .to = curt->loc});
+          pushLocMap();
           for (s32 i = 0; i < raw.len; ++i)
           {
             if (i && raw.ptr[i-1] == '\n' && i != raw.len-1)
-              locmap.push({.from = bytes_written+i, .to = curt->loc+i});
+              pushLocMap(i,i);
           }
         }
         writeOut(getRaw(), "\n");
@@ -159,7 +149,7 @@ b8 Parser::run()
       case LuaLine:
         TRACE("placing lua line: '", 
               io::SanitizeControlCharacters(getRaw()), "'\n");
-        locmap.push({.from = bytes_written, .to = curt->loc-1});
+        pushLocMap(-1, 0);
         writeOut(getRaw(), "\n");
         nextToken();
         break;
@@ -167,8 +157,9 @@ b8 Parser::run()
       case LuaInline:
         TRACE("placing lua inline: '", 
               io::SanitizeControlCharacters(getRaw()), "'\n");
-        locmap.push({.from = bytes_written, .to = curt->loc});
-        writeOut("__metaenv.val("_str, curt->loc, ",", getRaw(), ")\n"_str);
+        writeOut("__metaenv_val("_str, curtIdx(), ',');
+        pushLocMap();
+        writeOut(getRaw(), ")\n"_str);
         nextToken();
         break;
 
@@ -177,34 +168,44 @@ b8 Parser::run()
         {
           TRACE("encountered macro symbol\n");
           b8 is_immediate = curt->kind == MacroSymbolImmediate;
-          locmap.push({.from = bytes_written, .to = curt->loc});
+          pushLocMap();
 
           if (is_immediate)
-            writeOut("__metaenv.doc(", curt->loc, 
-                ",__metaenv.macro_immediate("_str);
+          {
+            writeOut("__metaenv_doc("_str, curtIdx(),
+              ",__metaenv_macro_immediate("_str, curtIdx(), ",");
+
+            nextSignificantToken(); // identifier
+            writeOut('"', getRaw(), "\", ");
+          }
           else
-            writeOut("__metaenv.macro("_str);
-          writeOut(curt->loc, ",\"", 
-              source->getStr(curt->macro_indent_loc, curt->macro_indent_len),
-              "\",");
+          {
+            writeOut("__metaenv_macro("_str);
+            writeOut(curtIdx(), ',');
 
-          TRACE("getting id\n");
-          nextSignificantToken(); // identifier
-          TRACE("got id\n");
+            TRACE("getting id\n");
+            nextSignificantToken(); // identifier
+            TRACE("got id\n");
 
-          locmap.push({.from = bytes_written, .to = curt->loc});
-          writeOut('"', getRaw(), "\",");
+            writeOut('"', getRaw(), "\",");
+          }
 
           TRACE("wrote name\n");
 
           if (curt->kind == MacroMethod)
           {
+            writeOut("true,"_str);
             String mobj = getRaw().sub(0, curt->method_colon_offset);
             String mfun = getRaw().sub(curt->method_colon_offset+1, curt->len);
-            writeOut("true,", mobj, '.', mfun, ',', mobj);
+            pushLocMap();
+            writeOut(mobj, '.', mfun, ',', mobj);
           }
           else
-            writeOut("false,", getRaw());
+          {
+            writeOut("false,"_str);
+            pushLocMap();
+            writeOut(getRaw());
+          }
 
           TRACE("wrote method\n");
 
@@ -220,9 +221,6 @@ b8 Parser::run()
               //             strings. I'm not really sure if this would be 
               //             more efficient but for cases where macros never
               //             get called it might be useful.
-
-              locmap.push({.from = bytes_written, .to = curt->loc});
-
               // NOTE(sushi) used to use this MacroPart stuff here 
               //             but finding that it makes working with macro
               //             arguments too unintuitive. Later once we get to
@@ -253,6 +251,7 @@ b8 Parser::run()
                 curt->loc,              ',',
                 curt->loc + curt->len,  ',',
                 '"');
+              pushLocMap();
               writeTokenSanitized();
               writeOut('"', ')');
               nextSignificantToken();
@@ -263,13 +262,13 @@ b8 Parser::run()
           else if (at(MacroStringArg))
           {
             TRACE("at string arg\n");
-            locmap.push({.from = bytes_written, .to = curt->loc});
             writeOut(',',
                 "__metaenv.lpp.MacroPart.new(",
                 '"', source->name, '"', ',',
                 curt->loc,              ',',
                 curt->loc + curt->len,  ',',
                 '"');
+            pushLocMap();
             writeTokenSanitized();
             writeOut('"', ')');
             nextToken();
@@ -284,6 +283,20 @@ b8 Parser::run()
   }
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Parser::pushLocMap(s32 from_offset, s32 to_offset)
+{
+  LocMapping mapping = 
+  {
+    *curt,
+    curt->loc+from_offset,
+    bytes_written+to_offset+1
+  };
+
+  locmap.push(mapping);
 }
 
 /* ----------------------------------------------------------------------------

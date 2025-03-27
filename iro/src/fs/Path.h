@@ -72,8 +72,16 @@ struct Path
   // Retrieve a String with the basename of the given path removed.
   static String removeBasename(String path);
 
+  // Retrieve a String with the extension of the given path removed.
+  static String removeExtension(String path);
+
+  // Retrieve a String with the first directory in the path removed.
+  static String removeFirstDir(String path);
+
   // Gets the last modified time of the file at the given path.
   static TimePoint modtime(String path);
+
+  static b8 isRooted(String path);
 
   // Compares the modification times of the given paths.
   //  0 is returned if they are equal, 
@@ -93,8 +101,17 @@ struct Path
 
   void destroy();
 
+  String asStr() { return buffer.asStr(); }
+
   Path copy();
   void clear();
+
+  Path& set(String s)
+  {
+    clear();
+    append(s);
+    return *this;
+  }
 
   // Equivalent to the static api, but applied to this Path.
   b8 unlink() { return unlink(buffer.asStr()); }
@@ -126,6 +143,7 @@ struct Path
   String basename() { return basename(buffer.asStr()); }
 
   void removeBasename() { buffer.len = removeBasename(buffer.asStr()).len; }
+  void removeExtension() { buffer.len = removeExtension(buffer.asStr()).len; }
 
   // Helpers for querying information about the file at this path
 

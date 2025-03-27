@@ -1,15 +1,19 @@
 $ local cmn = require "common"
 $ local ui = require "ui.UI"
 
-@@lpp.import "Engine.lh"
 @@lpp.import "game/GameMgr.lh"
-@@lpp.import "game/map/Map.schema.lh"
-@@lpp.import "game/Movement.comp.lh"
-@@lpp.import "game/Sprite.comp.lh"
-@@lpp.import "game/Transform.comp.lh"
+
+@@lpp.import "Engine.lh"
+
 @@lpp.import "asset/Packing.lh"
 @@lpp.import "asset/SourceDataFile.lh"
 @@lpp.import "asset/SourceDataParser.lh"
+
+@@lpp.import "game/Sprite.comp.lh"
+@@lpp.import "game/Movement.comp.lh"
+@@lpp.import "game/Transform.comp.lh"
+
+@@lpp.import "game/map/Map.defs.lh"
 
 #include "iro/Logger.h"
 #include "iro/Platform.h"
@@ -19,6 +23,8 @@ using namespace iro;
 static Logger logger =
   Logger::create("gamemgr"_str, Logger::Verbosity::Info);
 
+/* ----------------------------------------------------------------------------
+ */
 b8 GameMgr::init(Engine* eng)
 {
   INFO("initializing\n");
@@ -34,12 +40,6 @@ b8 GameMgr::init(Engine* eng)
 
   using namespace fs;
 
-  // auto testent =
-  //   entmgr.createEntityFromResource("assets/entities/Test.ent"_str);
-
-  // mindsys.attach(testent);
-  // eye.attach(testent);
-
   SourceDataFileHandle h_test_map =
     eng->source_data_file_reg.loadFromDisk("assets/maps/Test.map"_str);
 
@@ -48,11 +48,16 @@ b8 GameMgr::init(Engine* eng)
 
   auto* map_def = mem::stl_allocator.construct<MapDef>();
 
+  PackContext pack_context = 
+  {
+    .assetmgr  = &eng->assetmgr,
+    .renderer  = &eng->renderer,
+  };
+
   packSourceDataIntoType(
     *h_test_map.getFile()->returned_data,
     map_def,
-    eng->assetmgr,
-    eng->renderer);
+    pack_context);
 
   Map::InitParams map_params =
   {
@@ -66,17 +71,32 @@ b8 GameMgr::init(Engine* eng)
   if(!map.init(*map_def, map_params))
     return ERROR("failed to initialize the map '", map_def->name, "'\n");
 
+  SourceDataFileHandle h_test_map_tile_kinds =
+    eng->source_data_file_reg.loadFromDisk("assets/maps/Test.map_tiles"_str);
+
+  if (!h_test_map_tile_kinds.isValid())
+    return ERROR("failed to load test map tile kinds\n");
+
   map_editor = ui::MapEditor::create(eng->ui, &eng->renderer);
-  map_editor->selectMap(h_test_map);
+  map_editor->selectMap(
+    h_test_map,
+    h_test_map_tile_kinds,
+    engine->ui,
+    engine->assetmgr,
+    engine->renderer);
 
   return true;
 }
 
+/* ----------------------------------------------------------------------------
+ */
 void GameMgr::deinit()
 {
   entmgr.deinit();
 }
 
+/* ----------------------------------------------------------------------------
+ */
 b8 GameMgr::update()
 {
   if (!mindsys.update(*this))
@@ -88,27 +108,42 @@ b8 GameMgr::update()
   if (!eye.update(*this))
     return false;
 
-  RenderSys::UpdateParams render_params1 =
-  {
-    .viewport = { .size = engine->window.size },
-    .renderer = engine->renderer,
-    .entmgr = &entmgr,
-    .map = &map,
-  };
-  eye.getViewMat(&render_params1.view);
-  if (!rendersys.update(render_params1))
-    return false;
+  $ local map_editor = ui.createItemContext("MapEditor", "map_editor")
 
   map_editor->renderMap(engine->ui);
 
-  $ local map_editor = ui.createItemContext("MapEditor", "map_editor")
   if (engine->input.wasKeyPressed(Key::M))
   {
     @@map_editor.style:lookup(display)
     if (@map_editor.style.display.test(hidden))
-      @map_editor.style.set.display(horizontal);
+      @map_editor.style.set.display(0);
     else
       @map_editor.style.set.display(hidden);
+  }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 GameMgr::render()
+{
+  $ local map_editor = ui.createItemContext("MapEditor", "map_editor")
+  @@map_editor.style:lookup(display)
+
+  if (@map_editor.style.display.test(hidden))
+  {
+    RenderSys::UpdateParams render_params =
+    {
+      .viewport = { .size = engine->window.size },
+      .renderer = engine->renderer,
+      .entmgr = &entmgr,
+      .map = &map,
+    };
+
+    eye.getViewMat(&render_params.view);
+    if (!rendersys.update(render_params))
+      return false;
   }
 
   return true;

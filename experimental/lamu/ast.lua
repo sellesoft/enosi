@@ -5,7 +5,6 @@
 local cmn = require "common"
 local log = require "lamulog"
 local Token = require "token"
-local util = require "util"
 
 local ast = setmetatable({},
 {
@@ -147,7 +146,6 @@ end
 ast.NodeInstance.fork = function(self, cb)
   cb = cb or {}
   local relocations = {}
-  local type = require "type"
 
   local function deepCopy(x)
     local function impl()
@@ -261,6 +259,13 @@ ast.NodeInstance.dump = function(self, parser)
         if semantics.cast_to then
           infostack:push("cast_to: "..semantics.cast_to:getTypeName())
         end
+        if semantics.folded then
+          local valbuf = cmn.buffer.new()
+          valbuf:put("folded: ")
+          semantics.folded.node_kind.writeValue(
+            node.semantics.folded, valbuf, parser)
+          infostack:push(valbuf:get())
+        end
         if semantics.began_scope then
           local scope = semantics.began_scope
           for k,v in pairs(scope.transforms) do
@@ -290,6 +295,10 @@ ast.NodeInstance.dump = function(self, parser)
   dump(self, 0)
 
   log:notice(buf:get(),"\n")
+end
+
+ast.NodeInstance.__tostring = function(self)
+  return self.node_kind.name
 end
 
 ast.Node.schema = 
@@ -551,6 +560,9 @@ ast.Expr:derive "Tuple"
     end)
   end)
 
+ast.Expr:derive "Array"
+  .node.list.Expr "elements"
+
 ast.Expr:derive "NamedExpr"
   .node.Id "id"
   .node.Expr "expr"
@@ -647,6 +659,9 @@ local tok_to_binop_kind =
   [Token.Kind.Plus] = BinOpKind.Add,
   [Token.Kind.Minus] = BinOpKind.Sub,
   [Token.Kind.Equal] = BinOpKind.Assign,
+  [Token.Kind.DoubleEqual] = BinOpKind.Equal,
+  [Token.Kind.RAngle] = BinOpKind.GreaterThan,
+  [Token.Kind.LAngle] = BinOpKind.LessThan,
 }
 
 BinOpKind.fromTokenKind = function(tk)
@@ -676,9 +691,18 @@ ast.Expr:derive "IsExpr"
   .node.Expr "lhs"
   .node.Expr "rhs"
 
+ast.Expr:derive "Loop"
+  .node.Expr "body"
+
+ast.Expr:derive "Break"
+ast.Expr:derive "Continue"
+
 ast.Expr:derive "Access"
   .node.Expr "lhs"
   .node.Id "rhs"
 
+ast.Expr:derive "Subscript"
+  .node.Expr "subject"
+  .node.Expr "script"
 
 return ast

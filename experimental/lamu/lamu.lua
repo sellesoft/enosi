@@ -1,12 +1,4 @@
-local log = require "logger" ("lamu", Verbosity.Debug)
 local LuaType = require "Type"
-local List = require "list"
-local co = require "coroutine"
-local buffer = require "string.buffer"
-local util = require "util"
-local Twine = require "twine"
-local errhandler = require "errhandler"
-local pco = require "pco"
 local cmn = require "common"
 local Parser = require "parser"
 local Lexer = require "lexer"

@@ -5,11 +5,17 @@ $ local cmn = require "common"
 
 @lpp.import "Engine.lh"
 
+@defFileLogger(inputmgr, Info)
+
+/* ----------------------------------------------------------------------------
+ */
 b8 InputMgr::init(Engine& engine)
 {
   return true;
 }
 
+/* ----------------------------------------------------------------------------
+ */
 b8 InputMgr::update(Engine& engine)
 {
   keys_old = keys_new;
@@ -17,5 +23,30 @@ b8 InputMgr::update(Engine& engine)
   keys_new = keys_real;
   mouse_new = mouse_real;
 
+  char_count = real_char_count;
+  real_char_count = 0;
+
   return true;  
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void InputMgr::consumeMouseInput()
+{
+  mouse_old.clear();
+  mouse_new.clear();
+
+  scroll = 0.f;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void InputMgr::consumeKeyInput()
+{
+  keys_old.clear();
+  keys_new.clear();
+
+  mem::zero(chars, sizeof(chars));
+
+  char_count = 0;
 }

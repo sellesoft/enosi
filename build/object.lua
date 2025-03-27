@@ -311,6 +311,7 @@ LuaObj.defineTask = function(self, cmd)
   setFileExistanceAndModTimeCondition(self.task)
 
   self.task
+    :dependsOn(lake.task(lfile))
     :recipe(function()
       runAndReportResult(comp, lfile, ofile)
     end)
@@ -376,6 +377,7 @@ LppObj.defineTask = function(self, cmd)
   local lpp_cmd, cpp_cmd = cmd:complete(lfile, cfile, ofile, dfile, mfile)
 
   sys.trackCompileCommandsCmd(self.proj.root, cfile, cpp_cmd)
+  sys.trackCompileCommandsCmd(self.proj.root, self.src, lpp_cmd)
 
   local lpp_task = lake.task(lfile)
   local cpp_task = lake.task(cfile)

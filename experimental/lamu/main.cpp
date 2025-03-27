@@ -1,9 +1,9 @@
-#include "iro/common.h"
-#include "iro/unicode.h"
-#include "iro/fs/file.h"
-#include "iro/luastate.h"
-#include "iro/logger.h"
-#include "iro/gdbscriptdef.h"
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+#include "iro/fs/File.h"
+#include "iro/LuaState.h"
+#include "iro/Logger.h"
+#include "iro/GDBScriptDef.h"
 
 using namespace iro;
 
@@ -49,14 +49,17 @@ int main(int argc, const char** argv)
     return !ERROR("failed to require errhandler\n");
   const s32 I_errhandler = lua.gettop();
 
-  if (!lua.loadfile("lamu.lua"))
-    return !ERROR("failed to load lamu.lua:\n", lua.tostring(), "\n");
+  if (!lua.require("lamu"_str))
+    return !ERROR("failed to load lamu\n", lua.tostring(), "\n");
 
-  if (!lua.pcall(0,0,I_errhandler))
-  {
-    if (lua.isstring())
-      return !ERROR("script failed: ", lua.tostring(), "\n");
-  }
+//  if (!lua.loadfile("lamu.lua"))
+//    return !ERROR("failed to load lamu.lua:\n", lua.tostring(), "\n");
+
+  // if (!lua.pcall(0,0,I_errhandler))
+  // {
+  //   if (lua.isstring())
+  //     return !ERROR("script failed: ", lua.tostring(), "\n");
+  // }
 
   return 0;
 }

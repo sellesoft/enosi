@@ -23,6 +23,44 @@ static Logger logger =
 
 /* ----------------------------------------------------------------------------
  */
+void UI::destroyItem(Item* item)
+{
+  assert(item != root);
+
+  if (hovered == item)
+    hovered = nullptr;
+
+  if (focused == item)
+    focused = nullptr;
+
+  destroyItemChildren(item);
+    
+  item->cleanup();
+  item->style.deinit();
+  item_tree.remove(item->node);
+  
+  if (item->builtin.borders)
+    item->builtin.borders->remove(this);
+
+  if (item->builtin.scrollbars)
+    item->builtin.scrollbars->remove(this);
+
+  if (item->builtin.background)
+    item->builtin.background->remove(this);
+
+  mem::stl_allocator.free(item);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::destroyItemChildren(Item* item)
+{
+  while (ItemNode* child = item->node->first_child)
+    destroyItem(child->data);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 void UI::beginItem(Item* item)
 {
   item_stack.push(item);
@@ -133,7 +171,7 @@ b8 UI::update(Engine& engine)
   // TODO(sushi) only do this if the mouse moves by subscribing to the
   //             MouseMoved event, maybe. A lot of other stuff will
   //             also make this need to be retriggered as well.
-  findHoveredItem(item_tree.root);
+  // findHoveredItem(item_tree.root);
 
   renderer.bindPipeline(pipeline);
   renderer.setViewport(vec2i(0,0), window.size);
@@ -149,10 +187,31 @@ b8 UI::update(Engine& engine)
 
   temp_alloc.init();
 
+  focus_consumed = false;
+
   auto base_transform =
     mat3x2::createTransform({0.f,0.f}, 0.f);
 
-  updateTree(root->node, base_transform);
+  DeferredDrawCmdList top_most_drawcmds;
+
+  UpdateTreeContext ctx = 
+  {
+    .top_most_drawcmds = &top_most_drawcmds,
+    .current_transform = &base_transform,
+  };
+
+  updateTree(root->node, ctx);
+
+  // Draw top most drawcmds with no scissor.
+  renderer.setScissor(vec2i(0,0), window.size);
+  emitDrawCmds(top_most_drawcmds);
+
+  if (ctx.hovered && ctx.hovered != hovered)
+  {
+    INFO("new hover: ", ctx.hovered, " ", ctx.hovered->name, "\n");
+  }
+
+  hovered = ctx.hovered;
 
   temp_alloc.deinit();
 
@@ -261,14 +320,18 @@ static ItemNode* findStaticSizedParent(
 
 /* ----------------------------------------------------------------------------
  */
-void UI::updateTree(ItemNode* node, const mat3x2& current_transform)
+void UI::updateTree(ItemNode* node, UpdateTreeContext& ctx)
 {
+  // INFO("update ", node, " (", node->data->name, ")\n");
+  // SCOPED_INDENT;
+
   gfx::Renderer& renderer = eng->renderer;
   Window&        window   = eng->window;
   InputMgr&      input    = eng->input;
 
   Item* item = node->data;
   Item* parent = (node->parent? node->parent->data : nullptr);
+
 
   vec2f init_scroll = item->scroll;
   item->scroll = min(vec2f(0.f,0.f), max(item->scroll, item->max_scroll));
@@ -280,7 +343,11 @@ void UI::updateTree(ItemNode* node, const mat3x2& current_transform)
   $ local item = ui.createItemContext("Item", "item")
   $ local style = item.style
 
-  @@item.style:lookup(overflow, display)
+  // TODO(sushi) doing these look ups every frame for every item kinda
+  //             sucks. Maybe try storing a map from item to cached
+  //             information about it that we need here? Sorta defeats the
+  //             purpose of the style map stuff though.
+  @@item.style:lookup(overflow, display, margin, padding, border)
 
   if (@item.style.display.test(hidden))
     return;
@@ -289,36 +356,63 @@ void UI::updateTree(ItemNode* node, const mat3x2& current_transform)
 
   @@parent.style:lookup(overflow, margin, border)
 
-  // TODO(sushi) doing these look ups every frame for every item kinda
-  //             sucks. Maybe try storing a map from item to cached
-  //             information about it that we need here? Sorta defeats the
-  //             purpose of the style map stuff though.
-  @@style:lookup(margin, border)
-
-$ local tryUpdate = function(reason, cond)
-  if (item->update_triggers.test(UpdateReason::$(reason)) &&
-      ($(cond or "true")))
-    item->update(this, UpdateReason::$(reason));
+$ local tryUpdate = function(reason, cond, item)
+$   item = item or "item"
+$   cond = cond or "true"
+  ({
+    if ($(item)->update_triggers.test(UpdateReason::$(reason)) &&
+        ($(cond)))
+    {
+      updating_item = $(item);
+      update_reason = UpdateReason::$(reason);
+      $(item)->update(this, UpdateReason::$(reason));
+    }
+  });
 $ end
 
   @tryUpdate(Start)
 
-  if (item->isHovered(this, Item::HoverKind::Topmost))
+  if (item == hovered && 
+      eng->input.isKeyDown(Key::LCtrl) && 
+      eng->input.wasMouseButtonPressed(MouseButton::Left))
+    eval_break = item;
+
+  if (hovered == item)
   {
-    // Only allow hover and pressed when item is topmost.
     @tryUpdate(MouseHover)
     @tryUpdate(MousePressed, input.anyMouseButtonPressed())
-  }
 
-  if (item->isHovered(this, Item::HoverKind::Area))
-  {
-    // Allow other mouse inputs if the item is hovered at all.
+    if (input.wasMouseButtonPressed(MouseButton::Left))
+    {
+      Item* prev_focused = focused;
+      focused = item;
+
+      if (prev_focused)
+        INFO("focused ", prev_focused->name, " -> ", focused->name, "\n");
+      else
+        INFO("focused ", focused->name, "\n");
+
+      if (prev_focused != item)
+      {
+        @tryUpdate(FocusGained)
+        if (prev_focused)
+        {
+          @tryUpdate(FocusLost, true, prev_focused)
+        }
+      }
+    }
+
     @tryUpdate(MouseReleased, input.anyMouseButtonReleased())
     @tryUpdate(MouseDown, input.anyMouseButtonDown())
     @tryUpdate(MouseScroll, input.scroll != 0.f)
   }
 
-  @tryUpdate(MouseHoverChild, item->isHovered(this, Item::HoverKind::Child))
+  if (focused == item)
+  {
+    @tryUpdate(FocusedKeyPress, input.anyKeyPressed());
+  }
+
+  // \@tryUpdate(MouseHoverChild, item->isHovered(this, Item::HoverKind::Child))
 
   if (item->dirty)
   {
@@ -346,20 +440,17 @@ $ end
   @tryUpdate(Fin)
 
   vec2f scoff;
-  vec2f scext;
+  vec2f scsiz;
 
   if (parent && @parent.style.overflow != @Item.overflow.visible)
   {
-    vec2f cpos =
-      item->pos_screen +
-      @style.margin.top_left;
-    vec2f csiz = @item.getMarginedArea;
+    vec2f cpos = item->pos_screen + @style.margin.top_left;
+    vec2f csiz = max(@item.getMarginedArea, item->calcVisualArea());
+    vec2f cext = cpos + csiz;
 
     vec2f ppos =
       parent->pos_screen +
-      parent->calcContentStart(
-        @parent.style.margin,
-        @parent.style.border);
+      parent->calcContentStart(@parent.style.margin, @parent.style.border);
 
     ppos = max(ppos, parent->visible_start);
 
@@ -369,44 +460,23 @@ $ end
         @parent.style.border,
         parent->visible_size);
 
-    vec2f pext = ppos + psiz;
+    vec2f pext = 
+      min(ppos + psiz, parent->visible_start + parent->visible_size);
 
-    scoff =
-      max(
-        vec2f(0,0),
-        max(
-          ppos,
-          min(
-            cpos,
-            pext)));
-    vec2f br =
-      max(
-        ppos,
-        min(
-          cpos + csiz,
-          pext));
-    scext = max(vec2f(0,0), br - scoff);
-    item->visible_start =
-      max(
-        vec2f(0,0),
-        max(
-          ppos,
-          min(
-            cpos,
-            pext)));
-    br =
-      max(
-        ppos,
-        min(
-          cpos + csiz,
-          pext));
+    scoff = max(vec2f(0,0), max(ppos, min( cpos, pext)));
 
+    vec2f br = max(ppos, min(cext, pext));
+
+    scsiz = max(vec2f(0,0), br - scoff);
+    br = max(ppos, min(cext, pext));
+
+    item->visible_start = max(vec2f(0,0), max(ppos, min(cpos, pext)));
     item->visible_size = br - item->visible_start;
   }
   else
   {
     scoff = max(vec2f(0,0), item->pos_screen);
-    scext =
+    scsiz =
       max(
         vec2f(0,0),
         min(
@@ -419,102 +489,152 @@ $ end
   TRACE("item ", item->name, ":",
     "\n     ps: ", item->pos_screen,
     "\n  scoff: ", scoff,
-    "\n  scext: ", scext,
-    "\n    adj: ", vec2i(scoff.x, window.size.y - (scoff.y+scext.y)),
+    "\n  scsiz: ", scsiz,
+    "\n    adj: ", vec2i(scoff.x, window.size.y - (scoff.y+scsiz.y)),
     "\n");
 
   // TODO(sushi) we can maybe pull some of these conditions into the
   //             calculations above to stop doing work much earlier.
   b8 item_in_view =
     scoff.x < window.size.x && scoff.y < window.size.y &&
-    scext.x != 0.f          && scext.y != 0.f          &&
-    scoff.x + scext.x > 0.f && scoff.y + scext.y > 0.f;
-
-  b8 pushed_transform = false;
-
-  auto emitDrawCmd = [&](DrawCmd* drawcmd)
-  {
-    if (notnil(drawcmd->tex))
-    {
-      TRACE("  drawcmd has tex ", drawcmd->tex.index, "\n");
-      renderer.bindTexture(drawcmd->tex);
-    }
-    else
-    {
-      TRACE("  drawcmd has no tex\n");
-      renderer.bindTexture(eng->white_texture);
-    }
-
-    if (drawcmd->counts_used.y == 0)
-      return;
-
-    TRACE("  pushing draw \n",
-        "    io: ", drawcmd->index_offset,
-        "\n    ic: ", drawcmd->counts_used.y,
-        "\n    vo: ", drawcmd->vertex_offset, "\n");
-
-    renderer.draw(
-      drawcmd->index_offset,
-      drawcmd->counts_used.y,
-      drawcmd->vertex_offset);
-  };
-
-  auto emitDrawCmds = [&](DrawCmdList& drawcmds)
-  {
-    TRACE("pushing draw cmds \n");
-
-    for (DrawCmd* drawcmd : drawcmds)
-      emitDrawCmd(drawcmd);
-  };
+    scsiz.x != 0.f          && scsiz.y != 0.f          &&
+    scoff.x + scsiz.x > 0.f && scoff.y + scsiz.y > 0.f;
 
   if (item_in_view)
   {
-    f32 push_constant[9];
-    mat3x2 this_transform =
+    const mat3x2& current_transform = *ctx.current_transform;
+
+    // Flip the scissor for OpenGL.
+    scoff = vec2f(scoff.x, window.size.y - (scoff.y + scsiz.y));
+
+    vec2f item_margined_pos = item->pos_local   + @style.margin.top_left;
+    vec2f item_bordered_pos = item_margined_pos + @style.border.top_left;
+    vec2f item_padded_pos   = item_bordered_pos + @style.padding.top_left;
+
+    mat3x2 item_screen_transform = 
       current_transform.mul(
         mat3x2::createTransform(item->pos_local, 0.f));
-    this_transform.to_mat3(push_constant);
-    renderer.pushConstant(&push_constant, sizeof(push_constant));
 
-    renderer.setScissor(
-      vec2i(scoff.x, window.size.y - (scoff.y+scext.y)), scext);
+    mat3x2 item_margined_transform = 
+      current_transform.mul(mat3x2::createTransform(item_margined_pos, 0.f));
+
+    mat3x2 item_bordered_transform = 
+      current_transform.mul(mat3x2::createTransform(item_bordered_pos, 0.f));
+
+    mat3x2 item_padded_transform = 
+      current_transform.mul(mat3x2::createTransform(item_padded_pos, 0.f));
+
+    ItemSpace current_space = ItemSpace::Invalid;
+
+    auto pushTransform = [&](ItemSpace desired_space, b8 force = false)
+    {
+      assert(desired_space != ItemSpace::Invalid);
+
+      if (!force && desired_space == current_space)
+        return;
+
+      f32 push_constant[9] = {0};
+      switch (current_space = desired_space)
+      {
+      case ItemSpace::Padded:
+        item_padded_transform.toMat3(push_constant);
+        renderer.pushConstant(&push_constant, sizeof(push_constant));
+        break;
+      case ItemSpace::Bordered:
+        item_bordered_transform.toMat3(push_constant);
+        renderer.pushConstant(&push_constant, sizeof(push_constant));
+        break;
+      case ItemSpace::Margined:
+        item_margined_transform.toMat3(push_constant);
+        renderer.pushConstant(&push_constant, sizeof(push_constant));
+        break;
+      }
+    };
+
+    pushTransform(ItemSpace::Bordered);
+    renderer.setScissor(scoff, scsiz);
 
     // Emit background if we have one.
     if (item->builtin.background)
-      emitDrawCmd(item->builtin.background);
+      emitDrawCmd(item->builtin.background, item, vec4f(scoff, scsiz));
+
+    pushTransform(ItemSpace::Margined);
+
+    DrawCmdLists drawcmd_lists;
 
     // Ask the Item if it has any drawcmds.
-    DrawCmdList precmds;
-    precmds.init();
-    DrawCmdList postcmds;
-    postcmds.init();
-    item->reportDrawCmds(this, precmds, postcmds);
+    item->reportDrawCmds(this, drawcmd_lists);
+
+    for (ReportedDrawCmd& cmd : drawcmd_lists.top_most)
+    {
+      DeferredDrawCmd* deferred_cmd = ctx.top_most_drawcmds->push();
+      deferred_cmd->drawcmd = cmd.drawcmd;
+      switch (cmd.space)
+      {
+      case ItemSpace::Padded:
+        deferred_cmd->transform = item_padded_transform;
+        break;
+      case ItemSpace::Bordered:
+        deferred_cmd->transform = item_bordered_transform;
+        break;
+      case ItemSpace::Margined:
+        deferred_cmd->transform = item_margined_transform;
+        break;
+      default:
+        assert(!"unhandled ItemSpace");
+        break;
+      }
+    }
 
     // Emit pre-children commands.
-    if (precmds.len != 0)
-      emitDrawCmds(precmds);
+    for (ReportedDrawCmd& cmd : drawcmd_lists.pre_children)
+    {
+      pushTransform(cmd.space);
+      emitDrawCmd(cmd.drawcmd, item, vec4f(scoff, scsiz));
+    }
+
+    UpdateTreeContext child_ctx = ctx.inherit(&item_screen_transform);
 
     // Update child branches if the Item wants us to.
     if (item->shouldPlaceChildren())
     {
-      for (ItemNode* child = node->first_child; child; child = child->next)
-        updateTree(child, this_transform);
+      for (ItemNode* child = node->last_child; child; child = child->prev)
+        updateTree(child, child_ctx);
     }
 
+    if (child_ctx.hovered == nullptr)
+    {
+      vec2f visual_area = item->calcVisualArea();
+      if (math::pointInRect(
+            eng->input.mouse.window, 
+            item->visible_start,
+            visual_area))
+        ctx.hovered = item;
+    }
+    else
+      ctx.hovered = child_ctx.hovered;
+
     // Children likely changed scissor, so we have to set it back.
-    renderer.setScissor(
-      vec2i(scoff.x, window.size.y - (scoff.y+scext.y)), scext);
+    renderer.setScissor(scoff, scsiz);
 
     // Emit post-children commands.
-    if (postcmds.len != 0)
-      emitDrawCmds(postcmds);
+    for (ReportedDrawCmd& cmd : drawcmd_lists.post_children)
+    {
+      pushTransform(cmd.space);
+      emitDrawCmd(cmd.drawcmd, item, vec4f(scoff, scsiz));
+    }
 
     // Draw scrollbars and border when appropriate.
     if (item->builtin.scrollbars && item->max_scroll != vec2f(0.f,0.f))
-      emitDrawCmd(item->builtin.scrollbars);
+    {
+      pushTransform(ItemSpace::Padded);
+      emitDrawCmd(item->builtin.scrollbars, item, vec4f(scoff, scsiz));
+    }
+
+    pushTransform(ItemSpace::Bordered);
 
     if (item->builtin.borders)
-      emitDrawCmd(item->builtin.borders);
+      emitDrawCmd(item->builtin.borders, item, vec4f(scoff, scsiz));
   }
 
   // Handle scrollbar input for this Item if necessary.
@@ -580,11 +700,18 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
   Item* item = node->data;
   Item* parent = (node->parent? node->parent->data : nullptr);
 
+
+  if (item == eval_break)
+  {
+    eval_break = nullptr;
+    platform::debugBreak();
+  }
+
   item->dirty = false;
 
   $ local schema = ui.widgets.Item.schema
-  $ local item = ui.createItemContext("Item", "item")
-  $ local style = item.style
+  $ local item   = ui.createItemContext("Item", "item")
+  $ local style  = item.style
   $ local parent = ui.createItemContext("Item", "parent", true)
 
   @@style:lookup(
@@ -685,7 +812,7 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
     {
       if (@style.size.width < 0.f)
         ERROR("percent_x set but width set (", @style.size.width, ") is "
-        "negative\n");
+              "negative\n");
       else if (@parent.style.sizing.test(percent_x))
         item->size.x = @style.size.width/100.f * @parent.getPaddedWidth;
       else if (@parent.style.size.width >= 0.f)
@@ -715,9 +842,9 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
 
     flex.is_container = true;
     flex.effective_size =
-      (is_horizontal?
-        @item.getPaddedWidth :
-        @item.getPaddedHeight);
+      is_horizontal
+      ? @item.getPaddedWidth 
+      : @item.getPaddedHeight;
     flex.ratio_sum = 0.f;
     flex.disp_horizontal = is_horizontal;
 
@@ -727,7 +854,7 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
             "width\n");
       return;
     }
-    else if (hauto)
+    else if (!is_horizontal && hauto)
     {
       ERROR("display set to flex and vertical, but sizing is set to auto "
             "height\n");
@@ -794,6 +921,23 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
         }
       }
     }
+
+    // Calculate how many item sizes will need to be ceil'd rather than 
+    // floored to properly fit inside the container.
+    f32 floored_sum = 0.f;
+    for (ItemNode* cnode = node->first_child; cnode; cnode = cnode->next)
+    {
+      Item* child = cnode->data;
+      @@child.style:lookup(size, sizing)
+
+      if (@child.style.sizing.test(flex))
+      {
+        floored_sum +=
+          floor((is_horizontal? @child.style.size.x : @child.style.size.y)
+          / flex.ratio_sum * flex.effective_size);
+      }
+    }
+    flex.n_ceils = flex.effective_size - floored_sum;
   }
 
   Item::AdjustedSize adjusted_size =
@@ -873,8 +1017,8 @@ $   local style = child.style
     switch (@style.anchor)
     {
     case @schema.anchor.top_left:
-      child->pos_local.x += @style.pos.x;
-      child->pos_local.y += @style.pos.y;
+      child->pos_local.x += @child.style.pos.x;
+      child->pos_local.y += @child.style.pos.y;
       break;
 
     case @schema.anchor.top_right:
@@ -970,7 +1114,51 @@ $ end
         break;
 
       case @schema.positioning.absolute:
-        @placeAnchorSwitch
+        switch (@child.style.anchor)
+        {
+        case @schema.anchor.top_left:
+          child->pos_local.x = @child.style.pos.x;
+          child->pos_local.y = @child.style.pos.y;
+          break;
+
+        case @schema.anchor.top_right:
+          if (!wauto)
+            child->pos_local.x = 
+              (@item.getPaddedWidth - child->size.x) - @child.style.pos.x;
+          else
+            ERROR("item's anchor is specified as top_right, but the item's"
+                  "width is set to auto\n");
+
+          child->pos_local.y = @child.style.pos.x;
+          break;
+
+        case @schema.anchor.bottom_right:
+          if (!wauto)
+            child->pos_local.x = 
+              (@item.getPaddedWidth - child->size.x) - @child.style.pos.x;
+          else
+            ERROR("item's anchor is specified as bottom_right, but the item's"
+                  "width is set to auto\n");
+
+          if (!hauto)
+            child->pos_local.y = 
+              (@item.getPaddedHeight - child->size.y) - @child.style.pos.y;
+          else
+            ERROR("item's anchor is specified as bottom_right, but the item's"
+                  "height is set to auto\n");
+          break;
+
+        case @schema.anchor.bottom_left:
+          if (!hauto)
+            child->pos_local.y = 
+              (@item.getPaddedHeight - child->size.y) - @child.style.pos.y;
+          else
+            ERROR("item's anchor is specified as bottom_left, but the item's"
+                  "height is set to auto\n");
+
+          child->pos_local.x = @child.style.pos.x;
+          break;
+        }
         break;
 
       // NOTE(sushi) fixed positioning is handled in gen item branch
@@ -1099,10 +1287,8 @@ void UI::genItemBranch(ItemNode* node)
         vp,
         ip,
         sum,
-        item->pos_screen +
-        @item.style.margin.top_left +
-        @item.style.padding.top_left,
-        @item.getBorderedArea,
+        {@item.style.margin.left, @item.style.margin.top},
+        @item.getMarginedArea,
         @item.style.background_color);
 
     item->builtin.background->counts_used = sum;
@@ -1126,9 +1312,7 @@ void UI::genItemBranch(ItemNode* node)
         ip,
         sum,
         @item.style.border,
-        item->pos_screen +
-        @item.style.margin.top_left +
-        @item.style.border.top_left,
+        {0.f, 0.f},
         @item.getBorderedArea,
         @item.style.border_color);
 
@@ -1218,29 +1402,91 @@ void UI::genItemBranch(ItemNode* node)
 
 /* ----------------------------------------------------------------------------
  */
-b8 UI::findHoveredItem(ItemTree::Node* node)
+b8 UI::testFocusableRegion(vec2f pos, vec2f size)
 {
-  Item* item = node->data;
+  if (focus_consumed)
+    return false;
 
-  $ local item = ui.createItemContext("Item", "item")
-  @@item.style:lookup(display)
-
-  if (!@item.style.display.test(hidden) && item->shouldPlaceChildren())
+  if (math::pointInRect(
+        eng->input.mouse.window,
+        updating_item->pos_screen + pos,
+        size))
   {
-    for (ItemTree::Node* child = node->last_child; child; child = child->prev)
-    {
-      if (findHoveredItem(child))
-        return true;
-    }
-  }
-
-  if (item->containsPoint(eng->input.mouse.window))
-  {
-    hovered = item;
+    focus_consumed = true;
     return true;
   }
 
   return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::emitDrawCmd(
+    DrawCmd* drawcmd, 
+    Item* item, 
+    vec4f current_scissor)
+{
+  if (drawcmd->counts_used.y == 0)
+    return;
+
+  b8 drawcmd_scissor = 
+    item != nullptr && 
+    drawcmd->scissor != vec4f(-1.f, -1.f, -1.f, -1.f);
+
+  if (drawcmd_scissor)
+  {
+    f32 scissor_x = item->pos_screen.x + max(0.f, drawcmd->scissor.x);
+    f32 scissor_y = item->pos_screen.y + max(0.f, drawcmd->scissor.y);
+    f32 scissor_w = min(item->size.x, drawcmd->scissor.z);
+    f32 scissor_h = min(item->size.y, drawcmd->scissor.w);
+    
+    scissor_y = eng->window.size.y - (scissor_y + scissor_h);
+
+    eng->renderer.setScissor(
+      vec2i(scissor_x, scissor_y), vec2i(scissor_w, scissor_h));
+  }
+
+  if (notnil(drawcmd->tex))
+  {
+    TRACE("  drawcmd has tex ", drawcmd->tex.index, "\n");
+    eng->renderer.bindTexture(drawcmd->tex);
+  }
+  else
+  {
+    TRACE("  drawcmd has no tex\n");
+    eng->renderer.bindTexture(eng->white_texture);
+  }
+
+  TRACE("  pushing draw \n",
+      "      io: ", drawcmd->index_offset,
+      "\n    ic: ", drawcmd->counts_used.y,
+      "\n    vo: ", drawcmd->vertex_offset, "\n");
+
+  eng->renderer.draw(
+    drawcmd->index_offset,
+    drawcmd->counts_used.y,
+    drawcmd->vertex_offset);
+
+  if (drawcmd_scissor)
+  {
+    eng->renderer.setScissor(current_scissor.xy(), current_scissor.zw());
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::emitDrawCmds( DeferredDrawCmdList& drawcmds)
+{
+  for (DeferredDrawCmd& cmd : drawcmds)
+  {
+    if (cmd.drawcmd->counts_used.x != 0)
+    {
+      f32 push_constant[9] = {0};
+      cmd.transform.toMat3(push_constant);
+      eng->renderer.pushConstant(&push_constant, sizeof(push_constant));
+    }
+    emitDrawCmd(cmd.drawcmd, nullptr, {});
+  }
 }
 
 /* ----------------------------------------------------------------------------

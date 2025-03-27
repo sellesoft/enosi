@@ -3,9 +3,9 @@
  */
 
 $ require "common"
-$ local Comp = require "game.Component"
+$ local Comp = require "game.component.Component"
 
-@@lpp.import "game/Component.lh"
+@@lpp.import "game/component/Component.lh"
 
 #include "Color.h"
 #include "math/vec.h"

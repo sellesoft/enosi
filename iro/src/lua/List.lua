@@ -20,7 +20,7 @@ local List = Type.make()
 List.new = function(init)
   if init then
     assert(type(init) == "table", 
-      "List.new got "..type(init).."\n"..debug.traceback())
+      "List.new got a "..type(init).." instead of a table")
   else
     init = {}
   end
@@ -67,6 +67,10 @@ end
 List.pushFront = function(self, elem)
   table.insert(self, 1, elem)
   return self
+end
+
+List.popFront = function(self)
+  return table.remove(self, 1)
 end
 
 List.pushList = function(self, l)

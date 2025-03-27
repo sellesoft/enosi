@@ -14,10 +14,10 @@
 namespace lpp
 {
 
+/* ============================================================================
+ */
 struct Parser
 {
-  Array<Token> tokens;
-
   Lexer lexer;
 
   Token* curt;
@@ -30,18 +30,30 @@ struct Parser
   // A mapping from the generated metacode back to the original input.
   // This is used to generate a line mapping later so that lua errors can
   // be properly mapped to the lpp file.
-  struct LocMapping { s32 from; s32 to; };
+  struct LocMapping 
+  { 
+    Token token;
+    s32 from; 
+    s32 to; 
+  };
   Array<LocMapping> locmap;
   s32 bytes_written = 0; // tracked solely for the locmap
 
   jmp_buf err_handler;
 
-  b8   init(Source* source, io::IO* instream, io::IO* outstream);
+  b8 init(
+    Source* source, 
+    io::IO* instream, 
+    io::IO* outstream,
+    LexerConsumer* lex_diag_consumer);
+
   void deinit();
 
   b8 run();
 
   // internal stuff
+
+  void pushLocMap(s32 from_offset = 0, s32 to_offset = 0);
 
   b8 nextToken();
   b8 nextSignificantToken();
@@ -49,6 +61,8 @@ struct Parser
   b8 at(Token::Kind kind);
 
   String getRaw();
+
+  u64 curtIdx() const { return curt - lexer.tokens.arr; }
 
   void writeTokenSanitized();
 

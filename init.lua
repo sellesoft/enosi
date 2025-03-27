@@ -3,7 +3,7 @@
 local build_cmds = require "build.commands"
 local List = require "List"
 local Type = require "Type"
-local json = require "json"
+local json = require "JSON"
 
 local writeSeparator = function()
   io.write
@@ -284,7 +284,7 @@ local function getSourceToObj(path, bdir, c_to_o, l_to_o)
   end)
 end
 
-local compile_commands = {}
+local compile_commands = List{}
 local address_sanitizer = false
 
 local function compileObj(src_to_obj, cmd)
@@ -293,12 +293,12 @@ local function compileObj(src_to_obj, cmd)
     local args = flattenList(cmd:complete(v[1], v[2]))
 
 	if not v[1]:find("%.lua") then
-		table.insert(compile_commands,
+    compile_commands:push
 		{
 		  directory = cwd,
 		  arguments = args,
 		  file = v[1]
-		})
+		}
 	end
 
     if 0 ~= execBuildCmd(args)  then

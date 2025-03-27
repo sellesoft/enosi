@@ -1,0 +1,184 @@
+[
+  {
+    "type": "lua_block",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "lua_inline",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "macro",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "macro_identifier",
+          "named": true
+        },
+        {
+          "type": "macro_phase2",
+          "named": true
+        },
+        {
+          "type": "macro_phase3",
+          "named": true
+        },
+        {
+          "type": "macro_string_arg",
+          "named": true
+        },
+        {
+          "type": "macro_tuple_args",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "macro_identifier",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "macro_identifier_part",
+          "named": true
+        },
+        {
+          "type": "operator",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "macro_identifier_part",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "macro_string_arg",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "macro_tuple_arg",
+    "named": true,
+    "fields": {}
+  },
+  {
+    "type": "macro_tuple_args",
+    "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "macro_tuple_arg",
+          "named": true
+        },
+        {
+          "type": "operator",
+          "named": true
+        },
+        {
+          "type": "punc_bracket",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "source_file",
+    "named": true,
+    "root": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": false,
+      "types": [
+        {
+          "type": "document",
+          "named": true
+        },
+        {
+          "type": "lua_block",
+          "named": true
+        },
+        {
+          "type": "lua_inline",
+          "named": true
+        },
+        {
+          "type": "lua_line",
+          "named": true
+        },
+        {
+          "type": "macro",
+          "named": true
+        },
+        {
+          "type": "operator",
+          "named": true
+        },
+        {
+          "type": "punc_bracket",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "\"",
+    "named": false
+  },
+  {
+    "type": "(",
+    "named": false
+  },
+  {
+    "type": ")",
+    "named": false
+  },
+  {
+    "type": "document",
+    "named": true
+  },
+  {
+    "type": "lua_line",
+    "named": true
+  },
+  {
+    "type": "macro_phase2",
+    "named": true
+  },
+  {
+    "type": "macro_phase3",
+    "named": true
+  },
+  {
+    "type": "operator",
+    "named": true
+  },
+  {
+    "type": "punc_bracket",
+    "named": true
+  },
+  {
+    "type": "{",
+    "named": false
+  },
+  {
+    "type": "}",
+    "named": false
+  }
+]

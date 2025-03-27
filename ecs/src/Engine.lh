@@ -9,6 +9,7 @@ $ local cmn = require "common"
 
 @@lpp.import "asset/AssetMgr.lh"
 @@lpp.import "asset/SourceDataFileReg.lh"
+
 @@lpp.import "input/InputMgr.lh"
 @@lpp.import "input/Input.events.lh"
 
@@ -58,6 +59,8 @@ struct Engine
 
   ui::Inspector* inspector;
 
+
+  SourceDataFileHandle h_test;
 
   b8 init();
   void deinit();

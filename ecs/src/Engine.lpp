@@ -17,19 +17,26 @@ using namespace iro;
 @@lpp.import "ui/widgets/Text.lh"
 @@lpp.import "ui/widgets/Button.lh"
 @@lpp.import "ui/widgets/Separator.lh"
+@@lpp.import "ui/widgets/InputText.lh"
 @@lpp.import "ui/widgets/CollapsingHeader.lh"
 
 @@lpp.import "ui/Inspector.lh"
 
-@@lpp.import "game/Component.lh"
-@@lpp.import "game/Entity.lh"
 @@lpp.import "game/Transform.comp.lh"
-@@lpp.import "asset/SourceDataParser.lh"
-@@lpp.import "asset/SourceDataFile.lh"
+@@lpp.import "game/entity/Entity.lh"
+@@lpp.import "game/component/Component.lh"
+
 @@lpp.import "asset/Packing.lh"
+@@lpp.import "asset/SourceDataFile.lh"
+@@lpp.import "asset/SourceDataParser.lh"
+
+@@lpp.import "asset/SourceDataEditor.lh"
 
 static Logger logger =
   Logger::create("ecs.eng"_str, Logger::Verbosity::Info);
+
+ui::Item* base;
+ui::SourceDataEditor* sdata_edit_test;
 
 /* ----------------------------------------------------------------------------
  */
@@ -68,8 +75,7 @@ $ end
 
     gfx::CompiledTexture::CompileParams white_texture_params =
     {
-      .name         = "white"_str,
-      .data_path    = "data/textures/white.texture"_str,
+      .name         = "assets/textures/white"_str,
       .width        = 4,
       .height       = 4,
       .format       = gfx::ImageFormat::BW,
@@ -105,27 +111,25 @@ $ end
     io::StaticBuffer<511> texture_data_path_buffer;
     auto png_glob = fs::Globber::create("assets/textures/*.png"_str);
     png_glob.run([&](fs::Path& asset_path)
-      {
-        texture_data_path_buffer.len = 0;
-        String name = asset_path.basename().subToFirst('.');
-        gfx::CompiledTexture::writeDataPath(
-          &texture_data_path_buffer, name, assetmgr);
+    {
+      texture_data_path_buffer.len = 0;
+      String name = fs::Path::removeExtension(asset_path.asStr());
+      gfx::CompiledTexture::writeDataPath(
+        &texture_data_path_buffer, name, assetmgr);
 
-        gfx::CompiledTexture::CompileParams params =
-        { //TODO(delle) add TextureDef for specifying these params
-          .name         = name,
-          .asset_path   = asset_path.buffer.asStr(),
-          .data_path    = texture_data_path_buffer.asStr(),
-          .format       = gfx::ImageFormat::RGBA,
-          .filter       = gfx::ImageFilter::Nearest,
-          .address_mode = gfx::ImageAddressMode::ClampToWhite,
-          .allocator    = &mem::stl_allocator,
-          .assetmgr     = &assetmgr,
-        };
+      gfx::CompiledTexture::CompileParams params =
+      { //TODO(delle) add TextureDef for specifying these params
+        .name         = name,
+        .format       = gfx::ImageFormat::RGBA,
+        .filter       = gfx::ImageFilter::Nearest,
+        .address_mode = gfx::ImageAddressMode::ClampToWhite,
+        .allocator    = &mem::stl_allocator,
+        .assetmgr     = &assetmgr,
+      };
 
-        gfx::CompiledTexture::compilePNG(params);
-        return true;
-      });
+      gfx::CompiledTexture::compilePNG(params);
+      return true;
+    });
     png_glob.destroy();
   }
 
@@ -200,15 +204,13 @@ $ end
       .num_codepoints = 94,
     };
 
-    gfx::Font::CompileParams params =
-    {
-      .name       = "gohu"_str,
-      .asset_path = "assets/fonts/gohu.bdf"_str,
-      .data_path  = "data/fonts/gohu.cmp_font"_str,
-      .ranges     = CodepointRanges::from(&ascii, 1),
-      .allocator  = &mem::stl_allocator,
-      .assetmgr   = &assetmgr,
-    };
+  gfx::Font::CompileParams params =
+  {
+    .name       = "assets/fonts/gohu"_str,
+    .ranges     = CodepointRanges::from(&ascii, 1),
+    .allocator  = &mem::stl_allocator,
+    .assetmgr   = &assetmgr,
+  };
 
     gfx::Font::compileBDF(params);
   }
@@ -225,8 +227,55 @@ $ end
   INFO("done initializing in ",
     WithUnits(TimePoint::monotonic() - start_time), "\n");
 
-  // inspector = ui::Inspector::create(ui, this);
-  $ local inspector = ui.createItemContext("Inspector", "inspector")
+$ if true then
+
+  base = ui::Item::begin(ui, "base"_str);
+  {
+    @ui.style(base, Item, | size: 400 400)
+
+    sdata_edit_test = ui::SourceDataEditor::create(ui);
+
+    h_test =
+     source_data_file_reg.loadFromDisk("assets/maps/Test.map"_str);
+
+    sdata_edit_test->setSourceData(
+      ui, 
+      h_test.getFile()->returned_data,
+      h_test.getFile(),
+      "MapDef"_hashed);
+  }
+  ui.endItem();
+
+$ else
+
+  base = ui::Item::begin(ui, "base"_str);
+  {
+    @ui.style(base, Item, 
+    | size: 200 200
+    | display: flex
+    | background_color: 0xff0000ff)
+
+    auto* a = ui::Item::make(ui, "a"_str);
+    @ui.style(a, Item,
+    | size: 100% flex(1)
+    | background_color: 0x00ff00ff)
+
+    auto* c = ui::Item::make(ui, "c"_str);
+    @ui.style(c, Item,
+    | size: 100% 10
+    | background_color: 0xee00eeff)
+
+    auto* b = ui::Item::make(ui, "b"_str);
+    @ui.style(b, Item,
+    | size: 100% flex(2)
+    | background_color: 0x0000ffff)
+  }
+  ui.endItem();
+
+$ end
+
+
+  INFO("done!\n");
 
   return true;
 }
@@ -305,10 +354,12 @@ b8 Engine::update()
   if (!input.update(*this))
     return ERROR("failed to update input\n");
 
-  gamemgr.update();
+  gamemgr.render();
 
   if (!ui.update(*this))
     return ERROR("failed to update ui\n");
+
+  gamemgr.update();
 
   // inspector->fps->dirty = true;
   //

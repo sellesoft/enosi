@@ -1,0 +1,118 @@
+/*
+ *  Widget for editing some source data.
+ */
+
+$ require "common"
+$ local ui = require "ui.UI"
+
+@@lpp.import "ui/Item.lh"
+
+@@lpp.import "ui/widgets/InputText.lh"
+
+@@lpp.import "graphics/Font.lh"
+
+@@lpp.import "asset/SourceDataFile.lh"
+
+struct SourceData;
+
+namespace ui
+{
+
+struct DatumState;
+
+/* ============================================================================
+ */
+@ui.widget(SourceDataEditor,
+schema
+{
+  font        = inherit;
+  font_height = inherit;
+  text_color  = inherit;
+},
+struct
+{
+  // The SourceData we are editing. This is not owned by the editor, and 
+  // so is not cleaned up when setSourceData is called, and is expected to
+  // be kept in memory until released from the editor.
+  SourceData* sdata;
+  SourceDataFile* sfile;
+
+  u64 type_id;
+
+  f32 max_name_width;
+
+  DatumState* current_datum;
+
+  gfx::Font* font;
+  gfx::Texture font_texture;
+
+  /* ==========================================================================
+   *  State relevant for a Datum being edited textually. This is used to 
+   *  reduce some of the overhead of datum states having to store and manage
+   *  their own input text states as well as to reduce the amount of 
+   *  input text states we store to 1.
+   */
+  struct DatumTextEdit
+  {
+    enum class Kind
+    {
+      Name,
+      Type,
+      Value,
+    };
+
+    Kind kind;
+
+    SourceData* datum;
+
+    vec2f pos;
+    vec2f size;
+
+    InputTextState input_text;
+
+    void update(UI& ui, UpdateReason reason, SourceDataEditor* editor);
+
+    void onFocusLost(SourceDataFile* file);
+  };
+
+  DatumTextEdit datum_text_edit;
+
+  static SourceDataEditor* create(UI& ui);
+  void destroy();
+
+  void setSourceData(
+      UI& ui, 
+      SourceData* data, 
+      SourceDataFile* file, 
+      u64 type_id = 0);
+
+  void evaluate(UI* ui) override;
+  void generate(UI* ui) override;
+  void update(UI* ui, UpdateReason reason) override;
+  void reportDrawCmds(UI* ui, DrawCmdLists& lists) override;
+
+  // Used by datum states during 'update' to report some area that if clicked
+  // will begin textually editing some data. This should only be used during
+  // an update in which the reason == MouseReleased (unless in the future 
+  // we have some other way to focus text boxes), as if this finds that the
+  // cursor is contained in the provided rect, it will set the current 
+  // text edit state to the provided information.
+  void beginEditDatumText(
+    UI& ui,
+    SourceData* datum, 
+    DatumTextEdit::Kind kind,
+    vec2f pos,
+    vec2f size);
+
+  b8 isEditingDatumText(
+    SourceData* datum, 
+    DatumTextEdit::Kind kind) const;
+
+  void endEditDatumText(SourceData* datum, DatumTextEdit::Kind kind);
+
+private:
+  
+  void placeSourceDataItems(UI& ui, SourceData* sdata);
+})
+
+}

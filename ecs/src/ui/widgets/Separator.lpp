@@ -36,23 +36,13 @@ void Separator::generate(UI* ui)
 
   vec2i sum = {};
 
-  auto left = 
-    vec2i(
-      pos_screen.x + @this.style.margin.left, 
-      pos_screen.y + @this.style.margin.top);
-
-  auto right = 
-    vec2i(
-      pos_screen.x + size.x - @this.style.margin.right, 
-      pos_screen.y + @this.style.margin.top);
-
   sum += 
     gfx::putLine(
       vp,
       ip,
       sum,
-      left, 
-      right,
+      { 0.f, 0.f }, 
+      { size.x, 0.f },
       1.f,
       {255, 255, 255, 255});
 

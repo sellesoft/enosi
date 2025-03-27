@@ -323,7 +323,7 @@ struct Logger
       }
     }
 
-    assert(v != Verbosity::Fatal);
+    // assert(v != Verbosity::Fatal);
   }
 
   template<io::Formattable... T>

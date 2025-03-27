@@ -7,7 +7,7 @@
 namespace iro::fs
 {
 
-static Logger logger = 
+static Logger logger =
   Logger::create("iro.fs.path"_str, Logger::Verbosity::Trace);
 
 /* ----------------------------------------------------------------------------
@@ -136,9 +136,65 @@ String Path::removeBasename(String path)
 
 /* ----------------------------------------------------------------------------
  */
+String Path::removeExtension(String path)
+{
+  u8* scan = &path.last();
+  u8* dot = nullptr;
+
+  while (scan >= path.ptr)
+  {
+    if (*scan == '.')
+      dot = scan;
+    else if (*scan == '/')
+      break;
+
+    scan -= 1;
+  }
+
+  if (dot)
+    return String::from(path.ptr, dot);
+
+  return path;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+String Path::removeFirstDir(String path)
+{
+  u8* scan = path.ptr;
+
+  if (*scan == '/')
+    scan += 1;
+
+  while (scan < path.end())
+  {
+    if (*scan == '/' && scan < &path.last())
+      return String::from(scan + 1, path.end());
+
+    scan += 1;
+  }
+
+  return path;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 TimePoint Path::modtime(String path)
 {
   return FileInfo::of(path).last_modified_time;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Path::isRooted(String path)
+{
+#if IRO_WIN32
+  return path.findFirst(':').found();
+#elif IRO_LINUX
+  return path.ptr[0] == '/';
+#else
+#  error "unhandle OS in Path::isRooted"
+#endif
 }
 
 /* ----------------------------------------------------------------------------
@@ -183,7 +239,7 @@ s8 Path::compareModTimes(String path0, String path1)
 }
 
 /* ----------------------------------------------------------------------------
- *  TODO(sushi) implement alternative braces 
+ *  TODO(sushi) implement alternative braces
  *              (eg. path.{cpp,h} matches both 'path.cpp' and 'path.h')
  *              and implement character classes
  *              if i ever need them or if someone else wants them
@@ -199,12 +255,12 @@ b8 Path::matches(String name, String pattern)
   s64 pattern_pos = 0;
   s64 name_len = name.len;
   s64 pattern_len = pattern.len;
-  
+
   s64 name_backup = -1;
   s64 pattern_backup = -1;
 
   b8 nodot = true;
-  
+
   while (name_pos < name_len)
   {
     if (pattern_pos < pattern_len)
@@ -232,7 +288,7 @@ b8 Path::matches(String name, String pattern)
         if (pattern_pos + 1 < pattern_len)
           pattern_pos += 1;
 
-      default: 
+      default:
         {
           if (pattern.ptr[pattern_pos] == '/' && name.ptr[name_pos] != '/')
             break;
@@ -240,11 +296,11 @@ b8 Path::matches(String name, String pattern)
           nodot = pattern.ptr[pattern_pos] == '/';
 
           // decode at positions
-          utf8::Codepoint pattern_codepoint = 
+          utf8::Codepoint pattern_codepoint =
             utf8::decodeCharacter(
               pattern.ptr + pattern_pos, pattern.len - pattern_pos);
 
-          utf8::Codepoint name_codepoint = 
+          utf8::Codepoint name_codepoint =
             utf8::decodeCharacter(name.ptr + name_pos, name.len - name_pos);
 
           if (pattern_codepoint != name_codepoint)
@@ -257,7 +313,7 @@ b8 Path::matches(String name, String pattern)
       }
     }
 
-    if (pattern_backup == -1 || 
+    if (pattern_backup == -1 ||
        (name_backup != -1 && name.ptr[name_backup] == '/'))
       return false;
     // star loop: backtrack to the last * but dont jump over /

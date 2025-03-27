@@ -1,0 +1,86 @@
+/*
+ *  Manager of Component allocation and such.
+ */
+
+struct Component;
+
+template<typename T>
+u64 getComponentKind();
+
+/* ============================================================================
+ */
+template<typename T>
+struct ComponentIterState
+{
+  typedef DLinkedPool<T>::Node Node;
+
+  Node* node;
+
+  Node* operator++()
+  {
+    node = node->next;
+    return node;
+  }
+
+  b8 operator !=(const ComponentIterState<T>& rhs)
+  {
+    return node != rhs.node;
+  }
+
+  T* operator->()
+  {
+    return node->data;
+  }
+
+  T& operator *()
+  {
+    return *node->data;
+  }
+};
+
+/* ============================================================================
+ */
+template<typename T>
+struct ComponentIter
+{
+  typedef DLinkedPool<T>::Node Node;
+  Node* start;
+
+  ComponentIterState<T> begin() { return ComponentIterState<T>{start}; }
+  ComponentIterState<T> end() { return ComponentIterState<T>{nullptr}; }
+};
+
+/* ============================================================================
+ */
+struct ComponentMgr
+{
+  // Defined in ComponentMgr.lpp as we generate pools from Components defined
+  // around the project and we don't want to pollute this header with those 
+  // types.
+  struct CompPools* pools;
+
+  b8 init();
+  void deinit();
+
+  template<typename T>
+  T* allocateComponent();
+
+  // Allocates a component of some type and initializes it with some data that
+  // exists elsewhere. Used for creating components from data specified in a 
+  // def.
+  template<typename T>
+  T* allocateComponentFromInitialData(const T& comp)
+  {
+    T* pcomp = allocateComponent<T>();
+    // TODO(sushi) this is scuffed and needs to be done better.
+    void* node = pcomp->node;
+    mem::copy(pcomp, (void*)&comp, sizeof(T));
+    pcomp->node = node;
+    return pcomp;
+  }
+
+  void deallocateComponent(Component* cmp);
+
+  template<typename T>
+  ComponentIter<T> iterate();
+};
