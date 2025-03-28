@@ -78,6 +78,12 @@ struct RendererPipeline
 
 /* ----------------------------------------------------------------------------
  */
+constexpr u32 UNIFORM_BUFFER_DESCRIPTOR_SET_INDEX = 0;
+constexpr u32 SAMPLER_DESCRIPTOR_SET_INDEX = 1;
+constexpr u32 STORAGE_BUFFER_DESCRIPTOR_SET_INDEX = 2;
+
+/* ----------------------------------------------------------------------------
+ */
 struct RendererInternal
 {
   // Pools
@@ -128,7 +134,9 @@ $ end -- if ECS_DEBUG
   VkCommandPool command_pool;
   VkCommandBuffer command_buffer;
 
-  VkDescriptorSetLayout default_descriptor_set_layout;
+  VkDescriptorSetLayout default_uniform_buffer_descriptor_set_layout;
+  VkDescriptorSetLayout default_sampler_descriptor_set_layout;
+  VkDescriptorSetLayout default_storage_buffer_descriptor_set_layout;
 
   VkDescriptorPool descriptor_pool;
 

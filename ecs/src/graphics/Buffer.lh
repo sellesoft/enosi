@@ -132,7 +132,7 @@ struct Buffer
     Persistent,
   };
 
-  static constexpr u64 MAP_WHOLE_BUFFER = 0;
+  static constexpr u64 MAP_WHOLE_BUFFER = MAX_U64;
 
 
   u32 index;

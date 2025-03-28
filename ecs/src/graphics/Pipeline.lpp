@@ -48,11 +48,20 @@ b8 Pipeline::init(
     .size = renderer.getMaxPushConstantSize(),
   };
 
+  VkDescriptorSetLayout descriptor_set_layouts[] =
+  {
+    ri.default_uniform_buffer_descriptor_set_layout,
+    ri.default_sampler_descriptor_set_layout,
+    ri.default_storage_buffer_descriptor_set_layout,
+  };
+  constexpr u32 descriptor_set_layout_count =
+    sizeof(descriptor_set_layouts) / sizeof(descriptor_set_layouts[0]);
+
   VkPipelineLayoutCreateInfo pipeline_layout_create_info =
   {
     .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-    .setLayoutCount = 1,
-    .pSetLayouts = &ri.default_descriptor_set_layout,
+    .setLayoutCount = descriptor_set_layout_count,
+    .pSetLayouts = descriptor_set_layouts,
     .pushConstantRangeCount = 1,
     .pPushConstantRanges = &push_constant,
   };

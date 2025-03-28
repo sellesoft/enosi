@@ -1,11 +1,11 @@
 #version 450
 
+//NOTE: every field is padded to 16 bytes due to std140
 layout(std140, set = 0, binding = 0) uniform SceneBuffer
 {
   mat3 proj;
   mat3 view;
-  vec2 resolution;
-  float time;
+  vec4 resolution_and_time;
 }scene;
 
 layout(push_constant) uniform PushConstant

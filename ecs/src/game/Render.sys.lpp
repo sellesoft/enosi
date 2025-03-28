@@ -282,10 +282,11 @@ b8 RenderSys::update(const UpdateParams& params)
     mat3x2 proj = mat3x2::identity();
     proj.set(0, 0, EyeSys::pixels_per_meter * 2.f / (f32)params.viewport.w);
     proj.set(1, 1, EyeSys::pixels_per_meter * 2.f / (f32)params.viewport.h);
-    proj.toMat3(scene.proj);
-    params.view.toMat3(scene.view);
-    scene.resolution = vec2f(params.viewport.w, params.viewport.h);
-    scene.time = (f32)renderer.engine->frame_start_time;
+    proj.toMat4(scene.proj);
+    params.view.toMat4(scene.view);
+    scene.resolution_and_time[0] = (f32)params.viewport.w;
+    scene.resolution_and_time[1] = (f32)params.viewport.h;
+    scene.resolution_and_time[2] = (f32)renderer.engine->frame_start_time;
   }
 
   external_counts = {};
@@ -366,6 +367,19 @@ b8 RenderSys::update(const UpdateParams& params)
     for (Sprite& sprite : cmpmgr.iterate<Sprite>())
     {
       Entity* owner = entmgr.getEntity(sprite.owner);
+      if (owner == nullptr)
+      {
+        ERROR("sprite component for entity ", sprite.owner.value,
+          " has no owner\n");
+        continue;
+      }
+
+      if (sprite.texture == nullptr)
+      {
+        WARN("sprite component for entity ", owner->name,
+          " has no texture\n");
+        continue;
+      }
 
       if (auto* transform = owner->tryComp<Transform>())
       {

@@ -518,7 +518,7 @@ void MapEditor::evaluate(UI* ui)
     map_render->tex,
     {0,0,0,255});
 
-  need_render = true; //TODO(delle) see if we still need this
+  need_render = true;
 }
 
 /* ----------------------------------------------------------------------------
@@ -808,7 +808,7 @@ SourceData* MapEditor::getTileSourceData(
  */
 void MapEditor::renderMap(UI& ui)
 {
-  if (!need_render)
+  if (!need_render || size.x <= 0 || size.y <= 0)
     return;
 
   need_render = false;

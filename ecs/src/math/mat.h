@@ -110,7 +110,17 @@ struct mat3x2
   {
     out[0] = arr[0]; out[1] = arr[1]; out[2] = arr[2];
     out[3] = arr[3]; out[4] = arr[4]; out[5] = arr[5];
-    out[0] = 0.f;    out[1] = 0.f;    out[2] = 1.f;
+    out[6] = 0.f;    out[7] = 0.f;    out[8] = 1.f;
+  }
+  
+  /* --------------------------------------------------------------------------
+   */
+  void toMat4(f32 out[16]) const
+  {
+    out[0] = arr[0]; out[1] = arr[1]; out[2] = arr[2]; out[3] = 0.f;
+    out[4] = arr[3]; out[5] = arr[4]; out[6] = arr[5]; out[7] = 0.f;
+    out[8] = 0.f;    out[9] = 0.f;    out[10] = 1.f;   out[11] = 0.f;
+    out[12] = 0.f;   out[13] = 0.f;   out[14] = 0.f;   out[15] = 1.f;
   }
 };
 

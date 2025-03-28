@@ -319,7 +319,9 @@ b8 Buffer::init(
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
       .descriptorPool = ri.descriptor_pool,
       .descriptorSetCount = 1,
-      .pSetLayouts = &ri.default_descriptor_set_layout,
+      .pSetLayouts = (usage == Usage::UniformBuffer)
+        ? &ri.default_uniform_buffer_descriptor_set_layout
+        : &ri.default_storage_buffer_descriptor_set_layout,
     };
 
     if (VK_SUCCESS != vkAllocateDescriptorSets(ri.device, &alloc_info,
@@ -415,7 +417,11 @@ b8 Buffer::deinit(Renderer& renderer)
 b8 Buffer::map(Renderer& renderer, u64 offset, u64 size)
 {
   RendererInternal& ri = *(RendererInternal*)renderer.internal;
-  TRACE("mapping ",size," bytes of the buffer at index ",index,"\n");
+  TRACE("mapping ", size, " bytes of the buffer at index ", index, "\n");
+
+  if (size == 0)
+    return WARN("attempted to map 0 bytes of the buffer at index ", index,
+      "\n");
 
   if (index == 0)
     return ERROR("attempted to map an uninitialized buffer\n");
@@ -429,14 +435,16 @@ b8 Buffer::map(Renderer& renderer, u64 offset, u64 size)
     return ERROR("attempted to map an uninitialized buffer\n");
 
   if (mapped_data != nullptr)
-    return ERROR("attempted to map the already mapped buffer at index ",index,"\n");
+    return ERROR("attempted to map the already mapped buffer at index ",
+      index, "\n");
 
   if (size == MAP_WHOLE_BUFFER)
     size = VK_WHOLE_SIZE;
 
   if (VK_SUCCESS != vkMapMemory(ri.device, buffer->memory,
     offset, size, 0, &mapped_data))
-    return ERROR("failed to map ",size," bytes of the buffer at index ",index,"\n");
+    return ERROR("failed to map ", size, " bytes of the buffer at index ",
+      index, "\n");
 
   buffer->mapped_offset = offset;
   buffer->mapped_size = size;

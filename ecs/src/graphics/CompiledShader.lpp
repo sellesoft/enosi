@@ -165,10 +165,12 @@ b8 CompiledShader::compileGLSL(CompileParams& params)
   }
   defer { shaderc_compile_options_release(options); };
 
-$ if not ECS_DEBUG then
+$ if ECS_DEBUG then
+  shaderc_compile_options_set_generate_debug_info(options);
+$ else -- if ECS_DEBUG
   shaderc_compile_options_set_optimization_level(
     options, shaderc_optimization_level_performance);
-$ end -- if not ECS_DEBUG
+$ end -- if ECS_DEBUG
 
   shaderc_compilation_result_t result = shaderc_compile_into_spv(
     compiler,

@@ -72,13 +72,11 @@ b8 Framebuffer::init(
   {
     .srcSubpass = VK_SUBPASS_EXTERNAL,
     .dstSubpass = 0,
-    .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-      | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-    .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-      | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-    .srcAccessMask = 0,
+    .srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+    .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+    .srcAccessMask = VK_ACCESS_MEMORY_READ_BIT,
     .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
-      | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+      | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
     .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
   };
 
@@ -117,6 +115,8 @@ b8 Framebuffer::init(
   RendererFramebuffer* framebuffer = ri.framebuffer_pool.add();
   framebuffer->framebuffer = framebuffer_handle;
   framebuffer->renderpass = renderpass_handle;
+  framebuffer->width = width;
+  framebuffer->height = height;
   framebuffer->clear_color = clear_color;
   index = ri.framebuffer_pool.index_of(framebuffer);
   ri.framebuffer_count++;

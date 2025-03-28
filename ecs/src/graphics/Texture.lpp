@@ -35,6 +35,25 @@ static VkFormat imageFormatToVulkan(ImageFormat x){
 
 /* ----------------------------------------------------------------------------
  */
+static u32 imageFormatToBytesPerPixel(ImageFormat x){
+  switch(x){
+    case ImageFormat::BW:
+      return 1;
+    case ImageFormat::BWA:
+      return 2;
+    case ImageFormat::RGB:
+      return 3;
+    case ImageFormat::RGBA:
+      return 4;
+    case ImageFormat::BGRA:
+      return 4;
+  }
+  FATAL("invalid ImageFormat: ", (u32)x);
+  return 0;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 static VkFilter imageFilterToVulkan(ImageFilter x){
   switch(x){
     case ImageFilter::Nearest:
@@ -273,7 +292,8 @@ b8 Texture::init(
       return ERROR("failed to map memory for a staging buffer when"
         " uploading initial texture data\n");
 
-    mem::copy(data, pixels, memory_requirements.size);
+    u64 requested_size = width * height * imageFormatToBytesPerPixel(format);
+    mem::copy(data, pixels, requested_size);
 
     vkUnmapMemory(ri.device, staging_buffer_memory);
 
@@ -379,7 +399,7 @@ b8 Texture::init(
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
       .descriptorPool = ri.descriptor_pool,
       .descriptorSetCount = 1,
-      .pSetLayouts = &ri.default_descriptor_set_layout,
+      .pSetLayouts = &ri.default_sampler_descriptor_set_layout,
     };
 
     if (VK_SUCCESS != vkAllocateDescriptorSets(ri.device, &alloc_info,
@@ -397,7 +417,7 @@ b8 Texture::init(
     {
       .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
       .dstSet = descriptor_set,
-      .dstBinding = 1,
+      .dstBinding = 0,
       .dstArrayElement = 0,
       .descriptorCount = 1,
       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,

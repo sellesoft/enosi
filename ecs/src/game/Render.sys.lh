@@ -39,12 +39,12 @@ struct RenderSys
     gfx::Texture texture;
   };
 
+  //NOTE: every field is padded to 16 bytes due to std140
   struct Scene
   {
-    f32 proj[9];
-    f32 view[9];
-    vec2f resolution;
-    f32 time;
+    f32 proj[16];
+    f32 view[16];
+    f32 resolution_and_time[4];
   };
 
 

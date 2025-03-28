@@ -801,7 +801,7 @@ $ end -- if IRO_LINUX
       return FATAL("failed to create the vulkan command buffer\n");
   }
 
-  TRACE("creating the default descriptor set layout\n");
+  TRACE("creating the default descriptor set layouts\n");
   {
     VkDescriptorSetLayoutBinding uniform_buffer_binding =
     {
@@ -811,31 +811,60 @@ $ end -- if IRO_LINUX
       .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
     };
 
+    VkDescriptorSetLayoutCreateInfo uniform_buffer_layout_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .bindingCount = 1,
+      .pBindings = &uniform_buffer_binding,
+    };
+
+    if (VK_SUCCESS != vkCreateDescriptorSetLayout(ri.device,
+        &uniform_buffer_layout_info, &ri.allocator,
+        &ri.default_uniform_buffer_descriptor_set_layout))
+      return ERROR("failed to create the default uniform buffer"
+        " descriptor set layout\n");
+
     VkDescriptorSetLayoutBinding sampler_binding =
     {
-      .binding = 1,
+      .binding = 0,
       .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
       .descriptorCount = 1,
       .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
     };
 
-    VkDescriptorSetLayoutBinding bindings[] =
-    {
-      uniform_buffer_binding,
-      sampler_binding
-    };
-    constexpr u32 binding_count = sizeof(bindings) / sizeof(bindings[0]);
-
-    VkDescriptorSetLayoutCreateInfo layout_info =
+    VkDescriptorSetLayoutCreateInfo sampler_layout_info =
     {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = binding_count,
-      .pBindings = bindings,
+      .bindingCount = 1,
+      .pBindings = &sampler_binding,
     };
 
-    if (VK_SUCCESS != vkCreateDescriptorSetLayout(ri.device, &layout_info,
-        &ri.allocator, &ri.default_descriptor_set_layout))
-      return ERROR("failed to create the default descriptor set layout\n");
+    if (VK_SUCCESS != vkCreateDescriptorSetLayout(ri.device,
+        &sampler_layout_info, &ri.allocator,
+        &ri.default_sampler_descriptor_set_layout))
+      return ERROR("failed to create the default sampler"
+        " descriptor set layout\n");
+
+    VkDescriptorSetLayoutBinding storage_buffer_binding =
+    {
+      .binding = 0,
+      .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+      .descriptorCount = 1,
+      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+    };
+
+    VkDescriptorSetLayoutCreateInfo storage_buffer_layout_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .bindingCount = 1,
+      .pBindings = &storage_buffer_binding,
+    };
+
+    if (VK_SUCCESS != vkCreateDescriptorSetLayout(ri.device,
+        &storage_buffer_layout_info, &ri.allocator,
+        &ri.default_storage_buffer_descriptor_set_layout))
+      return ERROR("failed to create the default storage buffer"
+        " descriptor set layout\n");
   }
 
   TRACE("creating the vulkan descriptor pools\n");
@@ -907,13 +936,11 @@ $ end -- if IRO_LINUX
     {
       .srcSubpass = VK_SUBPASS_EXTERNAL,
       .dstSubpass = 0,
-      .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-        | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-      .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-        | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-      .srcAccessMask = 0,
+      .srcStageMask = VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+      .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+      .srcAccessMask = VK_ACCESS_MEMORY_READ_BIT,
       .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT
-        | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
       .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
     };
 
@@ -1170,7 +1197,11 @@ b8 Renderer::deinit()
   vkDestroyDescriptorPool(ri.device, ri.descriptor_pool, &ri.allocator);
 
   vkDestroyDescriptorSetLayout(ri.device,
-    ri.default_descriptor_set_layout, &ri.allocator);
+    ri.default_uniform_buffer_descriptor_set_layout, &ri.allocator);
+  vkDestroyDescriptorSetLayout(ri.device,
+    ri.default_sampler_descriptor_set_layout, &ri.allocator);
+  vkDestroyDescriptorSetLayout(ri.device,
+    ri.default_storage_buffer_descriptor_set_layout, &ri.allocator);
 
   vkDestroyCommandPool(ri.device, ri.command_pool, &ri.allocator);
 
@@ -1198,6 +1229,7 @@ b8 Renderer::update()
 {
   RendererInternal& ri = *(RendererInternal*)this->internal;
   TRACE("Renderer::update\n");
+  frame++;
 
   VkResult acquire_result = vkAcquireNextImageKHR(ri.device, ri.swapchain,
     0xFFFFFFFFFFFFFFFF, ri.image_acquired_semaphore, VK_NULL_HANDLE,
@@ -1423,8 +1455,8 @@ b8 Renderer::update()
       }
 
       vkCmdBindDescriptorSets(ri.command_buffer,
-        VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout, 1, 1,
-        &texture->descriptor_set, 0, nullptr);
+        VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout,
+        SAMPLER_DESCRIPTOR_SET_INDEX, 1, &texture->descriptor_set, 0, nullptr);
     }break;
 
     case DrawCmd::Kind::BindUniformBuffer:
@@ -1464,8 +1496,9 @@ b8 Renderer::update()
       }
 
       vkCmdBindDescriptorSets(ri.command_buffer,
-        VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout, 0, 1,
-        &buffer->descriptor_set, 0, nullptr);
+        VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout,
+        UNIFORM_BUFFER_DESCRIPTOR_SET_INDEX, 1, &buffer->descriptor_set,
+        0, nullptr);
     }break;
 
     case DrawCmd::Kind::BindStorageBuffer:
@@ -1505,8 +1538,9 @@ b8 Renderer::update()
       }
 
       vkCmdBindDescriptorSets(ri.command_buffer,
-        VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout, 2, 1,
-        &buffer->descriptor_set, 0, nullptr);
+        VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout,
+        STORAGE_BUFFER_DESCRIPTOR_SET_INDEX, 1, &buffer->descriptor_set,
+        0, nullptr);
     }break;
 
     case DrawCmd::Kind::BindVertexBuffer:
@@ -1600,15 +1634,69 @@ b8 Renderer::update()
     }
   }
 
+  TRACE("ending the render pass\n");
   vkCmdEndRenderPass(ri.command_buffer);
+
+  TRACE("ending the command buffer\n");
+  if (VK_SUCCESS != vkEndCommandBuffer(ri.command_buffer))
+    return FATAL("failed to end the command buffer\n");
+
+  TRACE("submitting the command buffer\n");
+  {
+    VkPipelineStageFlags wait_stages =
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+    VkSubmitInfo submit_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .waitSemaphoreCount = 1,
+      .pWaitSemaphores = &ri.image_acquired_semaphore,
+      .pWaitDstStageMask = &wait_stages,
+      .commandBufferCount = 1,
+      .pCommandBuffers = &ri.command_buffer,
+      .signalSemaphoreCount = 1,
+      .pSignalSemaphores = &ri.render_complete_semaphore,
+    };
+
+    if (VK_SUCCESS != vkQueueSubmit(ri.graphics_queue,1, &submit_info,
+        VK_NULL_HANDLE))
+      return FATAL("failed to submit the command buffer\n");
+  }
+
+  TRACE("presenting the frame\n");
+  {
+    VkPresentInfoKHR present_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+      .waitSemaphoreCount = 1,
+      .pWaitSemaphores = &ri.render_complete_semaphore,
+      .swapchainCount = 1,
+      .pSwapchains = &ri.swapchain,
+      .pImageIndices = &ri.default_framebuffer_index,
+    };
+
+    VkResult result = vkQueuePresentKHR(ri.graphics_queue, &present_info);
+    if (result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR)
+    {
+      WindowResized event = { engine->window.size };
+      onWindowResized(event);
+      return true;
+    }
+    else if (result != VK_SUCCESS)
+    {
+      return FATAL("failed to present the frame\n");
+    }
+
+    ri.default_framebuffer_index =
+      (ri.default_framebuffer_index + 1) % ri.swapchain_image_count;
+  }
 
   TRACE("clearing drawcmds\n");
   drawcmds.clear();
 
-  ri.default_framebuffer_index =
-    (ri.default_framebuffer_index + 1) % ri.swapchain_image_count;
-
-  frame++;
+  //TODO(delle) see if this is needed
+  if (VK_SUCCESS != vkDeviceWaitIdle(ri.device))
+    return FATAL("failed to wait for the device to idle\n");
 
   return true;
 };
@@ -1629,6 +1717,12 @@ void Renderer::setScissor(vec2i pos, vec2i size)
  */
 void Renderer::setViewport(vec2i pos, vec2i size)
 {
+  if (size.x <= 0 || size.y <= 0)
+  {
+    ERROR("attempted to set a viewport with zero or negative size\n");
+    return;
+  }
+
   DrawCmd cmd =
   {
     .kind = DrawCmd::Kind::SetViewport,
