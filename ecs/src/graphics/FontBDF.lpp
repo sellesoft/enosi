@@ -260,6 +260,7 @@ b8 Font::compileBDF(CompileParams& params)
   INFO("size: ", sizeof(Char) * num_chars, "\n");
 
   auto* chars = (Char*)allocator.allocate(num_chars * sizeof(Char));
+  mem::zero(chars, num_chars * sizeof(Char));
 
   for (s32 char_idx = 0; char_idx < num_chars; ++char_idx)
   {
