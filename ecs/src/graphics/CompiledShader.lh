@@ -52,8 +52,6 @@ struct CompiledShader : public Asset
   struct CompileParams
   {
     String          name;
-    String          asset_path;
-    String          data_path;
     ShaderType      type;
     mem::Allocator* allocator;
     AssetMgr*       assetmgr;

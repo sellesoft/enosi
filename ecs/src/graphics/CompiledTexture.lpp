@@ -113,6 +113,7 @@ CompiledTexture* CompiledTexture::load(
     data->width,
     data->height,
     data->format,
+    data->usage,
     data->address_mode,
     data->filter,
     data->pixels,
@@ -137,10 +138,15 @@ b8 CompiledTexture::compileFromMemory(void* pixels, CompileParams& params)
     return ERROR("failed to create data directories for data at '",
                  data_path);
 
+  if (params.usage == 0)
+    return ERROR("failed to compile texture '", params.name, "' because "
+                 "the usage is not set\n");
+
   CompiledTextureData data;
 
   data.format       = params.format;
   data.filter       = params.filter;
+  data.usage        = params.usage;
   data.address_mode = params.address_mode;
 
   data.width = params.width;

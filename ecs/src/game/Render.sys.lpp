@@ -127,13 +127,15 @@ b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
 
   //init the quad pipeline
   gfx::CompiledShader* compiled_quad_vertex_shader =
-    gfx::CompiledShader::load("scene.vertex"_str, assetmgr, renderer);
+    gfx::CompiledShader::load("assets/shaders/scene.vertex"_str,
+      assetmgr, renderer);
   if (compiled_quad_vertex_shader == nullptr)
     return ERROR("failed to load the vertex shader\n");
   quad_vertex_shader = compiled_quad_vertex_shader->gfx_shader;
 
   gfx::CompiledShader* compiled_quad_fragment_shader =
-    gfx::CompiledShader::load("scene.fragment"_str, assetmgr, renderer);
+    gfx::CompiledShader::load("assets/shaders/scene.fragment"_str,
+      assetmgr, renderer);
   if (compiled_quad_fragment_shader == nullptr)
     return ERROR("failed to load the fragment shader\n");
   quad_fragment_shader = compiled_quad_fragment_shader->gfx_shader;
@@ -145,13 +147,15 @@ b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
 
   //init the stars pipeline
   gfx::CompiledShader* compiled_fullscreen_vertex_shader =
-    gfx::CompiledShader::load("fullscreen.vertex"_str, assetmgr, renderer);
+    gfx::CompiledShader::load("assets/shaders/fullscreen.vertex"_str,
+      assetmgr, renderer);
   if (compiled_fullscreen_vertex_shader == nullptr)
     return ERROR("failed to load fullscreen vertex shader\n");
   fullscreen_vertex_shader = compiled_fullscreen_vertex_shader->gfx_shader;
 
   gfx::CompiledShader* compiled_stars_fragment_shader =
-    gfx::CompiledShader::load("stars.fragment"_str, assetmgr, renderer);
+    gfx::CompiledShader::load("assets/shaders/stars.fragment"_str,
+      assetmgr, renderer);
   if (compiled_stars_fragment_shader == nullptr)
     return ERROR("failed to load stars fragment shader\n");
   stars_fragment_shader = compiled_stars_fragment_shader->gfx_shader;

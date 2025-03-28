@@ -1,6 +1,7 @@
 /*
  *  Fixed pool structure for making chunks of unmoving memory and allocating
- *  from them in an efficient manner. The pool size is fixed at compile time.
+ *  from them in an efficient manner. The pool size is fixed at compile time
+ *  and there is no memory allocated for the pool.
  */
 #ifndef _iro_FixedPool_h
 #define _iro_FixedPool_h

@@ -28,6 +28,7 @@ struct Texture
     u32              width,
     u32              height,
     ImageFormat      format,
+    ImageUsage       usage,
     ImageAddressMode address_mode,
     ImageFilter      filter,
     void*            pixels,

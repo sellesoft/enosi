@@ -79,6 +79,7 @@ $ end
       .width        = 4,
       .height       = 4,
       .format       = gfx::ImageFormat::BW,
+      .usage        = gfx::ImageUsage::Sampled,
       .filter       = gfx::ImageFilter::Nearest,
       .address_mode = gfx::ImageAddressMode::ClampToWhite,
       .allocator    = &texture_compile_allocator,
@@ -93,11 +94,14 @@ $ end
       0xff, 0xff, 0xff, 0xff,
     };
 
-    b8 compiled = gfx::CompiledTexture::compileFromMemory(pixels, white_texture_params);
+    b8 compiled = gfx::CompiledTexture::compileFromMemory(pixels,
+      white_texture_params);
     if (!compiled)
       return ERROR("failed to compile the white texture\n");
 
-    auto compiled_white_texture = gfx::CompiledTexture::load("white"_str, assetmgr, renderer);
+    auto compiled_white_texture =
+      gfx::CompiledTexture::load("assets/textures/white"_str,
+        assetmgr, renderer);
     if (compiled_white_texture == nullptr)
       return ERROR("failed to load the white texture\n");
 
@@ -121,6 +125,7 @@ $ end
       { //TODO(delle) add TextureDef for specifying these params
         .name         = name,
         .format       = gfx::ImageFormat::RGBA,
+        .usage        = gfx::ImageUsage::Sampled,
         .filter       = gfx::ImageFilter::Nearest,
         .address_mode = gfx::ImageAddressMode::ClampToWhite,
         .allocator    = &mem::stl_allocator,
@@ -137,61 +142,55 @@ $ end
   {
     gfx::CompiledShader::CompileParams scene_vertex_shader_params =
     {
-      .name         = "scene.vertex"_str,
-      .asset_path   = "assets/shaders/scene.vertex.glsl"_str,
-      .data_path    = "data/shaders/scene.vertex.shader"_str,
-      .type         = gfx::ShaderType::Vertex,
-      .allocator    = &mem::stl_allocator,
-      .assetmgr     = &assetmgr,
+      .name      = "assets/shaders/scene.vertex"_str,
+      .type      = gfx::ShaderType::Vertex,
+      .allocator = &mem::stl_allocator,
+      .assetmgr  = &assetmgr,
     };
     gfx::CompiledShader::compileGLSL(scene_vertex_shader_params);
 
     gfx::CompiledShader::CompileParams scene_fragment_shader_params =
     {
-      .name         = "scene.fragment"_str,
-      .asset_path   = "assets/shaders/scene.fragment.glsl"_str,
-      .data_path    = "data/shaders/scene.fragment.shader"_str,
-      .type         = gfx::ShaderType::Fragment,
+      .name      = "assets/shaders/scene.fragment"_str,
+      .type      = gfx::ShaderType::Fragment,
+      .allocator = &mem::stl_allocator,
+      .assetmgr  = &assetmgr,
     };
     gfx::CompiledShader::compileGLSL(scene_fragment_shader_params);
 
     gfx::CompiledShader::CompileParams fullscreen_vertex_shader_params =
     {
-      .name         = "fullscreen.vertex"_str,
-      .asset_path   = "assets/shaders/fullscreen.vertex.glsl"_str,
-      .data_path    = "data/shaders/fullscreen.vertex.shader"_str,
-      .type         = gfx::ShaderType::Vertex,
-      .allocator    = &mem::stl_allocator,
-      .assetmgr     = &assetmgr,
+      .name      = "assets/shaders/fullscreen.vertex"_str,
+      .type      = gfx::ShaderType::Vertex,
+      .allocator = &mem::stl_allocator,
+      .assetmgr  = &assetmgr,
     };
     gfx::CompiledShader::compileGLSL(fullscreen_vertex_shader_params);
 
     gfx::CompiledShader::CompileParams stars_fragment_shader_params =
     {
-      .name         = "stars.fragment"_str,
-      .asset_path   = "assets/shaders/stars.fragment.glsl"_str,
-      .data_path    = "data/shaders/stars.fragment.shader"_str,
-      .type         = gfx::ShaderType::Fragment,
+      .name      = "assets/shaders/stars.fragment"_str,
+      .type      = gfx::ShaderType::Fragment,
+      .allocator = &mem::stl_allocator,
+      .assetmgr  = &assetmgr,
     };
     gfx::CompiledShader::compileGLSL(stars_fragment_shader_params);
 
     gfx::CompiledShader::CompileParams ui_vertex_shader_params =
     {
-      .name         = "ui.vertex"_str,
-      .asset_path   = "assets/shaders/ui.vertex.glsl"_str,
-      .data_path    = "data/shaders/ui.vertex.shader"_str,
-      .type         = gfx::ShaderType::Vertex,
-      .allocator    = &mem::stl_allocator,
-      .assetmgr     = &assetmgr,
+      .name      = "assets/shaders/ui.vertex"_str,
+      .type      = gfx::ShaderType::Vertex,
+      .allocator = &mem::stl_allocator,
+      .assetmgr  = &assetmgr,
     };
     gfx::CompiledShader::compileGLSL(ui_vertex_shader_params);
 
     gfx::CompiledShader::CompileParams ui_fragment_shader_params =
     {
-      .name         = "ui.fragment"_str,
-      .asset_path   = "assets/shaders/ui.fragment.glsl"_str,
-      .data_path    = "data/shaders/ui.fragment.shader"_str,
-      .type         = gfx::ShaderType::Fragment,
+      .name      = "assets/shaders/ui.fragment"_str,
+      .type      = gfx::ShaderType::Fragment,
+      .allocator = &mem::stl_allocator,
+      .assetmgr  = &assetmgr,
     };
     gfx::CompiledShader::compileGLSL(ui_fragment_shader_params);
   }

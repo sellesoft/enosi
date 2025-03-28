@@ -42,16 +42,16 @@ b8 Buffer::init(
 
   if (   (properties & MemoryProperty::LazilyAllocated)
       && (properties &
-            MemoryProperty::HostVisible
-          | MemoryProperty::HostCoherent))
+          ( MemoryProperty::HostVisible
+          | MemoryProperty::HostCoherent)))
     return ERROR("MemoryProperty::LazilyAllocated is incompatible with"
       " MemoryProperty::HostVisible and MemoryProperty::HostCoherent\n");
 
   if (   (behavior == MappingBehavior::Never)
       && (properties &
-            MemoryProperty::HostVisible
+          ( MemoryProperty::HostVisible
           | MemoryProperty::HostCoherent
-          | MemoryProperty::HostCached))
+          | MemoryProperty::HostCached)))
     return ERROR("MappingBehavior::Never is incompatible with"
       " MemoryProperty::HostVisible, MemoryProperty::HostCoherent,"
       " and MemoryProperty::HostCached\n");
@@ -336,7 +336,7 @@ b8 Buffer::init(
     {
       .buffer = buffer_handle,
       .offset = 0,
-      .range = memory_requirements.size
+      .range = requested_size,
     };
 
     VkWriteDescriptorSet descriptor_set_write =

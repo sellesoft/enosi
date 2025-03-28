@@ -37,15 +37,14 @@ static shaderc_shader_kind shaderTypeToShaderc(ShaderType type)
 s64 CompiledShader::writeDataPath(io::IO* io, String name, AssetMgr& assetmgr)
 {
   return io::formatv(io,
-      assetmgr.getDataDir(), "/shaders/", name, ".shader");
+      assetmgr.getDataDir(), '/', name, ".cmp_shader");
 }
 
 /* ----------------------------------------------------------------------------
  */
 b8 CompiledShaderData::serialize(io::IO* out)
 {
-  out->write(&type);
-  out->write(&binary_size);
+  out->write(this);
   out->write({binary, binary_size});
   return true;
 }
@@ -53,9 +52,9 @@ b8 CompiledShaderData::serialize(io::IO* out)
 /* ----------------------------------------------------------------------------
  */
 CompiledShader* CompiledShader::load(
-	String name,
-	AssetMgr& assetmgr,
-	gfx::Renderer& renderer)
+  String name,
+  AssetMgr& assetmgr,
+  gfx::Renderer& renderer)
 {
   using namespace fs;
 
@@ -99,12 +98,12 @@ CompiledShader* CompiledShader::load(
   shader->data =
     (CompiledShaderData*)mem::stl_allocator.allocate(file_size);
 
-	compiled_data_file.read({(u8*)shader->data, file_size});
+  compiled_data_file.read({(u8*)shader->data, file_size});
 
-	CompiledShaderData* data = shader->data;
-	data->binary = (u8*)(data + 1);
+  CompiledShaderData* data = shader->data;
+  data->binary = (u8*)(data + 1);
 
-	Slice<u8> binary_slice = Slice<u8>::from(data->binary, data->binary_size);
+  Slice<u8> binary_slice = Slice<u8>::from(data->binary, data->binary_size);
   shader->gfx_shader.init(renderer, data->type, binary_slice, name);
 
   return shader;
@@ -116,14 +115,34 @@ b8 CompiledShader::compileGLSL(CompileParams& params)
 {
   using namespace fs;
 
-  // Ensure the data directories exist
-  if (!platform::makeDir(Path::removeBasename(params.data_path), true))
-    return ERROR("failed to create data directories for data at '",
-                 params.data_path, "'\n");
+  PathBuffer asset_path_buffer;
+  io::formatv(&asset_path_buffer, params.name, ".glsl"_str);
+  String asset_path = asset_path_buffer.asStr();
 
-  auto source_file = File::from(params.asset_path, OpenFlag::Read);
+  if (!fs::Path::exists(asset_path))
+    return ERROR("attempt to compile shader '", params.name, "' but there"
+      " is no asset at path '", asset_path, "'\n");
+
+  PathBuffer data_path_buf;
+  writeDataPath(&data_path_buf, params.name, *params.assetmgr);
+  String data_path = data_path_buf.asStr();
+
+  //TODO add a way to force an asset recompile when
+  //  we need to update the compiled data format
+  if (!AssetMgr::checkNeedsCompiled(asset_path, data_path))
+    return true;
+
+  INFO("compiling '", asset_path, "'\n");
+  SCOPED_INDENT;
+
+  // Ensure the data directories exist
+  if (!platform::makeDir(Path::removeBasename(data_path), true))
+    return ERROR("failed to create data directories for data at '",
+                 data_path, "'\n");
+
+  auto source_file = File::from(asset_path, OpenFlag::Read);
   if (isnil(source_file))
-    return ERROR("failed to open shader source file '", params.asset_path, "'\n");
+    return ERROR("failed to open shader source file '", asset_path, "'\n");
   defer { source_file.close(); };
 
   io::Memory source_buffer;
@@ -155,7 +174,7 @@ $ end -- if not ECS_DEBUG
     compiler,
     (const char*)source_buffer.ptr, source_size,
     shaderTypeToShaderc(params.type),
-    (const char*)params.asset_path.ptr, "main",
+    (const char*)asset_path.ptr, "main",
     options);
   defer { shaderc_result_release(result); };
 
@@ -164,11 +183,11 @@ $ end -- if not ECS_DEBUG
     return ERROR("failed to compile shader: ",
       shaderc_result_get_error_message(result), "\n");
 
-  auto output_file = File::from(params.data_path,
+  auto output_file = File::from(data_path,
       OpenFlag::Write | OpenFlag::Create | OpenFlag::Truncate);
   if (isnil(output_file))
     return ERROR("failed to create shader output file '",
-      params.data_path, "'\n");
+      data_path, "'\n");
   defer { output_file.close(); };
 
   CompiledShaderData data;
@@ -178,7 +197,6 @@ $ end -- if not ECS_DEBUG
 
   if (!data.serialize(&output_file))
     return ERROR("failed to write shader data\n");
-
 
   return true;
 }

@@ -94,7 +94,7 @@ struct RendererInternal
   iro::FixedPool<RendererBuffer, 512> buffer_pool;
 
   u32 pipeline_count;
-  iro::FixedPool<RendererPipeline, 4> pipeline_pool;
+  iro::FixedPool<RendererPipeline, 8> pipeline_pool;
 
   // Vulkan Objects
   VkAllocationCallbacks allocator;

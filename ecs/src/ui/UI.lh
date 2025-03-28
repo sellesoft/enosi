@@ -34,8 +34,8 @@ struct PostReload;
 namespace ui
 {
 
-static constexpr u32 MAX_VERTICES = 0xffffff;
-static constexpr u32 MAX_INDICES = 0xffffff;
+static constexpr u32 MAX_VERTICES = 0xffff;
+static constexpr u32 MAX_INDICES = 0xffff;
 
 /* ============================================================================
  */

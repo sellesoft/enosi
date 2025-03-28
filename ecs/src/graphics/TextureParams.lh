@@ -16,11 +16,20 @@ enum class ImageFormat : u8
   BWA,
   RGB,
   RGBA,
+  BGRA,
 };
 
 /* ============================================================================
  */
-enum class ImageFilter :u8
+enum ImageUsage : u8
+{
+  Sampled = 1 << 0,
+  FramebufferColor = 1 << 1,
+};
+
+/* ============================================================================
+ */
+enum class ImageFilter : u8
 {
   Nearest,
   Linear,

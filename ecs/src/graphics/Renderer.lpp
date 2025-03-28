@@ -329,6 +329,10 @@ b8 Renderer::init(Engine& engine, mem::Allocator& allocator)
     ri.shader_pool.add();
     ri.shader_count = 1;
 
+    ri.buffer_pool.init();
+    ri.buffer_pool.add();
+    ri.buffer_count = 1;
+
     ri.pipeline_pool.init();
     ri.pipeline_pool.add();
     ri.pipeline_count = 1;
