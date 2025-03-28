@@ -119,18 +119,6 @@ $ end
     });
   png_glob.destroy();
 
-  @initSystem(ui.init(*this),              ui);
-  @initSystem(gamemgr.init(this),          gamemgr);
-
-#if ECS_HOT_RELOAD
-  reloader = hr::createReloader();
-  if (reloader == nullptr)
-    return ERROR("failed to create hot reloader\n");
-#endif
-
-  INFO("done initializing in ",
-    WithUnits(TimePoint::now() - start_time), "\n");
-
   CodepointRange ascii =
   {
     .first_codepoint = 32,
@@ -147,24 +135,38 @@ $ end
 
   gfx::Font::compileBDF(params);
 
+  @initSystem(ui.init(*this),              ui);
+  @initSystem(gamemgr.init(this),          gamemgr);
+
+#if ECS_HOT_RELOAD
+  reloader = hr::createReloader();
+  if (reloader == nullptr)
+    return ERROR("failed to create hot reloader\n");
+#endif
+
+  INFO("done initializing in ",
+    WithUnits(TimePoint::now() - start_time), "\n");
+
+
+
 $ if true then
 
-  base = ui::Item::begin(ui, "base"_str);
-  {
-    @ui.style(base, Item, | size: 400 400)
+  // base = ui::Item::begin(ui, "base"_str);
+  // {
+  //   @ui.style(base, Item, | size: 400 400)
 
-    sdata_edit_test = ui::SourceDataEditor::create(ui);
+  //   sdata_edit_test = ui::SourceDataEditor::create(ui);
 
-    h_test =
-     source_data_file_reg.loadFromDisk("assets/maps/Test.map"_str);
+  //   h_test =
+  //    source_data_file_reg.loadFromDisk("assets/maps/Test.map"_str);
 
-    sdata_edit_test->setSourceData(
-      ui, 
-      h_test.getFile()->returned_data,
-      h_test.getFile(),
-      "MapDef"_hashed);
-  }
-  ui.endItem();
+  //   sdata_edit_test->setSourceData(
+  //     ui, 
+  //     h_test.getFile()->returned_data,
+  //     h_test.getFile(),
+  //     "MapDef"_hashed);
+  // }
+  // ui.endItem();
 
 $ else
 
