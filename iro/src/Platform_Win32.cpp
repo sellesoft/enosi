@@ -486,9 +486,6 @@ s64 write(fs::File::Handle handle, Bytes buffer, b8 non_blocking, b8 /*is_pty*/)
  */
 b8 poll(fs::File::Handle handle, fs::PollEventFlags* flags)
 {
-  flags->clear();
-  flags->set(fs::PollEvent::In);
-  return true;
   assert((HANDLE)handle != INVALID_HANDLE_VALUE);
   assert(flags != nullptr);
 
@@ -722,6 +719,25 @@ s64 readdir(fs::Dir::Handle handle, Bytes buffer)
   }
 
   return utf8_len-1; // maybe safe idk
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 stdinHasData()
+{
+  HANDLE handle = GetStdHandle(STD_INPUT_HANDLE);
+  if(handle != INVALID_HANDLE_VALUE)
+  {
+    return ERROR("failed to get stdin pipe");
+  }
+
+  DWORD bytes_available;
+  if (!PeekNamedPipe(handle, NULL, 0, NULL, &bytes_available, NULL))
+  {
+    return win32Err("failed to peek stdin pipe");
+  }
+
+  return bytes_available > 0;
 }
 
 /* ----------------------------------------------------------------------------
@@ -1118,9 +1134,9 @@ static b8 createNullHandle(HANDLE* handle, DWORD access)
 struct ProcessWin32
 {
   HANDLE h_process = INVALID_HANDLE_VALUE;
-  // A handle to the pipe end that we read from. Both the child's stdout and
-  // stderr are set to this pipe.
+  HANDLE h_stdin = INVALID_HANDLE_VALUE;
   HANDLE h_stdout = INVALID_HANDLE_VALUE;
+  HANDLE h_stderr = INVALID_HANDLE_VALUE;
 };
 
 
@@ -1134,7 +1150,9 @@ b8 processSpawn(
     Process::Handle* out_handle,
     String file,
     Slice<String> args,
-    String cwd)
+    String cwd,
+    b8 non_blocking,
+    b8 redirect_err_to_out)
 {
   assert(out_handle);
   assert(notnil(file));
@@ -1143,15 +1161,27 @@ b8 processSpawn(
   if (p_proc == nullptr)
     return ERROR("failed to allocate a ProcessWin32\n");
 
+  HANDLE h_child_stdin_write = INVALID_HANDLE_VALUE;
+  HANDLE h_child_stdin_read = INVALID_HANDLE_VALUE;
   HANDLE h_child_stdout_write = INVALID_HANDLE_VALUE;
   HANDLE h_child_stdout_read = INVALID_HANDLE_VALUE;
+  HANDLE h_child_stderr_write = INVALID_HANDLE_VALUE;
+  HANDLE h_child_stderr_read = INVALID_HANDLE_VALUE;
 
   auto failsafe = deferWithCancel
   {
     ERROR("failed to spawn process ", file, "\n");
+    if (h_child_stdin_write != INVALID_HANDLE_VALUE)
+      CloseHandle(h_child_stdout_write);
+    if (h_child_stdin_read != INVALID_HANDLE_VALUE)
+      CloseHandle(h_child_stdout_read);
     if (h_child_stdout_write != INVALID_HANDLE_VALUE)
       CloseHandle(h_child_stdout_write);
     if (h_child_stdout_read != INVALID_HANDLE_VALUE)
+      CloseHandle(h_child_stdout_read);
+    if (h_child_stderr_write != INVALID_HANDLE_VALUE)
+      CloseHandle(h_child_stdout_write);
+    if (h_child_stderr_read != INVALID_HANDLE_VALUE)
       CloseHandle(h_child_stdout_read);
     g_process_pool.remove(p_proc);
   };
@@ -1258,19 +1288,32 @@ b8 processSpawn(
   sec_attr.bInheritHandle = TRUE;
   sec_attr.lpSecurityDescriptor = NULL;
 
-  if (!CreatePipe(&h_child_stdout_read, &h_child_stdout_write, &sec_attr, 0))
-    return win32Err("failed to create pipes for process");
+  if (!CreatePipe(&h_child_stdin_read, &h_child_stdin_write, &sec_attr, 0))
+    return win32Err("failed to create stdin pipes for process");
+  if (!SetHandleInformation(h_child_stdin_write, HANDLE_FLAG_INHERIT, 0))
+    return win32Err("failed to set child stdin write as non-inherited");
 
+  if (!CreatePipe(&h_child_stdout_read, &h_child_stdout_write, &sec_attr, 0))
+    return win32Err("failed to create stdout pipes for process");
   if (!SetHandleInformation(h_child_stdout_read, HANDLE_FLAG_INHERIT, 0))
     return win32Err("failed to set child stdout read as non-inherited");
+
+  if (!redirect_err_to_out)
+  {
+    if (!CreatePipe(&h_child_stderr_read, &h_child_stderr_write, &sec_attr, 0))
+      return win32Err("failed to create stderr pipes for process");
+    if (!SetHandleInformation(h_child_stderr_read, HANDLE_FLAG_INHERIT, 0))
+      return win32Err("failed to set child stderr read as non-inherited");
+  }
 
   STARTUPINFOW startup_info = {};
   startup_info.cb          = sizeof(startup_info);
   startup_info.dwFlags     = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
   startup_info.wShowWindow = SW_HIDE;
-  startup_info.hStdInput   = GetStdHandle(STD_INPUT_HANDLE);
+  startup_info.hStdInput   = h_child_stdin_read;
   startup_info.hStdOutput  = h_child_stdout_write;
-  startup_info.hStdError   = h_child_stdout_write;
+  startup_info.hStdError   =
+    redirect_err_to_out ? h_child_stdout_write : h_child_stderr_write;
 
   // create the process with handle duplication, no window, and parent stdio
   PROCESS_INFORMATION process_info = {};
@@ -1287,12 +1330,19 @@ b8 processSpawn(
         &process_info))
     return win32Err("failed to create process");
 
+  p_proc->h_stdin = h_child_stdin_write;
   p_proc->h_stdout = h_child_stdout_read;
+  p_proc->h_stderr =
+    redirect_err_to_out ? h_child_stdout_read : h_child_stderr_read;
   p_proc->h_process = process_info.hProcess;
+  CloseHandle(h_child_stdin_read);
   CloseHandle(h_child_stdout_write);
+  if (!redirect_err_to_out)
+    CloseHandle(h_child_stderr_write);
   CloseHandle(process_info.hThread); // we don't need to track the thread
 
-  TRACE("started process ", file, ":", (u64)process_info.hProcess, " with args:\n");
+  TRACE("started process ", file, ":",
+    (u64)process_info.hProcess, " with args:\n");
   for (String s : args)
   {
     TRACE(s, "\n");
@@ -1320,7 +1370,29 @@ b8 processHasOutput(Process::Handle h_process)
     return false;
   }
   if (bytes_available > 0)
-    TRACE((u64)p_proc->h_process, " has ", (u64)bytes_available, " bytes available\n");
+    TRACE((u64)p_proc->h_process, " has ",
+      (u64)bytes_available, " bytes available\n");
+  return bytes_available > 0;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 processHasErrOutput(Process::Handle h_process)
+{
+  auto* p_proc = (ProcessWin32*)h_process;
+  if (p_proc == nullptr)
+    return ERROR("processHasOutput passed a null process handle\n");
+
+  DWORD bytes_available = 0;
+  if (!PeekNamedPipe(p_proc->h_stderr, NULL, 0, NULL, &bytes_available, NULL))
+  {
+    if (GetLastError() != ERROR_BROKEN_PIPE)
+      return win32Err("failed to peek process pipe");
+    return false;
+  }
+  if (bytes_available > 0)
+    TRACE((u64)p_proc->h_process, " has ",
+      (u64)bytes_available, " bytes available\n");
   return bytes_available > 0;
 }
 
@@ -1350,13 +1422,15 @@ u64 processRead(Process::Handle h_process, Bytes buffer)
         return win32Err("failed to peek process pipe");
     }
 
-    TRACE("peeked ", (u64)bytes_to_read, " from ", (u64)p_proc->h_process, "\n");
+    TRACE("peeked ", (u64)bytes_to_read, " from ",
+      (u64)p_proc->h_process, "\n");
     bytes_to_read = min<u64>(bytes_to_read, buffer.len);
   }
 
   if (0 == bytes_to_read)
     return 0;
 
+  // TODO: perform read overlapped to handle non-blocking
   DWORD bytes_read;
   TRACE("read from ", (u64)p_proc->h_process, "\n");
   if (!ReadFile(
@@ -1369,6 +1443,82 @@ u64 processRead(Process::Handle h_process, Bytes buffer)
   TRACE("found ", (u64)bytes_read, " bytes\n");
 
   return (u64)bytes_read;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+u64 processReadStdErr(Process::Handle h_process, Bytes buffer)
+{
+  assert(buffer.ptr != nullptr && buffer.len != 0);
+
+  auto* p_proc = (ProcessWin32*)h_process;
+  if (p_proc == nullptr)
+    return ERROR("processReadOutput passed a null process handle\n");
+
+  DWORD bytes_to_read = buffer.len;
+  if (WaitForSingleObject(p_proc->h_process, 0) != WAIT_OBJECT_0)
+  {
+    // The process is still running, so peek the pipe.
+    if (!PeekNamedPipe(
+          p_proc->h_stderr,
+          NULL,
+          0,
+          NULL,
+          &bytes_to_read,
+          NULL))
+    {
+      if (GetLastError() != ERROR_BROKEN_PIPE)
+        return win32Err("failed to peek process pipe");
+    }
+
+    TRACE("peeked ", (u64)bytes_to_read, " from ",
+      (u64)p_proc->h_process, "\n");
+    bytes_to_read = min<u64>(bytes_to_read, buffer.len);
+  }
+
+  if (0 == bytes_to_read)
+    return 0;
+
+  // TODO: perform read overlapped to handle non-blocking
+  DWORD bytes_read;
+  TRACE("read from ", (u64)p_proc->h_process, "\n");
+  if (!ReadFile(
+        p_proc->h_stderr,
+        buffer.ptr,
+        bytes_to_read,
+        &bytes_read,
+        NULL))
+    return win32Err("failed to read process stderr pipe");
+  TRACE("found ", (u64)bytes_read, " bytes\n");
+
+  return (u64)bytes_read;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+u64 processWrite(Process::Handle h_process, Bytes buffer)
+{
+  auto* p_proc = (ProcessWin32*)h_process;
+  if (p_proc == nullptr)
+    return ERROR("processReadOutput passed a null process handle\n");
+
+  TRACE("write ", buffer.len ," bytes  to ", (u64)p_proc->h_process, "\n");
+
+  // TODO: perform write overlapped to handle non-blocking
+  DWORD bytes_written;
+  BOOL success = WriteFile(p_proc->h_stdin, buffer.ptr,
+    (DWORD)buffer.len, &bytes_written, NULL);
+  if (!success)
+  {
+    DWORD error = GetLastError();
+    if (error == ERROR_NO_DATA)
+      return 0;
+    else
+      return win32Err("failed to write to process stdin pipe");
+  }
+
+  TRACE("wrote ", (u64)bytes_written, " bytes\n");
+  return (u64)bytes_written;
 }
 
 /* ----------------------------------------------------------------------------
@@ -1702,6 +1852,13 @@ b8 isRunningUnderDebugger()
 void debugBreak()
 {
   DebugBreak();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+u64 getPid()
+{
+  return (u64)GetCurrentProcessId();
 }
 
 /* ----------------------------------------------------------------------------
