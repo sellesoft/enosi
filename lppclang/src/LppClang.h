@@ -343,6 +343,11 @@ LPPCFUNC u64 getFieldOffset(Context* ctx, Decl* field);
 LPPCFUNC b8 isComplete(Decl* decl);
 
 /* ----------------------------------------------------------------------------
+ *  Gets a comment, if any, attached to the given Decl.
+ */
+LPPCFUNC String getComment(Context* ctx, Decl* decl);
+
+/* ----------------------------------------------------------------------------
  *  Retrieves the declaration that actually defines whatever this is. Eg.
  *  there are Decls for forward declarations that are actually defined later.
  *

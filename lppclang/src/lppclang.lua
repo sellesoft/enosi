@@ -136,6 +136,7 @@ typedef struct
  b8 isAnonymousField(Decl* decl);
  u64 getFieldOffset(Context* ctx, Decl* field);
  b8 isComplete(Decl* decl);
+ String getComment(Context* ctx, Decl* decl);
  Decl* getDefinition(Decl* decl);
  void makeComplete(Context* ctx, Type* type);
  b8 isCanonicalDecl(Decl* decl);
@@ -672,6 +673,14 @@ Decl.asFunction = function(self)
   if lppclang.getDeclKind(self.decl) == lppclang.DeclKind_Function then
     return Function.new(self.ast, self.decl)
   end
+end
+
+Decl.getComment = function(self)
+  local c = lppclang.getComment(self.ctx.handle, self.handle)
+  if c.len == 0 then
+    return nil
+  end
+  return ffi.string(c.s, c.len)
 end
 
 --- An iterator over a sequence of declarations.
