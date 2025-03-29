@@ -4,6 +4,7 @@
 #include "iro/fs/File.h"
 
 #include "ctype.h"
+#include "iro/io/Format.h"
 
 namespace lpp
 {
@@ -114,15 +115,15 @@ b8 Parser::run()
         return false;
 
       case Whitespace:
+        TRACE("placing whitespace(", curtIdx(), "): ", 
+            io::SanitizeControlCharacters(getRaw()), "\n");
+
         writeOut(
           "__metaenv_docspan("_str, curtIdx(), ")\n");
         nextToken();
         break;
 
       case Document:
-        // TODO(sushi) consider just using offsets into the input file 
-        //             here instead of a whole lua string.
-
         TRACE("placing document text: '", 
               io::SanitizeControlCharacters(getRaw()), "'\n");
 
@@ -209,6 +210,7 @@ b8 Parser::run()
 
           TRACE("wrote method\n");
 
+          auto* rollback = curt;
           nextSignificantToken();
           if (at(MacroTupleArg))
           {
@@ -254,9 +256,14 @@ b8 Parser::run()
               pushLocMap();
               writeTokenSanitized();
               writeOut('"', ')');
+              auto* rollback = curt;
               nextSignificantToken();
               if (not at(MacroTupleArg))
+              {
+                curt = rollback;
+                nextToken();
                 break;
+              }
             }
           }
           else if (at(MacroStringArg))
@@ -271,6 +278,17 @@ b8 Parser::run()
             pushLocMap();
             writeTokenSanitized();
             writeOut('"', ')');
+            nextToken();
+          }
+          else
+          {
+            // A small trick to handle an edge case where a macro is called
+            // with no argument syntax following it. Since we skip to the 
+            // next significant token to figure this out, it will skip white
+            // space, causing whatever line is following the macro to be 
+            // merged with whatever the macro outputs. This breaks when 
+            // the macro outputs a line comment in C.
+            curt = rollback;
             nextToken();
           }
 
