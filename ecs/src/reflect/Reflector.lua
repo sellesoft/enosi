@@ -169,6 +169,8 @@ lpp.import = function(path)
   return buf:get()
 end
 
+lpp.stacktrace_func_filter[lpp.import] = true
+
 local tu_name = lpp.getCurrentInputSourceName()
 
 if lpp.generating_dep_file then
