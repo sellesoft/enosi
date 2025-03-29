@@ -70,6 +70,23 @@ return function(ctx)
     assertNotExited "val"
     if x == nil then
       error("inline lua expression resulted in nil", 2)
+    elseif type(x) == "table" then
+      local mt = getmetatable(x)
+      if mt == nil or not mt.__tostring then
+        local capture = stackcapture(1)
+        for frame in capture:each() do
+          local line = 
+            C.metaprogramMapMetaprogramLineToInputLine(menv.ctx, frame.line)
+          local short_src = frame.src:match ""
+          log:warn(frame.src:match ".+/(.+)", ":", line, ":")
+          if frame.name then
+            log:warn(" in ", frame.name)
+          end
+          log:warn("\n")
+        end
+        log:warn("inline lua value resulted in a table that does not have ",
+                 "a __tostring metamethod\n")
+      end
     end
     local s = tostring(x)
     if not s then
