@@ -18,6 +18,8 @@ namespace ui
  */
 b8 InputTextState::init(UI& ui, String init, String preview)
 {
+  INFO("its init\n");
+
   String text_init = 
     notnil(init)
     ? init
@@ -71,8 +73,31 @@ void InputTextState::draw(UI& ui, const DrawParams& params)
   drawcmds.text->counts_used = {};
   drawcmds.quads->counts_used = {};
 
+  f32 cursor_offset = 0.f;
+  String cscan = str;
+  for (;;)
+  {
+    if (text.cursor.pos == str.len - cscan.len || cscan.isEmpty())
+    {
+      if (cursor_offset < text_x_offset)
+        text_x_offset = cursor_offset;
+      else if (cursor_offset > text_x_offset + params.bounds.z)
+        text_x_offset = cursor_offset - params.bounds.z;
+      break;
+    }
+
+    gfx::PackedChar pc;
+    params.font->getPackedChar(&pc, cscan.advance().codepoint);
+
+    cursor_offset += pc.xadvance;
+  }
+
+  INFO(text_x_offset, " ", cursor_offset, " ", params.bounds.z, " ",
+       text_x_offset + cursor_offset, "\n");
+
   f32 cursor_x = -1.f;
   vec2f cursor = params.bounds.xy();
+  cursor.x -= text_x_offset;
 
   if (text.asStr().isEmpty())
   {
@@ -89,10 +114,12 @@ void InputTextState::draw(UI& ui, const DrawParams& params)
   }
   else
   {
-    while (!str.isEmpty())
+    for (;;)
     {
       if (str.ptr - text.ptr == text.cursor.pos)
         cursor_x = cursor.x;
+      if (str.isEmpty())
+        break;
 
       utf8::Codepoint cp = str.advance();
 
@@ -110,6 +137,10 @@ void InputTextState::draw(UI& ui, const DrawParams& params)
   {
     auto [vp, ip] = drawcmds.quads->getPtrs(&ui);
 
+    INFO(cursor_x, " ", params.bounds.z - 1.f, "\n");
+
+    cursor_x = min(cursor_x, params.bounds.x + params.bounds.z - 1.f);
+
     gfx::putFilledRect(
       vp, ip,
       &drawcmds.quads->counts_used,
@@ -121,63 +152,90 @@ void InputTextState::draw(UI& ui, const DrawParams& params)
 
 /* ----------------------------------------------------------------------------
  */
-b8 InputTextState::update(UI& ui, const UpdateParams& params)
+InputTextState::StateChange InputTextState::update(
+    UI& ui, 
+    const UpdateParams& params)
 {
+  if (params.reason == UpdateReason::MouseReleased)
+  {
+    f32 x = 0.f;
+    String scan = text.asStr();
+    while (!scan.isEmpty())
+    {
+      gfx::PackedChar pc;
+      params.font->getPackedChar(&pc, scan.advance().codepoint);
+
+      x += pc.xadvance;
+      INFO(x, "\n");
+      
+      if (params.local_mouse.x < x)
+      {
+        text.cursor.pos = text.asStr().len - scan.len - 1;
+        break;
+      }
+      else if (scan.isEmpty())
+      {
+        text.cursorMoveToEnd();
+        break;
+      }
+    }
+
+    return StateChange::CursorMoved;
+  }
+
   if (!params.is_focused || params.reason != UpdateReason::FocusedKeyPress)
-    return false;
+    return StateChange::None;
 
   InputMgr& input = ui.eng->input;
 
   b8 state_changed = false;
+  b8 ctrl_down = input.isKeyDown(Key::LCtrl) || input.isKeyDown(Key::RCtrl);
+  b8 alt_down = input.isKeyDown(Key::LAlt) || input.isKeyDown(Key::RAlt);
 
+$ local function actions(len)
   if (input.wasKeyPressed(Key::Right))
   {
-    if (input.isKeyDown(Key::LCtrl) || input.isKeyDown(Key::RCtrl))
-      state_changed |= text.cursorMoveRightWord();
-    else if (input.isKeyDown(Key::LAlt) || input.isKeyDown(Key::RAlt))
-      state_changed |= text.cursorMoveRightWordPart();
-    else
-      state_changed |= text.cursorMoveRight();
+    if (0 != text.cursorMoveRight$(len or "")())
+      return StateChange::CursorMoved;
   }
-
   if (input.wasKeyPressed(Key::Left))
   {
-    if (input.isKeyDown(Key::LCtrl) || input.isKeyDown(Key::RCtrl))
-      state_changed |= text.cursorMoveLeftWord();
-    else if (input.isKeyDown(Key::LAlt) || input.isKeyDown(Key::RAlt))
-      state_changed |= text.cursorMoveLeftWordPart();
-    else
-      state_changed |= text.cursorMoveLeft();
+    if (0 != text.cursorMoveLeft$(len or "")())
+      return StateChange::CursorMoved;
   }
-
   if (input.wasKeyPressed(Key::Backspace))
   {
-    if (input.isKeyDown(Key::LCtrl) || input.isKeyDown(Key::RCtrl))
-      state_changed |= text.deleteLeftWord();
-    else if (input.isKeyDown(Key::LAlt) || input.isKeyDown(Key::RAlt))
-      state_changed |= text.deleteLeftWordPart();
-    else
-      state_changed |= text.deleteLeft();
+    if (0 != text.deleteLeft$(len or "")())
+      return StateChange::TextChanged;
   }
-
   if (input.wasKeyPressed(Key::Delete))
   {
-    if (input.isKeyDown(Key::LCtrl) || input.isKeyDown(Key::RCtrl))
-      state_changed |= text.deleteRightWord();
-    else if (input.isKeyDown(Key::LAlt) || input.isKeyDown(Key::RAlt))
-      state_changed |= text.deleteRightWordPart();
-    else
-      state_changed |= text.deleteRight();
+    if (0 != text.deleteRight$(len or "")())
+      return StateChange::TextChanged;
+  }
+$ end
+
+  if (ctrl_down)
+  {
+    @actions "Word"
+  }
+  else if (alt_down)
+  {
+    @actions "WordPart"
+  }
+  else
+  {
+    @actions
   }
 
   if (input.char_count != 0 && !iscntrl(input.chars[0]))
   {
     auto insert = String::from(input.chars, input.char_count);
     text.insertString(insert);
-    state_changed = true;
+    return StateChange::TextChanged;
   }
   
-  return state_changed;
+  return StateChange::None;
 }
 
 /* ----------------------------------------------------------------------------

@@ -18,10 +18,11 @@ namespace ui
  */
 struct InputTextState
 {
-  TextEdit   text;
-  gfx::Font* font;
+  TextEdit text;
 
   String preview; // Owned.
+
+  f32 text_x_offset = 0.f;
 
   struct 
   {
@@ -51,7 +52,15 @@ struct InputTextState
     f32          font_height;
     UpdateReason reason;
   };
-  b8 update(UI& ui, const UpdateParams& params);
+  
+  enum class StateChange
+  {
+    None,
+    CursorMoved,
+    TextChanged,
+  };
+
+  StateChange update(UI& ui, const UpdateParams& params);
 
   void reportDrawCmds(UI& ui, DrawCmdLists& lists, b8 is_focused);
 
