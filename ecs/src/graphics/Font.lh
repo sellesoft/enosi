@@ -113,6 +113,8 @@ struct Font : public Asset
   // stored by this font.
   b8 getPackedChar(PackedChar* out, u32 codepoint) const;
 
+  vec2f getGlyphSize(u32 codepoint) const;
+
   // This ASSUMES that the given codepoint exists in the given range,
   // BE CAREFUL!
   // TODO(sushi) a safe alternative to this when we get to user input
