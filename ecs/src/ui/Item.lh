@@ -328,6 +328,9 @@ struct
 
     // Always draws below anything the Item draws.
     DrawCmd* background;
+
+    DrawCmd* debug;
+    DrawCmd* debug_text;
   } builtin;
 
   operator ItemNode*() { return node; }
@@ -440,7 +443,7 @@ struct
   // Calculates the visual area that this item takes up for hit testing.
   virtual vec2f calcVisualArea()
   {
-    return size;
+    return visible_size;
   }
   
   b8 containsPoint(vec2f point);

@@ -142,6 +142,14 @@ b8 UI::init(Engine& engine)
       gfx::ImageKind::TwoD,
       white_pixels);
 
+  gohu_font = 
+    gfx::Font::load(
+      "assets/fonts/gohu"_str,
+      engine.assetmgr,
+      engine.renderer);
+
+  gohu_font_texture = gohu_font->r_texture.getData()->gfx_texture;
+
   // Store a reference to the engine in case widgets need to access
   // information from it.
   eng = &engine;
@@ -195,11 +203,13 @@ b8 UI::update(Engine& engine)
     mat3x2::createTransform({0.f,0.f}, 0.f);
 
   DeferredDrawCmdList top_most_drawcmds;
+  DrawCmdList debug_drawcmds;
 
   UpdateTreeContext ctx = 
   {
     .top_most_drawcmds = &top_most_drawcmds,
     .current_transform = &base_transform,
+    .debug_cmds = &debug_drawcmds,
   };
 
   updateTree(root->node, ctx);
@@ -207,6 +217,12 @@ b8 UI::update(Engine& engine)
   // Draw top most drawcmds with no scissor.
   renderer.pushSetScissor(vec2i(0,0), window.size);
   emitDrawCmds(top_most_drawcmds);
+
+  renderer.pushUniformMat3x2("model"_str, 
+    mat3x2::createTransform({0.f, 0.f}, 0.f));
+
+  for (ReportedDrawCmd& ddc : debug_drawcmds)
+    emitDrawCmd(ddc.drawcmd, nullptr, {});
 
   if (ctx.hovered && ctx.hovered != hovered)
   {
@@ -293,6 +309,9 @@ b8 UI::update(Engine& engine)
       scrolling_item->scroll.y =
         min(0.f,
             max(scrolling_item->scroll.y, scrolling_item->max_scroll.y));
+
+      INFO(scrolling_item->pos_screen, " ", scrolling_item->visible_start, 
+           "\n");
     }
   }
 
@@ -467,7 +486,7 @@ $ end
     vec2f pext = 
       min(ppos + psiz, parent->visible_start + parent->visible_size);
 
-    scoff = max(vec2f(0,0), max(ppos, min( cpos, pext)));
+    scoff = max(vec2f(0,0), max(ppos, min(cpos, pext)));
 
     vec2f br = max(ppos, min(cext, pext));
 
@@ -604,11 +623,10 @@ $ end
 
     if (child_ctx.hovered == nullptr)
     {
-      vec2f visual_area = item->calcVisualArea();
       if (math::pointInRect(
             eng->input.mouse.window, 
             item->visible_start,
-            visual_area))
+            item->calcVisualArea()))
         ctx.hovered = item;
     }
     else
@@ -638,6 +656,58 @@ $ end
 
     if (item->builtin.borders)
       emitDrawCmd(item->builtin.borders, item, vec4f(scoff, scsiz));
+
+    if (item->builtin.debug == nullptr)
+    {
+      item->builtin.debug = drawcmds.add();
+      // item->builtin.debug->tex = gohu_font_texture;
+
+      item->builtin.debug_text = drawcmds.add();
+      item->builtin.debug_text->tex = gohu_font_texture;
+    }
+
+    if (false && item == hovered)
+    {
+      io::SmallBuffer<255> pos;
+      io::formatv(&pos, item->visible_start);
+
+      auto [vp, ip] = 
+        item->builtin.debug->realloc(
+          this, 
+          gfx::putBordersCounts());
+
+      vec2f text_size = gfx::measureText(
+        pos.asStr(), gohu_font, 11.f, 1.f);
+
+      item->builtin.debug->counts_used = {};
+
+      gfx::putBorders(
+        vp, ip,
+        &item->builtin.debug->counts_used,
+        {-2.f, -2.f, -2.f, -2.f},
+        item->visible_start,
+        item->visible_size,
+        0xff0000ff);
+
+      auto [tvp, tip] = 
+        item->builtin.debug_text->realloc(
+          this, gfx::putTextCounts(pos.asStr()));
+
+      item->builtin.debug_text->counts_used = {};
+
+      gfx::putText(
+        tvp, tip,
+        &item->builtin.debug_text->counts_used,
+        max(vec2f(0,0), min(item->pos_screen, root->size - text_size)),
+        pos.asStr(),
+        gohu_font,
+        11.f, 1.f,
+        0xffffffff,
+        nullptr);
+
+      ctx.debug_cmds->push(item->builtin.debug);
+      ctx.debug_cmds->push(item->builtin.debug_text);
+    }
   }
 
   // Handle scrollbar input for this Item if necessary.
@@ -1407,7 +1477,7 @@ void UI::genItemBranch(ItemNode* node)
  */
 b8 UI::testFocusableRegion(vec2f pos, vec2f size)
 {
-  if (focus_consumed)
+  if (focus_consumed || hovered != updating_item)
     return false;
 
   if (math::pointInRect(
@@ -1420,6 +1490,19 @@ b8 UI::testFocusableRegion(vec2f pos, vec2f size)
   }
 
   return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 UI::testHoverableRegion(vec2f pos, vec2f size)
+{
+  if (hovered != updating_item)
+    return false;
+
+  return math::pointInRect(
+      eng->input.mouse.window,
+      updating_item->pos_screen + pos,
+      size);
 }
 
 /* ----------------------------------------------------------------------------

@@ -71,6 +71,8 @@ struct UI
   b8 horizontal_scroll;
 
   gfx::Texture white_texture;
+  gfx::Font* gohu_font;
+  gfx::Texture gohu_font_texture;
 
   mem::LenientBump temp_alloc;
 
@@ -108,6 +110,8 @@ struct UI
   // test if a region of the Item was clicked during its update callback.
   b8 testFocusableRegion(vec2f pos, vec2f size);
 
+  b8 testHoverableRegion(vec2f pos, vec2f size);
+
 private:
 
   b8 focus_consumed = false;
@@ -131,6 +135,7 @@ private:
     DeferredDrawCmdList* top_most_drawcmds = nullptr;
     const mat3x2* current_transform = nullptr;
     Item* hovered = nullptr;
+    DrawCmdList* debug_cmds;
 
     UpdateTreeContext inherit(const mat3x2* current_transform)
     {
@@ -138,6 +143,7 @@ private:
       {
         .top_most_drawcmds = top_most_drawcmds,
         .current_transform = current_transform,
+        .debug_cmds = debug_cmds,
       };
     }
   };
