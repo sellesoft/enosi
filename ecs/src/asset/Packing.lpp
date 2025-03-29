@@ -6,6 +6,7 @@ $ local ast = require "reflect.AST"
 $ local List = require "List"
 $ local util = require "Util"
 $ local component = require "game.component.Component"
+$ local metadata = require "reflect.Metadata"
 
 #include "iro/Logger.h"
 
@@ -227,22 +228,44 @@ b8 packVec2(const SourceData& data, T* out)
 
   if (!data.hasChildren())
     return ERROR("expected an object to pack vec2\n");
+  
+  if (data.children.len() != 2)
+    return ERROR("too many children in vec2 source data\n");
 
-  for (const SourceData* child : data.children)
+  if (isnil(data.children[0]->name))
   {
-    if (!child->hasNumberValue())
-      return ERROR("vec2 members can only be numbers\n");
+    SourceData* x = data.children[0];
+    SourceData* y = data.children[1];
 
-    switch (child->name.hash())
+    // Must be nameless initialization.
+    if (!x->hasNumberValue())
+      return ERROR("vec2 members must be numbers\n");
+
+    out->x = strtof((char*)x->val.str.ptr, nullptr);
+
+    if (!y->hasNumberValue())
+      return ERROR("vec2 members must be numbers\n");
+
+    out->y = strtof((char*)y->val.str.ptr, nullptr);
+  }
+  else
+  {
+    for (const SourceData* child : data.children)
     {
-    case "x"_hashed:
-      out->x = strtof((char*)child->val.str.ptr, nullptr);
-      break;
-    case "y"_hashed:
-      out->y = strtof((char*)child->val.str.ptr, nullptr);
-      break;
-    default:
-      return ERROR("no member named ", child->name, " in vec2\n");
+      if (!child->hasNumberValue())
+        return ERROR("vec2 members can only be numbers\n");
+
+      switch (child->name.hash())
+      {
+      case "x"_hashed:
+        out->x = strtof((char*)child->val.str.ptr, nullptr);
+        break;
+      case "y"_hashed:
+        out->y = strtof((char*)child->val.str.ptr, nullptr);
+        break;
+      default:
+        return ERROR("no member named ", child->name, " in vec2\n");
+      }
     }
   }
 
@@ -272,7 +295,13 @@ b8 packSourceDataIntoEnum(const SourceData& data, $(typename)* out)
   switch (data.val.str.hash())
   {
 $ for elem in decl.elems:each() do
-  case "$(elem)"_hashed: *out = $(typename)::$(elem); break;
+$   if elem.metadata.hidden then
+  case "$(elem.name)"_hashed:
+    return 
+      ERROR("enum value $(typename)::$(elem.name) is marked as hidden\n");
+$   else
+  case "$(elem.name)"_hashed: *out = $(typename)::$(elem.name); break;
+$   end
 $ end
 
   default:
@@ -425,8 +454,9 @@ b8 packSourceDataIntoEnumArray(
     switch (child->name.hash())
     {
 $ for elem in enum_type.elems:each() do
-    case "$(elem)"_hashed:
-$     putPackCase(decl.name, "(*out)[TEnum::"..elem.."]", elem_type, prereqs)
+$   if elem.comment then metadata.parse(elem.comment) end
+    case "$(elem.name)"_hashed:
+$     putPackCase(decl.name, "(*out)[TEnum::"..elem.name.."]", elem_type, prereqs)
       break;
 $ end
     default:
