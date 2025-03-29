@@ -203,13 +203,13 @@ $ end
       .num_codepoints = 94,
     };
 
-  gfx::Font::CompileParams params =
-  {
-    .name       = "assets/fonts/gohu"_str,
-    .ranges     = CodepointRanges::from(&ascii, 1),
-    .allocator  = &mem::stl_allocator,
-    .assetmgr   = &assetmgr,
-  };
+    gfx::Font::CompileParams params =
+    {
+      .name       = "assets/fonts/gohu"_str,
+      .ranges     = CodepointRanges::from(&ascii, 1),
+      .allocator  = &mem::stl_allocator,
+      .assetmgr   = &assetmgr,
+    };
 
     gfx::Font::compileBDF(params);
   }
@@ -226,24 +226,26 @@ $ end
   INFO("done initializing in ",
     WithUnits(TimePoint::monotonic() - start_time), "\n");
 
+
+
 $ if true then
 
-  base = ui::Item::begin(ui, "base"_str);
-  {
-    @ui.style(base, Item, | size: 400 400)
+  // base = ui::Item::begin(ui, "base"_str);
+  // {
+  //   @ui.style(base, Item, | size: 400 400)
 
-    sdata_edit_test = ui::SourceDataEditor::create(ui);
+  //   sdata_edit_test = ui::SourceDataEditor::create(ui);
 
-    h_test =
-     source_data_file_reg.loadFromDisk("assets/maps/Test.map"_str);
+  //   h_test =
+  //    source_data_file_reg.loadFromDisk("assets/maps/Test.map"_str);
 
-    sdata_edit_test->setSourceData(
-      ui, 
-      h_test.getFile()->returned_data,
-      h_test.getFile(),
-      "MapDef"_hashed);
-  }
-  ui.endItem();
+  //   sdata_edit_test->setSourceData(
+  //     ui, 
+  //     h_test.getFile()->returned_data,
+  //     h_test.getFile(),
+  //     "MapDef"_hashed);
+  // }
+  // ui.endItem();
 
 $ else
 
