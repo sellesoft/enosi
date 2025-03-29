@@ -59,6 +59,7 @@ local createBuildCmds = function(proj)
       params.debug_info = true
     else
       params.opt = "speed"
+      params.debug_info = true
     end
 
     if sys.cfg.mode == "debug" and sys.cfg.asan and not proj.no_asan then
@@ -85,11 +86,6 @@ local createBuildCmds = function(proj)
   do local params = {}
     -- TODO(sushi) handle projects specifying 'requires' if there is ever 
     --             a usecase.
-
-    -- TODO(sushi) this should not be hardcoded like this but since I can't
-    --             nicely add bin/ to my path via the nix flake I'm just 
-    --             going to do this for now. Really really need to get rid of 
-    --             nix.
     params.lpp = sys.root.."/bin/lpp"
     params.cpp = cpp_params
 
