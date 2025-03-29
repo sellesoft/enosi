@@ -37,11 +37,14 @@ struct
   SourceData* sdata;
   SourceDataFile* sfile;
 
+  SourceDataFile default_data;
+
   u64 type_id;
 
   f32 max_name_width;
 
   DatumState* current_datum;
+  DatumState* hovered;
 
   gfx::Font* font;
   gfx::Texture font_texture;
@@ -63,7 +66,8 @@ struct
 
     Kind kind;
 
-    SourceData* datum;
+    DatumState* datum;
+    SourceData* sdata;
 
     vec2f pos;
     vec2f size;
@@ -72,12 +76,22 @@ struct
 
     void update(UI& ui, UpdateReason reason, SourceDataEditor* editor);
 
-    void onFocusLost(SourceDataFile* file);
+    void onFocusLost(SourceDataEditor* editor);
   };
 
   DatumTextEdit datum_text_edit;
 
-  static SourceDataEditor* create(UI& ui);
+  // An interface for recieving notifications when the source data editor does
+  // certain things.
+  struct Interface
+  {
+    // Called when some SourceData has been changed.
+    virtual void onEdit(SourceData* data) = 0;
+  };
+
+  Interface* interface;
+
+  static SourceDataEditor* create(UI& ui, Interface* interface = nullptr);
   void destroy();
 
   void setSourceData(
@@ -99,16 +113,32 @@ struct
   // text edit state to the provided information.
   void beginEditDatumText(
     UI& ui,
-    SourceData* datum, 
+    DatumState* datum,
+    SourceData* sdata, 
     DatumTextEdit::Kind kind,
     vec2f pos,
     vec2f size);
 
   b8 isEditingDatumText(
-    SourceData* datum, 
+    SourceData* sdata, 
     DatumTextEdit::Kind kind) const;
 
-  void endEditDatumText(SourceData* datum, DatumTextEdit::Kind kind);
+  void endEditDatumText(SourceData* sdata, DatumTextEdit::Kind kind);
+
+  void onEdit(SourceData* data)
+  {
+    if (interface)
+      interface->onEdit(data);
+  }
+
+  void onSourceDataReplaced(SourceData* old_data, SourceData* new_data);
+
+  void notifyExternalChange()
+  {
+    dirty = true;
+  }
+
+  SourceData* parseDefaultData(String s);
 
 private:
   

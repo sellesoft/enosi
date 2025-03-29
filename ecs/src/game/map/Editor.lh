@@ -16,6 +16,7 @@ $ local ui = require "ui.UI"
 @@lpp.import "ui/widgets/ComboBox.lh"
 
 @@lpp.import "asset/SourceDataFileHandle.lh"
+@@lpp.import "asset/SourceDataEditor.lh"
 
 @@lpp.import "graphics/Texture.lh"
 @@lpp.import "graphics/Framebuffer.lh"
@@ -41,7 +42,18 @@ struct Renderer;
 namespace ui
 {
 
+struct MapEditor;
 struct TextureDisplay;
+struct SDEditInterface;
+
+/* ============================================================================
+ */
+struct SDEditInterface : SourceDataEditor::Interface
+{
+  MapEditor* editor;
+
+  void onEdit(SourceData* data) override;
+};
 
 /* ============================================================================
  */
@@ -74,6 +86,9 @@ struct
   MapTileKindDefs maptiledefs;
 
   Text* world_pos;
+
+  SourceDataEditor* sdedit;
+  SDEditInterface sdinterface;
 
   enum class ControlState
   {

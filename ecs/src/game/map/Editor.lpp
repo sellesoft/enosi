@@ -260,6 +260,13 @@ struct TextureDisplay : public Item
 
 /* ----------------------------------------------------------------------------
  */
+void SDEditInterface::onEdit(SourceData* data) 
+{
+  editor->dirty = true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
 {
   auto* editor = ui.allocateAndInitItem<MapEditor>("game.map.editor"_str);
@@ -335,7 +342,7 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
     String options[] = 
     {
 $   for elem in ToolEnum.elems:each() do
-      "$(elem)"_str,
+      "$(elem.name)"_str,
 $   end
     };
 
@@ -381,7 +388,7 @@ $   end
       String add_type_options[] = 
       {
 $     for elem in decls.tile_kind.elems:each() do
-        "$(elem)"_str,
+        "$(elem.name)"_str,
 $     end
       };
       
@@ -408,6 +415,9 @@ $     end
       | margin: 0 5 0 5)
     }
     ui.endItem();
+
+    editor->sdedit = SourceDataEditor::create(ui, &editor->sdinterface);
+    editor->sdinterface.editor = editor;
   }
   ui.endItem();
 
@@ -441,6 +451,9 @@ void MapEditor::selectMap(
   h_selected_map = h_map;
   h_selected_map_tile_kinds = h_map_tile_kinds;
 
+  SourceDataFile* sfile = h_selected_map.getFile();
+  SourceData* returned_data = sfile->returned_data;
+
   PackContext pack_context = 
   {
     .assetmgr  = &assetmgr,
@@ -453,6 +466,8 @@ void MapEditor::selectMap(
     pack_context);
 
   texture_display->setFromTileKindDefs(ui, maptiledefs);
+
+  sdedit->setSourceData(ui, returned_data, sfile, "MapDef"_hashed);
 }
 
 /* ----------------------------------------------------------------------------
@@ -540,8 +555,6 @@ void MapEditor::update(UI* ui, UpdateReason reason)
 
           if (math::pointInRect(mw, border_pos, border_ext-border_pos))
           {
-            INFO("in border\n");
-
             if (mw.x < border_pos.x + layer_border_thickness)
               border_flags.set(Border::Left);
             else if (mw.x > border_ext.x - layer_border_thickness)
@@ -552,7 +565,6 @@ void MapEditor::update(UI* ui, UpdateReason reason)
             else if (mw.y > border_ext.y - layer_border_thickness)
               border_flags.set(Border::Bottom);
           }
-
 
           if (!border_flags.isNone())
           {
@@ -578,18 +590,12 @@ void MapEditor::update(UI* ui, UpdateReason reason)
           u32 layer_idx = layer - map.layers.arr;
           u32 tile_idx = tile - layer->tiles.arr;
 
-          INFO(
-            "selected layer ", layer_idx, " ",
-            "and tile ", tile_idx, "\n");
-
           SourceData* map_data = sdfile->returned_data;
           SourceData* layers_data = map_data->findChildByName("layers"_str);
           SourceData* layer_data = layers_data->children[layer_idx];
           SourceData* tiles_data = layer_data->findChildByName("tiles"_str);
           SourceData* tile_data = tiles_data->children[tile_idx];
           tile_data->dump();
-
-          // tile_data->children.clear();
 
           switch (tool)
           {
@@ -691,7 +697,9 @@ void MapEditor::update(UI* ui, UpdateReason reason)
 
         setLayerSourceData(resizing_layer, new_layer);
 
-        new_layer->dump();
+        // new_layer->dump();
+
+        sdedit->notifyExternalChange();
       }
     }
     break;
@@ -772,6 +780,7 @@ void MapEditor::setLayerSourceData(u32 idx, SourceData* data)
 {
   SourceData* map_data = h_selected_map.getFile()->returned_data;
   SourceData* layers_data = map_data->findChildByName("layers"_str);
+  SourceData* old = layers_data->children[idx];
   layers_data->children[idx] = data;
 }
 
