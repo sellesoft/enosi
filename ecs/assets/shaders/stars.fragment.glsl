@@ -20,8 +20,8 @@
 //NOTE: every field is padded to 16 bytes due to std140
 layout(std140, set = 0, binding = 0) uniform SceneBuffer
 {
-  mat3 proj;
-  mat3 view;
+  mat4 proj;
+  mat4 view;
   vec4 resolution_and_time;
 }scene;
 

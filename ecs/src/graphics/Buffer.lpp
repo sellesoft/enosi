@@ -417,7 +417,10 @@ b8 Buffer::deinit(Renderer& renderer)
 b8 Buffer::map(Renderer& renderer, u64 offset, u64 size)
 {
   RendererInternal& ri = *(RendererInternal*)renderer.internal;
-  TRACE("mapping ", size, " bytes of the buffer at index ", index, "\n");
+  if (size == MAP_WHOLE_BUFFER)
+    TRACE("mapping the whole buffer at index ", index, "\n");
+  else
+    TRACE("mapping ", size, " bytes of the buffer at index ", index, "\n");
 
   if (size == 0)
     return WARN("attempted to map 0 bytes of the buffer at index ", index,
