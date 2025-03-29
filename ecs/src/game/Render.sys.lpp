@@ -141,7 +141,7 @@ b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
   quad_fragment_shader = compiled_quad_fragment_shader->gfx_shader;
 
   if (!quad_pipeline.init(renderer,
-    quad_vertex_shader, quad_fragment_shader,
+    quad_vertex_shader, quad_fragment_shader, 0,
     "render.sys quad"_str))
     return ERROR("failed to init the quad pipeline\n");
 
@@ -161,7 +161,7 @@ b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
   stars_fragment_shader = compiled_stars_fragment_shader->gfx_shader;
 
   if (!stars_pipeline.init(renderer,
-    fullscreen_vertex_shader, stars_fragment_shader,
+    fullscreen_vertex_shader, stars_fragment_shader, 0,
     "stars"_str))
     return ERROR("failed to init the stars pipeline\n");
 
@@ -319,14 +319,6 @@ b8 RenderSys::update(const UpdateParams& params)
 
   renderer.bindPipeline(quad_pipeline);
   quads_vertex_buffer.map(renderer, 0, gfx::Buffer::MAP_WHOLE_BUFFER);
-
-  //TODO(delle) properly handle push constants
-  mem::zero(push_constant, 16*sizeof(f32));
-  push_constant[0] = 1.0f;
-  push_constant[5] = 1.0f;
-  push_constant[10] = 1.0f;
-  push_constant[15] = 1.0f;
-  renderer.pushConstant(push_constant, 16*sizeof(f32));
 
   if (params.broadcast)
     params.broadcast->raise<PreMapRender>({this});

@@ -24,7 +24,7 @@ $ end -- if IRO_LINUX
 
 #include <string.h>
 
-@defFileLogger(gfx, Trace)
+@defFileLogger(gfx, Info)
 
 namespace gfx
 {
@@ -1617,6 +1617,13 @@ b8 Renderer::update()
         break;
       }
 
+      if (cmd.push_constant.size > pipeline->push_constant_size)
+      {
+        ERROR("attempted to push constant with a size that is too large for"
+          " the active pipeline\n");
+        break;
+      }
+
       vkCmdPushConstants(ri.command_buffer, pipeline->layout,
         VK_SHADER_STAGE_VERTEX_BIT, 0, cmd.push_constant.size,
         cmd.push_constant.data);
@@ -1864,10 +1871,10 @@ void Renderer::draw(
 
 /* ----------------------------------------------------------------------------
  */
-u32 Renderer::getMaxPushConstantSize()
+u64 Renderer::getMaxPushConstantSize()
 {
     RendererInternal& ri = *(RendererInternal*)this->internal;
-    return ri.physical_device_properties.limits.maxPushConstantsSize;
+    return (u64)ri.physical_device_properties.limits.maxPushConstantsSize;
 }
 
 /* ----------------------------------------------------------------------------

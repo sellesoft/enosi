@@ -35,7 +35,8 @@ namespace ui
 {
 
 static constexpr u32 MAX_VERTICES = 0xffff;
-static constexpr u32 MAX_INDICES = 0xffff;
+static constexpr u32 MAX_INDICES = (MAX_VERTICES / 4) * 6;
+static constexpr u64 PUSH_CONSTANT_SIZE = 16 * sizeof(f32);
 
 /* ============================================================================
  */

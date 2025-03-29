@@ -51,7 +51,7 @@ struct Renderer
   void pushConstant(void* data, u64 size);
   void draw(u64 index_start, u64 index_count, u64 vertex_start);
 
-  u32 getMaxPushConstantSize();
+  u64 getMaxPushConstantSize();
 
   // NOTE(sushi) explicitly deleting the copy constructor of Renderer
   //             to prevent accidental copies since operating on a copy

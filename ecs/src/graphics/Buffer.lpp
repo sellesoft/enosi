@@ -8,7 +8,7 @@ $ require "common"
 
 #include "iro/Logger.h"
 
-@defFileLogger(gfx.buffer, Trace)
+@defFileLogger(gfx.buffer, Info)
 
 namespace gfx
 {

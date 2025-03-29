@@ -75,7 +75,6 @@ struct RenderSys
 
 
   gfx::Texture null_texture;
-  f32 push_constant[16];
 
   Scene scene;
   gfx::Buffer scene_uniform_buffer;

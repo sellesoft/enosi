@@ -109,7 +109,8 @@ b8 UI::init(Engine& engine)
     return ERROR("failed to load ui fragment shader\n");
   fragment_shader = compiled_fragment_shader->gfx_shader;
 
-  if (!pipeline.init(renderer, vertex_shader, fragment_shader, "ui"_str))
+  if (!pipeline.init(renderer, vertex_shader, fragment_shader,
+      ui::PUSH_CONSTANT_SIZE, "ui"_str))
     return ERROR("failed to init ui pipeline\n");
 
   if (!vertex_buffer.init(renderer, nullptr,
@@ -180,8 +181,8 @@ b8 UI::update(Engine& engine)
   renderer.setScissor(vec2i(0,0), window.size);
   renderer.bindVertexBuffer(vertex_buffer);
   renderer.bindIndexBuffer(index_buffer);
-  f32 push_constant[9] = {0};
-  renderer.pushConstant(&push_constant, sizeof(push_constant));
+  f32 push_constant[16] = {0};
+  renderer.pushConstant(&push_constant, ui::PUSH_CONSTANT_SIZE);
 
   TRACE("  mapping buffers\n");
   vertex_buffer.map(renderer, 0, gfx::Buffer::MAP_WHOLE_BUFFER);
@@ -535,20 +536,20 @@ $ end
       if (!force && desired_space == current_space)
         return;
 
-      f32 push_constant[9] = {0};
+      f32 push_constant[16] = {0};
       switch (current_space = desired_space)
       {
       case ItemSpace::Padded:
-        item_padded_transform.toMat3(push_constant);
-        renderer.pushConstant(&push_constant, sizeof(push_constant));
+        item_padded_transform.toMat4(push_constant);
+        renderer.pushConstant(&push_constant, ui::PUSH_CONSTANT_SIZE);
         break;
       case ItemSpace::Bordered:
-        item_bordered_transform.toMat3(push_constant);
-        renderer.pushConstant(&push_constant, sizeof(push_constant));
+        item_bordered_transform.toMat4(push_constant);
+        renderer.pushConstant(&push_constant, ui::PUSH_CONSTANT_SIZE);
         break;
       case ItemSpace::Margined:
-        item_margined_transform.toMat3(push_constant);
-        renderer.pushConstant(&push_constant, sizeof(push_constant));
+        item_margined_transform.toMat4(push_constant);
+        renderer.pushConstant(&push_constant, ui::PUSH_CONSTANT_SIZE);
         break;
       }
     };
@@ -1483,9 +1484,9 @@ void UI::emitDrawCmds( DeferredDrawCmdList& drawcmds)
   {
     if (cmd.drawcmd->counts_used.x != 0)
     {
-      f32 push_constant[9] = {0};
-      cmd.transform.toMat3(push_constant);
-      eng->renderer.pushConstant(&push_constant, sizeof(push_constant));
+      f32 push_constant[16] = {0};
+      cmd.transform.toMat4(push_constant);
+      eng->renderer.pushConstant(&push_constant, ui::PUSH_CONSTANT_SIZE);
     }
     emitDrawCmd(cmd.drawcmd, nullptr, {});
   }
