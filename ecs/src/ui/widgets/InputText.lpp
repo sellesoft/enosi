@@ -18,8 +18,6 @@ namespace ui
  */
 b8 InputTextState::init(UI& ui, String init, String preview)
 {
-  INFO("its init\n");
-
   String text_init = 
     notnil(init)
     ? init
@@ -92,9 +90,6 @@ void InputTextState::draw(UI& ui, const DrawParams& params)
     cursor_offset += pc.xadvance;
   }
 
-  INFO(text_x_offset, " ", cursor_offset, " ", params.bounds.z, " ",
-       text_x_offset + cursor_offset, "\n");
-
   f32 cursor_x = -1.f;
   vec2f cursor = params.bounds.xy();
   cursor.x -= text_x_offset;
@@ -137,8 +132,6 @@ void InputTextState::draw(UI& ui, const DrawParams& params)
   {
     auto [vp, ip] = drawcmds.quads->getPtrs(&ui);
 
-    INFO(cursor_x, " ", params.bounds.z - 1.f, "\n");
-
     cursor_x = min(cursor_x, params.bounds.x + params.bounds.z - 1.f);
 
     gfx::putFilledRect(
@@ -166,7 +159,6 @@ InputTextState::StateChange InputTextState::update(
       params.font->getPackedChar(&pc, scan.advance().codepoint);
 
       x += pc.xadvance;
-      INFO(x, "\n");
       
       if (params.local_mouse.x < x)
       {
