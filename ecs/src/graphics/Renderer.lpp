@@ -9,6 +9,7 @@ $ elseif IRO_WIN32 then --if IRO_LINUX
 #undef ERROR
 #undef min
 #undef max
+#undef interface
 $ else -- elseif IRO_WIN32
 #error "unhandled platform"
 $ end -- if IRO_LINUX

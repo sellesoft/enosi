@@ -6,6 +6,7 @@
 #undef ERROR
 #undef max
 #undef min
+#undef interface
 
 #include "Platform.h"
 #include "Platform_Win32.h"

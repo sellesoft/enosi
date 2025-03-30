@@ -9,10 +9,12 @@
 #ifndef __iro_PlatformWin32_h
 #define __iro_PlatformWin32_h
 
-#include "Windows.h"
+#define WIN32_LEAN_AND_MEAN
+#include "windows.h"
 #undef ERROR
-#undef min
 #undef max
+#undef min
+#undef interface
 
 #include "Common.h"
 #include "Unicode.h"
