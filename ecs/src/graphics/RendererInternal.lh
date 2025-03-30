@@ -5,8 +5,18 @@
 $ require "common"
 
 $ if IRO_LINUX then
+#define Window X11Window
+#define Font X11Font
+#define Time X11Time
+#define KeyCode X11KeyCode
 #define VK_USE_PLATFORM_XLIB_KHR
 #include <vulkan/vulkan.h>
+#undef Window
+#undef Font
+#undef Time
+#undef KeyCode
+#undef None
+#undef X
 $ elseif IRO_WIN32 then --if IRO_LINUX
 #define VK_USE_PLATFORM_WIN32_KHR
 #include <vulkan/vulkan.h>

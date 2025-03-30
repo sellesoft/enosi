@@ -569,7 +569,7 @@ $ if IRO_LINUX then
     VkXlibSurfaceCreateInfoKHR create_info =
     {
       .sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
-      .spy = x11.display,
+      .dpy = x11.display,
       .window = x11.root,
     };
 

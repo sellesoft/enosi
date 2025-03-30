@@ -213,8 +213,8 @@ b8 UI::update(Engine& engine)
   renderer.setScissor(vec2i(0,0), window.size);
   emitDrawCmds(top_most_drawcmds);
 
-  renderer.pushUniformMat3x2("model"_str, 
-    mat3x2::createTransform({0.f, 0.f}, 0.f));
+  mat3x2::createTransform({0.f, 0.f}, 0.f).toMat4(push_constant);
+  renderer.pushConstant(&push_constant, ui::PUSH_CONSTANT_SIZE);
 
   for (ReportedDrawCmd& ddc : debug_drawcmds)
     emitDrawCmd(ddc.drawcmd, nullptr, {});
