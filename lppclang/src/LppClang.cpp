@@ -12,6 +12,7 @@
 //             different translation units as this thing currently 
 //             takes 20s to compile and 30s to link in debug!!
 
+#include "clang/AST/DeclCXX.h"
 #include "clang/Tooling/Tooling.h"
 #include "clang/Tooling/CompilationDatabase.h"
 #include "clang/Tooling/DependencyScanning/DependencyScanningTool.h"
@@ -157,6 +158,24 @@ struct ClangIter
 typedef ClangIter<clang::DeclContext::decl_iterator> DeclContextIterator;
 typedef ClangIter<clang::RecordDecl::field_iterator> FieldIterator;
 typedef ClangIter<clang::EnumDecl::enumerator_iterator> EnumIterator;
+
+struct BaseIterator
+{
+  typedef clang::CXXRecordDecl::base_class_iterator I;
+
+  I current;
+  I end;
+
+  Type* next()
+  {
+    if (current == end)
+      return nullptr;
+
+    auto out = *current;
+    current++;
+    return (Type*)out.getType().getAsOpaquePtr();
+  }
+};
 
 struct DeclGroupIterator
 {
@@ -1485,6 +1504,37 @@ b8 isEnum(Decl* decl)
   if (clang::TagDecl::classof(cdecl))
     return clang::TagTypeKind::Enum == ((clang::TagDecl*)cdecl)->getTagKind();
   return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+BaseIter* createBaseIter(Context* ctx, Decl* decl)
+{
+  assert(decl);
+
+  using namespace clang;
+
+  auto* cdecl = getClangDecl(decl);
+  if (auto* cxx = llvm::dyn_cast<CXXRecordDecl>(cdecl))
+  {
+    auto bases = cxx->bases();
+    auto* iter = ctx->allocate<BaseIterator>();
+    iter->current = bases.begin();
+    iter->end = bases.end();
+    return (BaseIter*)iter;
+  }
+  return nullptr;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Type* nextBase(BaseIter* iter)
+{
+  assert(iter);
+
+  auto* iiter = (BaseIterator*)iter;
+
+  return iiter->next();
 }
 
 /* ----------------------------------------------------------------------------

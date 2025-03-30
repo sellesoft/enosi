@@ -104,6 +104,7 @@ typedef struct Stmt Stmt;
 typedef struct Expr Expr;
 typedef struct TemplateArg TemplateArg;
 typedef struct TemplateArgIter TemplateArgIter;
+typedef struct BaseIter BaseIter;
 
 /* ============================================================================
  */
@@ -298,6 +299,11 @@ LPPCFUNC b8 isRecord(Decl* decl);
 LPPCFUNC b8 isStruct(Decl* decl);
 LPPCFUNC b8 isUnion(Decl* decl);
 LPPCFUNC b8 isEnum(Decl* decl);
+
+/* ---------------------------------------------------------------------------
+ */
+LPPCFUNC BaseIter* createBaseIter(Context* ctx, Decl* decl);
+LPPCFUNC Type* nextBase(BaseIter* iter);
 
 /* ---------------------------------------------------------------------------
  *  Checks if this is a struct, union, or enum.
