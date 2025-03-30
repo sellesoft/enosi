@@ -1,0 +1,12 @@
+/*
+ *  Skin asset for SourceDataEditors.
+ */
+
+$ require "common"
+
+/* ============================================================================
+ */
+struct SourceDataEditorSkin
+{
+  f32 font_height;
+};

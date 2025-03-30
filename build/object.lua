@@ -417,10 +417,11 @@ object.Exe = Exe
 
 -- * --------------------------------------------------------------------------
 
-Exe.new = function(name, objs)
+Exe.new = function(name, objs, lib_filter)
   local o = {}
   o.name = name
   o.objs = objs
+  o.lib_filter = lib_filter
   return setmetatable(o, Exe)
 end
 
@@ -534,7 +535,7 @@ end
 -- * --------------------------------------------------------------------------
 
 Exe.defineTask = function(self)
-  defineLinkerTask(self, false)
+  defineLinkerTask(self, false, self.lib_filter)
 end
 
 -- * --------------------------------------------------------------------------

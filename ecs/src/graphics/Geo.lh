@@ -69,6 +69,28 @@ static vec2i putLine(
 
 /* ----------------------------------------------------------------------------
  */
+static void putLine(
+    Vertex* putverts, 
+    Index*  putindices, 
+    vec2i*  offsets, 
+    vec2f   start,
+    vec2f   end,
+    f32     thickness,
+    Color   color)
+{
+  *offsets += 
+    putLine(
+      putverts,
+      putindices,
+      *offsets,
+      start,
+      end,
+      thickness,
+      color);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 static inline vec2i putFilledTriangleCounts() { return { 3, 3 }; }
 
 /* ----------------------------------------------------------------------------
@@ -572,6 +594,13 @@ static vec2i putTextCounts(String text)
 
 /* ----------------------------------------------------------------------------
  */
+static vec2i putGlyphCounts()
+{
+  return putFilledRectCounts();
+}
+
+/* ----------------------------------------------------------------------------
+ */
 void putGlyph(
   Vertex* vp,
   Index*  ip,
@@ -580,6 +609,20 @@ void putGlyph(
   u32     codepoint,
   vec2f*  pos, 
   Color   color);
+
+/* ----------------------------------------------------------------------------
+ */
+static void putGlyph(
+  Vertex* vp,
+  Index*  ip,
+  vec2i*  counts,
+  Font*   font,
+  u32     codepoint,
+  vec2f   pos, 
+  Color   color)
+{
+  putGlyph(vp, ip, counts, font, codepoint, &pos, color);
+}
 
 /* ----------------------------------------------------------------------------
  */

@@ -535,8 +535,11 @@ b8 Metaprogram::run()
   }
 
   // NOTE(sushi) we only want to output the main lpp file's metafile
-  if (lpp->streams.meta.io  && prev == nullptr)
+  if (lpp->streams.meta.io)
+  {
+    io::formatv(lpp->streams.meta.io, "\n\n-- * ", input->name, "\n\n\n");
     io::format(lpp->streams.meta.io, meta.cache.asStr());
+  }
 
   if (lpp->consumers.meta)
     lpp->consumers.meta->consumeMetafile(*this, meta.cache.asStr());
@@ -835,7 +838,6 @@ b8 Metaprogram::processScopeSections(Scope* scope)
           if (!lua.pcall(0, 0, I.errhandler))
             return false;
 
-          // Simple write to the output cache.
           if (section->kind == Document)
           {
             scope->writeBuffer(section->buffer->asStr());
@@ -843,6 +845,7 @@ b8 Metaprogram::processScopeSections(Scope* scope)
           else
           {
             auto token = parser.lexer.tokens[section->token_idx];
+            TRACE(input->getStr(token.loc, token.len), "\n");
             scope->writeBuffer(input->getStr(token.loc, token.len));
           }
         }

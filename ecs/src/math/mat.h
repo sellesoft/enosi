@@ -63,6 +63,13 @@ struct mat3x2
 
   /* --------------------------------------------------------------------------
    */
+  vec2f getTranslation() const
+  {
+    return vec2f(get(2, 0), get(2, 1));
+  }
+
+  /* --------------------------------------------------------------------------
+   */
   static mat3x2 createInverseTransform(
       vec2f pos,
       f32   rotation,

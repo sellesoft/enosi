@@ -69,11 +69,15 @@ void ComboBox::update(UI* ui, UpdateReason reason)
     return;
   }
 
-  if (open)
+  @@this.style:lookup(box_height, option_height)
+
+  if (open && 
+      ui->testFocusableRegion(
+        {0.f,0.f}, 
+        size.yadd(@this.style.option_height * options.len())))
   {
     vec2f cursor_local = ui->eng->input.mouse.window - pos_screen;
     
-    @@this.style:lookup(box_height, option_height)
 
     if (cursor_local.y > @this.style.box_height)
     {

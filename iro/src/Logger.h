@@ -33,6 +33,7 @@
 #define WARN(...)   __HELPER(Warn,   true,  false, __VA_ARGS__)
 #define ERROR(...)  __HELPER(Error,  false, false, __VA_ARGS__)
 #define FATAL(...)  __HELPER(Fatal,  false, false, __VA_ARGS__)
+
 // Alternatives for logging w/o most formatting. This still handles colors.
 #define ERROR_NOFMT(...) __HELPER(Error, false, true, __VA_ARGS__)
 

@@ -340,6 +340,14 @@ Record.eachFieldWithIndex = function(self)
   end
 end
 
+Record.log = function(self, var)
+  local s = 'INFO("'..var..' '..self.name..'"'
+  for field in self.members.list:each() do
+    s = s..', "\\n'..field.name..': ", '..var..'.'..field.name
+  end
+  return s..', "\\n")'
+end
+
 local Field = LuaType.make()
 ast.Field = Field
 

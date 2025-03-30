@@ -45,6 +45,7 @@ typedef struct Stmt Stmt;
 typedef struct Expr Expr;
 typedef struct TemplateArg TemplateArg;
 typedef struct TemplateArgIter TemplateArgIter;
+typedef struct BaseIter BaseIter;
 typedef struct ParseStmtResult
 {
   Stmt* stmt;
@@ -120,6 +121,8 @@ typedef struct
  b8 isStruct(Decl* decl);
  b8 isUnion(Decl* decl);
  b8 isEnum(Decl* decl);
+ BaseIter* createBaseIter(Context* ctx, Decl* decl);
+ Type* nextBase(BaseIter* iter);
  b8 isTagDecl(Decl* decl);
  b8 isTemplate(Decl* decl);
  b8 isTemplateSpecialization(Decl* decl);
@@ -136,6 +139,7 @@ typedef struct
  b8 isAnonymousField(Decl* decl);
  u64 getFieldOffset(Context* ctx, Decl* field);
  b8 isComplete(Decl* decl);
+ String getComment(Context* ctx, Decl* decl);
  Decl* getDefinition(Decl* decl);
  void makeComplete(Context* ctx, Type* type);
  b8 isCanonicalDecl(Decl* decl);
@@ -208,6 +212,7 @@ local Ctx,
       Function,
       TemplateArg,
       DeclIter,
+      BaseIter,
       ParamIter,
       FieldIter,
       EnumIter,
@@ -574,6 +579,13 @@ Decl.isUnion = function(self)
   return 0 ~= lppclang.isUnion(self.handle)
 end
 
+Decl.getBaseIter = function(self)
+  local handle = lppclang.createBaseIter(self.ctx.handle, self.handle)
+  if handle ~= nil then
+    return BaseIter.new(self.ctx, handle)
+  end
+end
+
 Decl.isTagDecl = function(self)
   return 0 ~= lppclang.isTagDecl(self.handle)
 end
@@ -671,6 +683,33 @@ end
 Decl.asFunction = function(self)
   if lppclang.getDeclKind(self.decl) == lppclang.DeclKind_Function then
     return Function.new(self.ast, self.decl)
+  end
+end
+
+Decl.getComment = function(self)
+  local c = lppclang.getComment(self.ctx.handle, self.handle)
+  if c.len == 0 then
+    return nil
+  end
+  return ffi.string(c.s, c.len)
+end
+
+BaseIter = makeStruct()
+
+BaseIter.new = function(ctx, handle)
+  assert(handle ~= nil)
+  return setmetatable(
+  {
+    ctx = ctx,
+    handle = handle,
+  }, BaseIter)
+end
+
+BaseIter.next = function(self)
+  assert(self.handle ~= nil)
+  local nb = lppclang.nextBase(self.handle)
+  if nb ~= nil then
+    return Type.new(self.ctx, nb)
   end
 end
 

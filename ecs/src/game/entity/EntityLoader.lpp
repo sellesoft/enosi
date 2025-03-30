@@ -133,6 +133,9 @@ EntityId loadEntity(
 
   for (Component* defcomp : def.components)
   {
+    if (defcomp == nullptr)
+      continue;
+
     switch (defcomp->kind)
     {
 $ for comp, i in Comp.components.list:eachWithIndex() do

@@ -16,6 +16,7 @@
 local ast = require "reflect.AST"
 local List = require "List"
 local log = require "Logger" ("reflect.processor", Verbosity.Info)
+local metadata = require "reflect.Metadata"
 
 require "lppclang" .init "../lppclang/build/debug/liblppclang.so"
 
@@ -115,6 +116,7 @@ Processor.processTopLevelDecls = function(self, iter)
     if not cdecl then break end
 
     local decl = self:processTopLevelDecl(cdecl)
+    
     if decl then
 
       -- We defer recording tag decls until we finish a top level decl to
@@ -159,10 +161,6 @@ Processor.processTopLevelDecl = function(self, cdecl)
   if cdecl:name() == "" then return end
 
   if cdecl:isTemplateSpecialization() then return end
-
-  -- if cdecl:name() == "GameMgr" or cdecl:name() == "Engine" then
-  --   print(cdecl:name())
-  -- end
 
   if cdecl:isNamespace() then
     local name = cdecl:name()
@@ -212,19 +210,9 @@ Processor.resolveDecl = function(self, cdecl)
     decl = self:processEnum(cdecl, ctype)
   end
 
-  -- if decl and
-  --    (decl.name == "struct GameMgr" or
-  --     decl.name == "struct Engine")
-  -- then
-  --   decl:dump()
-  -- end
-
-  if decl then
-    -- self:recordDecl(decl)
-  end
-
   if decl then
     decl.type = self:resolveType(ctype)
+    decl.comment = cdecl:getComment()
   end
 
   return decl
@@ -313,6 +301,28 @@ Processor.processStruct = function(self, cdecl, ctype)
   self:recordProcessed(ctype:getCanonicalTypeName(), struct)
 
   self:processRecordMembers(cdecl, ctype, struct)
+
+  cdecl = self:ensureDefinitionDecl(cdecl)
+
+  if cdecl:isComplete() then
+    local bases = cdecl:getBaseIter()
+    if bases then
+      local base = bases:next()
+      while base do
+        local basedecl = base:getDecl()
+        if basedecl then
+          local decl = self:resolveDecl(basedecl)
+          if decl then
+            decl.derived = decl.derived or List{}
+            decl.derived:push(struct)
+            struct.bases = struct.bases or List{}
+            struct.bases:push(decl)
+          end
+        end
+        base = bases:next()
+      end
+    end
+  end
 
   return struct
 end
@@ -406,6 +416,14 @@ Processor.processRecordMembers = function(self, cdecl, ctype, record)
           field_type,
           member_cdecl:getFieldOffset() / 8)
 
+      field.comment = member_cdecl:getComment()
+
+      if field.comment then
+        field.metadata = metadata.parse(field.comment)
+      else
+        field.metadata = {}
+      end
+
       record:addMember(member_cdecl:name(), field)
     elseif member_cdecl:isTagDecl() then
       local member_decl = self:resolveDecl(member_cdecl)
@@ -427,7 +445,16 @@ Processor.processEnum = function(self, cdecl, ctype)
       local elem = iter:next()
       if not elem then break end
 
-      enum.elems:push(elem:name())
+      local e = {}
+      e.name = elem:name()
+      e.comment = elem:getComment()
+      if e.comment then
+        e.metadata = metadata.__parse(e.comment)
+      else
+        e.metadata = {}
+      end
+
+      enum.elems:push(e)
     end
   end
 

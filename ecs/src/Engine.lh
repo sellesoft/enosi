@@ -60,8 +60,6 @@ struct Engine
   ui::Inspector* inspector;
 
 
-  SourceDataFileHandle h_test;
-
   b8 init();
   void deinit();
 

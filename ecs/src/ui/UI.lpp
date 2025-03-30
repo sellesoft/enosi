@@ -13,13 +13,15 @@ $ local ui = require "ui.UI"
 #include "iro/Logger.h"
 #include "iro/containers/SmallArray.h"
 
+$ require "Log"
+
+
 using namespace iro;
 
 namespace ui
 {
 
-static Logger logger =
-  Logger::create("ui"_str, Logger::Verbosity::Info);
+@log.ger(ui, Info)
 
 /* ----------------------------------------------------------------------------
  */
@@ -196,11 +198,13 @@ b8 UI::update(Engine& engine)
     mat3x2::createTransform({0.f,0.f}, 0.f);
 
   DeferredDrawCmdList top_most_drawcmds;
+  DrawCmdList debug_drawcmds;
 
   UpdateTreeContext ctx = 
   {
     .top_most_drawcmds = &top_most_drawcmds,
     .current_transform = &base_transform,
+    .debug_cmds = &debug_drawcmds,
   };
 
   updateTree(root->node, ctx);
@@ -209,10 +213,11 @@ b8 UI::update(Engine& engine)
   renderer.setScissor(vec2i(0,0), window.size);
   emitDrawCmds(top_most_drawcmds);
 
-  if (ctx.hovered && ctx.hovered != hovered)
-  {
-    INFO("new hover: ", ctx.hovered, " ", ctx.hovered->name, "\n");
-  }
+  renderer.pushUniformMat3x2("model"_str, 
+    mat3x2::createTransform({0.f, 0.f}, 0.f));
+
+  for (ReportedDrawCmd& ddc : debug_drawcmds)
+    emitDrawCmd(ddc.drawcmd, nullptr, {});
 
   hovered = ctx.hovered;
 
@@ -390,11 +395,6 @@ $ end
       Item* prev_focused = focused;
       focused = item;
 
-      if (prev_focused)
-        INFO("focused ", prev_focused->name, " -> ", focused->name, "\n");
-      else
-        INFO("focused ", focused->name, "\n");
-
       if (prev_focused != item)
       {
         @tryUpdate(FocusGained)
@@ -466,7 +466,7 @@ $ end
     vec2f pext = 
       min(ppos + psiz, parent->visible_start + parent->visible_size);
 
-    scoff = max(vec2f(0,0), max(ppos, min( cpos, pext)));
+    scoff = max(vec2f(0,0), max(ppos, min(cpos, pext)));
 
     vec2f br = max(ppos, min(cext, pext));
 
@@ -488,13 +488,6 @@ $ end
     item->visible_start = item->pos_screen;
     item->visible_size = item->size;
   }
-
-  TRACE("item ", item->name, ":",
-    "\n     ps: ", item->pos_screen,
-    "\n  scoff: ", scoff,
-    "\n  scsiz: ", scsiz,
-    "\n    adj: ", vec2i(scoff.x, window.size.y - (scoff.y+scsiz.y)),
-    "\n");
 
   // TODO(sushi) we can maybe pull some of these conditions into the
   //             calculations above to stop doing work much earlier.
@@ -607,11 +600,10 @@ $ end
 
     if (child_ctx.hovered == nullptr)
     {
-      vec2f visual_area = item->calcVisualArea();
       if (math::pointInRect(
             eng->input.mouse.window, 
             item->visible_start,
-            visual_area))
+            item->calcVisualArea()))
         ctx.hovered = item;
     }
     else
@@ -638,6 +630,97 @@ $ end
 
     if (item->builtin.borders)
       emitDrawCmd(item->builtin.borders, item, vec4f(scoff, scsiz));
+
+    if (item->builtin.debug == nullptr)
+    {
+      item->builtin.debug = drawcmds.add();
+      // item->builtin.debug->tex = gohu_font_texture;
+
+      item->builtin.debug_text = drawcmds.add();
+      item->builtin.debug_text->tex = gohu_font_texture;
+    }
+
+    if (false && item == hovered)
+    {
+      io::StaticBuffer<32> text;
+      io::format(&text, item);
+
+      auto [vp, ip] = 
+        item->builtin.debug->realloc(
+          this, 
+          gfx::putBordersCounts() + 
+          2 * gfx::putFilledRectCounts());
+
+      vec2f text_size = gfx::measureText(
+        text.asStr(), gohu_font, 11.f, 1.f);
+
+      item->builtin.debug->counts_used = {};
+
+      vec2f text_pos = 
+        max(vec2f(0,0), min(item->pos_screen, root->size - text_size));
+
+      gfx::putFilledRect(
+        vp, ip,
+        &item->builtin.debug->counts_used,
+        text_pos,
+        text_size,
+        0x000000ff);
+
+      vec2f bar_pos, bar_size;
+      vec2f handle_pos, handle_size;
+
+      bar_pos += item->pos_screen;
+      handle_pos += item->pos_screen;
+
+      item->calcVerticalScrollBar(
+        this,
+        &bar_pos, &bar_size,
+        &handle_pos, &handle_size);
+
+      gfx::putFilledRect(
+        vp, ip,
+        &item->builtin.debug->counts_used,
+        handle_pos,
+        handle_size,
+        0x00ff00ff);
+
+      gfx::putBorders(
+        vp, ip,
+        &item->builtin.debug->counts_used,
+        {-2.f, -2.f, -2.f, -2.f},
+        item->visible_start,
+        item->visible_size,
+        0xff0000ff);
+
+      auto [tvp, tip] = 
+        item->builtin.debug_text->realloc(
+          this, gfx::putTextCounts(text.asStr()));
+
+      item->builtin.debug_text->counts_used = {};
+
+      gfx::putText(
+        tvp, tip,
+        &item->builtin.debug_text->counts_used,
+        max(vec2f(0,0), min(item->pos_screen, root->size - text_size)),
+        text.asStr(),
+        gohu_font,
+        11.f, 1.f,
+        0xffffffff,
+        nullptr);
+
+
+
+      ctx.debug_cmds->push(item->builtin.debug);
+      ctx.debug_cmds->push(item->builtin.debug_text);
+    }
+  }
+
+  if (item->isHovered(this, Item::HoverKind::Child) && 
+      item->max_scroll.y != 0.f && input.scroll != 0.f)
+  {
+    item->scroll.y = 
+      min(0.f, max(item->max_scroll.y, item->scroll.y + 10 * input.scroll));
+    item->dirty = true;
   }
 
   // Handle scrollbar input for this Item if necessary.
@@ -654,6 +737,9 @@ $ end
         this,
         &bar_pos, &bar_size,
         &handle_pos, &handle_size);
+
+      bar_pos += item->pos_screen;
+      handle_pos += item->pos_screen;
 
       if (math::pointInRect(
             input.mouse.window,
@@ -672,6 +758,9 @@ $ end
         this,
         &bar_pos, &bar_size,
         &handle_pos, &handle_size);
+
+      bar_pos += item->pos_screen;
+      handle_pos += item->pos_screen;
 
       if (math::pointInRect(
             input.mouse.window,
@@ -1407,7 +1496,7 @@ void UI::genItemBranch(ItemNode* node)
  */
 b8 UI::testFocusableRegion(vec2f pos, vec2f size)
 {
-  if (focus_consumed)
+  if (focus_consumed || hovered != updating_item)
     return false;
 
   if (math::pointInRect(
@@ -1420,6 +1509,19 @@ b8 UI::testFocusableRegion(vec2f pos, vec2f size)
   }
 
   return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 UI::testHoverableRegion(vec2f pos, vec2f size)
+{
+  if (hovered != updating_item)
+    return false;
+
+  return math::pointInRect(
+      eng->input.mouse.window,
+      updating_item->pos_screen + pos,
+      size);
 }
 
 /* ----------------------------------------------------------------------------
@@ -1438,12 +1540,27 @@ void UI::emitDrawCmd(
 
   if (drawcmd_scissor)
   {
-    f32 scissor_x = item->pos_screen.x + max(0.f, drawcmd->scissor.x);
-    f32 scissor_y = item->pos_screen.y + max(0.f, drawcmd->scissor.y);
+    f32 scissor_x = max(0.f, item->pos_screen.x + drawcmd->scissor.x);
+    f32 scissor_y = max(0.f, item->pos_screen.y + drawcmd->scissor.y);
     f32 scissor_w = min(item->size.x, drawcmd->scissor.z);
     f32 scissor_h = min(item->size.y, drawcmd->scissor.w);
-    
+
     scissor_y = eng->window.size.y - (scissor_y + scissor_h);
+
+    f32 ext_x = scissor_x + scissor_w;
+    f32 ext_y = scissor_y + scissor_h;
+
+    scissor_x = max(scissor_x, current_scissor.x);
+    scissor_y = max(scissor_y, current_scissor.y);
+    scissor_w = 
+      min(
+        scissor_w, 
+        current_scissor.x + current_scissor.z - scissor_x);
+    scissor_h = 
+      min(
+        scissor_h,
+        max(0.f, current_scissor.y + current_scissor.w - scissor_y));
+
 
     eng->renderer.setScissor(
       vec2i(scissor_x, scissor_y), vec2i(scissor_w, scissor_h));

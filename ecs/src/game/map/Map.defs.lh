@@ -1,6 +1,7 @@
 
 $ local cmn = require "common"
 $ local Schema = require "asset.Schema"
+$ local metadata = require "reflect.Metadata"
 
 #include "iro/Common.h"
 #include "iro/Unicode.h"
@@ -25,7 +26,8 @@ enum class TileKind
   Empty,
   Wall,
   Floor,
-
+  
+  @metadata.hidden
   COUNT,
 };
 

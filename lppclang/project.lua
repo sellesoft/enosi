@@ -7,9 +7,9 @@ local lppclang = sys.getLoadingProject()
 lppclang:dependsOn("llvm", "iro")
 
 for cfile in lake.find("src/**/*.cpp"):each() do 
-  if not cfile:find("main%.cpp") then
+  --if not cfile:find("main%.cpp") then
     lppclang.report.CppObj(cfile)
-  end
+  --end
 end
 
 for lfile in lake.find("src/**/*.lua"):each() do
@@ -40,3 +40,9 @@ lppclang.report.published(
       -- how to gracefully fix for now.
       luajit=true
     }))
+
+lppclang.report.Exe("lppclang-test", 
+  lppclang:gatherBuildObjects{bobj.CppObj, bobj.LuaObj},
+  {
+    lppclang=true
+  })

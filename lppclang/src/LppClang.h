@@ -104,6 +104,7 @@ typedef struct Stmt Stmt;
 typedef struct Expr Expr;
 typedef struct TemplateArg TemplateArg;
 typedef struct TemplateArgIter TemplateArgIter;
+typedef struct BaseIter BaseIter;
 
 /* ============================================================================
  */
@@ -300,6 +301,11 @@ LPPCFUNC b8 isUnion(Decl* decl);
 LPPCFUNC b8 isEnum(Decl* decl);
 
 /* ---------------------------------------------------------------------------
+ */
+LPPCFUNC BaseIter* createBaseIter(Context* ctx, Decl* decl);
+LPPCFUNC Type* nextBase(BaseIter* iter);
+
+/* ---------------------------------------------------------------------------
  *  Checks if this is a struct, union, or enum.
  */
 LPPCFUNC b8 isTagDecl(Decl* decl);
@@ -341,6 +347,11 @@ LPPCFUNC u64 getFieldOffset(Context* ctx, Decl* field);
 /* ----------------------------------------------------------------------------
  */
 LPPCFUNC b8 isComplete(Decl* decl);
+
+/* ----------------------------------------------------------------------------
+ *  Gets a comment, if any, attached to the given Decl.
+ */
+LPPCFUNC String getComment(Context* ctx, Decl* decl);
 
 /* ----------------------------------------------------------------------------
  *  Retrieves the declaration that actually defines whatever this is. Eg.

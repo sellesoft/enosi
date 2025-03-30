@@ -536,6 +536,53 @@ int testFieldOffset()
   return 0;
 }
 
+void commentWalk(Context* ctx, Decl* decl)
+{
+  INFO("* ------- ", getDeclName(decl), "\n");
+  String comment = getComment(ctx, decl);
+  if (notnil(comment))
+    INFO(comment, "\n");
+  else
+    INFO(" no comment\n");
+
+  if (DeclIter* iter = createDeclIter(ctx, decl))
+  {
+    while (Decl* child = getNextDecl(iter))
+    {
+      commentWalk(ctx, child);
+    }
+  }
+}
+
+int testComments()
+{
+  auto ctx = createContext(nullptr, 0);
+  if (!ctx)
+    return 1;
+  defer { destroyContext(ctx); };
+
+  Decl* decl = parseString(ctx, R"cpp(
+    // This struct is someThing.
+    struct Thing
+    {
+      // A
+      int a;
+      // Then
+      // B
+      int b;
+      // And
+      //
+      
+      // C
+      int c;
+    };
+  )cpp"_str);
+
+  commentWalk(ctx, decl);
+
+  return 0;
+}
+
 int main()
 {
   if (!iro::log.init())
@@ -564,6 +611,7 @@ int main()
   // return testDepedencies();
   // return testFakeNamespace();
   // return debugEnumParse();
-  return testFieldOffset();
+  // return testFieldOffset();
+  return testComments();
 }
 

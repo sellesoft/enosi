@@ -12,12 +12,14 @@
 //             different translation units as this thing currently 
 //             takes 20s to compile and 30s to link in debug!!
 
+#include "clang/AST/DeclCXX.h"
 #include "clang/Tooling/Tooling.h"
 #include "clang/Tooling/CompilationDatabase.h"
 #include "clang/Tooling/DependencyScanning/DependencyScanningTool.h"
 #include "clang/AST/Decl.h"
 #include "clang/AST/DeclGroup.h"
 #include "clang/AST/LocInfoType.h"
+#include "clang/AST/Comment.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Sema/Template.h"
 #include "clang/Frontend/CompilerInstance.h"
@@ -35,6 +37,7 @@
 #include "clang/Driver/Driver.h"
 #include "clang/Driver/Compilation.h"
 #include "clang/Basic/SourceManager.h"
+#include "llvm/Support/Casting.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/TargetParser/Host.h"
 
@@ -155,6 +158,24 @@ struct ClangIter
 typedef ClangIter<clang::DeclContext::decl_iterator> DeclContextIterator;
 typedef ClangIter<clang::RecordDecl::field_iterator> FieldIterator;
 typedef ClangIter<clang::EnumDecl::enumerator_iterator> EnumIterator;
+
+struct BaseIterator
+{
+  typedef clang::CXXRecordDecl::base_class_iterator I;
+
+  I current;
+  I end;
+
+  Type* next()
+  {
+    if (current == end)
+      return nullptr;
+
+    auto out = *current;
+    current++;
+    return (Type*)out.getType().getAsOpaquePtr();
+  }
+};
 
 struct DeclGroupIterator
 {
@@ -519,6 +540,7 @@ struct Context
     clang.getCodeGenOpts().ClearASTBeforeBackend = false;
     clang.getFrontendOpts().DisableFree = false;
     clang.getCodeGenOpts().DisableFree = false;
+    clang.getLangOpts().CommentOpts.ParseAllComments = true;
 
     clang.LoadRequestedPlugins();
 
@@ -606,7 +628,7 @@ static b8 startNewBuffer(
   FileID fileid = 
     srcmgr.createFileID(
       std::move(
-        llvm::MemoryBuffer::getMemBuffer(
+        llvm::MemoryBuffer::getMemBufferCopy(
           llvm::StringRef((char*)s.ptr, s.len))),
       SrcMgr::C_User, 
       0, 0, new_loc);
@@ -1486,6 +1508,37 @@ b8 isEnum(Decl* decl)
 
 /* ----------------------------------------------------------------------------
  */
+BaseIter* createBaseIter(Context* ctx, Decl* decl)
+{
+  assert(decl);
+
+  using namespace clang;
+
+  auto* cdecl = getClangDecl(decl);
+  if (auto* cxx = llvm::dyn_cast<CXXRecordDecl>(cdecl))
+  {
+    auto bases = cxx->bases();
+    auto* iter = ctx->allocate<BaseIterator>();
+    iter->current = bases.begin();
+    iter->end = bases.end();
+    return (BaseIter*)iter;
+  }
+  return nullptr;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Type* nextBase(BaseIter* iter)
+{
+  assert(iter);
+
+  auto* iiter = (BaseIterator*)iter;
+
+  return iiter->next();
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 isTagDecl(Decl* decl)
 {
   assert(decl);
@@ -1637,9 +1690,35 @@ u64 getFieldOffset(Context* ctx, Decl* field)
 b8 isComplete(Decl* decl)
 {
   assert(decl);
-  auto cdecl = getClangDecl(decl);
+  auto* cdecl = getClangDecl(decl);
   assert(clang::TagDecl::classof(cdecl));
   return ((clang::TagDecl*)cdecl)->isCompleteDefinition();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+String getComment(Context* ctx, Decl* decl)
+{
+  assert(decl);
+
+  using namespace clang;
+  using namespace comments;
+
+  auto* cdecl = getClangDecl(decl);
+
+  ASTContext& ast = ctx->clang->getASTContext();
+  Preprocessor& preprocessor = ctx->clang->getPreprocessor();
+  SourceManager& srcmgr = ctx->clang->getSourceManager();
+
+  if (const RawComment* comment = ast.getRawCommentForAnyRedecl(cdecl))
+  {
+    auto text = comment->getRawText(srcmgr);
+    return 
+      String::from((u8*)text.data(), text.size())
+      .allocateCopy(&ctx->string_allocator);
+  }
+
+  return nil;
 }
 
 /* ----------------------------------------------------------------------------
@@ -1647,7 +1726,7 @@ b8 isComplete(Decl* decl)
 Decl* getDefinition(Decl* decl)
 {
   assert(decl);
-  auto cdecl = getClangDecl(decl);
+  auto* cdecl = getClangDecl(decl);
   if (!clang::TagDecl::classof(cdecl))
     return nullptr;
   return (Decl*)((clang::TagDecl*)cdecl)->getDefinition();

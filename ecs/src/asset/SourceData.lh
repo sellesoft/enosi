@@ -73,6 +73,13 @@ struct SourceData
 
   /* --------------------------------------------------------------------------
    */
+  b8 hasData() const
+  {
+    return hasObjectData() || hasStringValue() || hasNumberValue();
+  }
+
+  /* --------------------------------------------------------------------------
+   */
   void destroy()
   {
     children.destroy();
@@ -82,6 +89,7 @@ struct SourceData
    */
   const SourceData* findChildByName(String name) const
   {
+    assert(hasObjectData());
     for (const SourceData* child : children)
     {
       if (child->name == name)
@@ -96,6 +104,10 @@ struct SourceData
   {
     return (SourceData*)((const SourceData*)this)->findChildByName(name);
   } 
+
+  /* --------------------------------------------------------------------------
+   */
+  SourceData* deepCopy(SourceDataFile* sfile);
 
   void dump(u32 depth = 0) const;
   void dump(io::IO* out, u32 depth = 0) const;

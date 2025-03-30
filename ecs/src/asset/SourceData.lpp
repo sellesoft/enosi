@@ -10,6 +10,33 @@ using namespace iro;
 
 /* ----------------------------------------------------------------------------
  */
+SourceData* SourceData::deepCopy(SourceDataFile* sfile)
+{
+  SourceData* nu = sfile->allocateSourceData();
+
+  if (notnil(name))
+    nu->name = name.allocateCopy(&sfile->string_cache);
+  if (notnil(type))
+    nu->type = type.allocateCopy(&sfile->string_cache);
+
+  if (!hasObjectData())
+  {
+    nu->val.kind = val.kind;
+    if (notnil(val.str))
+      nu->val.str = val.str.allocateCopy(&sfile->string_cache);
+  }
+  else
+  {
+    nu->children.init();
+    for (SourceData* child : children)
+      nu->children.push(child->deepCopy(sfile));
+  }
+
+  return nu;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 void SourceData::dump(io::IO* out, u32 depth) const
 {
   auto indent = [&]()
