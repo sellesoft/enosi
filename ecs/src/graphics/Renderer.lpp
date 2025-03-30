@@ -1,4 +1,5 @@
 $ require "common"
+$ require "Log"
 
 @@lpp.import "graphics/RendererInternal.lh"
 
@@ -30,8 +31,7 @@ $ end -- if IRO_LINUX
 namespace gfx
 {
 
-static Logger logger =
-  Logger::create("gfx"_str, Logger::Verbosity::Info);
+@log.ger(gfx, Info)
 
 /* ----------------------------------------------------------------------------
  */
@@ -42,13 +42,13 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL vkDebugCallback(
   void* user_data)
 {
   switch(severity){
-    /*case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
       TRACE(callback_data->pMessage, "\n");
       break;
     case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
       INFO(callback_data->pMessage, "\n");
       break;
-    */case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
+    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
       WARN(callback_data->pMessage, "\n");
       break;
     case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
@@ -84,12 +84,21 @@ static b8 updateSwapchain(Renderer& renderer)
   ri.surface_format = formats[0];
   for (u32 i = 0; i < format_count; i++)
   {
+$ if IRO_LINUX then
+    if (   formats[i].format == VK_FORMAT_R8G8B8A8_UNORM
+        && formats[i].colorSpace == VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT)
+    {
+      ri.surface_format = formats[i];
+      break;
+    }
+$ else
     if (   formats[i].format == VK_FORMAT_B8G8R8A8_SRGB
         && formats[i].colorSpace == VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT)
     {
       ri.surface_format = formats[i];
       break;
     }
+$ end
   }
 
   u32 present_mode_count = 0;
@@ -127,21 +136,25 @@ static b8 updateSwapchain(Renderer& renderer)
   {
     ri.swapchain_min_image_count = 2;
     ri.surface_present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
+    @log.info("selected mailbox\n");
   }
   else if (immediate)
   {
     ri.swapchain_min_image_count = 1;
     ri.surface_present_mode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+    @log.info("selected immediate\n");
   }
   else if (fifo_relaxed)
   {
     ri.swapchain_min_image_count = 2;
     ri.surface_present_mode = VK_PRESENT_MODE_FIFO_RELAXED_KHR;
+    @log.info("selected relaxed\n");
   }
   else
   {
     ri.swapchain_min_image_count = 2;
     ri.surface_present_mode = VK_PRESENT_MODE_FIFO_KHR;
+    @log.info("selected fifo\n");
   }
   ri.swapchain_min_image_count = max(capabilities.minImageCount,
     min(capabilities.maxImageCount, ri.swapchain_min_image_count));
@@ -199,7 +212,7 @@ static b8 updateSwapchain(Renderer& renderer)
 
   if (VK_SUCCESS != vkCreateSwapchainKHR(ri.device, &create_info,
     &ri.allocator, &ri.swapchain))
-    return FATAL("failed to create the win32 vulkan swapchain\n");
+    return FATAL("failed to update the swapchain\n");
 
   vkDestroySwapchainKHR(ri.device, old_swapchain, &ri.allocator);
 
@@ -571,7 +584,7 @@ $ if IRO_LINUX then
     {
       .sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
       .dpy = x11.display,
-      .window = x11.root,
+      .window = (X11Window)engine.window.handle,
     };
 
     if (VK_SUCCESS != vkCreateXlibSurfaceKHR(ri.instance, &create_info,
