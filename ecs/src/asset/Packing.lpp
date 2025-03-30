@@ -203,7 +203,8 @@ b8 packString(const SourceData& data, String* out)
  */
 b8 destroyString(String* s)
 {
-  mem::stl_allocator.free(s->ptr);
+  if (notnil(*s))
+    mem::stl_allocator.free(s->ptr);
   return true;
 }
 
@@ -568,6 +569,8 @@ $ end
  */
 b8 packComponent(const SourceData& data, Component** out, PackContext& ctx)
 {
+  *out = nullptr;
+
   if (isnil(data.type))
     return ERROR("Component data must be typed\n");
 
@@ -614,7 +617,8 @@ b8 destroyPackedData<Component*>(Component** comp)
   //             plain source data values, maybe.. I'm really not sure, but 
   //             this should probably be rethought in the future once we 
   //             have a greater idea of what Components have packed into them.
-  mem::stl_allocator.free(*comp);
+  if (*comp != nullptr)
+    mem::stl_allocator.free(*comp);
 
   return true;
 }

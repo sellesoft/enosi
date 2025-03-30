@@ -39,10 +39,12 @@ b8 Tile::init(
   for (const EntityDef& entdef : def.entities)
   {
     auto entid = loadEntity(entdef, entmgr, assetmgr, renderer);
-    auto* ent = entmgr.getEntity(entid);
-    auto* transform = ent->tryComp<Transform>();
-    transform->pos = pos;
-    transform->placement_layer = layer_idx;
+    if (auto* ent = entmgr.getEntity(entid))
+    {
+      auto* transform = ent->tryComp<Transform>();
+      transform->pos = pos;
+      transform->placement_layer = layer_idx;
+    }
   }
 
   return true;

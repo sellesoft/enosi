@@ -74,8 +74,14 @@ local eachDecl = function(f)
           if decl.specialized_name == "Array" then
             local subtype = decl.template_args[1]
             local subdecl = subtype:getDecl()
-            if subdecl and not isExplicitlyFiltered(subdecl.name) then
-              can_emit = true
+            if subdecl then
+              if not isExplicitlyFiltered(subdecl.name) then
+                can_emit = true
+              end
+            else
+              if subtype:is(ast.PointerType) then
+                can_emit = true
+              end
             end
           end
         elseif decl:is(ast.Struct) or decl:is(ast.Enum) then
@@ -251,9 +257,6 @@ struct DatumState : DatumBase
     parent = params.parent;
     data = params.data;
 
-    if (parent)
-      INFO("got parent ", parent, " -> ", parent->parent, "\n");
-
     name = ui.drawcmds.add();
     name->tex = params.editor->font_texture;
 
@@ -359,23 +362,15 @@ struct DatumState : DatumBase
   
     name->counts_used = {};
 
-    drawText(
-      ui,
-      params.name,
-      { skin.rows.name_pad + getNameXOffset(), calcRowTextY() },
-      name,
-      params);
-  
-    /*gfx::putText(*/
-    /*  vp, ip,*/
-    /*  &name->counts_used,*/
-    /*  { pos.x + skin.rows.name_pad + getNameXOffset(), calcRowTextY() },*/
-    /*  params.name,*/
-    /*  params.editor->font,*/
-    /*  skin.font_height,*/
-    /*  1.f,*/
-    /*  skin.text_color,*/
-    /*  nullptr);*/
+    if (parent == nullptr || !parent->embedsChildren())
+    {
+      drawText(
+        ui,
+        params.name,
+        { skin.rows.name_pad + getNameXOffset(), calcRowTextY() },
+        name,
+        params);
+    }
 
     datum_idx = *params.datum_count += 1;
 
@@ -402,6 +397,16 @@ struct DatumState : DatumBase
   /* --------------------------------------------------------------------------
    */
   virtual f32 getNameXOffset() const { return 0.f; }
+
+  /* --------------------------------------------------------------------------
+   *  Kinda scuffed but used for TypedPointerState's.
+   */
+  virtual b8 embedsChildren() const { return false; }
+
+  /* --------------------------------------------------------------------------
+   *  Kinda scuffed but used for TypedPointerState's.
+   */
+  virtual b8 isOpen() const { return true; }
 
   /* --------------------------------------------------------------------------
    */
@@ -572,6 +577,251 @@ struct DatumState : DatumBase
       lists.pre_children.push(dc.text);
     }
   };  
+
+  struct DatumComboBox
+  {
+    SourceData*       data;
+    vec2f             pos;
+    vec2f             size;
+    DatumTextEditKind kind;
+    b8                open;
+
+    typedef Slice<String> Options;
+
+    struct
+    {
+      DrawCmd* text;
+      DrawCmd* decor;
+    } dc;
+    
+    b8 init(
+        UI& ui,
+        SourceData* data,
+        DatumTextEditKind kind,
+        SourceDataEditor* editor)
+    {
+      this->data = data;
+      this->kind = kind;
+
+      dc.text = ui.drawcmds.add();
+      dc.text->tex = editor->font_texture;
+
+      dc.decor = ui.drawcmds.add();
+      dc.decor->alloc(
+        &ui, gfx::putFilledRectCounts() + gfx::putBordersCounts());
+
+      open = false;
+
+      return true;
+    }
+
+    void deinit(UI& ui)
+    {
+      dc.text->remove(&ui);
+      dc.decor->remove(&ui);
+    }
+
+    void setData(SourceData* data) { this->data = data; }
+
+    struct TextLayout
+    {
+      vec2f pos;
+      vec2f size;
+    };
+
+    TextLayout calcTextLayout() const
+    {
+      TextLayout layout = {};
+      layout.pos = vec2f(
+        pos.x + skin.enum_box.text_horizontal_padding,
+        pos.y + ceil(0.5f * (size.y - skin.font_height)));
+      layout.size = vec2f(
+        size.x - 2 * skin.enum_box.text_horizontal_padding,
+        skin.font_height);
+      return layout;
+    }
+
+    String getSelected() const
+    {
+      switch (kind)
+      {
+      case DatumTextEditKind::Name:
+        return data->name;
+        break;
+      case DatumTextEditKind::Type:
+        return data->type;
+        break;
+      case DatumTextEditKind::Value:
+        return data->val.str;
+        break;
+      }
+    }
+
+    void setSelected(String s)
+    {
+      switch (kind)
+      {
+      case DatumTextEditKind::Name:
+        data->name = s;
+        break;
+      case DatumTextEditKind::Type:
+        data->type = s;
+        break;
+      case DatumTextEditKind::Value:
+        data->val.str = s;
+        break;
+      }
+    }
+
+    void draw(
+        UI& ui, 
+        vec2f pos, 
+        vec2f size, 
+        const Options& options,
+        const DrawParams& params)
+    {
+      this->pos = pos;
+      this->size = size;
+
+      auto [text_pos, text_size] = calcTextLayout();
+
+      u32 char_count = 0;
+      for (String opt : options)
+        char_count += opt.countCharacters();
+      
+      b8 has_selected = false;
+
+      // Place options.
+      {
+        String selected = getSelected();
+       
+        auto [vp, ip] = dc.text->realloc(
+          &ui, s32(char_count) * gfx::putFilledRectCounts());
+        dc.text->counts_used = {};
+
+        gfx::putText(
+          vp, ip,
+          &dc.text->counts_used,
+          text_pos,
+          selected,
+          params.editor->font,
+          skin.font_height,
+          1.f,
+          skin.text_color,
+          nullptr);
+
+        f32 y = 0.f;
+
+        for (String opt : options)
+        {
+          if (selected != opt)
+          {
+            y += skin.rows.height;
+
+            gfx::putText(
+              vp, ip,
+              &dc.text->counts_used,
+              text_pos.yadd(y),
+              opt,
+              params.editor->font,
+              skin.font_height,
+              1.f,
+              skin.text_color,
+              nullptr);
+          }
+          else
+            has_selected = true;
+        }
+      }
+
+      // Place decor.
+      {
+        auto [vp, ip] = dc.decor->getPtrs(&ui);
+        dc.decor->counts_used = {};
+
+        auto decor_pos = 
+          vec2f(pos.x, pos.y + skin.enum_box.vertical_padding);
+        auto decor_size = 
+          vec2f(size.x, skin.rows.height - 2 * skin.enum_box.vertical_padding);
+
+        if (open)
+          decor_size.y += 
+            (options.len - (has_selected? 1 : 0)) * skin.rows.height;
+
+        gfx::putFilledRect(
+          vp, ip,
+          &dc.decor->counts_used,
+          decor_pos,
+          decor_size,
+          skin.enum_box.bg_color);
+
+        gfx::putBorders(
+          vp, ip,
+          &dc.decor->counts_used,
+          skin.enum_box.borders,
+          decor_pos,
+          decor_size,
+          skin.enum_box.border_color);
+      }
+    }
+
+    b8 update(
+        UI& ui, 
+        UpdateReason reason, 
+        DatumState* datum,
+        const Options& options,
+        SourceDataEditor* editor)
+    {
+      if (reason != UpdateReason::MouseReleased)
+        return false;
+
+      b8 selected_elem = false;
+  
+      if (open)
+      {
+        f32 y = pos.y;
+
+        String selected = getSelected();
+        auto [text_pos, text_size] = calcTextLayout();
+
+        for (String opt : options)
+        {
+          if (selected != opt)
+          {
+            y += skin.rows.height;
+
+            INFO("test ", vec2f(pos.x, y), " ", 
+                 vec2f(size.x, skin.rows.height), "\n");
+
+            if (ui.testFocusableRegion({pos.x, y}, {size.x, skin.rows.height}))
+            {
+              INFO("hit\n");
+              setSelected(opt);
+              datum->onEdit(editor);
+              selected_elem = true;
+              break;
+            }
+          }
+        }
+
+        open = false;
+      }
+      else if (ui.testFocusableRegion(pos, size))
+      {
+        open = true;
+      }
+
+      editor->dirty = true;
+      return selected_elem;
+    }
+
+    void reportDrawCmds(UI& ui, DrawCmdLists& lists, SourceDataEditor* editor)
+    {
+      DrawCmdList* list = open? &lists.top_most : &lists.pre_children;
+      list->push(dc.decor);
+      list->push(dc.text);
+    }
+  };
 
   /* --------------------------------------------------------------------------
    */
@@ -858,6 +1108,14 @@ struct ObjectState : DatumState
    */
   void datum_eval(UI& ui, const EvalParams& params) override
   {
+    if (parent != nullptr)
+    {
+      if (parent->embedsChildren())
+        open = parent->isOpen();
+    }
+    else
+      open = true;
+
     obj_eval(ui, params);
   }
 
@@ -893,17 +1151,28 @@ struct ObjectState : DatumState
    */
   void datum_draw(UI& ui, const DrawParams& params) override
   {
-    drawGlyph(
-      ui,
-      (open? '-' : '+'),
-      vec2f(skin.rows.name_pad, calcRowTextY()),
-      name,
-      params);
+    if (parent == nullptr || !parent->embedsChildren())
+    {
+      drawGlyph(
+        ui,
+        (open? '-' : '+'),
+        vec2f(skin.rows.name_pad, calcRowTextY()),
+        name,
+        params);
+    }
 
     obj_draw(ui, params);
   }
 
   virtual void obj_draw(UI& ui, const DrawParams& params) {}
+
+  /* --------------------------------------------------------------------------
+   */
+  virtual b8 embedInParent() const { return false; }
+
+  /* --------------------------------------------------------------------------
+   */
+  virtual b8 parentIsOpen() const { return true; }
 
   /* --------------------------------------------------------------------------
    */
@@ -919,7 +1188,8 @@ struct ObjectState : DatumState
       UpdateReason reason, 
       SourceDataEditor* editor) override
   {
-    if (parent != nullptr && reason == UpdateReason::MouseReleased)
+    if (parent != nullptr && reason == UpdateReason::MouseReleased &&
+        !parent->embedsChildren())
     {
       vec2f local_cursor = 
         ui.eng->input.mouse.window - editor->pos_screen;
@@ -928,8 +1198,15 @@ struct ObjectState : DatumState
 
       if (ui.testFocusableRegion(pos, {name_extent, skin.rows.height}))
       {
-        open = !open;
-        editor->dirty = true;
+        if (ui.eng->input.isKeyDown(Key::LAlt))
+        {
+          data->dump();
+        }
+        else
+        {
+          open = !open;
+          editor->dirty = true;
+        }
       }
     }
 
@@ -1115,6 +1392,8 @@ struct Vec2State : DatumState
 
 $ -- * ------------------------------------------------------------------------
 
+$ local getTypeDatumType
+
 $ local function getDeclDatumType(decl)
 $   if decl:is(ast.TemplateSpecialization) then
 $     if decl.specialized_name == "vec2" then
@@ -1124,6 +1403,8 @@ $       local subtype = decl.template_args[1]
 $       local subdecl = subtype:getDecl()
 $       if subdecl then
 $         return "ArrayState<"..removeTag(subdecl.name)..">"
+$       elseif subtype:is(ast.PointerType) then
+$         return "ArrayState<"..getTypeDatumType(subtype)..">"
 $       end
 $     end
 $   elseif decl:is(ast.Struct) then
@@ -1136,7 +1417,7 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
-$ local function getTypeDatumType(type)
+$ getTypeDatumType = function(type)
 $   if type.name == "String" then
 $     return "ValueState"
 $   end
@@ -1144,6 +1425,13 @@ $
 $  type = type:getDesugared()
 $  if type:is(ast.Builtin) then
 $    return "ValueState"
+$  elseif type:is(ast.PointerType) then
+$    local decl = type.subtype:getDecl()
+$    if decl then
+$      if decl.derived then
+$        return "TypedPointerState<"..removeTag(decl.name)..">"
+$      end
+$    end
 $  end
 $ 
 $  if type:is(ast.TagType) then
@@ -1151,6 +1439,190 @@ $    local decl = type:getDecl()
 $    return getDeclDatumType(decl)
 $  end
 $  return "ValueState"
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+template<typename T>
+struct TypedPointerState;
+
+template<typename T>
+TypedPointerState<T> __typed_pointer_state_dummy_;
+
+$ local function putTypedPointerState(name, decl)
+/* ============================================================================
+ */
+template<>
+struct TypedPointerState<$(name)> : ObjectState
+{
+  DatumState* subdatum;
+
+  DatumComboBox combo_box;
+
+  typedef SmallArray<String, $(#decl.derived)> Options;
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 obj_init(UI& ui, const InitParams& params) override
+  {
+    if (notnil(data->type))
+    {
+      if (!allocateSubdatum(
+          ui, params.name, params.default_data, params.editor))
+        return false;
+    }
+    else
+      subdatum = nullptr;
+
+    if (!combo_box.init(ui, data, DatumTextEditKind::Type, params.editor))
+      return false;
+
+    return true;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 allocateSubdatum(
+      UI& ui,
+      String name, 
+      String default_data, 
+      SourceDataEditor* editor)
+  {
+    switch (data->type.hash())
+    {
+$ for derived in decl.derived:each() do
+$   local datum_type  = getDeclDatumType(derived)
+    case "$(removeTag(derived.name))"_hashed:
+      subdatum = 
+        (DatumState*)mem::stl_allocator.construct<$(datum_type)>();
+      if (!subdatum->init(ui, 
+            {
+              this, 
+              data,
+              editor,
+              name,
+              default_data
+            }))
+        return ERROR("failed to init typed sub data\n");
+      break;
+$ end 
+    default:
+      return ERROR("invalid type for typed pointer (", data->type, "does "
+                   "not derive from $(name))\n");
+    }
+
+    return true;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void obj_deinit(UI& ui) override
+  {
+    if (subdatum != nullptr)
+      subdatum->deinit(ui);
+
+    combo_box.deinit(ui);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void obj_eval(UI& ui, const EvalParams& params) override
+  {
+    *params.y += skin.rows.height;
+
+    if (subdatum != nullptr)
+      subdatum->eval(ui, params);
+
+    combo_box.setData(data);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 embedsChildren() const override { return true; }
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 isOpen() const override { return open; }
+
+  /* --------------------------------------------------------------------------
+   */
+  void getTypeOptions(Options* options) const
+  {
+$ for derived in decl.derived:each() do
+    options->push("$(removeTag(derived.name))"_str);
+$ end
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void obj_draw(UI& ui, const DrawParams& params) override
+  {
+    if (subdatum != nullptr)
+      subdatum->draw(ui, params);
+
+    Options options;
+    getTypeOptions(&options);
+
+    f32 inline_x = calcInlineValueX(params.editor->max_name_width);
+
+    combo_box.draw(
+      ui, 
+      {pos.x + inline_x, pos.y}, 
+      {size.x - inline_x, skin.rows.height},
+      options.asSlice(),
+      params);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void obj_update(
+      UI& ui, 
+      UpdateReason reason, 
+      SourceDataEditor* editor) override
+  {
+    Options options;
+    getTypeOptions(&options);
+
+    if (combo_box.update(ui, reason, this, options.asSlice(), editor))
+    {
+      if (subdatum != nullptr)
+      {
+        subdatum->deinit(ui);
+        mem::stl_allocator.free(subdatum);
+      }
+
+      if (!allocateSubdatum(ui, nil, nil, editor))
+        return;
+
+      open = true;
+    }
+
+    if (subdatum != nullptr)
+      subdatum->update(ui, reason, editor);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void obj_reportDrawCmds(
+      UI& ui,
+      DrawCmdLists& lists,
+      SourceDataEditor* editor) override
+  {
+    combo_box.reportDrawCmds(ui, lists, editor);
+
+    if (subdatum != nullptr)
+      subdatum->reportDrawCmds(ui, lists, editor);
+  }
+};
+
+// NOTE(sushi) this is here because for whatever reason if a type is only 
+//             ever referred to via pointers it wont show up in GDB's debug
+//             symbols. So we instantiate a dummy global for each 
+//             specialization of this type. This is only because only Array
+//             data uses this atm so once StructStates also use it, this 
+//             can be removed.
+template<>
+TypedPointerState<$(name)> __typed_pointer_state_dummy_<$(name)> = {};
 $ end
 
 $ -- * ------------------------------------------------------------------------
@@ -1163,7 +1635,11 @@ struct StructState<$(name)> : ObjectState
 {
 $   for field,i in decl:eachFieldWithIndex() do
   // $(field.name): $(field.type:tostring())
+$     if field.type:is(ast.PointerType) then
+  ValueState member$(i);
+$     else
   $(getTypeDatumType(field.type)) member$(i);
+$     end
 $   end
 
   /* --------------------------------------------------------------------------
@@ -1197,7 +1673,7 @@ $ end
    */
   void obj_eval(UI& ui, const EvalParams& params) override
   {
-    if (parent != nullptr)
+    if (parent != nullptr && !parent->embedsChildren())
       *params.y += skin.rows.height;
 
     if (open)
@@ -1264,8 +1740,18 @@ struct ArrayState;
 $ local function putArrayState(name, decl)
 $   local subtype = decl.template_args[1]
 $   local subdecl = subtype:getDecl()
-$   local subname = removeTag(subdecl.name)
-$   if not subdecl then return end
+$   local subname
+$   if subdecl then 
+$     subname = removeTag(subdecl.name)
+$   else
+$     if subtype:is(ast.PointerType) then
+$       subdecl = subtype:tryUnwrapToRecordDecl()
+$       subname = getTypeDatumType(subtype)
+$       putTypedPointerState(removeTag(subdecl.name), subdecl)
+$     else
+$       error("decl passed to ArrayState has no decl and is not a pointer")
+$     end
+$   end
 /* ============================================================================
  */
 template<>
@@ -1399,41 +1885,41 @@ struct ArrayState<$(subname)> : ObjectState
   {
     auto* editor = params.editor;
 
+    auto [vp, ip] = 
+      dc.buttons->realloc(&ui, 
+        gfx::putFilledRectCounts() + 
+        gfx::putBordersCounts());
+
+    dc.buttons->counts_used = {};
+
+    auto [bp, bs, tp] = calcAddButtonPosAndSize(editor);
+
+    gfx::putFilledRect(
+      vp, ip,
+      &dc.buttons->counts_used,
+      bp, bs,
+      0x323349ff);
+
+    gfx::putBorders(
+      vp, ip,
+      &dc.buttons->counts_used,
+      { -1.f, -1.f, -1.f, -1.f },
+      bp, bs,
+      0x7986a4ff);
+    
+    auto [tvp, tip] = dc.text->realloc(&ui, gfx::putTextCounts("+"_str));
+    dc.text->counts_used = {};
+
+    gfx::putGlyph(
+      tvp, tip,
+      &dc.text->counts_used,
+      params.editor->font,
+      '+',
+      tp,
+      skin.text_color);
+
     if (open)
     {
-      auto [vp, ip] = 
-        dc.buttons->realloc(&ui, 
-          gfx::putFilledRectCounts() + 
-          gfx::putBordersCounts());
-
-      dc.buttons->counts_used = {};
-
-      auto [bp, bs, tp] = calcAddButtonPosAndSize(editor);
-
-      gfx::putFilledRect(
-        vp, ip,
-        &dc.buttons->counts_used,
-        bp, bs,
-        0x323349ff);
-
-      gfx::putBorders(
-        vp, ip,
-        &dc.buttons->counts_used,
-        { -1.f, -1.f, -1.f, -1.f },
-        bp, bs,
-        0x7986a4ff);
-      
-      auto [tvp, tip] = dc.text->realloc(&ui, gfx::putTextCounts("+"_str));
-      dc.text->counts_used = {};
-
-      gfx::putGlyph(
-        tvp, tip,
-        &dc.text->counts_used,
-        params.editor->font,
-        '+',
-        tp,
-        skin.text_color);
-
       io::SmallBuffer<8> idx_name;
       for (u32 i = 0; i < arr.len(); ++i)
       {
@@ -1455,14 +1941,26 @@ struct ArrayState<$(subname)> : ObjectState
     {
       for (auto& state : arr)
         state.update(ui, reason, editor);
+    }
 
+    if (reason == UpdateReason::MouseReleased)
+    {
       auto [bp,bs,_] = calcAddButtonPosAndSize(editor);
 
       if (ui.testFocusableRegion(bp, bs))
       {
-        SourceData* new_elem = editor->sfile->allocateSourceData();
-        data->children.push(new_elem);
-        editor->onEdit(data);
+        io::SmallBuffer<8> idx_name;
+        io::format(&idx_name, arr.len());
+        auto* sub = arr.push();
+        if (!sub->init(
+            ui, 
+            { this, nullptr, editor, idx_name.asStr() }))
+          ERROR("failed to initialize new data child \n");
+
+        sub->onEdit(editor);
+        sub->data->name = nil;
+        data->dump();
+        open = true;
       }
     }
   }
@@ -1474,13 +1972,13 @@ struct ArrayState<$(subname)> : ObjectState
       DrawCmdLists& lists, 
       SourceDataEditor* editor) override
   {
+    lists.pre_children.push(dc.buttons);
+    lists.pre_children.push(dc.text);
+
     if (open)
     {
       for (auto& state : arr)
         state.reportDrawCmds(ui, lists, editor);
-
-      lists.pre_children.push(dc.buttons);
-      lists.pre_children.push(dc.text);
     }
   }
 };
@@ -1505,27 +2003,16 @@ $   end
 template<>
 struct EnumState<$(name)> : DatumState
 {
-  b8 open = false;
+  DatumComboBox combo_box;
 
-  struct
-  {
-    DrawCmd* decor;
-    DrawCmd* text;
-  } dc;
+  typedef SmallArray<String, $(elem_count)> Options;
 
   /* --------------------------------------------------------------------------
    */
   b8 datum_init(UI& ui, const InitParams& params) override
   {
-    dc.decor = ui.drawcmds.add();
-    dc.decor->alloc(&ui, 
-      gfx::putBordersCounts() + 
-      gfx::putFilledRectCounts() + 
-      gfx::putLineCounts());
-
-    dc.text = ui.drawcmds.add();
-    dc.text->alloc(&ui, $(elem_char_count) * gfx::putFilledRectCounts());
-    dc.text->tex = params.editor->font_texture;
+    if (!combo_box.init(ui, data, DatumTextEditKind::Value, params.editor))
+      return false;
 
     return true;
   }
@@ -1534,8 +2021,7 @@ struct EnumState<$(name)> : DatumState
    */
   void datum_deinit(UI& ui) override
   {
-    dc.decor->remove(&ui);
-    dc.text->remove(&ui);
+    combo_box.deinit(ui);
   }
 
   /* --------------------------------------------------------------------------
@@ -1543,6 +2029,7 @@ struct EnumState<$(name)> : DatumState
   void datum_eval(UI& ui, const EvalParams& params) override
   {
     *params.y += skin.rows.height;
+    combo_box.setData(data);
   }
 
   /* --------------------------------------------------------------------------
@@ -1574,124 +2061,30 @@ struct EnumState<$(name)> : DatumState
 
   /* --------------------------------------------------------------------------
    */
-  vec4f calcTextPosAndSize(const DrawParams& params) const
+  void getOptions(Options* options) const
   {
-    auto inline_x = calcInlineValueX(params.editor->max_name_width);
-
-    auto p = vec2f(
-      pos.x + inline_x + skin.enum_box.text_horizontal_padding,
-      pos.y + ceil(0.5f * (size.y - skin.font_height)));
-
-    auto s = vec2f(
-      size.x - 2 * skin.enum_box.text_horizontal_padding,
-      skin.font_height);
-
-    return vec4f(p, s);
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  vec2f calcElemSize(SourceDataEditor* editor) const
-  {
-    return vec2f(
-      editor->size.x - calcInlineValueX(editor->max_name_width),
-      skin.rows.height);
+$ for elem in decl.elems:each() do
+$   if not elem.metadata.hidden then
+    options->push("$(elem.name)"_str);
+$   end
+$ end
   }
 
   /* --------------------------------------------------------------------------
    */
   void datum_draw(UI& ui, const DrawParams& params) override
   {
+    Options options;
+    getOptions(&options);
+
     f32 inline_x = calcInlineValueX(params.editor->max_name_width);
-    vec4f textps = calcTextPosAndSize(params);
-    
-    {
-      auto [vp, ip] = dc.text->getPtrs(&ui);
-      dc.text->counts_used = {};
 
-      f32 y = 0.f;
-
-      gfx::putText(
-        vp, ip,
-        &dc.text->counts_used,
-        textps.xy(),
-        data->val.str,
-        params.editor->font,
-        skin.font_height,
-        1.f,
-        skin.text_color,
-        nullptr);
-
-      if (open)
-      {
-$ for elem in decl.elems:each() do
-$   if not elem.metadata.hidden then
-        if (data->val.str != "$(elem.name)"_str)
-        {
-          y += skin.rows.height;
-
-          gfx::putText(
-            vp, ip,
-            &dc.text->counts_used,
-            textps.xy().yadd(y),
-            "$(elem.name)"_str,
-            params.editor->font,
-            skin.font_height,
-            1.f,
-            skin.text_color,
-            nullptr);
-        }
-$   end
-$ end
-      }
-    }
-
-    {
-      auto [vp, ip] = dc.decor->getPtrs(&ui);
-      dc.decor->counts_used = {};
-
-      auto decor_pos = 
-        vec2f(pos.x + inline_x, pos.y + skin.enum_box.vertical_padding);
-      auto decor_size = 
-        vec2f(
-          size.x - inline_x, 
-          skin.rows.height - 2 * skin.enum_box.vertical_padding);
-
-      if (open)
-      {
-        decor_size.y += $(elem_count - 1) * skin.rows.height;
-
-        // TODO(sushi) this doesnt work idk y and i dont feel like figuring
-        //             it out rn.
-        auto separator_start = 
-          vec2f(pos.x + inline_x + 5.f, pos.y + skin.rows.height);
-        auto separator_end = 
-          vec2f(params.editor->size.x - 10.f, separator_start.y);
-
-        gfx::putLine(
-          vp, ip,
-          &dc.decor->counts_used,
-          separator_start,
-          separator_end,
-          1.f, 
-          {255,255,255,255});
-      }
-
-      gfx::putFilledRect(
-        vp, ip,
-        &dc.decor->counts_used,
-        decor_pos,
-        decor_size,
-        skin.enum_box.bg_color);
-
-      gfx::putBorders(
-        vp, ip,
-        &dc.decor->counts_used,
-        skin.enum_box.borders,
-        decor_pos,
-        decor_size,
-        skin.enum_box.border_color);
-    }
+    combo_box.draw(
+      ui, 
+      {pos.x + inline_x, pos.y}, 
+      {size.x - inline_x, size.y},
+      options.asSlice(),
+      params);
   }
 
   /* --------------------------------------------------------------------------
@@ -1701,47 +2094,10 @@ $ end
       UpdateReason reason, 
       SourceDataEditor* editor) override
   {
-    if (reason != UpdateReason::MouseReleased)
-      return;
+    Options options;
+    getOptions(&options);
 
-    vec2f local_cursor = 
-      ui.eng->input.mouse.window - editor->pos_screen;
-
-    vec2f elem_size = calcElemSize(editor);
-
-    f32 x = calcInlineValueX(editor->max_name_width);
-
-    if (open)
-    {
-      b8 clicked_element = false;
-
-      f32 y = pos.y + skin.rows.height;
-
-$ for elem,i in decl.elems:eachWithIndex() do
-$   if not elem.metadata.hidden then
-      if (data->val.str != "$(elem.name)"_str)
-      {
-        if (ui.testFocusableRegion({x, y}, elem_size))
-        {
-          data->val.str = "$(elem.name)"_str;
-          clicked_element = true;
-          onEdit(editor);
-        }
-
-        y += skin.rows.height;
-      }
-$   end
-$ end
-
-      open = false;
-    }
-    else
-    {
-      if (ui.testFocusableRegion({x, pos.y}, elem_size))
-        open = true;
-    }
-
-    editor->dirty = true;
+    combo_box.update(ui, reason, this, options.asSlice(), editor);
   }
 
   /* --------------------------------------------------------------------------
@@ -1751,10 +2107,7 @@ $ end
       DrawCmdLists& lists, 
       SourceDataEditor* editor) override
   {
-    DrawCmdList* list = open? &lists.top_most : &lists.pre_children;
-
-    list->push(dc.decor);
-    list->push(dc.text);
+    combo_box.reportDrawCmds(ui, lists, editor);
   }
 };
 $ end
@@ -2230,7 +2583,7 @@ void SourceDataEditor::endEditDatumText(
  */
 SourceData* SourceDataEditor::parseDefaultData(String s)
 {
-  io::StringView view;
+  auto view = io::StringView::from(s);
   SourceDataParser parser;
 
   if (!parser.init(&default_data, &view, "default_data"_str))

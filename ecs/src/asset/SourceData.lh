@@ -73,6 +73,13 @@ struct SourceData
 
   /* --------------------------------------------------------------------------
    */
+  b8 hasData() const
+  {
+    return hasObjectData() || hasStringValue() || hasNumberValue();
+  }
+
+  /* --------------------------------------------------------------------------
+   */
   void destroy()
   {
     children.destroy();

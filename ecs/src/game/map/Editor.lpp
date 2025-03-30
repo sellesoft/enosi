@@ -416,8 +416,15 @@ $     end
     }
     ui.endItem();
 
+    auto* sdedit_box = ui::Item::begin(ui);
+    @ui.style(sdedit_box, Item, 
+    | size: 100% 300
+    | border: 2)
+
     editor->sdedit = SourceDataEditor::create(ui, &editor->sdinterface);
     editor->sdinterface.editor = editor;
+
+    ui.endItem();
   }
   ui.endItem();
 

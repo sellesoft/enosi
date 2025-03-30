@@ -27,6 +27,7 @@ SourceData* SourceData::deepCopy(SourceDataFile* sfile)
   }
   else
   {
+    nu->children.init();
     for (SourceData* child : children)
       nu->children.push(child->deepCopy(sfile));
   }

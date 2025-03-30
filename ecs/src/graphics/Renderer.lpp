@@ -1398,6 +1398,7 @@ void Renderer::pushDraw(
  */
 void Renderer::pushSetScissor(vec2i pos, vec2i size)
 {
+  assert(size.x >= 0.f && size.y >= 0.f);
   DrawCmd cmd;
   cmd.kind = DrawCmd::Kind::SetScissor;
   cmd.set_scissor.pos = pos;
