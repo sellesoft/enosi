@@ -302,6 +302,28 @@ Processor.processStruct = function(self, cdecl, ctype)
 
   self:processRecordMembers(cdecl, ctype, struct)
 
+  cdecl = self:ensureDefinitionDecl(cdecl)
+
+  if cdecl:isComplete() then
+    local bases = cdecl:getBaseIter()
+    if bases then
+      local base = bases:next()
+      while base do
+        local basedecl = base:getDecl()
+        if basedecl then
+          local decl = self:resolveDecl(basedecl)
+          if decl then
+            decl.derived = decl.derived or List{}
+            decl.derived:push(struct)
+            struct.bases = struct.bases or List{}
+            struct.bases:push(decl)
+          end
+        end
+        base = bases:next()
+      end
+    end
+  end
+
   return struct
 end
 
