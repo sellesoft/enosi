@@ -45,6 +45,19 @@ if sys.os == "windows" then
 
   ecs.report.ext.StaticLib "vulkan-1"
   ecs.report.ext.StaticLib "shaderc_combined"
+elseif sys.os == "linux" then
+  ecs.report.dir.include
+  {
+    direct = { "../shaderc/include", }
+  }
+
+  ecs.report.dir.lib
+  {
+    direct = { "../shaderc/lib", }
+  }
+
+  ecs.report.ext.StaticLib "vulkan"
+  ecs.report.ext.StaticLib "shaderc_combined"
 end
 
 if sys.cfg.mode == "debug" then
