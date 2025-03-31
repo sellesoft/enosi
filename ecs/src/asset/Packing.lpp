@@ -9,6 +9,7 @@ $ local component = require "game.component.Component"
 $ local metadata = require "reflect.Metadata"
 
 #include "iro/Logger.h"
+#include "iro/containers/BitArray.h"
 
 #include "stdlib.h"
 
@@ -18,6 +19,8 @@ using namespace iro;
 
 @@lpp.import "asset/Packing.lh"
 @@lpp.import "asset/SourceData.lh"
+@@lpp.import "asset/SourceDataFile.lh"
+@@lpp.import "asset/SourceDataParser.lh"
 @@lpp.import "asset/AssetMgr.lh"
 @@lpp.import "graphics/CompiledTexture.lh"
 
@@ -275,6 +278,42 @@ b8 packVec2(const SourceData& data, T* out)
 
 /* ----------------------------------------------------------------------------
  */
+b8 packColor(const SourceData& data, Color* out)
+{
+  if (!data.hasChildren())
+    return ERROR("expected an object to pack Color\n");
+
+  // TODO(sushi) nameless initialization
+
+  for (const SourceData* child : data.children)
+  {
+    if (!child->hasNumberValue())
+      return ERROR("vec2 members can only be numbers\n");
+
+    switch (child->name.hash())
+    {
+    case "r"_hashed:
+      out->r = strtof((char*)child->val.str.ptr, nullptr);
+      break;
+    case "g"_hashed:
+      out->g = strtof((char*)child->val.str.ptr, nullptr);
+      break;
+    case "b"_hashed:
+      out->b = strtof((char*)child->val.str.ptr, nullptr);
+      break;
+    case "a"_hashed:
+      out->a = strtof((char*)child->val.str.ptr, nullptr);
+      break;
+    default:
+      return ERROR("no member named ", child->name, " in vec2\n");
+    }
+  }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 packSourceDataPointer(const SourceData& data, const SourceData** out)
 {
   *out = &data;
@@ -361,6 +400,13 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
+$ local putColorPackCase = function(declname, addrname, type, prereqs)
+    if (!packColor(*child, &$(addrname)))
+      return ERROR("failed to Color data for field $(addrname)\n");
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
 $ local putEnumArrayPackCase = function(declname, addrname, type, prereqs)
     if (!packSourceDataIntoEnumArray(*child, &$(addrname), ctx))
       return ERROR("failed to pack enum array data for field $(addrname)\n");
@@ -410,7 +456,11 @@ $       else
 $         error("unhandled specialized template "..decl.specialized_name)
 $       end
 $     elseif decl:is(ast.Struct) then
-$       return (putStructPackCase(declname, addrname, type, prereqs))
+$       if removeTypeTag(decl.name) == "Color" then
+$         return (putColorPackCase(declname, addrname, type, prereqs))
+$       else
+$         return (putStructPackCase(declname, addrname, type, prereqs))
+$       end
 $     elseif decl:is(ast.Enum) then
 $       return (putEnumPackCase(declname, addrname, type, prereqs))
 $     end
@@ -457,7 +507,11 @@ b8 packSourceDataIntoEnumArray(
 $ for elem in enum_type.elems:each() do
 $   if elem.comment then metadata.parse(elem.comment) end
     case "$(elem.name)"_hashed:
-$     putPackCase(decl.name, "(*out)[TEnum::"..elem.name.."]", elem_type, prereqs)
+$     putPackCase(
+$       decl.name, 
+$       "(*out)[TEnum::"..elem.name.."]", 
+$       elem_type, 
+$       prereqs)
       break;
 $ end
     default:
@@ -498,14 +552,17 @@ b8 packSourceDataIntoType<$(name)>(
   if (data.children.isEmpty())
     return true;
 
+  BitArray<$(decl:getFieldCount())> found_fields;
+
   for (const SourceData* child : data.children)
   {
     switch (child->name.hash())
     {
-$ for field in decl:eachFieldWithIndex() do
+$ for field,i in decl:eachFieldWithIndex() do
     case "$(field.name)"_hashed:
       {
-$     putPackCase(decl.name, "out->"..field.name, field.type, prereqs)
+        found_fields.set($(i));
+$       putPackCase(decl.name, "out->"..field.name, field.type, prereqs)
       }
       break;
 $ end
@@ -513,6 +570,38 @@ $ end
       return ERROR("no field named '", child->name, "' in $(name)\n");
     }
   }
+
+$ for field,i in decl:eachFieldWithIndex() do
+$   if field.metadata.default then
+  if (!found_fields.test($(i)))
+  {
+    
+    // TODO(sushi) this can absolutely be done better, given that we know this 
+    //             information at compile time, but I'm just wanting to get 
+    //             this working for now. In the future, we should be able to 
+    //             determine a constant value for the default data given to 
+    //             us and be able to just mem copy it into the member here.
+    SourceDataFile file;
+    file.init();
+    defer { file.deinit(); };
+
+    auto view = io::StringView::from("$(field.metadata.default)"_str);
+    SourceDataParser parser;
+
+    parser.init(&file, &view, "$(field.name) default"_str);
+    defer { parser.deinit(); };
+
+    SourceData* default_data = file.allocateSourceData();
+
+    if (!parser.parsePossiblyTypedData(default_data))
+      return ERROR("failed to parse default value of $(field.name)\n");
+    
+    // yeah im lazy so what
+    SourceData* child = default_data;
+$   putPackCase(decl.name, "out->"..field.name, field.type, prereqs)
+  }
+$   end
+$ end
   
   return true;
 }
