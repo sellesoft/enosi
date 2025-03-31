@@ -2,12 +2,13 @@
 --- Macros replacing the normal C logging macros.
 ---
 
-local cmn = require "common"
+local List = require "List"
+local buffer = require "string.buffer"
 
 log = {}
 
 local function putLog(verb, ...)
-  local args = cmn.List{...}
+  local args = List{...}
   if args:len() == 1 then
     if args[1]:find "^<<%-" then
       local delimiter, body_start = args[1]:match "<<%-(.-)\n()"
@@ -17,7 +18,7 @@ local function putLog(verb, ...)
       local body, ws = 
         args[1]:match("(.*)\n(%s*)"..delimiter.."$", body_start)
       
-      local buf = cmn.buffer.new()
+      local buf = buffer.new()
 
       for line in body:gmatch "[^\n]+" do
         if line:find("^"..ws) then
@@ -27,7 +28,7 @@ local function putLog(verb, ...)
 
       body = buf:get()
 
-      local result = cmn.buffer.new()
+      local result = buffer.new()
       local prev_stop = 1
       local first = true
       for start,interp,stop in body:gmatch "()%$(%b())()" do
@@ -52,7 +53,7 @@ local function putLog(verb, ...)
 
   ::not_heredoc::
 
-  local buf = cmn.buffer.new()
+  local buf = buffer.new()
   buf:put(verb, "(")
   for arg,i in args:eachWithIndex() do
     buf:put(arg)
