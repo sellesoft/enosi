@@ -63,6 +63,10 @@ struct InputMgr
   {
     return keys_new.test(key);
   }
+  b8 anyKeyDown()
+  {
+    return keys_new.testAny();
+  }
   b8 wasKeyPressed(Key key)
   {
     return keys_new.test(key) && !keys_old.test(key);
