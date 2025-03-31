@@ -14,7 +14,78 @@ local build =
 
 local driver = {}
 
+driver.finalCallbacks = List{}
+driver.filtered_projs = {}
+
 driver.subcmds = {}
+
+-- * --------------------------------------------------------------------------
+
+local function shouldBuildToolchain()
+  local verf = io.open("toolchain.ver", "r")
+  local ver
+  local verm
+  if verf then
+    ver = verf:read("*n")
+    local vermf = io.open("toolchain.ver.mine", "r")
+    if vermf then
+      verm = vermf:read("*n")
+    else
+      verm = 0
+      sys.log:info("missing toolchain.ver.mine, creating with version 0\n")
+      vermf = io.open("toolchain.ver.mine", "w")
+      if vermf then
+        vermf:write('0')
+        vermf:close()
+      else
+        sys.log:error("failed to create toolchain.ver.mine\n")
+      end
+    end
+  else
+    sys.log:warn("toolchain.ver was not found or could not be opened, unable ",
+                 "to verify toolchain is up to date.\n")
+    return false
+  end
+
+  driver.toolchain_ver = ver
+
+  if verm < ver then
+    sys.log:warn(
+      "local toolchain version is outdated (", verm, " < ", ver, ")\n")
+    return true
+  end
+end
+
+-- * --------------------------------------------------------------------------
+
+local function checkToolchain()
+  if shouldBuildToolchain() then
+    sys.log:notice("the tool chain appears to be outdated, may I rebuild ",
+                   "it first?\n[Y/n]")
+
+    local r = io.stdin:read(1)
+    if r ~= 'n' then
+      -- Explicitly disable ecs for now as it does not compile in release
+      driver.filtered_projs["ecs"] = true
+      driver.subcmds.publish(List{}, true)
+      driver.finalCallbacks:push(function(success)
+        if success then
+          local vermf = io.open("toolchain.ver.mine", "w") or 
+            error("failed to open toolchain.ver.mine")
+          vermf:write(driver.toolchain_ver)
+          vermf:close()
+          sys.log:notice("great! now rerun lake\n")
+        else
+          sys.log:fatal("\n\nwell that sucks. please tell sushi about this\n")
+        end
+      end)
+      return true
+    else
+      sys.log:warn("\n\n    good luck~!\n\n")
+    end
+  end
+  return false
+end
 
 -- * --------------------------------------------------------------------------
 
@@ -25,6 +96,8 @@ driver.run = function()
   local args = lake.cliargs
 
   if args:isEmpty() then
+    if checkToolchain() then return end
+
     driver.subcmds.build()
   else
     local subcmd = driver.subcmds[args[1]]
@@ -32,6 +105,13 @@ driver.run = function()
       sys.log:fatal("unknown subcommand '",subcmd,"'")
       os.exit(1)
     end
+
+    if subcmd ~= driver.subcmds.clean then
+      if checkToolchain() then
+        return true 
+      end
+    end
+
     return (subcmd(args:sub(2)))
   end
 end
@@ -168,7 +248,9 @@ end
 
 local loadEnabledProjects = function()
   for proj in List(sys.cfg.enabled_projects):each() do
-    sys.getOrLoadProject(proj)
+    if not driver.filtered_projs[proj] then
+      sys.getOrLoadProject(proj)
+    end
   end
 end
 
@@ -276,7 +358,7 @@ end
 --- 
 --- Support for specifying projects will maybe be added later.
 ---
-driver.subcmds.publish = function(args)
+driver.subcmds.publish = function(args, no_write_ver)
   if #args > 0 then
     error("'publish' does not take any arguments for the time being")
   end
@@ -325,6 +407,26 @@ driver.subcmds.publish = function(args)
           end)
       end
     end
+  end
+
+  if not no_write_ver then
+    driver.finalCallbacks:push(function(success)
+      if success then
+        local verf = io.open("toolchain.ver", "w")
+        if verf then
+          verf:write(driver.toolchain_ver + 1)
+        else
+          sys.log:error("failed to open toolchain.ver for writing\n")
+        end
+        local vermf = io.open("toolchain.ver.mine", "w")
+        if vermf then
+          vermf:write(driver.toolchain_ver + 1)
+          vermf:close()
+        else
+          sys.log:error("failed to open toolchain.ver.mine for writing\n")
+        end
+      end
+    end)
   end
 end
 

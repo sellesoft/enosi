@@ -18,6 +18,10 @@ lake.registerFinalCallback(function(success)
     io.write(flair.red, "failed ", flair.reset)
   end
   io.write("in ", (lake.getMonotonicClock() - build_start)/1000000, "s\n")
+
+  for cb in require "build.driver" .finalCallbacks:each() do
+    cb(success)
+  end
 end)
 
 -- Loaded in run(), so can only be used inside of functions here.
