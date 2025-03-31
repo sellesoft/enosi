@@ -293,7 +293,8 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
                       | gfx::ImageUsage::FramebufferColor),
     gfx::ImageAddressMode::ClampToBlack,
     gfx::ImageFilter::Nearest,
-    nullptr);
+    nullptr,
+    "map_editor"_str);
   map_render->alloc(&ui, gfx::putFilledRectCounts());
 
   editor->map_render = map_render;
@@ -303,7 +304,8 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
     600,
     400,
     map_render->tex,
-    {0,0,0,255});
+    {0,0,0,255},
+    "map_editor"_str);
 
   if (!editor->entmgr.init())
   {
@@ -527,7 +529,8 @@ void MapEditor::evaluate(UI* ui)
                       | gfx::ImageUsage::FramebufferColor),
     gfx::ImageAddressMode::ClampToBlack,
     gfx::ImageFilter::Nearest,
-    nullptr);
+    nullptr,
+    "map_editor"_str);
 
   if (!tex_init)
     return;
@@ -538,7 +541,8 @@ void MapEditor::evaluate(UI* ui)
     size.x,
     size.y,
     map_render->tex,
-    {0,0,0,255});
+    {0,0,0,255},
+    "map_editor"_str);
 
   need_render = true;
 }

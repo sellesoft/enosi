@@ -19,6 +19,8 @@ namespace gfx
  */
 struct DrawCmd
 {
+  static constexpr u64 MAX_PUSH_CONSTANT_SIZE = 128;
+
   enum class Kind
   {
     SetScissor,
@@ -60,7 +62,7 @@ struct DrawCmd
 
     struct
     {
-      void* data;
+      u8 data[MAX_PUSH_CONSTANT_SIZE];
       u64 size;
     } push_constant;
 

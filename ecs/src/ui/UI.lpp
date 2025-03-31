@@ -25,6 +25,20 @@ namespace ui
 
 /* ----------------------------------------------------------------------------
  */
+void pushConstantFromTransform(
+  gfx::Renderer& renderer,
+  const Window& window,
+  const mat3x2& transform)
+{
+  f32 push_constant[16] = {0};
+  transform.toMat4(push_constant);
+  push_constant[0] = 2.0f * push_constant[0] / window.size.x;
+  push_constant[5] = -2.0f * push_constant[5] / window.size.y;
+  renderer.pushConstant(push_constant, ui::PUSH_CONSTANT_SIZE);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 void UI::destroyItem(Item* item)
 {
   assert(item != root);
@@ -183,8 +197,8 @@ b8 UI::update(Engine& engine)
   renderer.setScissor(vec2i(0,0), window.size);
   renderer.bindVertexBuffer(vertex_buffer);
   renderer.bindIndexBuffer(index_buffer);
-  f32 push_constant[16] = {0};
-  renderer.pushConstant(&push_constant, ui::PUSH_CONSTANT_SIZE);
+  pushConstantFromTransform(renderer, window,
+    mat3x2::createTransform({0.f, 0.f}, 0.f));
 
   TRACE("  mapping buffers\n");
   vertex_buffer.map(renderer, 0, gfx::Buffer::MAP_WHOLE_BUFFER);
@@ -213,8 +227,8 @@ b8 UI::update(Engine& engine)
   renderer.setScissor(vec2i(0,0), window.size);
   emitDrawCmds(top_most_drawcmds);
 
-  mat3x2::createTransform({0.f, 0.f}, 0.f).toMat4(push_constant);
-  renderer.pushConstant(&push_constant, ui::PUSH_CONSTANT_SIZE);
+  pushConstantFromTransform(renderer, window,
+    mat3x2::createTransform({0.f, 0.f}, 0.f));
 
   for (ReportedDrawCmd& ddc : debug_drawcmds)
     emitDrawCmd(ddc.drawcmd, nullptr, {});
@@ -529,20 +543,16 @@ $ end
       if (!force && desired_space == current_space)
         return;
 
-      f32 push_constant[16] = {0};
       switch (current_space = desired_space)
       {
       case ItemSpace::Padded:
-        item_padded_transform.toMat4(push_constant);
-        renderer.pushConstant(&push_constant, ui::PUSH_CONSTANT_SIZE);
+        pushConstantFromTransform(renderer, window, item_padded_transform);
         break;
       case ItemSpace::Bordered:
-        item_bordered_transform.toMat4(push_constant);
-        renderer.pushConstant(&push_constant, ui::PUSH_CONSTANT_SIZE);
+        pushConstantFromTransform(renderer, window, item_bordered_transform);
         break;
       case ItemSpace::Margined:
-        item_margined_transform.toMat4(push_constant);
-        renderer.pushConstant(&push_constant, ui::PUSH_CONSTANT_SIZE);
+        pushConstantFromTransform(renderer, window, item_margined_transform);
         break;
       }
     };
@@ -1601,9 +1611,7 @@ void UI::emitDrawCmds( DeferredDrawCmdList& drawcmds)
   {
     if (cmd.drawcmd->counts_used.x != 0)
     {
-      f32 push_constant[16] = {0};
-      cmd.transform.toMat4(push_constant);
-      eng->renderer.pushConstant(&push_constant, ui::PUSH_CONSTANT_SIZE);
+      pushConstantFromTransform(eng->renderer, eng->window, cmd.transform);
     }
     emitDrawCmd(cmd.drawcmd, nullptr, {});
   }

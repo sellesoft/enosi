@@ -52,7 +52,7 @@ b8 Framebuffer::init(
     .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
     .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
     .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-    .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+    .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
   };
 
   VkAttachmentReference attachment_ref =
@@ -115,6 +115,7 @@ b8 Framebuffer::init(
   RendererFramebuffer* framebuffer = ri.framebuffer_pool.add();
   framebuffer->framebuffer = framebuffer_handle;
   framebuffer->renderpass = renderpass_handle;
+  framebuffer->image = ri.texture_pool.at_index(texture.index)->image;
   framebuffer->width = width;
   framebuffer->height = height;
   framebuffer->clear_color = clear_color;

@@ -54,6 +54,7 @@ struct RendererFramebuffer
 {
   VkFramebuffer framebuffer;
   VkRenderPass renderpass;
+  VkImage image;
   u32 width;
   u32 height;
   vec4f clear_color;

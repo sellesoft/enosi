@@ -1297,10 +1297,14 @@ b8 Renderer::update()
 
     vkCmdBeginRenderPass(ri.command_buffer, &begin_info,
       VK_SUBPASS_CONTENTS_INLINE);
+
+    debugBeginLabel(*this, ri.command_buffer, vec4f(0.2f, 0.4f, 0.8f, 1.0f),
+      "default framebuffer"_str);
   }
 
   TRACE("executing draw commands\n");
   Pipeline current_pipeline = {};
+  Framebuffer current_framebuffer = {};
   for (DrawCmd& cmd : drawcmds)
   {
     switch (cmd.kind)
@@ -1356,6 +1360,48 @@ b8 Renderer::update()
       VkClearValue clear_values[1] = { 0.0f, 0.0f, 0.0f, 1.0f };
       VkExtent2D extent = { 0, 0 };
 
+      debugEndLabel(*this, ri.command_buffer);
+      vkCmdEndRenderPass(ri.command_buffer);
+
+      // transition framebuffer image back to SHADER_READ_ONLY after rendering
+      if (current_framebuffer.index != 0)
+      {
+        RendererFramebuffer* framebuffer =
+          ri.framebuffer_pool.at_index(current_framebuffer.index);
+        if (framebuffer == nullptr)
+        {
+          ERROR("failed to transition the framebuffer image back to"
+            " SHADER_READ_ONLY after rendering because it is out of bounds\n");
+          break;
+        }
+
+        VkImageMemoryBarrier barrier =
+        {
+          .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+          .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+          .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+          .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+          .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+          .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+          .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+          .image = framebuffer->image,
+          .subresourceRange =
+          {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+          },
+        };
+
+        vkCmdPipelineBarrier(
+          ri.command_buffer,
+          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+          0, 0, nullptr, 0, nullptr, 1, &barrier);
+      }
+
       if (cmd.bind_framebuffer.index == 0)
       {
         vk_framebuffer = ri.default_framebuffers[ri.default_framebuffer_index];
@@ -1372,8 +1418,11 @@ b8 Renderer::update()
         RendererFramebuffer* framebuffer =
           ri.framebuffer_pool.at_index(cmd.bind_framebuffer.index);
         if (framebuffer == nullptr)
+        {
           ERROR("failed to bind the framebuffer at index ",
             cmd.bind_framebuffer.index, " because it is out of bounds\n");
+          break;
+        }
 
         vk_framebuffer = framebuffer->framebuffer;
         vk_renderpass = framebuffer->renderpass;
@@ -1394,6 +1443,32 @@ b8 Renderer::update()
           .width = framebuffer->width,
           .height = framebuffer->height,
         };
+
+        // transition image layout to COLOR_ATTACHMENT_OPTIMAL before rendering
+        VkImageMemoryBarrier barrier =
+        {
+          .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+          .srcAccessMask = VK_ACCESS_SHADER_READ_BIT,
+          .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+          .oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+          .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+          .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+          .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+          .image = framebuffer->image,
+          .subresourceRange =
+          {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+          },
+        };
+
+        vkCmdPipelineBarrier(ri.command_buffer,
+          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+          0, 0, nullptr, 0, nullptr, 1, &barrier);
       }
 
       VkRenderPassBeginInfo begin_info =
@@ -1410,10 +1485,12 @@ b8 Renderer::update()
         .pClearValues = clear_values,
       };
 
-      vkCmdEndRenderPass(ri.command_buffer);
-
       vkCmdBeginRenderPass(ri.command_buffer, &begin_info,
         VK_SUBPASS_CONTENTS_INLINE);
+      debugBeginLabel(*this, ri.command_buffer, vec4f(0.4f, 0.8f, 0.1f, 1.0f),
+        "framebuffer ", cmd.bind_framebuffer.index, "\n");
+
+      current_framebuffer = cmd.bind_framebuffer;
     }break;
 
     case DrawCmd::Kind::BindPipeline:
@@ -1656,7 +1733,44 @@ b8 Renderer::update()
   }
 
   TRACE("ending the render pass\n");
-  vkCmdEndRenderPass(ri.command_buffer);
+  {
+    debugEndLabel(*this, ri.command_buffer);
+    vkCmdEndRenderPass(ri.command_buffer);
+  
+    // transition framebuffer image back to SHADER_READ_ONLY after rendering
+    if (current_framebuffer.index != 0)
+    {
+      RendererFramebuffer* framebuffer =
+        ri.framebuffer_pool.at_index(current_framebuffer.index);
+      assert(framebuffer != nullptr);
+
+      VkImageMemoryBarrier barrier =
+      {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = framebuffer->image,
+        .subresourceRange =
+        {
+          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+          .baseMipLevel = 0,
+          .levelCount = 1,
+          .baseArrayLayer = 0,
+          .layerCount = 1,
+        },
+      };
+
+      vkCmdPipelineBarrier(
+        ri.command_buffer,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        0, 0, nullptr, 0, nullptr, 1, &barrier);
+    }
+  }
 
   TRACE("ending the command buffer\n");
   if (VK_SUCCESS != vkEndCommandBuffer(ri.command_buffer))
@@ -1851,15 +1965,28 @@ void Renderer::pushConstant(void* data, u64 size)
     if (size > max_push_constant_size)
     {
       ERROR("push constant size (", size, ") exceeds device maximum allowed"
-        " size (", max_push_constant_size, ")\n");
+          " size (", max_push_constant_size, ")\n");
+      return;
+    }
+
+    if (size > DrawCmd::MAX_PUSH_CONSTANT_SIZE)
+    {
+      ERROR("push constant size (", size, ") exceeds maximum allowed"
+        " size (", DrawCmd::MAX_PUSH_CONSTANT_SIZE, ")\n");
       return;
     }
 
     DrawCmd cmd =
     {
       .kind = DrawCmd::Kind::PushConstant,
-      .push_constant = { data, size },
+      .push_constant =
+      {
+        {0},
+        size
+      },
     };
+    memcpy(cmd.push_constant.data, data, size);
+
     drawcmds.push(cmd);
 }
 
