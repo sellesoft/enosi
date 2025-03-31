@@ -27,7 +27,6 @@ template<
   // key accessor
   // which could be a hash function or member or whatever
   u64 (*GetKey)(const T*)
-  
 >
 struct AVL
 {
@@ -37,6 +36,7 @@ struct AVL
   */
   struct Node
   {
+    u64 key = 0;
     s8 balance_factor = 0; // -1, 0, or 1
     // TODO(sushi) we may be able to do something neat where we instead store 
     //             offsets from the nodes position in the pool with s32s or 
@@ -103,12 +103,10 @@ struct AVL
     Node* search_node = root;
     for (;;)
     {
-      u64 search_key = GetKey(search_node->data);
-
-      if (search_key == data_key)
+      if (search_node->key == data_key)
         return true;
 
-      if (search_key > data_key)
+      if (search_node->key > data_key)
       {
         if (search_node->left)
           search_node = search_node->left;
@@ -132,12 +130,10 @@ struct AVL
     Node* search_node = root;
     for (;;)
     {
-      u64 search_key = GetKey(search_node->data);
-
-      if (search_key == key)
+      if (search_node->key == key)
         return search_node->data;
 
-      if (search_key > key)
+      if (search_node->key > key)
       {
         if (search_node->left)
           search_node = search_node->left;
@@ -166,12 +162,10 @@ struct AVL
     b8 place_right = true;
     for (;;)
     {
-      u64 search_key = GetKey(search_node->data);
-
-      if (search_key == data_key)
+      if (search_node->key == data_key)
         return search_node;
       
-      if (search_key > data_key)
+      if (search_node->key > data_key)
       {
         if (search_node->left)
         {
@@ -192,6 +186,7 @@ struct AVL
     // need a new node
     Node* new_node = pool.add();
     new_node->parent = search_node;
+    new_node->key = data_key;
     if (place_right)
       search_node->right = new_node;
     else
@@ -303,12 +298,10 @@ struct AVL
       if (!search_node)
         return;
 
-      u64 search_key = GetKey(search_node->data);
-
-      if (search_key == data_key)
+      if (search_node->key == data_key)
         break;
 
-      if (data_key > search_key)
+      if (data_key > search_node->key)
         search_node = search_node->right;
       else
         search_node = search_node->left;
