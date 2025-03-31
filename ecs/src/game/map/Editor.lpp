@@ -421,6 +421,9 @@ $     end
     | size: 100% 300
     | border: 2)
 
+    editor->selected_sdata_info = Text::make(ui);
+    @ui.style(editor->selected_sdata_info, Text, display: hidden);
+
     editor->sdedit = SourceDataEditor::create(ui, &editor->sdinterface);
     editor->sdinterface.editor = editor;
 
@@ -539,6 +542,9 @@ void MapEditor::update(UI* ui, UpdateReason reason)
 
   SourceDataFile* sdfile = h_selected_map.getFile();
 
+  if (input.isKeyDown(Key::LCtrl) && input.wasKeyReleased(Key::S))
+    ui->eng->source_data_file_reg.saveToDisk(h_selected_map);
+
   switch (control_state)
   {
   case ControlState::None:
@@ -604,6 +610,13 @@ void MapEditor::update(UI* ui, UpdateReason reason)
                 tile_data, 
                 h_selected_map.getFile(),
                 "MapTileDef"_hashed);
+
+              @ui.style(selected_sdata_info, Text, display: 0);
+
+              io::SmallBuffer<255> buffer;
+              vec2f tile_pos = map.getTilePos(*layer, *tile);
+              io::formatv(&buffer, "editing tile at ", tile_pos);
+              selected_sdata_info->set(buffer.asStr());
             }
           }
 
