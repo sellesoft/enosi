@@ -41,3 +41,5 @@ luals.log/
 cgo/
 
 experimental/lamu/build/
+
+toolchain.ver.mine
