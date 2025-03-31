@@ -389,11 +389,6 @@ $ end
 
   @tryUpdate(Start)
 
-  if (item == hovered && 
-      eng->input.isKeyDown(Key::LCtrl) && 
-      eng->input.wasMouseButtonPressed(MouseButton::Left))
-    eval_break = item;
-
   if (hovered == item)
   {
     @tryUpdate(MouseHover)
@@ -608,7 +603,8 @@ $ end
       if (math::pointInRect(
             eng->input.mouse.window, 
             item->visible_start,
-            item->calcVisualArea()))
+            item->calcVisualArea()) ||
+          item->onHitTest(eng->input.mouse.window - item->pos_screen))
         ctx.hovered = item;
     }
     else
@@ -715,8 +711,6 @@ $ end
         11.f, 1.f,
         0xffffffff,
         nullptr);
-
-
 
       ctx.debug_cmds->push(item->builtin.debug);
       ctx.debug_cmds->push(item->builtin.debug_text);
@@ -1563,7 +1557,7 @@ void UI::emitDrawCmd(
     scissor_w = 
       min(
         scissor_w, 
-        current_scissor.x + current_scissor.z - scissor_x);
+        max(0.f, current_scissor.x + current_scissor.z - scissor_x));
     scissor_h = 
       min(
         scissor_h,
