@@ -104,6 +104,7 @@ struct
   void generate(UI* ui) override;
   void update(UI* ui, UpdateReason reason) override;
   void reportDrawCmds(UI* ui, DrawCmdLists& lists) override;
+  b8 onHitTest(vec2f local_cursor) override;
 
   // Used by datum states during 'update' to report some area that if clicked
   // will begin textually editing some data. This should only be used during

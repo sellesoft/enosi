@@ -4,6 +4,7 @@
 
 #include "iro/containers/Slice.h"
 #include "iro/fs/File.h"
+#include "iro/fs/Path.h"
 
 namespace lpp
 {
@@ -333,5 +334,13 @@ b8 Driver::construct(Lpp* lpp)
 
   return lpp->init(params);
 }
+
+/* ----------------------------------------------------------------------------
+ */
+void Driver::cleanupAfterFailure()
+{ 
+  if (notnil(streams.out.file))
+    fs::Path::unlink(streams.out.name);
+} 
 
 }

@@ -419,7 +419,7 @@ Processor.processRecordMembers = function(self, cdecl, ctype, record)
       field.comment = member_cdecl:getComment()
 
       if field.comment then
-        field.metadata = metadata.parse(field.comment)
+        field.metadata = metadata.__parse(field.comment)
       else
         field.metadata = {}
       end

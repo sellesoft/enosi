@@ -325,6 +325,16 @@ Record.dump = function(self, out)
   end
 end
 
+Record.getFieldCount = function(self)
+  local count = 0
+  for mem in self.members.list:each() do
+    if mem.obj:is(ast.Field) then
+      count = count + 1
+    end
+  end
+  return count
+end
+
 Record.eachFieldWithIndex = function(self)
   local iter = self.members.list:eachWithIndex()
   return function()

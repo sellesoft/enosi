@@ -445,6 +445,28 @@ struct
   {
     return visible_size;
   }
+
+  // If an Item needs to perform special hit testing, eg. it draws content
+  // outside of the bounds that UI is aware of, this function should be 
+  // overridden to help UI understand those areas. 
+  // 'local_cursor' is the position of the mouse relative to the Item's 
+  // current screen position. If this returns 'true', then the Item is 
+  // considered hovered by the cursor.
+  // NOTE that this is overridden by the normal hit testing logic, eg. if the
+  // cursor is found to hover the normal bounds that UI checks, this will not 
+  // be called, and so should not be seen as REQUIRED to implement for an Item
+  // to detect if it is hovered. This is only necessary in special cases where
+  // an Item draws, say, top-most UI that is outside of its normal bounds (eg.
+  // a combo box) that UI will not detect normally.
+  // TODO(sushi) it would be nice to have a better solution, but at the moment
+  //             a path to that is not clear. This is implemented to support
+  //             the new style of UI usage where the internals of Items are 
+  //             more immediate mode styled, which UI was never originally 
+  //             designed for. Eventually this as well as a lot of the 
+  //             scattered API above (and probably, to be, below this) need
+  //             to be cleaned up and made more consistent once we have a 
+  //             better grasp on this new style.
+  virtual b8 onHitTest(vec2f local_cursor) { return false; }
   
   b8 containsPoint(vec2f point);
 

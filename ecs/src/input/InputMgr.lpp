@@ -5,7 +5,7 @@ $ local cmn = require "common"
 
 @lpp.import "Engine.lh"
 
-@defFileLogger(inputmgr, Info)
+@log.ger(inputmgr, Info)
 
 /* ----------------------------------------------------------------------------
  */
@@ -25,6 +25,46 @@ b8 InputMgr::update(Engine& engine)
 
   char_count = real_char_count;
   real_char_count = 0;
+
+$ if false then
+$ local function forEachKey()
+  for (Key key = Key::A; (u32)key < (u32)Key::COUNT; key = (Key)((u32)key + 1))
+$ end
+
+  if (anyKeyDown())
+  {
+    @log.info("DOWN: ");
+    @forEachKey
+    {
+      if (isKeyDown(key))
+        @log.info(getKeyStr(key), ' ');
+    }
+    @log.info('\n');
+  }
+
+  if (anyKeyPressed())
+  {
+    @log.info("PRESSED: ");
+    @forEachKey
+    {
+      if (wasKeyPressed(key))
+        @log.info(getKeyStr(key), ' ');
+    }
+    @log.info('\n');
+  }
+
+  if (anyKeyReleased())
+  {
+    @log.info("RELEASED: ");
+    @forEachKey
+    {
+      if (wasKeyReleased(key))
+        @log.info(getKeyStr(key), ' ');
+    } 
+    @log.info('\n');
+  }
+
+$ end
 
   return true;  
 }

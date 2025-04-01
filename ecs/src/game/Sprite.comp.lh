@@ -4,6 +4,7 @@
 
 $ require "common"
 $ local Comp = require "game.component.Component"
+$ local metadata = require "reflect.Metadata"
 
 @@lpp.import "game/component/Component.lh"
 
@@ -15,10 +16,13 @@ namespace gfx
 struct CompiledTexture;
 }
 
-@Comp.def(Sprite,
+struct Sprite : Component
 {
   vec2f size;
+  @metadata.default "{r=255,g=255,b=255,a=255}"
   Color color;
   gfx::CompiledTexture* texture;
-})
+
+  @Comp.mark "Sprite"
+};
 

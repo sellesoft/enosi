@@ -90,6 +90,8 @@ struct
   SourceDataEditor* sdedit;
   SDEditInterface sdinterface;
 
+  Text* selected_sdata_info;
+
   enum class ControlState
   {
     None,

@@ -125,6 +125,12 @@ static const struct
     f32 comp_spacing = 5.f;
   } vec;
 
+  struct 
+  {
+    f32 min_comp_width = 32.f;
+    f32 comp_spacing = 5.f;
+  } col;
+
   struct
   {
     f32 text_horizontal_padding = 6.f;
@@ -710,27 +716,30 @@ struct DatumState : DatumBase
           skin.text_color,
           nullptr);
 
-        f32 y = 0.f;
-
-        for (String opt : options)
+        if (open)
         {
-          if (selected != opt)
-          {
-            y += skin.rows.height;
+          f32 y = 0.f;
 
-            gfx::putText(
-              vp, ip,
-              &dc.text->counts_used,
-              text_pos.yadd(y),
-              opt,
-              params.editor->font,
-              skin.font_height,
-              1.f,
-              skin.text_color,
-              nullptr);
+          for (String opt : options)
+          {
+            if (selected != opt)
+            {
+              y += skin.rows.height;
+
+              gfx::putText(
+                vp, ip,
+                &dc.text->counts_used,
+                text_pos.yadd(y),
+                opt,
+                params.editor->font,
+                skin.font_height,
+                1.f,
+                skin.text_color,
+                nullptr);
+            }
+            else
+              has_selected = true;
           }
-          else
-            has_selected = true;
         }
       }
 
@@ -776,6 +785,8 @@ struct DatumState : DatumBase
         return false;
 
       b8 selected_elem = false;
+
+      @log.info("update combo box\n");
   
       if (open)
       {
@@ -815,6 +826,14 @@ struct DatumState : DatumBase
       return selected_elem;
     }
 
+    b8 onHitTest(vec2f local_cursor, const Options& options) 
+    {
+      if (open)
+        return 
+          math::pointInRect(local_cursor, pos, {size.x, options.len * size.y});
+      return math::pointInRect(local_cursor, pos, size);
+    }
+
     void reportDrawCmds(UI& ui, DrawCmdLists& lists, SourceDataEditor* editor)
     {
       DrawCmdList* list = open? &lists.top_most : &lists.pre_children;
@@ -822,6 +841,10 @@ struct DatumState : DatumBase
       list->push(dc.text);
     }
   };
+
+  /* --------------------------------------------------------------------------
+   */
+  virtual b8 onHitTest(vec2f local_cursor) { return false; }
 
   /* --------------------------------------------------------------------------
    */
@@ -1390,6 +1413,174 @@ struct Vec2State : DatumState
   }
 };
 
+/* ============================================================================
+ */
+struct ColorState : ValueState
+{
+  DatumTextBox r_box;
+  DatumTextBox g_box;
+  DatumTextBox b_box;
+  DatumTextBox a_box;
+
+  DrawCmd* component_names = nullptr;
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 datum_init(UI& ui, const InitParams& params) override
+  {
+    auto* editor = params.editor;
+
+    SourceData* r = data->findChildByName("r"_str);
+    SourceData* g = data->findChildByName("g"_str);
+    SourceData* b = data->findChildByName("b"_str);
+    SourceData* a = data->findChildByName("a"_str);
+
+    if (!r_box.init(ui, r, DatumTextEditKind::Value, editor))
+      return false;
+    if (!g_box.init(ui, g, DatumTextEditKind::Value, editor))
+      return false;
+    if (!b_box.init(ui, b, DatumTextEditKind::Value, editor))
+      return false;
+    if (!a_box.init(ui, a, DatumTextEditKind::Value, editor))
+      return false;
+
+    component_names = ui.drawcmds.add();
+    component_names->alloc(&ui, 4 * gfx::putFilledRectCounts());
+    component_names->tex = editor->font_texture;
+
+    return true;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void datum_deinit(UI& ui) override
+  {
+    r_box.deinit(ui);
+    g_box.deinit(ui);
+    b_box.deinit(ui);
+    a_box.deinit(ui);
+    component_names->remove(&ui);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void datum_eval(UI& ui, const EvalParams& params) override
+  {
+    r_box.setData(data->findChildByName("r"_str));
+    g_box.setData(data->findChildByName("g"_str));
+    b_box.setData(data->findChildByName("b"_str));
+    a_box.setData(data->findChildByName("a"_str));
+
+    *params.y += skin.rows.height;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 resolveMissingData(
+      String name,
+      String default_data,
+      SourceDataEditor* editor) override
+  {
+    if (notnil(default_data))
+    {
+      data = editor->parseDefaultData(default_data);
+      if (data == nullptr)
+        return false;
+
+      if (!data->hasObjectData())
+      {
+        ERROR("default vec2 data resulted in a SourceData value\n");
+        return false;
+      }
+
+      data->name = name;
+    }
+    else
+    {
+      data = editor->parseDefaultData("{r=255,g=255,b=255,a=255}"_str);
+      if (data == nullptr)
+        return false;
+      data->name = name;
+    }
+    
+    return true;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void drawComponent(
+      UI& ui, 
+      String name, 
+      f32* pos_x, 
+      DatumTextBox* box,
+      const DrawParams& params)
+  {
+    *pos_x += 
+      drawText(
+        ui,
+        name,
+        vec2f(*pos_x, calcRowTextY()), 
+        component_names,
+        params).x;
+
+    *pos_x += 6.f;
+    box->draw(
+      ui, 
+      vec2f(pos.x + *pos_x, pos.y), 
+      vec2f(skin.col.min_comp_width, skin.rows.height),
+      params);
+
+    *pos_x += skin.col.min_comp_width + skin.vec.comp_spacing;
+
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void datum_draw(UI& ui, const DrawParams& params) override
+  {
+    // Component values.
+    {
+      auto [vp, ip] = component_names->getPtrs(&ui);
+      component_names->counts_used = {};
+
+      f32 pos_x = calcInlineValueX(params.editor->max_name_width);
+      
+      drawComponent(ui, "r"_str, &pos_x, &r_box, params);
+      drawComponent(ui, "g"_str, &pos_x, &g_box, params);
+      drawComponent(ui, "b"_str, &pos_x, &b_box, params);
+      drawComponent(ui, "a"_str, &pos_x, &a_box, params);
+    }
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void datum_update(
+      UI& ui, 
+      UpdateReason reason, 
+      SourceDataEditor* editor) override
+  {
+    r_box.update(ui, this, reason, editor);
+    g_box.update(ui, this, reason, editor);
+    b_box.update(ui, this, reason, editor);
+    a_box.update(ui, this, reason, editor);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void datum_reportDrawCmds(
+      UI& ui, 
+      DrawCmdLists& lists, 
+      SourceDataEditor* editor) override
+  {
+    lists.pre_children.push(component_names);
+    r_box.reportDrawCmds(ui, lists, editor);
+    g_box.reportDrawCmds(ui, lists, editor);
+    b_box.reportDrawCmds(ui, lists, editor);
+    a_box.reportDrawCmds(ui, lists, editor);
+  }
+
+};
+
 $ -- * ------------------------------------------------------------------------
 
 $ local getTypeDatumType
@@ -1408,7 +1599,12 @@ $         return "ArrayState<"..getTypeDatumType(subtype)..">"
 $       end
 $     end
 $   elseif decl:is(ast.Struct) then
-$     return "StructState<"..removeTag(decl.name)..">"
+$     local name = removeTag(decl.name)
+$     if name == "Color" then
+$       return "ColorState"
+$     else
+$       return "StructState<"..removeTag(decl.name)..">"
+$     end
 $   elseif decl:is(ast.Enum) then
 $     return "EnumState<"..removeTag(decl.name)..">"
 $   end
@@ -1603,6 +1799,16 @@ $ end
 
   /* --------------------------------------------------------------------------
    */
+  b8 onHitTest(vec2f local_cursor) override
+  {
+    Options options;
+    getTypeOptions(&options);
+
+    return combo_box.onHitTest(local_cursor, options.asSlice());
+  }
+
+  /* --------------------------------------------------------------------------
+   */
   void obj_reportDrawCmds(
       UI& ui,
       DrawCmdLists& lists,
@@ -1642,6 +1848,13 @@ $     else
 $     end
 $   end
 
+$ local function getFieldDefaultValue(field)
+$   if not field.metadata.default then
+$     return "nil"
+$   end
+$   return '"'..field.metadata.default..'"_str'
+$ end
+
   /* --------------------------------------------------------------------------
    */
   b8 obj_init(UI& ui, const InitParams& params) override
@@ -1654,7 +1867,7 @@ $ for field,i in decl:eachFieldWithIndex() do
       this,
       data->findChildByName("$(field.name)"_str),
       "$(field.name)"_str,
-      $(field.metadata.default or "nil")));
+      $(getFieldDefaultValue(field))));
 $ end
 
     return true;
@@ -1683,7 +1896,7 @@ $ for field,i in decl:eachFieldWithIndex() do
         "$(field.name)"_str,
         data->findChildByName("$(field.name)"_str),
         params.x + (parent != nullptr? 6.f : 0.f),
-        $(field.metadata.default or "nil")));
+        $(getFieldDefaultValue(field))));
 $ end
     }
   }
@@ -1713,6 +1926,20 @@ $ for field,i in decl:eachFieldWithIndex() do
       member$(i).update(ui, reason, editor);
 $ end
     }
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 onHitTest(vec2f local_cursor) override
+  {
+    if (open)
+    {
+$ for field,i in decl:eachFieldWithIndex() do
+      if (member$(i).onHitTest(local_cursor))
+        return true;
+$ end
+    }
+    return false;
   }
 
   /* --------------------------------------------------------------------------
@@ -1963,6 +2190,22 @@ struct ArrayState<$(subname)> : ObjectState
         open = true;
       }
     }
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 onHitTest(vec2f local_cursor) override
+  {
+    if (open)
+    {
+      for (auto& state : arr)
+      {
+        if (state.onHitTest(local_cursor))
+          return true;
+      }
+    }
+
+    return false;
   }
 
   /* --------------------------------------------------------------------------
@@ -2279,6 +2522,8 @@ $ end)
   }
 
   ui.endItem();
+
+  dirty = true;
 }
 
 /* ----------------------------------------------------------------------------
@@ -2499,6 +2744,16 @@ void SourceDataEditor::update(UI* ui, UpdateReason reason)
     datum_text_edit.update(*ui, reason, this);
     current_datum->update(*ui, reason, this);
   }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SourceDataEditor::onHitTest(vec2f local_cursor)
+{
+  if (current_datum)
+    return current_datum->onHitTest(local_cursor); 
+
+  return false;
 }
 
 /* ----------------------------------------------------------------------------

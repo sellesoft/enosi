@@ -5,6 +5,9 @@
 -- Introduce lpp as a global.
 lpp = require "Lpp"
 
+-- Introduces the log global
+require "Log"
+
 local common = {}
 
 common.reflect = require "reflect.Reflector"

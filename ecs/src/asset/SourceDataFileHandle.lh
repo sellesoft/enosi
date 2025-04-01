@@ -76,6 +76,9 @@ struct SourceDataFileHandle
 
 private:
   
+  // TODO(sushi) we dont need to store this why did i do this?
+  //             regardless, ref counting is out of style, so this whole header
+  //             thing will probably be removed.
   SourceDataFileHeader* header = nullptr;
 
   // Only the registry may create handles.

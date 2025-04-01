@@ -78,7 +78,10 @@ int main(int argc, const char** argv)
   defer { lpp.deinit(); };
 
   if (!lpp.run())
+  {
+    driver.cleanupAfterFailure();
     return 1;
+  }
 
   return 0;
 }

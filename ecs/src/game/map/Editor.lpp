@@ -336,7 +336,7 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
 
   editor->left_panel = Item::begin(ui, "left_panel"_str);
   {
-    editor->world_pos = Text::make(ui, "world_pos"_str);
+    // editor->world_pos = Text::make(ui, "world_pos"_str);
 
     @ui.style(editor->left_panel, Item,
     | size: 300 100%
@@ -427,6 +427,9 @@ $     end
     @ui.style(sdedit_box, Item, 
     | size: 100% 300
     | border: 2)
+
+    editor->selected_sdata_info = Text::make(ui);
+    @ui.style(editor->selected_sdata_info, Text, display: hidden);
 
     editor->sdedit = SourceDataEditor::create(ui, &editor->sdinterface);
     editor->sdinterface.editor = editor;
@@ -562,6 +565,9 @@ void MapEditor::update(UI* ui, UpdateReason reason)
 
   SourceDataFile* sdfile = h_selected_map.getFile();
 
+  if (input.isKeyDown(Key::LCtrl) && input.wasKeyReleased(Key::S))
+    ui->eng->source_data_file_reg.saveToDisk(h_selected_map);
+
   switch (control_state)
   {
   case ControlState::None:
@@ -606,6 +612,37 @@ void MapEditor::update(UI* ui, UpdateReason reason)
 
         if (control_state == ControlState::None)
         {
+          if (input.isKeyDown(Key::LCtrl))
+          {
+            Tile* tile;
+            Layer* layer;
+            if (map.getTileAndLayerAtPos(&layer, &tile, mw))
+            {
+              u32 layer_idx = layer - map.layers.arr;
+              u32 tile_idx = tile - layer->tiles.arr;
+
+              SourceData* map_data = sdfile->returned_data;
+              SourceData* layers_data = 
+                map_data->findChildByName("layers"_str);
+              SourceData* layer_data = layers_data->children[layer_idx];
+              SourceData* tiles_data = 
+                layer_data->findChildByName("tiles"_str);
+              SourceData* tile_data = tiles_data->children[tile_idx];
+              sdedit->setSourceData(
+                *ui, 
+                tile_data, 
+                h_selected_map.getFile(),
+                "MapTileDef"_hashed);
+
+              @ui.style(selected_sdata_info, Text, display: 0);
+
+              io::SmallBuffer<255> buffer;
+              vec2f tile_pos = map.getTilePos(*layer, *tile);
+              io::formatv(&buffer, "editing tile at ", tile_pos);
+              selected_sdata_info->set(buffer.asStr());
+            }
+          }
+
           drag_start_viewport = mvp;
           drag_start_eye = eye.pos;
           control_state = ControlState::Dragging;
@@ -759,6 +796,7 @@ void MapEditor::update(UI* ui, UpdateReason reason)
     // renderMap(*ui);
   }
 
+$ if false then
   io::StaticBuffer<512> text;
   io::formatv(&text,
     eye.pos,      " ",
@@ -769,6 +807,7 @@ void MapEditor::update(UI* ui, UpdateReason reason)
     eye.worldToScreen(mw, size));
 
   world_pos->set(text.asStr());
+$ end
 }
 
 /* ----------------------------------------------------------------------------

@@ -22,10 +22,23 @@ Component.new = function(name)
   return setmetatable(o, Component)
 end
 
+comp.mark = function(name)
+  if comp.components.map[name] then
+    log:fatal("a component with name ", name, " already exists\n")
+    lpp.cancel()
+  end
+
+  local c = Component.new(name)
+  comp.components.map[name] = c
+  comp.components.list:push(c)
+
+  return "b8 init();"
+end
+
 comp.def = function(name, def)
   if comp.components.map[name] then
     log:fatal("a component with name ", name, " already exists\n")
-    os.exit(1)
+    lpp.cancel()
   end
 
   local c = Component.new(name)

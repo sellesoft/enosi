@@ -97,11 +97,31 @@ SourceDataFileHandle SourceDataFileReg::loadFromDisk(String path)
  */
 b8 SourceDataFileReg::saveToDisk(const SourceDataFileHandle& h_sdfile)
 {
+  using namespace fs;
+
   if (!h_sdfile.isValid())
     return ERROR("SourceDataFileReg::saveToDisk passed a nil handle\n");
 
-  
-}
+  auto* sdfile = h_sdfile.getFile();
+  auto* slot = (SourceDataFileSlot*)h_sdfile.header;
+
+  auto file = 
+    File::from(slot->path, OpenFlag::Write | OpenFlag::Truncate);
+  if (isnil(file))
+    return @log.error("failed to open file at ", slot->path, " for writing\n");
+  defer { file.close(); };
+
+  for (SourceData& aux : sdfile->aux_data_list)
+    aux.dump(&file);
+
+  if (sdfile->returned_data != nullptr)
+  {
+    io::format(&file, "return ");
+    sdfile->returned_data->dump(&file);
+  }
+
+  return true;
+} 
 
 /* ----------------------------------------------------------------------------
  */

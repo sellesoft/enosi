@@ -136,6 +136,8 @@ struct Driver
 
   // Constructs an lpp instance from this Driver.
   b8 construct(Lpp* lpp);
+
+  void cleanupAfterFailure();
 };
 
 }
