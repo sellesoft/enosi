@@ -211,10 +211,10 @@ static vec2i putFilledRect(
     offsets,
     pos,
     dim,
-    { 0.f, 1.f },
-    { 1.f, 1.f },
-    { 1.f, 0.f },
     { 0.f, 0.f },
+    { 1.f, 0.f },
+    { 1.f, 1.f },
+    { 0.f, 1.f },
     color);
 }
 

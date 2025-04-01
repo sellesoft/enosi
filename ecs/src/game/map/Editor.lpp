@@ -501,10 +501,10 @@ void MapEditor::generate(UI* ui)
         map_render->counts_used,
         pos_screen,
         size,
-        {0.f, 1.f},
-        {1.f, 1.f},
-        {1.f, 0.f},
         {0.f, 0.f},
+        {1.f, 0.f},
+        {1.f, 1.f},
+        {0.f, 1.f},
         {255,255,255,255});
   }
 }

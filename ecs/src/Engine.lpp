@@ -78,7 +78,7 @@ $ end
       .name         = "assets/textures/white"_str,
       .width        = 2,
       .height       = 2,
-      .format       = gfx::ImageFormat::RGBA,
+      .format       = gfx::ImageFormat::BW,
       .usage        = gfx::ImageUsage::Sampled,
       .filter       = gfx::ImageFilter::Nearest,
       .address_mode = gfx::ImageAddressMode::ClampToWhite,
@@ -86,13 +86,7 @@ $ end
       .assetmgr     = &assetmgr,
     };
 
-    u8 pixels[16] =
-    {
-      0xff, 0xff, 0xff, 0xff,
-      0xff, 0xff, 0xff, 0xff,
-      0xff, 0xff, 0xff, 0xff,
-      0xff, 0xff, 0xff, 0xff,
-    };
+    u8 pixels[16] = { 0xff, 0xff, 0xff, 0xff, };
 
     b8 compiled = gfx::CompiledTexture::compileFromMemory(pixels,
       white_texture_params);

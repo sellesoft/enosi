@@ -33,7 +33,7 @@ void pushConstantFromTransform(
   f32 push_constant[16] = {0};
   transform.toMat4(push_constant);
   push_constant[0] = 2.0f * push_constant[0] / window.size.x;
-  push_constant[5] = -2.0f * push_constant[5] / window.size.y;
+  push_constant[5] = 2.0f * push_constant[5] / window.size.y;
   renderer.pushConstant(push_constant, ui::PUSH_CONSTANT_SIZE);
 }
 
@@ -513,9 +513,6 @@ $ end
   if (item_in_view)
   {
     const mat3x2& current_transform = *ctx.current_transform;
-
-    // Flip the scissor for OpenGL.
-    scoff = vec2f(scoff.x, window.size.y - (scoff.y + scsiz.y));
 
     vec2f item_margined_pos = item->pos_local   + @style.margin.top_left;
     vec2f item_bordered_pos = item_margined_pos + @style.border.top_left;
