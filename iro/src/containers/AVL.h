@@ -155,6 +155,7 @@ struct AVL
     {
       root = pool.add();
       root->balance_factor = 0;
+      root->key = data_key;
       return root;
     }
 
@@ -187,6 +188,7 @@ struct AVL
     Node* new_node = pool.add();
     new_node->parent = search_node;
     new_node->key = data_key;
+    assert(data_key);
     if (place_right)
       search_node->right = new_node;
     else
@@ -277,11 +279,13 @@ struct AVL
       root = pool.add();
       root->data = data;
       root->balance_factor = 0;
+      root->key = GetKey(data);
       return;
     }
 
     Node* new_node = insert(GetKey(data));
     new_node->data = data;
+    assert(new_node->key);
   }
   
   /* --------------------------------------------------------------------------
@@ -631,7 +635,7 @@ public:
       return current;
     }
 
-    b8 operator !=(const RangeIterator& rhs)
+    b8 operator !=(const RangeIterator& rhs) const
     {
       return current != rhs.current;
     }
