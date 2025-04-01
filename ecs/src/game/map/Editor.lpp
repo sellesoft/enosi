@@ -288,7 +288,7 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
     *renderer,
     600,
     400,
-    gfx::ImageFormat::BGRA,
+    gfx::ImageFormat::RGBA,
     (gfx::ImageUsage)(  gfx::ImageUsage::Sampled
                       | gfx::ImageUsage::FramebufferColor),
     gfx::ImageAddressMode::ClampToBlack,
@@ -524,7 +524,7 @@ void MapEditor::evaluate(UI* ui)
     *renderer,
     size.x,
     size.y,
-    gfx::ImageFormat::BGRA,
+    gfx::ImageFormat::RGBA,
     (gfx::ImageUsage)(  gfx::ImageUsage::Sampled
                       | gfx::ImageUsage::FramebufferColor),
     gfx::ImageAddressMode::ClampToBlack,

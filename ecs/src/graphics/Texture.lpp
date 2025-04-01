@@ -16,18 +16,20 @@ namespace gfx
 
 /* ----------------------------------------------------------------------------
  */
-static VkFormat imageFormatToVulkan(ImageFormat x){
-  switch(x){
-    case ImageFormat::BW:
-      return VK_FORMAT_R8_UNORM;
-    case ImageFormat::BWA:
-      return VK_FORMAT_R8G8_UNORM;
-    case ImageFormat::RGB:
-      return VK_FORMAT_R8G8B8_UNORM;
-    case ImageFormat::RGBA:
-      return VK_FORMAT_R8G8B8A8_UNORM;
-    case ImageFormat::BGRA:
-      return VK_FORMAT_B8G8R8A8_UNORM;
+VkFormat imageFormatToVulkan(ImageFormat x)
+{
+  switch(x)
+  {
+  case ImageFormat::BW:
+    return VK_FORMAT_R8_UNORM;
+  case ImageFormat::BWA:
+    return VK_FORMAT_R8G8_UNORM;
+  case ImageFormat::RGB:
+    return VK_FORMAT_R8G8B8_UNORM;
+  case ImageFormat::RGBA:
+    return VK_FORMAT_R8G8B8A8_UNORM;
+  case ImageFormat::BGRA:
+    return VK_FORMAT_B8G8R8A8_UNORM;
   }
   FATAL("invalid ImageFormat: ", (u32)x);
   return VK_FORMAT_UNDEFINED;
@@ -35,18 +37,20 @@ static VkFormat imageFormatToVulkan(ImageFormat x){
 
 /* ----------------------------------------------------------------------------
  */
-static u32 imageFormatToBytesPerPixel(ImageFormat x){
-  switch(x){
-    case ImageFormat::BW:
-      return 1;
-    case ImageFormat::BWA:
-      return 2;
-    case ImageFormat::RGB:
-      return 3;
-    case ImageFormat::RGBA:
-      return 4;
-    case ImageFormat::BGRA:
-      return 4;
+static u32 imageFormatToBytesPerPixel(ImageFormat x)
+{
+  switch(x)
+  {
+  case ImageFormat::BW:
+    return 1;
+  case ImageFormat::BWA:
+    return 2;
+  case ImageFormat::RGB:
+    return 3;
+  case ImageFormat::RGBA:
+    return 4;
+  case ImageFormat::BGRA:
+    return 4;
   }
   FATAL("invalid ImageFormat: ", (u32)x);
   return 0;
@@ -54,12 +58,14 @@ static u32 imageFormatToBytesPerPixel(ImageFormat x){
 
 /* ----------------------------------------------------------------------------
  */
-static VkFilter imageFilterToVulkan(ImageFilter x){
-  switch(x){
-    case ImageFilter::Nearest:
-      return VK_FILTER_NEAREST;
-    case ImageFilter::Linear:
-      return VK_FILTER_LINEAR;
+static VkFilter imageFilterToVulkan(ImageFilter x)
+{
+  switch(x)
+  {
+  case ImageFilter::Nearest:
+    return VK_FILTER_NEAREST;
+  case ImageFilter::Linear:
+    return VK_FILTER_LINEAR;
   }
   FATAL("invalid ImageFilter: ", (u32)x);
   return VK_FILTER_NEAREST;
@@ -67,20 +73,22 @@ static VkFilter imageFilterToVulkan(ImageFilter x){
 
 /* ----------------------------------------------------------------------------
  */
-static VkSamplerAddressMode imageAddressModeToVulkan(ImageAddressMode x){
-  switch(x){
-    case ImageAddressMode::Repeat:
-      return VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    case ImageAddressMode::MirroredRepeat:
-      return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-    case ImageAddressMode::ClampToEdge:
-      return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    case ImageAddressMode::ClampToWhite:
-      return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-    case ImageAddressMode::ClampToBlack:
-      return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-    case ImageAddressMode::ClampToTransparent:
-      return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+static VkSamplerAddressMode imageAddressModeToVulkan(ImageAddressMode x)
+{
+  switch(x)
+  {
+  case ImageAddressMode::Repeat:
+    return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+  case ImageAddressMode::MirroredRepeat:
+    return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+  case ImageAddressMode::ClampToEdge:
+    return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+  case ImageAddressMode::ClampToWhite:
+    return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+  case ImageAddressMode::ClampToBlack:
+    return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+  case ImageAddressMode::ClampToTransparent:
+    return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
   }
   FATAL("invalid ImageAddressMode: ", (u32)x);
   return VK_SAMPLER_ADDRESS_MODE_REPEAT;
@@ -114,6 +122,10 @@ b8 Texture::init(
   if (width == 0 || height == 0)
     return ERROR("failed to initialize a texture because the width or"
       " height is not positive\n");
+
+  if (usage & ImageUsage::FramebufferColor && format != ImageFormat::RGBA)
+    return ERROR("failed to initialize a texture because the format is"
+      " not RGBA but was specified as a framebuffer color texture\n");
 
   VkFormat vk_format = imageFormatToVulkan(format);
 

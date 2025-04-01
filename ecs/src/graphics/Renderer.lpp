@@ -189,7 +189,8 @@ $ end
     .imageColorSpace = ri.surface_format.colorSpace,
     .imageExtent = ri.surface_extent,
     .imageArrayLayers = 1,
-    .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+    .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+      | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
     .preTransform = capabilities.currentTransform,
     .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
     .presentMode = ri.surface_present_mode,
@@ -233,41 +234,116 @@ static b8 updateFramebuffers(Renderer& renderer)
     return FATAL("vulkan swapchain image count is >",
       RendererInternal::MAX_DEFAULT_FRAMEBUFFERS,
       "; bump RendererInternal::MAX_DEFAULT_FRAMEBUFFERS\n");
-  vkGetSwapchainImagesKHR(ri.device, ri.swapchain,
-    &ri.swapchain_image_count, ri.default_framebuffer_images);
+
+  for (u32 i = 0; i < old_image_count; i++)
+  {
+    vkDestroyFramebuffer(ri.device,
+      ri.default_framebuffers[i], &ri.allocator);
+    vkDestroyImageView(ri.device,
+      ri.default_framebuffer_image_views[i], &ri.allocator);
+    vkDestroyImage(ri.device,
+      ri.default_framebuffer_images[i], &ri.allocator);
+    vkFreeMemory(ri.device,
+      ri.default_framebuffer_image_memories[i], &ri.allocator);
+  }
 
   for (u32 i = 0; i < ri.swapchain_image_count; i++)
   {
-    vkDestroyImageView(ri.device,
-      ri.default_framebuffer_image_views[i], &ri.allocator);
+    VkImageCreateInfo image_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .imageType = VK_IMAGE_TYPE_2D,
+      .format = VK_FORMAT_R8G8B8A8_UNORM,
+      .extent =
+      {
+        .width = ri.surface_extent.width,
+        .height = ri.surface_extent.height,
+        .depth = 1
+      },
+      .mipLevels = 1,
+      .arrayLayers = 1,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .tiling = VK_IMAGE_TILING_OPTIMAL,
+      .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+        | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
+    };
 
-    VkImageViewCreateInfo image_view_create_info =
+    if (VK_SUCCESS != vkCreateImage(ri.device, &image_info, &ri.allocator,
+      &ri.default_framebuffer_images[i]))
+      return FATAL("failed to create default framebuffer image ", i, "\n");
+
+    debugSetObjectName(renderer, VK_OBJECT_TYPE_IMAGE,
+      ri.default_framebuffer_images[i],
+      "<default framebuffer ", i, " image>");
+
+    VkMemoryRequirements image_memory_requirements;
+    vkGetImageMemoryRequirements(ri.device, ri.default_framebuffer_images[i],
+      &image_memory_requirements);
+
+    VkPhysicalDeviceMemoryProperties image_memory_properties;
+    vkGetPhysicalDeviceMemoryProperties(ri.physical_device,
+      &image_memory_properties);
+
+    VkMemoryPropertyFlags desired_memory_properties =
+      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+    u32 image_memory_type = 0;
+    for (u32 j = 0; j < image_memory_properties.memoryTypeCount; j++)
+    {
+      if (   (image_memory_requirements.memoryTypeBits & (1 << j))
+          && (  (  image_memory_properties.memoryTypes[j].propertyFlags
+                 & desired_memory_properties)
+               == desired_memory_properties))
+      {
+        image_memory_type = j;
+        break;
+      }
+    }
+
+    VkMemoryAllocateInfo alloc_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize = image_memory_requirements.size,
+      .memoryTypeIndex = image_memory_type,
+    };
+
+    if (VK_SUCCESS != vkAllocateMemory(ri.device, &alloc_info, &ri.allocator,
+      &ri.default_framebuffer_image_memories[i]))
+      return FATAL("failed to allocate memory for default framebuffer"
+        " image ", i, "\n");
+
+    debugSetObjectName(renderer, VK_OBJECT_TYPE_DEVICE_MEMORY,
+      ri.default_framebuffer_image_memories[i],
+      "<default framebuffer ", i, " image memory>");
+
+    vkBindImageMemory(ri.device, ri.default_framebuffer_images[i],
+      ri.default_framebuffer_image_memories[i], 0);
+
+    VkImageViewCreateInfo view_create_info =
     {
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
       .image = ri.default_framebuffer_images[i],
       .viewType = VK_IMAGE_VIEW_TYPE_2D,
-      .format = ri.surface_format.format,
+      .format = VK_FORMAT_R8G8B8A8_UNORM,
       .subresourceRange =
       {
         .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
         .baseMipLevel = 0,
         .levelCount = 1,
         .baseArrayLayer = 0,
-        .layerCount = 1,
-      },
+        .layerCount = 1
+      }
     };
 
-    if (VK_SUCCESS != vkCreateImageView(ri.device, &image_view_create_info,
+    if (VK_SUCCESS != vkCreateImageView(ri.device, &view_create_info,
       &ri.allocator, &ri.default_framebuffer_image_views[i]))
-      return FATAL("failed to bind the default vulkan framebuffer ", i,
-        " image view\n");
+      return FATAL("failed to create view for default framebuffer"
+        " image ", i, "\n");
 
     debugSetObjectName(renderer, VK_OBJECT_TYPE_IMAGE_VIEW,
       ri.default_framebuffer_image_views[i],
       "<default framebuffer ", i, " image view>");
-
-    vkDestroyFramebuffer(ri.device,
-      ri.default_framebuffers[i], &ri.allocator);
 
     VkFramebufferCreateInfo framebuffer_create_info =
     {
@@ -280,22 +356,15 @@ static b8 updateFramebuffers(Renderer& renderer)
       .layers = 1,
     };
 
-    if (VK_SUCCESS != vkCreateFramebuffer(ri.device, &framebuffer_create_info,
-      &ri.allocator, &ri.default_framebuffers[i]))
+    if (VK_SUCCESS != vkCreateFramebuffer(ri.device,
+      &framebuffer_create_info, &ri.allocator,
+      &ri.default_framebuffers[i]))
       return FATAL("failed to create the default vulkan"
         " framebuffer ", i, "\n");
 
     debugSetObjectName(renderer, VK_OBJECT_TYPE_FRAMEBUFFER,
       ri.default_framebuffers[i],
       "<default framebuffer ", i, ">");
-  }
-
-  for (u32 i = ri.swapchain_image_count; i < old_image_count; i++)
-  {
-    vkDestroyImageView(ri.device,
-      ri.default_framebuffer_image_views[i], &ri.allocator);
-    vkDestroyFramebuffer(ri.device,
-      ri.default_framebuffers[i], &ri.allocator);
   }
 
   return true;
@@ -923,14 +992,14 @@ $ end -- if IRO_LINUX
   {
     VkAttachmentDescription attachment_desc =
     {
-      .format = ri.surface_format.format,
+      .format = VK_FORMAT_R8G8B8A8_UNORM,
       .samples = VK_SAMPLE_COUNT_1_BIT,
       .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
       .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
       .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
       .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
       .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-      .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+      .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
     };
 
     VkAttachmentReference attachment_ref =
@@ -981,35 +1050,103 @@ $ end -- if IRO_LINUX
   {
     vkGetSwapchainImagesKHR(ri.device, ri.swapchain,
       &ri.swapchain_image_count, nullptr);
-    if (ri.swapchain_image_count > 4)
-      return FATAL("vulkan swapchain image count is >4;"
-        " bump the code limit\n");
-
-    vkGetSwapchainImagesKHR(ri.device, ri.swapchain,
-      &ri.swapchain_image_count, ri.default_framebuffer_images);
-
+    if (ri.swapchain_image_count > ri.MAX_DEFAULT_FRAMEBUFFERS)
+      return FATAL("vulkan swapchain image count is >",
+        ri.MAX_DEFAULT_FRAMEBUFFERS, "; bump the code limit\n");
+    
     for (u32 i = 0; i < ri.swapchain_image_count; i++)
     {
-      VkImageViewCreateInfo image_view_create_info =
+      VkImageCreateInfo image_info =
+      {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+        .imageType = VK_IMAGE_TYPE_2D,
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
+        .extent =
+        {
+          .width = ri.surface_extent.width,
+          .height = ri.surface_extent.height,
+          .depth = 1
+        },
+        .mipLevels = 1,
+        .arrayLayers = 1,
+        .samples = VK_SAMPLE_COUNT_1_BIT,
+        .tiling = VK_IMAGE_TILING_OPTIMAL,
+        .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+          | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
+      };
+
+      if (VK_SUCCESS != vkCreateImage(ri.device, &image_info, &ri.allocator,
+        &ri.default_framebuffer_images[i]))
+        return FATAL("failed to create default framebuffer image ", i, "\n");
+
+      debugSetObjectName(*this, VK_OBJECT_TYPE_IMAGE,
+        ri.default_framebuffer_images[i],
+        "<default framebuffer ", i, " image>");
+
+      VkMemoryRequirements image_memory_requirements;
+      vkGetImageMemoryRequirements(ri.device, ri.default_framebuffer_images[i],
+        &image_memory_requirements);
+
+      VkPhysicalDeviceMemoryProperties image_memory_properties;
+      vkGetPhysicalDeviceMemoryProperties(ri.physical_device,
+        &image_memory_properties);
+
+      VkMemoryPropertyFlags desired_memory_properties =
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+      u32 image_memory_type = 0;
+      for (u32 j = 0; j < image_memory_properties.memoryTypeCount; j++)
+      {
+        if (   (image_memory_requirements.memoryTypeBits & (1 << j))
+            && (  (  image_memory_properties.memoryTypes[j].propertyFlags
+                   & desired_memory_properties)
+                == desired_memory_properties))
+        {
+          image_memory_type = j;
+          break;
+        }
+      }
+
+      VkMemoryAllocateInfo alloc_info =
+      {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = image_memory_requirements.size,
+        .memoryTypeIndex = image_memory_type,
+      };
+
+      if (VK_SUCCESS != vkAllocateMemory(ri.device, &alloc_info, &ri.allocator,
+        &ri.default_framebuffer_image_memories[i]))
+        return FATAL("failed to allocate memory for default framebuffer"
+          " image ", i, "\n");
+
+      debugSetObjectName(*this, VK_OBJECT_TYPE_DEVICE_MEMORY,
+        ri.default_framebuffer_image_memories[i],
+        "<default framebuffer ", i, " image memory>");
+
+      vkBindImageMemory(ri.device, ri.default_framebuffer_images[i],
+        ri.default_framebuffer_image_memories[i], 0);
+
+      VkImageViewCreateInfo view_create_info =
       {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .image = ri.default_framebuffer_images[i],
         .viewType = VK_IMAGE_VIEW_TYPE_2D,
-        .format = ri.surface_format.format,
+        .format = VK_FORMAT_R8G8B8A8_UNORM,
         .subresourceRange =
         {
           .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
           .baseMipLevel = 0,
           .levelCount = 1,
           .baseArrayLayer = 0,
-          .layerCount = 1,
-        },
+          .layerCount = 1
+        }
       };
 
-      if (VK_SUCCESS != vkCreateImageView(ri.device, &image_view_create_info,
+      if (VK_SUCCESS != vkCreateImageView(ri.device, &view_create_info,
         &ri.allocator, &ri.default_framebuffer_image_views[i]))
-        return FATAL("failed to bind the default vulkan framebuffer ", i,
-          " image view\n");
+        return FATAL("failed to create view for default framebuffer"
+          " image ", i, "\n");
 
       debugSetObjectName(*this, VK_OBJECT_TYPE_IMAGE_VIEW,
         ri.default_framebuffer_image_views[i],
@@ -1770,6 +1907,118 @@ b8 Renderer::update()
         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
         0, 0, nullptr, 0, nullptr, 1, &barrier);
     }
+  }
+
+  TRACE("blitting default framebuffer to swapchain image\n");
+  {
+    VkImageMemoryBarrier barrier =
+    {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+      .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+      .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
+      .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+      .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .image = ri.default_framebuffer_images[ri.default_framebuffer_index],
+      .subresourceRange =
+      {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel = 0,
+        .levelCount = 1,
+        .baseArrayLayer = 0,
+        .layerCount = 1
+      }
+    };
+
+    vkCmdPipelineBarrier(ri.command_buffer,
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+      VK_PIPELINE_STAGE_TRANSFER_BIT,
+      0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+    VkImage swapchain_images[ri.MAX_DEFAULT_FRAMEBUFFERS];
+    vkGetSwapchainImagesKHR(ri.device, ri.swapchain,
+      &ri.swapchain_image_count, swapchain_images);
+
+    barrier.srcAccessMask = VK_ACCESS_NONE;
+    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.image = swapchain_images[ri.default_framebuffer_index];
+
+    vkCmdPipelineBarrier(ri.command_buffer,
+      VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+      VK_PIPELINE_STAGE_TRANSFER_BIT,
+      0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+    VkImageBlit blit =
+    {
+      .srcSubresource =
+      {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .mipLevel = 0,
+        .baseArrayLayer = 0,
+        .layerCount = 1
+      },
+      .srcOffsets =
+      {
+        {0, 0, 0},
+        {(s32)ri.surface_extent.width, (s32)ri.surface_extent.height, 1}
+      },
+      .dstSubresource =
+      {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, 
+        .mipLevel = 0,
+        .baseArrayLayer = 0,
+        .layerCount = 1
+      },
+      .dstOffsets =
+      {
+        {0, 0, 0},
+        {(s32)ri.surface_extent.width, (s32)ri.surface_extent.height, 1}
+      }
+    };
+
+    vkCmdBlitImage(ri.command_buffer,
+      ri.default_framebuffer_images[ri.default_framebuffer_index],
+      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+      swapchain_images[ri.default_framebuffer_index],
+      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+      1, &blit, VK_FILTER_LINEAR);
+
+    VkMemoryBarrier memory_barrier =
+    {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+      .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+      .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT
+    };
+
+    vkCmdPipelineBarrier(ri.command_buffer,
+      VK_PIPELINE_STAGE_TRANSFER_BIT,
+      VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+      0, 1, &memory_barrier, 0, nullptr, 0, nullptr);
+
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_NONE;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    barrier.image = swapchain_images[ri.default_framebuffer_index];
+
+    vkCmdPipelineBarrier(ri.command_buffer,
+      VK_PIPELINE_STAGE_TRANSFER_BIT,
+      VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
+      0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    barrier.image = ri.default_framebuffer_images[ri.default_framebuffer_index];
+
+    vkCmdPipelineBarrier(ri.command_buffer,
+      VK_PIPELINE_STAGE_TRANSFER_BIT,
+      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+      0, 0, nullptr, 0, nullptr, 1, &barrier);
   }
 
   TRACE("ending the command buffer\n");
