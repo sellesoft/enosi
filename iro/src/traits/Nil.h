@@ -83,6 +83,8 @@ release_inline bool isnil(const T& x) { return NilValue<T>::isNil(x); }
 template<Nillable T>
 release_inline bool notnil(const T& x) { return not isnil(x); }
 
+#define COALESCE(x, v) (notnil(x) ? (x) : (v))
+
 // 'resolves' a nillable value 'x' to 'v' if x is nil, otherwise does nothing.
 // Returns true if the value was resolved.
 template<Nillable T>

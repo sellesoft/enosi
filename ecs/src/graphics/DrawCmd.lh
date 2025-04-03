@@ -34,6 +34,11 @@ struct DrawCmd
     BindIndexBuffer,
     PushConstant,
     Draw,
+$ if ECS_DEBUG then
+    DebugBeginLabel,
+    DebugEndLabel,
+    DebugInsertLabel,
+$ end -- if ECS_DEBUG
   };
 
   Kind kind;
@@ -72,6 +77,14 @@ struct DrawCmd
       u64 index_count;
       u64 vertex_start;
     } draw;
+
+$ if ECS_DEBUG then
+    struct
+    {
+      char label[64];
+      vec4f color;
+    } debug_label;
+$ end -- if ECS_DEBUG
   };
 };
 

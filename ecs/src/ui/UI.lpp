@@ -30,10 +30,21 @@ void pushConstantFromTransform(
   const Window& window,
   const mat3x2& transform)
 {
-  f32 push_constant[16] = {0};
+  f32 push_constant[16];
   transform.toMat4(push_constant);
-  push_constant[0] = 2.0f * push_constant[0] / window.size.x;
-  push_constant[5] = 2.0f * push_constant[5] / window.size.y;
+
+  f32 scale_x = 2.0f / window.size.x;
+  f32 scale_y = 2.0f / window.size.y;
+  push_constant[0] *= scale_x;
+  push_constant[1] *= scale_x;
+  push_constant[4] *= scale_y;
+  push_constant[5] *= scale_y;
+
+  push_constant[12] = push_constant[2] * scale_x;
+  push_constant[13] = push_constant[6] * scale_y;
+  push_constant[2] = 0.0f;
+  push_constant[6] = 0.0f;
+
   renderer.pushConstant(push_constant, ui::PUSH_CONSTANT_SIZE);
 }
 
@@ -354,6 +365,9 @@ void UI::updateTree(ItemNode* node, UpdateTreeContext& ctx)
   Item* item = node->data;
   Item* parent = (node->parent? node->parent->data : nullptr);
 
+  eng->renderer.debugBeginLabel(vec4f(0.5f, 0.2f, 0.2f, 1.f),
+    notnil(item->name) ? item->name : "unnamed ui item"_str);
+  defer { eng->renderer.debugEndLabel(); };
 
   vec2f init_scroll = item->scroll;
   item->scroll = min(vec2f(0.f,0.f), max(item->scroll, item->max_scroll));
@@ -1546,8 +1560,6 @@ void UI::emitDrawCmd(
     f32 scissor_w = min(item->size.x, drawcmd->scissor.z);
     f32 scissor_h = min(item->size.y, drawcmd->scissor.w);
 
-    scissor_y = eng->window.size.y - (scissor_y + scissor_h);
-
     f32 ext_x = scissor_x + scissor_w;
     f32 ext_y = scissor_y + scissor_h;
 
@@ -1561,7 +1573,6 @@ void UI::emitDrawCmd(
       min(
         scissor_h,
         max(0.f, current_scissor.y + current_scissor.w - scissor_y));
-
 
     eng->renderer.setScissor(
       vec2i(scissor_x, scissor_y), vec2i(scissor_w, scissor_h));

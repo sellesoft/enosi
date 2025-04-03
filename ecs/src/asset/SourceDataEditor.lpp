@@ -2403,7 +2403,8 @@ struct FieldInputText : public InputText
  */
 SourceDataEditor* SourceDataEditor::create(UI& ui, Interface* interface)
 {
-  auto* editor = ui.allocateAndInitItem<SourceDataEditor>(nil);
+  auto* editor = ui.allocateAndInitItem<SourceDataEditor>(
+    "source_data_editor"_str);
   if (editor == nullptr)
     return nullptr;
 

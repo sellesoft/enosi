@@ -1432,11 +1432,19 @@ b8 Renderer::update()
       .pClearValues = clear_values,
     };
 
+    if (ri.func_vkCmdBeginDebugUtilsLabelEXT != nullptr)
+    {
+      VkDebugUtilsLabelEXT label =
+      {
+        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+        .pLabelName = "default framebuffer",
+        .color = { 0.2f, 0.4f, 0.8f, 1.0f },
+      };
+      ri.func_vkCmdBeginDebugUtilsLabelEXT(ri.command_buffer, &label);
+    }
+
     vkCmdBeginRenderPass(ri.command_buffer, &begin_info,
       VK_SUBPASS_CONTENTS_INLINE);
-
-    debugBeginLabel(*this, ri.command_buffer, vec4f(0.2f, 0.4f, 0.8f, 1.0f),
-      "default framebuffer"_str);
   }
 
   TRACE("executing draw commands\n");
@@ -1497,8 +1505,12 @@ b8 Renderer::update()
       VkClearValue clear_values[1] = { 0.0f, 0.0f, 0.0f, 1.0f };
       VkExtent2D extent = { 0, 0 };
 
-      debugEndLabel(*this, ri.command_buffer);
       vkCmdEndRenderPass(ri.command_buffer);
+
+      if (ri.func_vkCmdEndDebugUtilsLabelEXT != nullptr)
+      {
+        ri.func_vkCmdEndDebugUtilsLabelEXT(ri.command_buffer);
+      }
 
       // transition framebuffer image back to SHADER_READ_ONLY after rendering
       if (current_framebuffer.index != 0)
@@ -1622,10 +1634,22 @@ b8 Renderer::update()
         .pClearValues = clear_values,
       };
 
+      if (ri.func_vkCmdBeginDebugUtilsLabelEXT != nullptr)
+      {
+        iro::io::StaticBuffer<63> name = {};
+        iro::io::formatv(&name, "framebuffer ", cmd.bind_framebuffer.index);
+
+        VkDebugUtilsLabelEXT label =
+        {
+          .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+          .pLabelName = (const char*)name.buffer,
+          .color = { 0.4f, 0.8f, 0.1f, 1.0f },
+        };
+        ri.func_vkCmdBeginDebugUtilsLabelEXT(ri.command_buffer, &label);
+      }
+
       vkCmdBeginRenderPass(ri.command_buffer, &begin_info,
         VK_SUBPASS_CONTENTS_INLINE);
-      debugBeginLabel(*this, ri.command_buffer, vec4f(0.4f, 0.8f, 0.1f, 1.0f),
-        "framebuffer ", cmd.bind_framebuffer.index, "\n");
 
       current_framebuffer = cmd.bind_framebuffer;
     }break;
@@ -1866,14 +1890,68 @@ b8 Renderer::update()
       vkCmdDrawIndexed(ri.command_buffer, cmd.draw.index_count,
         1, cmd.draw.index_start, cmd.draw.vertex_start, 0);
     }break;
+
+$ if ECS_DEBUG then
+    case DrawCmd::Kind::DebugBeginLabel:
+    {
+      if (ri.func_vkCmdBeginDebugUtilsLabelEXT != nullptr)
+      {
+        VkDebugUtilsLabelEXT label =
+        {
+          .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+          .pLabelName = cmd.debug_label.label,
+          .color =
+          {
+            cmd.debug_label.color.x,
+            cmd.debug_label.color.y,
+            cmd.debug_label.color.z,
+            cmd.debug_label.color.w,
+          },
+        };
+        ri.func_vkCmdBeginDebugUtilsLabelEXT(ri.command_buffer, &label);
+      }
+    } break;
+
+    case DrawCmd::Kind::DebugEndLabel:
+    {
+      if (ri.func_vkCmdEndDebugUtilsLabelEXT != nullptr)
+      {
+        ri.func_vkCmdEndDebugUtilsLabelEXT(ri.command_buffer);
+      }
+    } break;
+
+    case DrawCmd::Kind::DebugInsertLabel:
+    {
+      if (ri.func_vkCmdInsertDebugUtilsLabelEXT != nullptr)
+      {
+        VkDebugUtilsLabelEXT label =
+        {
+          .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+          .pLabelName = cmd.debug_label.label,
+          .color =
+          {
+            cmd.debug_label.color.x,
+            cmd.debug_label.color.y,
+            cmd.debug_label.color.z,
+            cmd.debug_label.color.w,
+          },
+        };
+        ri.func_vkCmdInsertDebugUtilsLabelEXT(ri.command_buffer, &label);
+      }
+    } break;
+$ end -- if ECS_DEBUG
     }
   }
 
   TRACE("ending the render pass\n");
   {
-    debugEndLabel(*this, ri.command_buffer);
     vkCmdEndRenderPass(ri.command_buffer);
-  
+
+    if (ri.func_vkCmdEndDebugUtilsLabelEXT != nullptr)
+    {
+      ri.func_vkCmdEndDebugUtilsLabelEXT(ri.command_buffer);
+    }
+
     // transition framebuffer image back to SHADER_READ_ONLY after rendering
     if (current_framebuffer.index != 0)
     {
@@ -2089,6 +2167,12 @@ b8 Renderer::update()
  */
 void Renderer::setScissor(vec2i pos, vec2i size)
 {
+  if (size.x <= 0 || size.y <= 0)
+  {
+    ERROR("attempted to set a scissor with zero or negative size\n");
+    return;
+  }
+
   DrawCmd cmd =
   {
     .kind = DrawCmd::Kind::SetScissor,
@@ -2257,6 +2341,55 @@ void Renderer::draw(
     },
   };
   drawcmds.push(cmd);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::debugBeginLabel(vec4f color, utf8::String label)
+{
+$ if ECS_DEBUG then
+  DrawCmd cmd =
+  {
+    .kind = DrawCmd::Kind::DebugBeginLabel,
+    .debug_label =
+    {
+      .color = color,
+    }
+  };
+  mem::copy(cmd.debug_label.label, label.ptr, min(label.len, 63ULL));
+  drawcmds.push(cmd);
+$ end -- if ECS_DEBUG
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::debugEndLabel()
+{
+$ if ECS_DEBUG then
+  DrawCmd cmd =
+  {
+    .kind = DrawCmd::Kind::DebugEndLabel,
+  };
+  drawcmds.push(cmd);
+$ end -- if ECS_DEBUG
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::debugInsertLabel(vec4f color, utf8::String label)
+{
+$ if ECS_DEBUG then
+  DrawCmd cmd =
+  {
+    .kind = DrawCmd::Kind::DebugInsertLabel,
+    .debug_label =
+    {
+      .color = color,
+    }
+  };
+  mem::copy(cmd.debug_label.label, label.ptr, min(label.len, 63ULL));
+  drawcmds.push(cmd);
+$ end -- if ECS_DEBUG
 }
 
 /* ----------------------------------------------------------------------------

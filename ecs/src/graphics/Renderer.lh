@@ -6,6 +6,7 @@ $ require "common"
 
 #include "iro/Common.h"
 #include "iro/containers/Array.h"
+#include "iro/Unicode.h"
 #include "math/mat.h"
 #include "math/vec.h"
 
@@ -52,6 +53,10 @@ struct Renderer
   void draw(u64 index_start, u64 index_count, u64 vertex_start);
 
   u64 getMaxPushConstantSize();
+
+  void debugBeginLabel(vec4f color, utf8::String label);
+  void debugEndLabel();
+  void debugInsertLabel(vec4f color, utf8::String label);
 
   // NOTE(sushi) explicitly deleting the copy constructor of Renderer
   //             to prevent accidental copies since operating on a copy

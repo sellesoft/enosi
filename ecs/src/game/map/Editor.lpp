@@ -423,12 +423,12 @@ $     end
     }
     ui.endItem();
 
-    auto* sdedit_box = ui::Item::begin(ui);
+    auto* sdedit_box = ui::Item::begin(ui, "sdedit_box"_str);
     @ui.style(sdedit_box, Item, 
     | size: 100% 300
     | border: 2)
 
-    editor->selected_sdata_info = Text::make(ui);
+    editor->selected_sdata_info = Text::make(ui, "selected_sdata_info"_str);
     @ui.style(editor->selected_sdata_info, Text, display: hidden);
 
     editor->sdedit = SourceDataEditor::create(ui, &editor->sdinterface);
