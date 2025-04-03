@@ -78,6 +78,7 @@ struct IO
     return write(Bytes{ (u8*)v, sizeof(T) });
   }
 
+
   template<typename T>
   s64 read(T* v)
   {
@@ -134,10 +135,60 @@ struct Memory : public IO
   // Commits space reserved by reserve().
   void commit(s32 space);
 
+  // Allocates some memory from this buffer of some type, basically equivalent
+  // to reserving and then committing, but also constructs the object in place
+  // too.
+  template<typename T>
+  T* allocateType()
+  {
+    Bytes reserved = reserve(sizeof(T));
+    assert(reserved.len >= sizeof(T));
+    commit(sizeof(T));
+    new (reserved.ptr) T;
+    return (T*)reserved.ptr;
+  }
+
+  u8* allocateBytes(u64 size)
+  {
+    Bytes reserved = reserve(size);
+    assert(reserved.len == size);
+    commit(size);
+    return reserved.ptr;
+  }
+
+  u64 allocateBytesOffset(Bytes bytes)
+  {
+    u64 offset = len;
+    u8* allocated = allocateBytes(bytes.len);
+    mem::copy(allocated, bytes.ptr, bytes.len);
+    return offset;
+  }
+
+  String allocateString(String s)
+  {
+    u8* bytes = allocateBytes(s.len);
+    mem::copy(bytes, s.ptr, s.len);
+    return String::from(bytes, s.len);
+  }
+
+  u64 allocateStringOffset(String s)
+  {
+    u64 offset = len;
+    allocateString(s);
+    return offset;
+  }
+
   String asStr() { return {ptr, len}; }
+  Bytes asBytes() { return {ptr, len}; }
 
   s64 write(Bytes slice) override;
   s64 read(Bytes slice) override;
+
+  template<typename T>
+  s64 writeType(const T& v)
+  {
+    return write(Bytes{ (u8*)&v, sizeof(T) });
+  }
 
   s64 readFrom(s64 pos, Bytes slice) override;
 

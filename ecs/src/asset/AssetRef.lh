@@ -1,0 +1,14 @@
+/*
+ *  Type used in schemas that indicates that a member can reference another 
+ *  asset file.
+ */ 
+
+$ require "common"
+$ local metadata = require "reflect.Metadata"
+
+#include "iro/Unicode.h"
+#include "iro/traits/Nil.h"
+
+using namespace iro;
+
+

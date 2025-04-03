@@ -1,0 +1,52 @@
+/*
+ *  Some data that either comes from packing SourceData or from loading 
+ *  CompiledData.
+ */
+
+$ require "common"
+
+#include "iro/memory/Bump.h"
+
+struct AssetRef;
+
+/* ============================================================================
+ *  An AssetRef found in the data that was packed, intended to be resolved
+ *  later by whoever is using this data.
+ */
+struct PackedAssetRef
+{
+  // The next ref in the linked list.
+  PackedAssetRef* next;
+
+  // The type of asset being referenced.
+  String type;
+
+  // A pointer to the reference in the data.
+  AssetRef* ref;
+};
+
+/* ============================================================================
+ */
+struct PackedData
+{
+  // A buffer containing all data that was retieved while packing this data,
+  // eg. its raw binary data, strings, etc.
+  mem::LenientBump buffer;
+
+  // A linked list of asset refs found during packing.
+  PackedAssetRef* refs;
+
+  // A slice containing the ROOT data of this PackedData, eg. if we packed a 
+  // MapDef, this will span said def, not including strings or other data
+  // that may have been allocated.
+  Bytes data;
+
+  void recordAssetRef(String type, AssetRef* assetref)
+  {
+    auto* ref = buffer.allocateType<PackedAssetRef>();
+    ref->next = refs;
+    ref->type = type;
+    ref->ref = assetref;
+    refs = ref;
+  }
+};

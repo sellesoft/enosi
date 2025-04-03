@@ -1,0 +1,43 @@
+/*
+ *  A manager for GPU resources that originate from assets.
+ */ 
+
+$ require "common"
+
+#include "iro/containers/AVL.h"
+
+@@lpp.import "graphics/CompiledTexture.lh"
+
+using namespace iro;
+
+namespace gfx
+{
+
+/* ============================================================================
+ */
+struct ResourceMgr
+{
+  template<typename T>
+  struct Resource
+  {
+    String name;
+    T  resource;
+  };
+
+  // TODO(sushi) use indexed pools once vulkan is merged
+  template<typename T>
+  using ResourceMap = AVL<
+    Resource<T>, [](const Resource<T>* r) { return r->name.hash(); }>;
+
+  ResourceMap<CompiledTexture> textures;
+
+  b8 init();
+  void deinit();
+
+  // TODO(sushi) this should be handing out the Texture handle.
+  CompiledTexture* createTexture(String name);
+  CompiledTexture* findTexture(String name);
+
+};
+
+}

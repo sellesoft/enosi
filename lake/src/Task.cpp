@@ -5,7 +5,7 @@
 #include "iro/Logger.h"
 
 static Logger logger = 
-  Logger::create("lake.task"_str, Logger::Verbosity::Notice);
+  Logger::create("lake.task"_str, Logger::Verbosity::Trace);
 
 /* ----------------------------------------------------------------------------
  */

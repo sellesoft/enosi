@@ -75,6 +75,8 @@ struct Path
   // Retrieve a String with the extension of the given path removed.
   static String removeExtension(String path);
 
+  static b8 hasExtension(String path);
+
   // Retrieve a String with the first directory in the path removed.
   static String removeFirstDir(String path);
 

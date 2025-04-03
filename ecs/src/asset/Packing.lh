@@ -2,36 +2,49 @@ $ local cmn = require "common"
 $ local Schema = require "asset.Schema"
 
 @@lpp.import "asset/SourceData.lh"
+@@lpp.import "asset/PackedData.lh"
+
+#include "iro/containers/SmallArray.h"
+#include "iro/memory/Bump.h"
 
 struct AssetMgr;
+struct AssetRef;
 
 namespace gfx
 {
 struct Renderer;
 }
 
-// TODO(sushi) it would be nice to take an allocator here, but that somewhat
-//             complicates destroying packed data, as it may crash if we 
-//             pass an allocator that does not support freeing. We can just 
-//             pass nullptr in that case but its sorta weird to have the user
-//             know that.
-//
-//             The allocation is mostly for Component stuff, as they are 
-//             inherited types and so arbitrarily sized. Another way we might
-//             want to approach stuff like this is just having a specific 
-//             container type for these types that is provided here that 
-//             allocates them how it sees fit. I'm not entirely sure yet
-//             though, and hopefully we get some better ideas in the future.
+namespace iro::io
+{
+struct IO;
+}
+
 struct PackContext
 {
   // Optional systems only required when the type being packed
   // has members that need these to load it.
   AssetMgr* assetmgr;
   gfx::Renderer* renderer;
+
+  PackedData packed;
 };
 
 template<typename T>
 b8 packSourceDataIntoType(const SourceData& data, T* out, PackContext& ctx);
 
 template<typename T>
-b8 destroyPackedData(T* data);
+b8 packSourceDataIntoType(
+  const SourceData& data, 
+  PackContext& ctx)
+{
+  ctx.packed.buffer.init();
+  ctx.packed.data.ptr = (u8*)ctx.packed.buffer.allocateType<T>();
+  ctx.packed.data.len = sizeof(T);
+  return packSourceDataIntoType(data, (T*)ctx.packed.data.ptr, ctx);
+}
+
+// Packs some SourceData based on what its type value is.
+b8 packSourceDataFromType(
+  const SourceData& data, 
+  PackContext& ctx);

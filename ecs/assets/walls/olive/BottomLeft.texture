@@ -1,0 +1,8 @@
+return gfx::TextureDef
+{
+  name = "assets/walls/olive/BottomLeft.png",
+  kind = "TwoD",
+  filter = "Nearest",
+  address_mode = "ClampToWhite",
+}
+  

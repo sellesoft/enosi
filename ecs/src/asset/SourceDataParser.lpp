@@ -4,6 +4,7 @@ $ local cmn = require "common"
 @@lpp.import "asset/SourceDataFile.lh"
 
 #include "iro/Logger.h"
+#include "iro/Platform.h"
 
 @cmn.defFileLogger(srcdata.parse, Info)
 
@@ -343,6 +344,42 @@ Token SourceDataParser::nextToken()
     if (id == "return"_str)
     {
       out.kind = TK::Return;
+    }
+    else if (scanner.at(':'))
+    {
+      scanner.advance();
+
+      io::SmallBuffer<255> fullid;
+      io::formatv(&fullid, id);
+
+      for (;;)
+      {
+        if (!scanner.at(':'))
+        {
+          errorAt(out, 
+            "expected a ':' after ':' for scope resolution operator\n");
+          return out;
+        }
+
+        scanner.advance();
+
+        auto part = scanner.scanIdentifier();
+        if (isnil(part))
+        {
+          errorAt(out, "expected an identifier after '::'\n");
+          return out;
+        }
+
+        io::formatv(&fullid, "::", part);
+
+        if (!scanner.at(':'))
+          break;
+
+        scanner.advance();
+      }
+
+      out.kind = TK::Identifier;
+      out.raw = fullid.asStr().allocateCopy(&file->string_cache);
     }
     else
     {

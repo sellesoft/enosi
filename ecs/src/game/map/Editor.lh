@@ -83,8 +83,6 @@ struct
   MapDef    mapdef;
   Map       map;
 
-  MapTileKindDefs maptiledefs;
-
   Text* world_pos;
 
   SourceDataEditor* sdedit;

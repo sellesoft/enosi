@@ -1,0 +1,8 @@
+return gfx::TextureDef
+{
+  name = "assets/textures/WorkTableHorizontalRightCapGlass.png",
+  kind = "TwoD",
+  filter = "Nearest",
+  address_mode = "ClampToWhite",
+}
+  

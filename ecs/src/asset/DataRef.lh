@@ -1,0 +1,21 @@
+/*
+ *  Used to indicate that a member of some Def type references some 
+ *  data specified elsewhere.
+ */
+
+$ require "common"
+$ local metadata = require "reflect.Metadata"
+
+/* ============================================================================
+ */
+@metadata.inline_value(name)
+template<typename T>
+struct DataRef
+{
+  // The name of the data 
+  String name;
+  
+  // The data being referenced, which is resolved once all data has been built.
+  @metadata.hidden
+  T* data;
+};

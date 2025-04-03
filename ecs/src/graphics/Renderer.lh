@@ -16,6 +16,7 @@ using namespace iro;
 @@lpp.import "Buffer.lh"
 @@lpp.import "DrawCmd.lh"
 @@lpp.import "Framebuffer.lh"
+@@lpp.import "graphics/ResourceMgr.lh"
 
 struct Engine;
 struct Window;
@@ -40,6 +41,8 @@ struct Renderer
   u32 stars_program;
 
   Array<DrawCmd> drawcmds;
+
+  ResourceMgr resource_mgr;
 
   b8   init(Engine& engine, mem::Allocator& allocator);
   void deinit();

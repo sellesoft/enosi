@@ -29,19 +29,22 @@ static b8 codepointInRange(PackRange* range, u32 codepoint)
  */
 PackRange* Font::getRangeOfCodepoint(u32 codepoint) const
 {
-  if (data->num_ranges == 1)
+  const FontData& data = getData();
+  const Slice<PackRange> ranges = data.ranges.getSlice();
+
+  if (ranges.len == 1)
   {
-    if (codepointInRange(data->ranges, codepoint))
-      return data->ranges;
+    if (codepointInRange(ranges.ptr, codepoint))
+      return ranges.ptr;
     else
       return nullptr;
   }
 
-  for (s32 rangeidx = 0; rangeidx < data->num_ranges; ++rangeidx)
+  for (s32 rangeidx = 0; rangeidx < ranges.len; ++rangeidx)
   {
-    PackRange* range = data->ranges + rangeidx;
+    PackRange* range = ranges.ptr + rangeidx;
     
-    if (codepointInRange(data->ranges, codepoint))
+    if (codepointInRange(range, codepoint))
       return range;
   }
 
@@ -113,94 +116,34 @@ Font* Font::load(
     return nullptr;
   }
 
-  auto* font = assetmgr.allocateAsset<Font>(data_path);
+  Asset* asset = assetmgr.loadAssetFromDisk(data_path);
+  if (asset == nullptr)
+  {
+    @log.error("failed to load font asset '", data_path, "'\n");
+    return nullptr;
+  }
+
+  // TODO(sushi) need somewhere to put these.
+  auto* font = mem::stl_allocator.allocateType<Font>();
   if (font == nullptr)
   {
     ERROR("failed to allocate font asset\n");
     return nullptr;
   }
 
-  // Open the compiled data from disk.
-  auto compiled_data_file = File::from(data_path, OpenFlag::Read);
-  if (isnil(compiled_data_file))
-  {
-    ERROR("failed to open compiled font data from '", data_path, "'\n");
-    return nullptr;
-  }
-
-  u64 file_size = compiled_data_file.getInfo().byte_size;
-  font->data = (FontData*)mem::stl_allocator.allocate(file_size);
-
-  compiled_data_file.read({(u8*)font->data, file_size});
-
-  FontData* data = font->data;
-
-  // Adjust pointers to point at correct data.
-  data->ranges = (PackRange*)(data + 1);
-
-  for (s32 range_idx = 0; range_idx < data->num_ranges; ++range_idx)
-  {
-    PackRange& range = data->ranges[range_idx];
-    range.chardata = 
-      (PackedChar*)((u8*)data + (u64)range.chardata);
-  }
+  font->asset.asset = asset;
 
   INFO("loading font's texture\n");
 
   // Load the texture.
-  font->r_texture.trackNoRef(
-    gfx::CompiledTexture::load(name, assetmgr, renderer));
-  if (!font->r_texture.isValid())
+  font->texture = gfx::CompiledTexture::load(name, assetmgr, renderer);
+  if (font->texture == nullptr)
   {
     ERROR("failed to load font texture\n");
     return nullptr;
   }
 
   return font;
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 FontData::serialize(io::IO* out)
-{
-  out->write({(u8*)this, offsetof(FontData, ranges)});
-
-  // Write dummy pointer memory to be readjusted when loaded.
-  void* dummy = (void*)0xff;
-  out->write(&dummy);
-
-  u64 char_data_offset = sizeof(FontData) + num_ranges * sizeof(PackRange);
-  
-  if (ranges)
-  {
-    // Serialize the ranges array.
-    for (s32 range_idx = 0; range_idx < num_ranges; ++range_idx)
-    {
-      PackRange& range = ranges[range_idx];
-
-      out->write({(u8*)&range, offsetof(PackRange, chardata)});
-
-      // Store offset to this range's char data array from the beginning 
-      // of the data.
-      out->write(&char_data_offset);
-
-      char_data_offset += range.num_chars * sizeof(PackedChar);
-    }
-
-    // Serialize the char data arrays.
-    for (s32 range_idx = 0; range_idx < num_ranges; ++range_idx)
-    {
-      PackRange& range = ranges[range_idx];
-
-      out->write(
-        {
-          (u8*)range.chardata, 
-          range.num_chars*sizeof(PackedChar)
-        });
-    }
-  }
-
-  return true;
 }
 
 }

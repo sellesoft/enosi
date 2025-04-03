@@ -97,6 +97,9 @@ b8 Renderer::init(Engine& engine, mem::Allocator& allocator)
 
   this->frame = 0;
 
+  if (!resource_mgr.init())
+    return @log.error("failed to initialize resource manager\n");
+
   if (!this->drawcmds.init(16))
     return ERROR("failed to initialize draw cmd array\n");
 
@@ -1349,19 +1352,18 @@ b8 Renderer::loadTexture(CompiledTexture* texture)
     return ERROR("call to loadTexture with a texture that has already "
                  "been assigned a gfx::Texture\n");
 
-  const CompiledTextureData* data = texture->data;
-  assert(data);
+  const CompiledTextureData& data = texture->getData();
 
   texture->gfx_texture =
     gfx::Texture::create(
       *this,
-      data->width,
-      data->height,
-      data->format,
-      data->address_mode,
-      data->filter,
-      data->kind,
-      data->pixels);
+      data.width,
+      data.height,
+      data.format,
+      data.address_mode,
+      data.filter,
+      data.kind,
+      data.pixels.get());
 
   return notnil(texture->gfx_texture);
 }

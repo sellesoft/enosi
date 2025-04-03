@@ -15,7 +15,6 @@ local importPattern = function(pattern)
   end)
 end
 
-importPattern "**/graphics/Font.lh"
 importPattern "**/*.defs.lh"
 importPattern "**/*.comp.lh"
 
@@ -57,7 +56,9 @@ local function isExplicitlyFiltered(name)
      name:find "^iro::mem" or
      name == "iro::ScopedIndent" or 
      name == "defer_dummy" or 
-     name == "defer_with_cancel_dummy"
+     name == "defer_with_cancel_dummy" or
+     name == "Nil" or
+     name == "gfx::Renderer"
   then
     return true
   end
@@ -2430,7 +2431,7 @@ SourceDataEditor* SourceDataEditor::create(UI& ui, Interface* interface)
       ui.eng->assetmgr,
       ui.eng->renderer);
 
-  editor->font_texture = editor->font->r_texture.getData()->gfx_texture;
+  editor->font_texture = editor->font->texture->gfx_texture;
 
   editor->update_triggers = 
       UpdateReason::MouseReleased

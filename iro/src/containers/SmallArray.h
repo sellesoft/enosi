@@ -62,13 +62,43 @@ struct SmallArray
 
   /* --------------------------------------------------------------------------
    */ 
+  b8 isEmpty() const
+  {
+      return len == 0;
+  }
+
+  /* --------------------------------------------------------------------------
+   */ 
   void deinit()
   {
     clear();
     big_allocator = nullptr;
   }
 
-  b8 isSmall()
+  /* --------------------------------------------------------------------------
+   */
+  void move(SmallArray* dst)
+  {
+    dst->deinit();
+    dst->len = len;
+    dst->space = space;
+    dst->big_allocator = big_allocator;
+    if (isSmall())
+    {
+      mem::copy(dst->small_arr, small_arr, sizeof(T) * len);
+      dst->arr = dst->small_arr;
+    }
+    else
+    {
+      dst->arr = arr;
+    }
+    arr = small_arr;
+    len = space = 0;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 isSmall() const
   {
     return arr == small_arr;
   }

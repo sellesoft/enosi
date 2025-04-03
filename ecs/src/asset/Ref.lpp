@@ -1,0 +1,33 @@
+$ require "common"
+$ local ast = require "reflect.AST"
+$ local Defs = require "asset.GatherDefs"
+
+#include "iro/Logger.h"
+
+$ local defs = Defs.gather()
+@defs.imported:get
+
+using namespace iro;
+
+@log.ger(ref, Debug);
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Ref::load(String type, LoadParams& params)
+{
+$ local TRef = defs.p.decls.map["struct Ref"]
+
+  switch (type.hash())
+  {
+  case "Ref"_hashed:
+    return ERROR("Ref::load called with type Ref\n");
+
+$ for der in TRef.derived:each() do
+$   local name = Defs.removeTag(der.name)
+  case "$(name)"_hashed:
+    return (($(name)*)this)->load(params);
+$ end
+  }
+
+  return ERROR("unhandled type in Ref::load: ", type, "\n");
+}

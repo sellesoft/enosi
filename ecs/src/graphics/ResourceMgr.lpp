@@ -1,0 +1,49 @@
+$ require "common"
+
+@@lpp.import "graphics/ResourceMgr.lh"
+
+namespace gfx
+{
+
+@log.ger(gfx.rsrcmgr, Debug)
+
+/* ----------------------------------------------------------------------------
+ */
+b8 ResourceMgr::init()
+{
+  if (!textures.init())
+    return false;
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void ResourceMgr::deinit()
+{
+  textures.deinit();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+CompiledTexture* ResourceMgr::createTexture(String name)
+{
+  auto* r = mem::stl_allocator.construct<Resource<CompiledTexture>>();
+
+  r->name = name.allocateCopy();
+
+  textures.insert(r);
+
+  return &r->resource;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+CompiledTexture* ResourceMgr::findTexture(String name)
+{
+  if (auto* texture = textures.find(name.hash()))
+    return &texture->resource;
+  return nullptr;
+}
+
+}

@@ -2075,7 +2075,17 @@ String getUnqualifiedCanonicalTypeName(Context* ctx, Type* type)
 u64 getTypeSize(Context* ctx, Type* type)
 {
   assert(ctx && type);
-  return ctx->getASTContext()->getTypeInfo(getClangType(type)).Width;
+  
+  auto* astctx = ctx->getASTContext();
+  if (astctx == nullptr)
+  {
+    printf("failed to get ast context\n");
+    return 0;
+  }
+
+  const auto& typeinfo = astctx->getTypeInfo(getClangType(type));
+
+  return typeinfo.Width;
 }
 
 /* ----------------------------------------------------------------------------

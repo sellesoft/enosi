@@ -2,13 +2,3 @@ $ local cmn = require "common"
 
 @@lpp.import "asset/Asset.lh"
 @@lpp.import "asset/AssetMgr.lh"
-
-/* ----------------------------------------------------------------------------
- */ 
-void AssetRef::release()
-{
-  assert(ptr != nullptr);
-  if (ptr->rc.remRef())
-    ptr->rsrcmgr->unloadAsset(ptr);
-  ptr = nullptr;
-}

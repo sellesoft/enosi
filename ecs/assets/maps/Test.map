@@ -1,4 +1,4 @@
-return Map
+return MapDef
 {
   name = "Test",
   size = { x = 6, y = 6 },
@@ -12,112 +12,87 @@ return Map
         // --------------------------------------------------------------------
         // y = 0
         {
-          kind = "Wall",
-          texture = "assets/textures/WallBotLeftCornerOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallHorizontalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallHorizontalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallHorizontalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallBotRightCornerOlive"
+          kind = "assets/walls/olive/Wall"
         },
         // --------------------------------------------------------------------
         // y = 1
         {
-          kind = "Wall",
-          texture = "assets/textures/WallVerticalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesLightGray"
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesLightGray"
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesLightGray"
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallVerticalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         // --------------------------------------------------------------------
         // y = 2
         {
-          kind = "Wall",
-          texture = "assets/textures/WallVerticalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesLightGray"
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesLightGray"
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesLightGray"
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallVerticalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         // --------------------------------------------------------------------
         // y = 3
         {
-          kind = "Wall",
-          texture = "assets/textures/WallVerticalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesLightGray"
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesLightGray"
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesLightGray"
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallVerticalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         // --------------------------------------------------------------------
         // y = 4
         {
-          kind = "Wall",
-          texture = "assets/textures/WallTopLeftCornerOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallHorizontalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallHorizontalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallHorizontalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallTopRightCornerOlive"
+          kind = "assets/walls/olive/Wall"
         },
       }
     },
@@ -129,96 +104,74 @@ return Map
         // --------------------------------------------------------------------
         // y = 0
         {
-          kind = "Wall",
-          texture = "assets/textures/WallBotLeftCornerOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallHorizontalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallHorizontalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallHorizontalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallHorizontalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallHorizontalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallHorizontalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallHorizontalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallHorizontalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallBotRightCornerOlive"
+          kind = "assets/walls/olive/Wall"
         },
         // --------------------------------------------------------------------
         // y = 1
         {
-          kind = "Wall",
-          texture = "assets/textures/WallVerticalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray"
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray"
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray"
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray"
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray"
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray"
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray"
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallVerticalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         // --------------------------------------------------------------------
         // y = 2
         {
-          kind = "Wall",
-          texture = "assets/textures/WallVerticalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/walls/olive/Wall",
           entities =
           {
             Entity
@@ -235,46 +188,36 @@ return Map
           },
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallVerticalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         // --------------------------------------------------------------------
         // y = 3
         {
-          kind = "Wall",
-          texture = "assets/textures/WallVerticalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
           entities =
           {
             Entity
@@ -291,16 +234,13 @@ return Map
           },
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
           entities =
           {
             Entity
@@ -317,8 +257,7 @@ return Map
           },
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
           entities =
           {
             Entity
@@ -335,30 +274,24 @@ return Map
           },
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallVerticalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         // --------------------------------------------------------------------
         // y = 4
         {
-          kind = "Wall",
-          texture = "assets/textures/WallVerticalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
           entities =
           {
             Entity
@@ -375,16 +308,13 @@ return Map
           },
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
           entities =
           {
             Entity
@@ -401,8 +331,7 @@ return Map
           },
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
           entities =
           {
             Entity
@@ -419,30 +348,24 @@ return Map
           },
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallVerticalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         // --------------------------------------------------------------------
         // y = 5
         {
-          kind = "Wall",
-          texture = "assets/textures/WallVerticalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
           entities =
           {
             Entity
@@ -459,24 +382,19 @@ return Map
           },
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
           entities =
           {
             Entity
@@ -494,26 +412,21 @@ return Map
           },
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallVerticalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         // --------------------------------------------------------------------
         // y = 6
         {
-          kind = "Wall",
-          texture = "assets/textures/WallVerticalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
           entities =
           {
             Entity
@@ -530,46 +443,36 @@ return Map
           },
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallVerticalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         // --------------------------------------------------------------------
         // y = 7
         {
-          kind = "Wall",
-          texture = "assets/textures/WallVerticalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
           entities =
           {
             Entity
@@ -586,32 +489,25 @@ return Map
           },
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
           entities =
           {
             Entity
@@ -628,18 +524,15 @@ return Map
           },
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallVerticalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         // --------------------------------------------------------------------
         // y = 8
         {
-          kind = "Wall",
-          texture = "assets/textures/WallVerticalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
           entities =
           {
             Entity
@@ -656,28 +549,22 @@ return Map
           },
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
           entities =
           {
             Entity
@@ -694,8 +581,7 @@ return Map
           },
         },
         {
-          kind = "Floor",
-          texture = "assets/textures/FloorTilesDarkGray",
+          kind = "assets/floors/tiles/Floor",
           entities =
           {
             Entity
@@ -712,50 +598,39 @@ return Map
           },
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallVerticalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         // --------------------------------------------------------------------
         // y = 9
         {
-          kind = "Wall",
-          texture = "assets/textures/WallTopLeftCornerOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallHorizontalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallHorizontalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallHorizontalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallHorizontalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallHorizontalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallHorizontalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallHorizontalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallHorizontalOlive"
+          kind = "assets/walls/olive/Wall"
         },
         {
-          kind = "Wall",
-          texture = "assets/textures/WallTopRightCornerOlive"
+          kind = "assets/walls/olive/Wall"
         },
       }
     }

@@ -1,0 +1,60 @@
+/*
+ *  Represents some packed data storable on disk.
+ */
+
+$ require "common"
+
+@@lpp.import "asset/Asset.lh"
+@@lpp.import "asset/OffsetPtr.lh"
+
+#include "iro/containers/SmallArray.h"
+
+struct AssetMgr;
+struct SourceDataFileReg;
+
+/* ============================================================================
+ */
+struct CompiledData
+{
+  OffsetString name;
+  OffsetString type;
+
+  OffsetSlice<u8> root;
+
+  OffsetSlice<u8> data;
+
+  OffsetSlice<u8> strings;
+
+  struct CompileParams
+  {
+    String name;
+    String type;
+    AssetMgr& assetmgr;
+    SourceDataFileReg& sfile_reg;
+  };
+
+  template<typename T>
+  static b8 compile(const CompileParams& params);
+
+  static b8 compile(const CompileParams& params);
+
+  static CompiledData* load(String name, String type, AssetMgr& assetmgr);
+
+  template<typename T>
+  T* getRootAs() const
+  {
+    return (T*)root.getSlice().ptr;
+  }
+  
+  void makeDataPointersAbsolute(); 
+
+  struct DataRef
+  {
+    String type;
+    Ref* ref;
+  };  
+  
+  typedef SmallArray<DataRef, 16> Refs;
+
+  void getRefs(Refs* refs);
+};

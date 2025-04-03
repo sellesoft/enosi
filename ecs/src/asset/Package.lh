@@ -1,0 +1,49 @@
+/*
+ *  A collection of packed data serializable to disk.
+ */
+
+$ require "common"
+
+#include "iro/io/IO.h"
+#include "iro/containers/Pool.h"
+#include "iro/containers/AVL.h"
+
+using namespace iro;
+
+/* ============================================================================
+ */
+struct Package
+{
+  struct Data
+  {
+    String name;
+    String type;
+    u64    offset;
+    u64    size;
+
+    PackedAssetRefList refs;
+  };
+
+  typedef AVL<Data, [](const Data* x) { return x->name.hash(); }> DataMap;
+  typedef Pool<Data> DataPool;
+
+  DataMap map;
+  DataPool pool;
+  io::Memory buffer;
+
+  b8 init();
+  void deinit();
+
+  b8 addData(String name, String type, void* ptr, u64 size);
+
+  template<typename T>
+  b8 addData(String name, String type, T* ptr)
+  { 
+    return addData(name, type, ptr, sizeof(T));
+  }
+
+  void* findData(String name) const;
+
+  template<typename T>
+  T* findData(String name);
+};

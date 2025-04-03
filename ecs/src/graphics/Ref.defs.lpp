@@ -1,0 +1,68 @@
+$ require "common"
+
+@@lpp.import "graphics/Ref.defs.lh"
+@@lpp.import "graphics/Texture.defs.lh"
+
+@@lpp.import "asset/AssetMgr.lh"
+@@lpp.import "asset/CompiledData.lh"
+
+@@lpp.import "graphics/Renderer.lh"
+
+#include "iro/Platform.h"
+
+namespace gfx
+{
+
+@log.ger(ref.texture, Debug);
+
+/* ----------------------------------------------------------------------------
+ */
+b8 TextureRef::load(LoadParams& params)
+{
+  PathBuffer src_path_buffer;
+  io::formatv(&src_path_buffer, name, ".texture"_str);
+  String src_path = src_path_buffer.asStr();
+
+  CompiledData::CompileParams compile_params = 
+  {
+    .name = src_path,
+    .type = "gfx::TextureDef"_str,
+    .assetmgr = params.assetmgr,
+    .sfile_reg = params.sfile_reg,
+  };
+
+  if (!CompiledData::compile(compile_params))
+    return false;
+
+  auto* data = 
+    CompiledData::load(src_path, "gfx::TextureDef"_str, params.assetmgr);
+  if (data == nullptr)
+    return ERROR("failed to load '", src_path, "' data");
+
+  data->makeDataPointersAbsolute();
+
+  auto* def = data->getRootAs<TextureDef>();
+
+  if (isnil(def->name))
+    return ERROR("loaded texture def has a nil name\n");
+
+  platform::debugBreak();
+
+  gfx::CompiledTexture::CompileParams texture_params = 
+  {
+    .name = def->name,
+    .kind = def->kind,
+    .format = def->format,
+    .filter = def->filter,
+    .address_mode = def->address_mode,
+    .allocator = &mem::stl_allocator,
+    .assetmgr = &params.assetmgr,
+  };
+
+  if (!gfx::CompiledTexture::compilePNG(texture_params))
+    return ERROR("failed to compile texture\n");
+
+  return true;
+}
+
+}

@@ -48,20 +48,21 @@ b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
   quads_buffer.unmap();
 
   //load the null texture
-  null_texture.trackNoRef(
+  null_texture = 
     gfx::CompiledTexture::load(
-      "assets/textures/null"_str, assetmgr, renderer));
+      "assets/textures/null"_str, assetmgr, renderer)->gfx_texture;
 
-  if (!null_texture.isValid())
+  if (isnil(null_texture))
   {
-    null_texture.track(assetmgr.findAsset("assets/textures/white"_str));
-    if (!null_texture.isValid())
+    null_texture = 
+      gfx::CompiledTexture::load(
+        "assets/textures/white"_str, assetmgr, renderer)->gfx_texture;
+    if (isnil(null_texture))
       return ERROR("failed to find a valid null texture\n");
   }
-  assert(null_texture.isValid());
 
   //init quads batches
-  batches[0].texture = null_texture.getData();
+  batches[0].texture = null_texture;
   batch_count = 1;
   quad_count = 0;
 
@@ -133,8 +134,8 @@ static void drawBatches(RenderSys& sys, gfx::Renderer& renderer)
   u32 index_offset = 0;
   for (u32 i = 0; i < sys.batch_count; i++)
   {
-    assert(sys.batches[i].texture != nullptr);
-    renderer.pushBindTexture(sys.batches[i].texture->gfx_texture);
+    assert(notnil(sys.batches[i].texture));
+    renderer.pushBindTexture(sys.batches[i].texture);
     renderer.pushDraw(index_offset, 6*sys.batches[i].quad_count, 0);
     index_offset += 6*sys.batches[i].quad_count;
   }
@@ -144,7 +145,7 @@ static void drawBatches(RenderSys& sys, gfx::Renderer& renderer)
   sys.quads_buffer.num_indexes = 6*sys.quad_count;
 
   sys.batches[0].quad_count = 0;
-  sys.batches[0].texture = sys.null_texture.getData();
+  sys.batches[0].texture = sys.null_texture;
   sys.batch_count = 1;
   sys.quad_count = 0;
 }
@@ -153,7 +154,7 @@ static void drawBatches(RenderSys& sys, gfx::Renderer& renderer)
  */
 void RenderSys::drawQuad(
   vec2f pos,
-  const gfx::CompiledTexture* texture,
+  gfx::Texture texture,
   Color color,
   gfx::Renderer& renderer)
 {
@@ -274,11 +275,12 @@ b8 RenderSys::update(const UpdateParams& params)
         if (tile.def == nullptr)
           continue;
 
-        if (tile.def->texture == nullptr)
-          continue;
+        // if (tile.def->texture == nullptr)
+        //   continue;
 
         vec2f pos = map.getTilePos(layer, tile);
-        drawQuad(pos, tile.def->texture, tint, renderer);
+        //drawQuad(pos, tile.def->texture, tint, renderer);
+        drawQuad(pos, null_texture, tint, renderer);
       }
 
       layer_idx++;
@@ -307,11 +309,11 @@ b8 RenderSys::update(const UpdateParams& params)
         Layer& layer = map.layers[transform->placement_layer];
 
         vec2f pos = layer.def->pos + transform->pos;
-        gfx::CompiledTexture* texture = sprite.texture;
+        gfx::Texture texture = sprite.texture.texture;
         Color color = sprite.color;
-        if (texture == nullptr)
+        if (isnil(texture))
         {
-          texture = null_texture.getData();
+          texture = null_texture;
           color = 0xff0000ff;
         }
 

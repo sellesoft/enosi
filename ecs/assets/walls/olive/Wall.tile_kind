@@ -1,0 +1,15 @@
+return TileKindDef
+{
+  kind = "Wall",
+
+  textures = 
+  {
+    BottomLeftCorner    = "assets/walls/olive/BottomLeft",
+    BottomRightCorner   = "assets/walls/olive/BottomRight",
+    TopLeftCorner       = "assets/walls/olive/TopLeft",
+    TopRightCorner      = "assets/walls/olive/TopRight",
+    Horizontal          = "assets/walls/olive/Horizontal",
+    Vertical            = "assets/walls/olive/Vertical",
+    FourWayIntersection = "assets/walls/olive/Intersection",
+  }
+}

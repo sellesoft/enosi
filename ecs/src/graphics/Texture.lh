@@ -23,14 +23,13 @@ struct Renderer;
  */
 struct Texture
 {
-  Renderer* renderer;
-
-  u32 width;
-  u32 height;
-
-  void* handle;
-  void* memory_handle;
-  void* view_handle;
+  void* handle = nullptr;
+  
+  // laziness
+  bool operator == (const Texture& rhs) const
+  {
+    return handle == rhs.handle;
+  }
 
   static Texture create(
     Renderer&        renderer,

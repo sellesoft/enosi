@@ -24,7 +24,12 @@ namespace gfx
 b8 CompiledTexture::compilePNG(CompileParams& params)
 {
   PathBuffer asset_path_buffer;
-  io::formatv(&asset_path_buffer, params.name, ".png"_str);
+  
+  if (params.name.endsWith(".png"_str))
+    io::formatv(&asset_path_buffer, params.name);
+  else
+    io::formatv(&asset_path_buffer, params.name, ".png"_str);
+
   String asset_path = asset_path_buffer.asStr();
 
   PathBuffer data_path_buffer;

@@ -35,7 +35,7 @@ struct RenderSys
   struct QuadBatch
   {
     u32 quad_count;
-    const gfx::CompiledTexture* texture;
+    gfx::Texture texture;
   };
 
   b8 init(gfx::Renderer& renderer, AssetMgr& assetmgr);
@@ -59,11 +59,11 @@ struct RenderSys
 
   void drawQuad(
     vec2f pos, 
-    const gfx::CompiledTexture* texture, 
+    gfx::Texture texture, 
     Color color,
     gfx::Renderer& renderer);
 
-  gfx::CompiledTextureRef null_texture;
+  gfx::Texture null_texture;
 
   // TODO(sushi) move this somewhere central so it may be shared with UI
   //             as it defines the same thing.

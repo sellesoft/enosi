@@ -1,0 +1,27 @@
+$ require "common"
+$ local metadata = require "reflect.Metadata"
+
+@@lpp.import "asset/Asset.lh"
+@@lpp.import "graphics/Texture.lh"
+
+#include "iro/Unicode.h"
+
+using namespace iro;
+
+namespace gfx
+{
+
+/* ============================================================================
+ */
+struct TextureRef : Ref
+{
+  @metadata.source_type(png)
+  String name;
+
+  @metadata.hidden
+  gfx::Texture texture;
+
+  b8 load(LoadParams&);
+};
+
+}

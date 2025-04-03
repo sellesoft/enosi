@@ -58,8 +58,8 @@ void putGlyph(
     vp, ip,
     counts,
     pc,
-    font->data->size_x,
-    font->data->size_y,
+    font->getData().size_x,
+    font->getData().size_y,
     *pos,
     color);
 
@@ -76,7 +76,6 @@ vec2f measureText(
 {
   vec2f size = {};
   vec2f cursor = {};
-  FontData* data = font->data;
 
   // Cache off space width since its used in a couple places.
   gfx::PackedChar space_char;
@@ -132,7 +131,7 @@ void putText(
   auto* ip = putindices;
 
   vec2f cursor = pos;
-  FontData* font_data = font->data;
+  const FontData& font_data = font->getData();
 
   // Cache off space width since its used in a couple places.
   gfx::PackedChar space_char;
@@ -163,8 +162,8 @@ void putText(
           ip, 
           offsets, 
           pc,
-          font_data->size_x,
-          font_data->size_y,
+          font_data.size_x,
+          font_data.size_y,
           cursor, 
           color);
         cursor.x += pc.xadvance;

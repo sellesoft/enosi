@@ -22,6 +22,7 @@ int lua__getFileFullPathIfExists(lua_State* L);
 int lua__debugBreak(lua_State* L);
 int lua__getCurrentInputSourceName(lua_State* L);
 int lua__getInputName(lua_State* L);
+int lua__getcwd(lua_State* L);
 }
 
 namespace lpp
@@ -70,6 +71,7 @@ b8 Lpp::init(const InitParams& params)
   addGlobalCFunc(lua__debugBreak);
   addGlobalCFunc(lua__getCurrentInputSourceName);
   addGlobalCFunc(lua__getInputName);
+  addGlobalCFunc(lua__getcwd);
 
 #undef addGlobalCFunc
 
@@ -407,6 +409,18 @@ int lua__debugBreak(lua_State* L)
 {
   platform::debugBreak();
   return 0;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+int lua__getcwd(lua_State* L)
+{
+  auto lua = LuaState::fromExistingState(L);
+  auto cwd = fs::Path::cwd();
+
+  lua.pushstring((cwd.asStr()));
+
+  return 1;
 }
 
 }

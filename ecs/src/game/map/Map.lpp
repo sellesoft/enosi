@@ -76,9 +76,9 @@ b8 Layer::init(
 
   tiles.resize(def.size.x * def.size.y);
 
-  if (tiles.len() != def.tiles.len())
+  if (tiles.len() != def.tiles.len)
     return ERROR("missing tiles in def of layer ", layer_idx, ". Expected ", 
-                 tiles.len(), " tiles but was only provided ", def.tiles.len(),
+                 tiles.len(), " tiles but was only provided ", def.tiles.len,
                  "\n");
 
   for (u32 tile_idx = 0; tile_idx < tiles.len(); ++tile_idx)
@@ -134,9 +134,9 @@ b8 Map::init(const MapDef& def, InitParams& params)
   if (!layers.init())
     return ERROR("failed to initialize layer array\n");
 
-  layers.resize(def.layers.len());
+  layers.resize(def.layers.len);
   
-  for (u32 i = 0; i < def.layers.len(); ++i)
+  for (u32 i = 0; i < def.layers.len; ++i)
   {
     MapLayerDef* layer_def = def.layers.arr + i;
     Layer* layer = layers.arr + i;

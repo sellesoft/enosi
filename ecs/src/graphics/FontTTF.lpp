@@ -21,6 +21,11 @@ namespace gfx
  */
 b8 Font::compileTTF(CompileParams& params)
 {
+// Disabling until this is used again (and fixed as I dont think it worked
+// properly before I disabled it) because I don't want to maintain this if 
+// we're not using it.
+  return false;
+$ if false then
   PathBuffer asset_path_buffer;
   io::formatv(&asset_path_buffer, params.name, ".bdf"_str);
   String asset_path = asset_path_buffer.asStr();
@@ -251,6 +256,7 @@ $ end
     return ERROR("failed to compile font texture\n");
 
   return true;
+$ end
 }
 
 }
