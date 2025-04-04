@@ -125,6 +125,7 @@ cmd.CppObj.getIOIndependentFlags = function(params)
       "-Wno-switch",
       "-Wno-return-type-c-linkage",
       "-Wno-reorder-init-list",
+      "-Wno-c99-designator",
       "-fmessage-length=80",
       "-fdiagnostics-absolute-paths",
       params.static_msvcrt and "-fms-runtime-lib=static",
