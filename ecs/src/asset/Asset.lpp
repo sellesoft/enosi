@@ -72,7 +72,7 @@ b8 TypedSourceAssetRef<int>::load(String type, LoadParams& params)
 
   for (auto& ref : refs)
   {
-    ref.ref->load(ref.type, params);
+    ref.ptr->load(ref.type, params);
   }
 
   return true;

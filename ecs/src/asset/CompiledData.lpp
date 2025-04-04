@@ -395,7 +395,8 @@ $     if decl.specialized_name == "TypedPtr" then
 $       putCompileTypedPtrData(name, decl)
 $     end
 $   elseif decl:is(ast.Struct) and name ~= "gfx::CompiledTexture" and
-$         name ~= "CompiledData" then
+$         name ~= "CompiledData" and
+$         name ~= "RefLoader" then
 $     putCompileStructData(name, decl)
 $   end
 $ end)
@@ -578,7 +579,8 @@ b8 DataCompiler::compile(String type, void* ptr)
   {
 $ defs:eachDecl(function(name, decl)
 $   if decl:is(ast.Struct) and name ~= "gfx::CompiledTexture" and
-$      name ~= "CompiledData" then
+$      name ~= "CompiledData" and 
+$      name ~= "RefLoader" then
   case "$(name)"_hashed:
     return compile<$(name)>(*($(name)*)ptr);
 $   end
@@ -586,7 +588,8 @@ $ end)
 
 $ defs:eachDecl(function(name, decl)
 $   if decl:is(ast.Struct) and name ~= "gfx::CompiledTexture" and
-$      name ~= "CompiledData" then
+$      name ~= "CompiledData" and
+$      name ~= "RefLoader" then
   case "TypedPtr<$(name)>"_hashed:
     return compileTypedPtr<$(name)>(*(TypedPtr<$(name)>*)ptr);
 $   end
@@ -646,7 +649,8 @@ void getRefs(CompiledData::Refs* refs, String type, void* ptr)
   {
 $ defs:eachDecl(function(name, decl)
 $   if decl:is(ast.Struct) and name ~= "gfx::CompiledTexture" and
-$     name ~= "CompiledData" then
+$     name ~= "CompiledData" and
+$     name ~= "RefLoader" then
   case "$(name)"_hashed:
     ::getRefs(refs, ($(name)*)ptr);
     return;

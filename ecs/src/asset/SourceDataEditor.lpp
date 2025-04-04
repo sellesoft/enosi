@@ -72,7 +72,7 @@ local eachDecl = function(f)
       local name = removeTag(decl.name)
       if not isExplicitlyFiltered(name) then
         if decl:is(ast.TemplateSpecialization) then
-          if decl.specialized_name == "Array" then
+          if decl.specialized_name == "ArrayDef" then
             local subtype = decl.template_args[1]
             local subdecl = subtype:getDecl()
             if subdecl then
@@ -1590,7 +1590,7 @@ $ local function getDeclDatumType(decl)
 $   if decl:is(ast.TemplateSpecialization) then
 $     if decl.specialized_name == "vec2" then
 $       return "Vec2State"
-$     elseif decl.specialized_name == "Array" then
+$     elseif decl.specialized_name == "ArrayDef" then
 $       local subtype = decl.template_args[1]
 $       local subdecl = subtype:getDecl()
 $       if subdecl then
@@ -2360,7 +2360,7 @@ $ -- * ------------------------------------------------------------------------
 
 $ eachDecl(function(name, decl)
 $   if decl:is(ast.TemplateSpecialization) then
-$     if decl.specialized_name == "Array" then
+$     if decl.specialized_name == "ArrayDef" then
 $       putArrayState(name, decl)
 $     end
 $   elseif decl:is(ast.Struct) then

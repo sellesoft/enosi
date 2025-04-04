@@ -68,7 +68,7 @@ b8 GameMgr::init(Engine* eng)
 
   for (auto& ref : refs)
   {
-    ref.ref->load(ref.type, load_params);
+    ref.ptr->load(ref.type, load_params);
   }
 
 $ if true then

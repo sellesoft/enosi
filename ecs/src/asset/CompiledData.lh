@@ -56,7 +56,7 @@ struct CompiledData
   struct DataRef
   {
     String type;
-    Ref* ref;
+    Ref* ptr;
   };  
   
   typedef SmallArray<DataRef, 16> Refs;
