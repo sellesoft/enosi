@@ -34,7 +34,7 @@ struct BitArray
     WordCount = (size + (BitsPerWord - 1)) / BitsPerWord,
   };
 
-  u32 words[WordCount];
+  u32 words[WordCount] = {};
 
   void set(u32 offset)
   {
