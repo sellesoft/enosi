@@ -404,6 +404,9 @@ struct AVL
         target->parent->right = child;
     }
 
+    if (target == root)
+      root = nullptr;
+
     pool.remove(target);
   }
 

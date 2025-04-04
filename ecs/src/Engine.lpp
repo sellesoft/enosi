@@ -27,9 +27,9 @@ using namespace iro;
 @@lpp.import "game/component/Component.lh"
 
 @@lpp.import "asset/Packing.lh"
+@@lpp.import "asset/CompiledData.lh"
 @@lpp.import "asset/SourceDataFile.lh"
 @@lpp.import "asset/SourceDataParser.lh"
-
 @@lpp.import "asset/SourceDataEditor.lh"
 
 static Logger logger =
@@ -90,7 +90,7 @@ $ end
   };
 
   gfx::CompiledTexture::compileFromMemory(pixels, white_texture_params);
-  gfx::CompiledTexture::load("white"_str, assetmgr, renderer);
+  gfx::CompiledTexture::load("assets/textures/white"_str, assetmgr, renderer);
 
   texture_compile_allocator.deinit();
 

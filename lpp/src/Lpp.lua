@@ -219,7 +219,16 @@ end
 local lua_print = print
 print = function(first, ...)
   local info = debug.getinfo(2)
-  lua_print(info.source..":"..info.currentline..": "..tostring(first), ...)
+  local src = info.source
+  local cwd = lua__getcwd()
+  if src:find("^"..cwd) then
+    src = src:sub(#cwd+2)
+  end 
+  local line = info.currentline
+  if lpp.context then
+    line = C.metaprogramMapMetaprogramLineToInputLine(lpp.context, line)
+  end
+  lua_print(src..":"..line..": "..tostring(first), ...)
 end
 
 -- * --------------------------------------------------------------------------

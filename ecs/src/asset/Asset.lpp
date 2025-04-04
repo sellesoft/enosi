@@ -1,14 +1,79 @@
 $ local cmn = require "common"
+$ local ast = require "reflect.AST"
+$ local Defs = require "asset.GatherDefs"
+
+$ local defs = Defs.gather()
+@defs.imported:get
 
 @@lpp.import "asset/Asset.lh"
 @@lpp.import "asset/AssetMgr.lh"
+@@lpp.import "asset/CompiledData.lh"
+
+#include "iro/fs/Path.h"
+#include "iro/fs/File.h"
+
+using namespace fs;
+
+@log.ger(asset, Info)
 
 /* ----------------------------------------------------------------------------
- */ 
-void AssetRef::release()
+ */
+template<>
+b8 TypedSourceAssetRef<int>::load(String type, LoadParams& params)
 {
-  assert(ptr != nullptr);
-  if (ptr->rc.remRef())
-    ptr->rsrcmgr->unloadAsset(ptr);
-  ptr = nullptr;
+  if (isnil(name))
+    return false;
+
+  String asset_name = name;
+
+  PathBuffer src_path_buffer;
+
+  if (Path::hasExtension(name))
+  {
+    io::formatv(&src_path_buffer, name);
+    asset_name = name.subToLast('.');
+  }
+  else
+  {
+    String source_type = rtr::getMetadataValue(type, "source_types"_str);
+    if (isnil(source_type))
+      return ERROR(
+        "attempt to load asset '", name, "' of type ", type, " but asset "
+        "name has no extension and ", type, " does not specify source_types "
+        "metadata\n");
+
+    io::formatv(&src_path_buffer, name, '.', source_type);
+  }
+
+  String src_path = src_path_buffer.asStr();
+
+  @log.debug("loading asset '", src_path, "'\n");
+
+  // platform::debugBreak();
+
+  CompiledData::CompileParams compile_params = 
+  {
+    .name = src_path,
+    .type = type,
+    .assetmgr = params.assetmgr,
+    .sfile_reg = params.sfile_reg,
+  };
+
+  if (!CompiledData::compile(compile_params))
+    return false;
+
+  auto compiled_data = 
+    CompiledData::load(src_path, type, params.assetmgr, &asset);
+  if (compiled_data == nullptr)
+    return ERROR("failed to load data from '", src_path, "'\n");
+
+  CompiledData::Refs refs;
+  compiled_data->getRefs(&refs);
+
+  for (auto& ref : refs)
+  {
+    ref.ptr->load(ref.type, params);
+  }
+
+  return true;
 }

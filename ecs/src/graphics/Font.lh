@@ -14,6 +14,7 @@ $ local SourceData = require "asset.SourceData"
 using namespace iro;
 
 @@lpp.import "asset/Asset.lh"
+@@lpp.import "asset/OffsetPtr.lh"
 
 @@lpp.import "graphics/Font.defs.lh"
 @@lpp.import "graphics/CompiledTexture.lh"
@@ -51,8 +52,7 @@ struct PackRange
 {
   f32 font_size;
   s32 first_codepoint;
-  s32 num_chars;
-  PackedChar* chardata;
+  OffsetSlice<PackedChar> chars;
 };
 
 /* ============================================================================
@@ -78,29 +78,31 @@ struct FontData
   f32 descent;
   f32 line_gap;
 
-  u32 num_ranges;
-  PackRange* ranges;
-
-  b8 serialize(io::IO* out);
+  OffsetSlice<PackRange> ranges;
 
   static b8 deserialize(FontData* out, void* data);
 };
 
 struct Font;
 
-typedef TypedAssetRef<Font> FontRef;
+typedef TypedAssetRef<FontData> FontDataRef;
 
 /* ============================================================================
  *  Runtime representation of a loaded font.
  */
-struct Font : public Asset 
+struct Font 
 {
-  FontData* data = nullptr;
-  gfx::CompiledTextureRef r_texture = {};
+  FontDataRef asset;
+  gfx::CompiledTexture* texture;
 
-  const FontData* getFontData() const
+  const FontData& getData() const
   {
-    return data;
+    return *asset;
+  }
+
+  gfx::Texture getTexture() const
+  {
+    return texture->gfx_texture;
   }
 
   // It's recommended to use this to find the proper range for a given

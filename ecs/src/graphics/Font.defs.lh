@@ -6,6 +6,8 @@ $ local Schema = require "asset.Schema"
 #include "iro/containers/Array.h"
 #include "iro/containers/Slice.h"
 
+@@lpp.import "asset/ArrayDef.lh"
+
 using namespace iro;
 
 /* ============================================================================
@@ -24,6 +26,6 @@ typedef Slice<CodepointRange> CodepointRanges;
 {
   String name;
   String asset_path;
-  Array<CodepointRange> ranges;
+  ArrayDef<CodepointRange> ranges;
 })
 

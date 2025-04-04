@@ -159,6 +159,21 @@ String Path::removeExtension(String path)
 
 /* ----------------------------------------------------------------------------
  */
+b8 Path::hasExtension(String path)
+{
+  u8* scan = &path.last();
+  while (scan >= path.ptr)
+  {
+    if (*scan == '.')
+      return true;
+    scan -= 1;
+  }
+
+  return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 String Path::removeFirstDir(String path)
 {
   u8* scan = path.ptr;

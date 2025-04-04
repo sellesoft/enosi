@@ -150,7 +150,7 @@ b8 UI::init(Engine& engine)
       engine.assetmgr,
       engine.renderer);
 
-  gohu_font_texture = gohu_font->r_texture.getData()->gfx_texture;
+  gohu_font_texture = gohu_font->texture->gfx_texture;
 
   // Store a reference to the engine in case widgets need to access
   // information from it.

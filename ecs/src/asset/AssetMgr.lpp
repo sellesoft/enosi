@@ -19,6 +19,9 @@ b8 AssetMgr::init(mem::Allocator* allocator)
   if (!map.init(allocator))
     return ERROR("failed to init asset map\n");
 
+  if (!pool.init(allocator))
+    return @log.error("failed to init asset pool\n");
+
   INFO("finished\n");
 
   return true;
@@ -49,17 +52,61 @@ void AssetMgr::deinit()
 
 /* ----------------------------------------------------------------------------
  */
-Asset* AssetMgr::allocateAsset(u64 size, String name)
+Asset* AssetMgr::allocateAsset(String name)
 {
   u64 name_hash = name.hash();
   assert(map.find(name_hash) == nullptr && 
     "a Asset has already been allocated with the given name");
 
-  auto* asset = (Asset*)allocator->allocate(size);
-  mem::zero(asset, size);
+  Asset* asset = pool.pushTail()->data;
   
   asset->hash = name_hash;
+  asset->name = name.allocateCopy(allocator);
+
   map.insert(asset);
+
+  return asset;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Asset* AssetMgr::loadAssetFromDisk(String name)
+{
+  using namespace fs;
+
+  u64 name_hash = name.hash();
+  if (Asset* existing = map.find(name_hash))
+  {
+    @log.debug("asset '", name, "' already loaded\n");
+    return existing;
+  }
+
+  @log.debug("loading asset '", name, "' from disk\n");
+
+  if (!Path::exists(name))
+  {
+    @log.error("no asset exists at path '", name, "'\n");
+    return nullptr;
+  }
+
+  auto file = File::from(name, OpenFlag::Read);
+  if (isnil(file))
+  {
+    @log.error("failed to open asset file at '", name, "'\n");
+    return nullptr;
+  }
+
+  Asset* asset = allocateAsset(name);
+  if (asset == nullptr)
+  {
+    @log.error("failed to allocate asset '", name, "'\n");
+    return nullptr;
+  }
+
+  asset->size = file.getInfo().byte_size;
+  asset->data = allocator->allocate(asset->size);
+
+  assert(asset->size == file.read({(u8*)asset->data, asset->size}));
 
   return asset;
 }
@@ -69,19 +116,6 @@ Asset* AssetMgr::allocateAsset(u64 size, String name)
 Asset* AssetMgr::findAsset(String name) const
 {
   return map.find(name.hash());
-}
-
-/* ----------------------------------------------------------------------------
- */
-void AssetMgr::unloadAsset(Asset* asset)
-{
-  assert(!asset->rc.isReferenced());
-
-  asset->onUnload();
-
-  map.remove(asset);
-
-  allocator->free(asset);
 }
 
 /* ----------------------------------------------------------------------------

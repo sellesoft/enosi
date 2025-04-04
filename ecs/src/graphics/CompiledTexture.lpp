@@ -29,37 +29,15 @@ s64 CompiledTexture::writeDataPath(io::IO* io, String name, AssetMgr& assetmgr)
 
 /* ----------------------------------------------------------------------------
  */
-b8 CompiledTextureData::serialize(io::IO* out)
-{
-  out->write({(u8*)this, offsetof(CompiledTextureData, pixels)});
-
-  void* dummy = (void*)0xff;
-  out->write(&dummy);
-
-  u64 pixel_stride = 0;
-  switch (format)
-  {
-    case ImageFormat::BW:   pixel_stride = 1; break;
-    case ImageFormat::BWA:  pixel_stride = 2; break;
-    case ImageFormat::RGB:  pixel_stride = 3; break;
-    case ImageFormat::RGBA: pixel_stride = 4; break;
-  }
-  assert(pixel_stride != 0);
-
-  u64 pixels_bytes = width * height * pixel_stride;
-  out->write({(u8*)pixels, pixels_bytes});
-
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
 CompiledTexture* CompiledTexture::load(
     String name, 
     AssetMgr& assetmgr, 
     gfx::Renderer& renderer)
 {
   using namespace fs;
+
+  if (CompiledTexture* existing = renderer.resource_mgr.findTexture(name))
+    return existing;
 
   TRACE("loading '", name, "'\n");
 
@@ -68,12 +46,7 @@ CompiledTexture* CompiledTexture::load(
 
   String data_path = data_path_buf.asStr();
 
-  Asset* existing = assetmgr.findAsset(data_path);
-  if (existing != nullptr)
-    return (CompiledTexture*)existing;
-
-  TRACE("loading '", name, "' which is unloaded\n");
-  SCOPED_INDENT;
+  assert(nullptr == assetmgr.findAsset(data_path));
 
   if (!Path::exists(data_path))
   {
@@ -82,31 +55,25 @@ CompiledTexture* CompiledTexture::load(
     return nullptr;
   }
 
-  auto* texture = assetmgr.allocateAsset<CompiledTexture>(data_path);
+  Asset* asset = assetmgr.loadAssetFromDisk(data_path);
+  if (asset == nullptr)
+  {
+    @log.error("failed to load texture '", name, "' from disk\n");
+    return nullptr;
+  }
+
+  auto* texture = renderer.resource_mgr.createTexture(name);
   if (texture == nullptr)
   {
-    ERROR("failed to load texture '", name, "'\n");
+    ERROR("failed to allocate texture '", name, "'\n");
     return nullptr;
   }
 
-  auto compiled_data_file = File::from(data_path, OpenFlag::Read);
-  if (isnil(compiled_data_file))
-  {
-    ERROR("failed to open compiled texture data from '", data_path, "'\n");
-    return nullptr;
-  }
-  defer { compiled_data_file.close(); };
+  texture->asset.asset = asset;
 
-  u64 file_size = compiled_data_file.getInfo().byte_size;
-  texture->data = 
-    (CompiledTextureData*)mem::stl_allocator.allocate(file_size);
+  auto& data = texture->getData();
 
-  compiled_data_file.read({(u8*)texture->data, file_size});
-
-  CompiledTextureData* data = texture->data;
-
-  // Repoint the data's pixels.
-  data->pixels = (void*)(data + 1);
+  assert(data.width != 0 && data.height != 0);
 
   renderer.loadTexture(texture);
 
@@ -139,22 +106,74 @@ b8 CompiledTexture::compileFromMemory(void* pixels, CompileParams& params)
   data.width = params.width;
   data.height = params.height;
 
-  data.pixels = pixels;
+  assert(data.width != 0 && data.height != 0);
+
+  data.pixels.set(&data + 1);
+
+  u64 pixel_stride = 0;
+  switch (data.format)
+  {
+    case ImageFormat::BW:   pixel_stride = 1; break;
+    case ImageFormat::BWA:  pixel_stride = 2; break;
+    case ImageFormat::RGB:  pixel_stride = 3; break;
+    case ImageFormat::RGBA: pixel_stride = 4; break;
+  }
+  u64 pixels_size = pixel_stride * data.width * data.height;
 
   auto data_file = 
     File::from(data_path, 
         OpenFlag::Create
       | OpenFlag::Truncate
       | OpenFlag::Write);
+
   if (isnil(data_file))
     return ERROR("failed to open texture data file for writing at '", 
                  data_path, "'\n");
-  defer { data_file.close(); };
 
-  if (!data.serialize(&data_file))
-    return ERROR("failed to serialize texture\n");
+  data_file.write({(u8*)&data, sizeof(CompiledTextureData)});
+  data_file.write({(u8*)pixels, pixels_size});
+
+  data_file.close();
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 CompiledTexture::compileFromMemory(
+    void* pixels, 
+    fs::File* file, 
+    CompileParams& params)
+{
+  CompiledTextureData data;
+
+  data.format       = params.format;
+  data.filter       = params.filter;
+  data.address_mode = params.address_mode;
+  data.kind         = params.kind;
+
+  data.width = params.width;
+  data.height = params.height;
+
+  assert(data.width != 0 && data.height != 0);
+
+  data.pixels.set(&data + 1);
+
+  u64 pixel_stride = 0;
+  switch (data.format)
+  {
+    case ImageFormat::BW:   pixel_stride = 1; break;
+    case ImageFormat::BWA:  pixel_stride = 2; break;
+    case ImageFormat::RGB:  pixel_stride = 3; break;
+    case ImageFormat::RGBA: pixel_stride = 4; break;
+  }
+  u64 pixels_size = pixel_stride * data.width * data.height;
+
+  file->write({(u8*)&data, sizeof(CompiledTextureData)});
+  file->write({(u8*)pixels, pixels_size});
+
+  return true;
+
 }
 
 }

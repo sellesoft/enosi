@@ -32,7 +32,9 @@ Diagnostics:
         'misc-no-recursion',
         'readability-uppercase-literal-suffix',
         'modernize-use-std-numbers',
-        'modernize-raw-string-literal'
+        'modernize-raw-string-literal',
+        'modernize-use-designated-initializers',
+        'modernize-use-nodiscard'
       ]
     FastCheckFilter: None
 

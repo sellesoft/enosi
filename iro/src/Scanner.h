@@ -56,7 +56,6 @@ struct Scanner
    */
   b8 eof() const { return at_end || at(0) || isnil(current_codepoint); }
 
-
   /* --------------------------------------------------------------------------
    */
   void advance(b8 contiguous = false);

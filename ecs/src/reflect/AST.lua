@@ -47,6 +47,9 @@ ast.decls =
 local Type = LuaType.make()
 local Decl = LuaType.make()
 
+Type.metadata = {}
+Decl.metadata = {}
+
 -- Automatically set the name of each type.
 setmetatable(ast, 
 {
@@ -289,6 +292,8 @@ Record.new = function(name)
     list = List{},
     map = {},
   }
+  o.bases = List{}
+  o.derived = List{}
   return setmetatable(o, Record)
 end
 
@@ -356,6 +361,14 @@ Record.log = function(self, var)
     s = s..', "\\n'..field.name..': ", '..var..'.'..field.name
   end
   return s..', "\\n")'
+end
+
+Record.isDerivedFrom = function(self, decl)
+  for base in self.bases:each() do
+    if base == decl or base:isDerivedFrom(decl) then
+      return true
+    end
+  end
 end
 
 local Field = LuaType.make()

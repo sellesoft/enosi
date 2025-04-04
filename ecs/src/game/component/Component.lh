@@ -11,6 +11,7 @@ $ local ui = require "ui.UI"
 
 using namespace iro;
 
+@@lpp.import "asset/TypedPtr.lh"
 @@lpp.import "game/entity/EntityId.lh"
 
 
@@ -42,6 +43,8 @@ struct Component
 };
 
 DefineNilValue(Component, {0}, { return x.kind == 0; });
+
+typedef TypedPtr<Component> ComponentPtr;
 
 /* ----------------------------------------------------------------------------
  */

@@ -32,8 +32,8 @@ struct AssetMgr
   typedef AVL<Asset, Asset::getHash> AssetMap;
 
   typedef DList<Asset> AssetList;
-
-  AssetList list;
+  
+  AssetPool pool;
   AssetMap map;
 
   mem::Allocator* allocator;
@@ -42,25 +42,15 @@ struct AssetMgr
   void deinit();
 
   // Allocates a block of memory as an Asset, returns a reference to it 
-  // and registers it with 'name'.
+  // and registers it with 'name'. The given size is allocated AFTER 
+  // the Asset structure.
+  //
   // This will assert if an Asset with the given name already exists, as 
   // these functions are expected to be called when we know that the 
   // wanted Asset doesn't already exist!
-  Asset* allocateAsset(u64 size, String name);
+  Asset* allocateAsset(String name);
 
-  template<typename T>
-  T* allocateAsset(String name)
-  {
-    auto* asset = (T*)allocateAsset(sizeof(T), name);
-    new (asset) T;
-
-    asset->name = name.allocateCopy(&mem::stl_allocator);
-    asset->hash = name.hash();
-    asset->rc.addRef();
-    asset->rsrcmgr = this;
-
-    return asset;
-  }
+  Asset* loadAssetFromDisk(String path);
 
   // Attempts to find an asset from a given name and returns it.
   Asset* findAsset(String name) const;
@@ -69,11 +59,4 @@ struct AssetMgr
 
   String getAssetDir() const { return "assets"_str; }
   String getDataDir() const { return "data"_str; }
-
-private:
-
-  // Only asset refs may unload a asset.
-  friend AssetRef;
-
-  void unloadAsset(Asset* asset);
 };

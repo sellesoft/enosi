@@ -1,0 +1,777 @@
+$ local cmn = require "common"
+$ local glob = require "Glob"
+$ local Processor = require "reflect.Processor"
+$ local ast = require "reflect.AST"
+$ local Defs = require "asset.GatherDefs"
+
+#include "iro/Logger.h"
+#include "iro/fs/File.h"
+#include "iro/fs/Path.h"
+#include "iro/containers/SmallArray.h"
+
+using namespace iro;
+
+@log.ger(compiledata, Debug);
+
+$ local defs = Defs.gather()
+@defs.imported:get
+
+@@lpp.import "asset/CompiledData.lh"
+
+@@lpp.import "asset/Packing.lh"
+@@lpp.import "asset/AssetMgr.lh"
+@@lpp.import "asset/SourceDataFileReg.lh"
+
+$ -- * ------------------------------------------------------------------------
+
+/* ----------------------------------------------------------------------------
+ */
+String getSourceAssetType(String type)
+{
+  switch (type.hash())
+  {
+$ defs:eachDecl(function(name, decl)
+$   if decl:is(ast.Struct) then
+$     if decl.metadata.source_types then
+  case "$(name)"_hashed:
+    return "$(decl.metadata.source_types)"_str;
+$     end
+$   end
+$ end)
+  }
+
+  return nil;
+}
+
+/* ============================================================================
+ */
+struct CompiledPtr
+{
+  u64 pointer_offset;
+  u64 pointee_count;
+  u64 pointee_size;
+  String pointee_type;
+};
+
+typedef SmallArray<CompiledPtr, 64> CompiledPtrs;
+
+struct CompiledString
+{
+  u64 string_offset;
+  u64 data_offset;
+  u64 data_len;
+};
+
+typedef SmallArray<CompiledString, 64> CompiledStrings;
+
+/* ============================================================================
+ */
+struct DataCompiler
+{
+  // Raw root data gathered from the input.
+  io::Memory* data_buffer;
+  io::Memory* string_buffer;
+  CompiledStrings* strings;
+  CompiledPtrs* pointers;
+
+  b8 init(
+      io::Memory* data_buf, 
+      io::Memory* string_buf, 
+      CompiledStrings* strs,
+      CompiledPtrs* ptrs)
+  {
+    data_buffer = data_buf;
+    string_buffer = string_buf;
+    strings = strs;
+    pointers = ptrs;
+
+    return true;
+  }
+
+  template<typename T>
+  void writeData(const T& x)
+  {
+    data_buffer->write({(u8*)&x, sizeof(T)});
+  }
+
+  template<typename T>
+  void writeData()
+  {
+    u8* bytes = data_buffer->allocateBytes(sizeof(T));
+    mem::zero(bytes, sizeof(T));
+  }
+  
+  template<typename T>
+  b8 compile(const T& x);
+
+  b8 compile(String type, void* ptr);
+
+  b8 compileString(const String& str)
+  {
+    if (notnil(str))
+    {
+      strings->push(
+      {
+        .string_offset = data_buffer->len,
+        .data_offset = string_buffer->len,
+        .data_len = str.len,
+      });
+      string_buffer->allocateString(str);
+    }
+    writeData<String>();
+    return true;
+  }
+
+  template<typename T>
+  b8 compileArray(String type, const ArrayDef<T>& arr)
+  {
+    auto* p = pointers->push();
+    p->pointer_offset = data_buffer->len;
+    p->pointee_count = arr.len;
+    p->pointee_size = sizeof(T);
+    p->pointee_type = type;
+
+    writeData(arr);
+
+    return true;
+  }
+
+  template<typename T>
+  b8 compileTypedPtr(const TypedPtr<T>& ptr)
+  {
+    if (!compileString(ptr.type))
+      return false;
+    
+    auto* p = pointers->push();
+    p->pointer_offset = data_buffer->len;
+    p->pointee_count = 1;
+    p->pointee_size = sizeof(T);
+    p->pointee_type = ptr.type;
+
+    writeData(ptr.ptr);
+
+    return true;
+  }
+
+  b8 compileAssetRef(const AssetRef& ref)
+  {
+    // INFO("compiled asset ref ", ref.name, "\n");
+    if (!compileString(ref.name))
+      return false;
+
+    writeData<void*>();
+
+    return true;
+  }
+
+  b8 compileColor(const Color& color)
+  {
+    writeData(color);
+    return true;
+  }
+};
+
+template<typename T>
+void getRefs(CompiledData::Refs* refs, T* x);
+void getRefs(CompiledData::Refs* refs, String type, void* ptr);
+
+/* ----------------------------------------------------------------------------
+ */
+static String getDataAssetPath(
+    PathBuffer* out, 
+    String data_dir,
+    String name, 
+    String type)
+{
+  using namespace fs;
+
+  io::formatv(out, data_dir, '/', name);
+
+  if (!Path::hasExtension(name))
+  {
+    auto srctype = getSourceAssetType(type);
+    if (isnil(srctype))
+    {
+      ERROR("asset name passed '", name, "' does not contain an "
+            "extension and there is no known source type for $(type)");
+      return nil;
+    }
+    io::formatv(out, '.', srctype);
+  }
+
+  io::format(out, ".data"_str);
+
+  return out->asStr();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static String getSourceAssetPath(
+    PathBuffer* out,
+    String name,
+    String type)
+{
+  using namespace fs;
+
+  io::formatv(out, name);
+
+  if (!Path::hasExtension(name))
+  {
+    auto srctype = getSourceAssetType(type);
+    if (isnil(srctype))
+    {
+      ERROR("asset name passed '", name, "' does not contain an "
+            "extension and there is no known source type for $(type)");
+      return nil;
+    }
+    io::formatv(out, '.', srctype);
+  }
+
+  return out->asStr();
+}
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putCompileStructData(name, decl)
+$   local TAssetRef = defs.p.decls.map["struct AssetRef"]
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 DataCompiler::compile<$(name)>(const $(name)& x)
+{
+  u64 start_offset = data_buffer->len;
+
+$ if decl.bases then
+$   for base in decl.bases:each() do
+$     local basename = Defs.removeTag(base.name)
+  compile<$(basename)>(*($(basename)*)&x);
+$   end
+$ end
+
+$ local last_field
+$ for field in decl:eachFieldWithIndex() do
+  // Field $(field.name) at offset $(field.offset) with size $(field.type.size)
+  // $(field.type:tostring())
+$   if last_field then
+$     local diff = field.offset - last_field.offset
+$     if diff > last_field.type.size then
+  // Allocate padded space.
+  data_buffer->allocateBytes($(diff - last_field.type.size));
+$     end
+$   end
+$   last_field = field
+$   local type = field.type
+$   if type.name == "String" then
+  compileString(x.$(field.name));
+$   elseif type.name == "Color" then
+  compileColor(x.$(field.name));
+$   elseif type:is(ast.PointerType) then
+  writeData(x.$(field.name));
+$   else
+$     type = type:getDesugared()
+$     if type:is(ast.TagType) then
+$       local decl = type:getDecl()
+$       if decl then
+$         if decl:is(ast.Record) and decl:isDerivedFrom(TAssetRef) then
+  compileAssetRef(x.$(field.name));
+$         elseif decl:is(ast.Enum) then
+  writeData(x.$(field.name));
+$         elseif decl:is(ast.TemplateSpecialization) then
+$           if decl.specialized_name == "vec2" then
+  writeData(x.$(field.name));
+$           elseif decl.specialized_name == "ArrayDef" then
+  compileArray(
+    "$(Defs.removeTag(decl.template_args[1].name))"_str, x.$(field.name));
+$           elseif decl.specialized_name == "TypedPtr" then
+  compileTypedPtr(x.$(field.name));
+$           elseif decl.specialized_name == "EnumArray" then
+  for (auto& elem : x.$(field.name))
+    compile(elem);
+$           end
+$         elseif decl:is(ast.Struct) then
+  compile<$(Defs.removeTag(decl.name))>(x.$(field.name));
+$         end
+$       end
+$     else
+  writeData(x.$(field.name));
+$     end
+$   end
+$ end
+
+$ if last_field then
+$   local this_size = decl.type.size
+$   local last_ext = last_field.type.size + last_field.offset
+$   if this_size >= last_ext then
+  // Padding.
+  data_buffer->allocateBytes($(this_size - last_ext));
+$   end
+$ end
+
+$ if 0 ~= decl:getFieldCount() then
+$   -- Empty structs in C++ are 1 byte, which will trip this.
+  assert(data_buffer->len - start_offset == sizeof($(name)));
+$ end
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<> 
+void getRefs<$(name)>(CompiledData::Refs* refs, $(name)* x)
+{
+$ local TRef = defs.p.decls.map["struct Ref"]
+$ local function pushRef(decl, field)
+  refs->push(
+    {
+      "$(Defs.removeTag(decl.name))"_str,
+      &x->$(field.name),
+    });
+$ end
+
+$ if decl:is(ast.Record) and decl:isDerivedFrom(TRef) then
+  refs->push({"$(name)"_str, x});
+$ end
+
+$ local ref = defs.p.decls.map["struct Ref"]
+$ for field in decl:eachFieldWithIndex() do
+$   local type = field.type:getDesugared()
+  // $(field.name): $(field.type:tostring())
+$   if type:is(ast.TagType) then
+$     local decl = type:getDecl()
+$     if decl then
+$       if decl:is(ast.Record) and decl:isDerivedFrom(ref) then
+$         pushRef(decl, field)
+  getRefs(refs, &x->$(field.name));
+$       elseif decl:is(ast.Struct) then
+  getRefs(refs, &x->$(field.name));
+$       elseif decl:is(ast.TemplateSpecialization) then
+$         if decl.specialized_name == "ArrayDef" then
+  for (auto& elem : x->$(field.name))
+    getRefs(refs, &elem);
+$         elseif decl.specialized_name == "TypedPtr" then
+  getRefs(refs, &x->$(field.name));
+$         elseif decl.specialized_name == "EnumArray" then
+  for (auto& elem : x->$(field.name))
+    getRefs(refs, &elem);
+$         end
+$       else
+$       end
+$     end
+$   end
+$ end
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<> 
+void getRefs<TypedPtr<$(name)>>(
+    CompiledData::Refs* refs, 
+    TypedPtr<$(name)>* x)
+{
+  if (x->ptr != nullptr)
+    getRefs(refs, x->type, x->ptr);
+}
+
+/* ----------------------------------------------------------------------------
+ *  TODO(sushi) this should be more automated.
+ */
+template<>
+void getRefs<TypedSourceAssetRef<$(name)>>(
+  CompiledData::Refs* refs,
+  TypedSourceAssetRef<$(name)>* x)
+{
+  if (x->isValid())
+    getRefs(refs, &**x);
+}
+
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ defs:eachDecl(function(name, decl)
+$   if decl:is(ast.TemplateSpecialization) then
+$     if decl.specialized_name == "TypedPtr" then
+$       putCompileTypedPtrData(name, decl)
+$     end
+$   elseif decl:is(ast.Struct) and name ~= "gfx::CompiledTexture" and
+$         name ~= "CompiledData" and
+$         name ~= "RefLoader" then
+$     putCompileStructData(name, decl)
+$   end
+$ end)
+
+/* ----------------------------------------------------------------------------
+ */
+b8 CompiledData::compile(const CompileParams& params)
+{
+  using namespace fs;
+
+  PathBuffer source_path_buffer;
+  String source_path = 
+    getSourceAssetPath(
+      &source_path_buffer,
+      params.name,
+      params.type);
+
+  if (isnil(source_path))
+    return false;
+
+  SourceDataFileHandle source_data_file = 
+    params.sfile_reg.loadFromDisk(source_path);
+
+  if (!source_data_file.isValid())
+    return false;
+
+  SourceDataFile* sfile = source_data_file.getFile();
+
+  SourceData* root_data = sfile->returned_data;
+
+  if (root_data->type != params.type)
+    return ERROR(
+      "returned type (", root_data->type, ") of ", source_path, 
+      " differs from expected type ", params.type, "\n");
+
+  PackedData packed;
+  defer { packed.clear(); };
+
+  PackContext pack_context = 
+  {
+    nullptr,
+    nullptr,
+    &packed,
+  };
+
+  if (!packSourceDataFromType(*root_data, pack_context))
+    return ERROR("failed to pack data of ", source_path, "\n");
+
+  PathBuffer data_path_buffer;
+  String data_path = 
+    getDataAssetPath(
+      &data_path_buffer, 
+      params.assetmgr.getDataDir(),
+      params.name,
+      params.type);
+
+  if (isnil(data_path))
+    return false;
+
+  if (!platform::makeDir(Path::removeBasename(data_path), true))
+    return @log.error("failed to make directories\n");
+
+  io::Memory data_buffer;
+  data_buffer.open();
+  defer { data_buffer.close(); };
+
+  data_buffer.writeType<CompiledData>({});
+
+  // Set name and type early.
+  {
+    u64 name_offset = data_buffer.len;
+    data_buffer.allocateString(params.name);
+
+    u64 type_offset = data_buffer.len;
+    data_buffer.allocateString(params.type);
+
+    auto* compiled = (CompiledData*)data_buffer.ptr;
+
+    compiled->name.setString(
+      String::from(data_buffer.ptr + name_offset, params.name.len));
+
+    compiled->type.setString(
+      String::from(data_buffer.ptr + type_offset, params.type.len));
+  }
+
+  io::Memory strings_buffer;
+  strings_buffer.open();
+  defer { strings_buffer.close(); };
+
+  CompiledStrings strings;
+  CompiledPtrs pointers;
+
+  u64 data_start = data_buffer.len;
+
+  DataCompiler compiler;
+  compiler.init(&data_buffer, &strings_buffer, &strings, &pointers);
+
+  if (!compiler.compile(params.type, packed.data.ptr))
+    return false;
+
+  u64 root_size = data_buffer.len - data_start;
+
+  for (;;)
+  {
+    CompiledPtrs next_pointers;
+    compiler.init(&data_buffer, &strings_buffer, &strings, &next_pointers);
+
+    for (auto& ptr : pointers)
+    {
+      // Get the address of the pointer and what it points to.
+      void** ptrptr = (void**)(data_buffer.ptr + ptr.pointer_offset);
+      void* ptrdata = *ptrptr;
+
+      // Set the pointer to be an offset to the data we're about to write.
+      ((OffsetPtr<void>*)ptrptr)->set(data_buffer.ptr + data_buffer.len);
+
+      // Compile each pointee.
+      for (u32 i = 0; i < ptr.pointee_count; ++i)
+      {
+        u64 offset = data_buffer.len;
+        void* pointee = (u8*)ptrdata + i * ptr.pointee_size;
+        compiler.compile(ptr.pointee_type, pointee);
+        void* pte = data_buffer.ptr + offset;
+      }
+    }
+
+    if (next_pointers.isEmpty())
+      break;
+
+    next_pointers.move(&pointers);
+  }
+
+  u64 strings_start = data_buffer.len;
+
+  for (auto& str : strings)
+  {
+    auto* strptr = (String*)(void**)(data_buffer.ptr + str.string_offset);
+    
+    OffsetString::setStringAsOffsetString(strptr, String::from(
+      data_buffer.ptr + strings_start + str.data_offset,
+      str.data_len));
+  }
+
+  auto data_file = 
+    File::from(data_path,
+        OpenFlag::Write
+      | OpenFlag::Truncate
+      | OpenFlag::Create);
+
+  if (isnil(data_file))
+    return @log.error(
+      "failed to open data file for writing at '", data_path, "'\n");
+
+  auto* compiled = (CompiledData*)data_buffer.ptr;
+
+  compiled->root.setSlice(Slice<u8>::from(
+    data_buffer.ptr + data_start,
+    root_size));
+
+  compiled->data.setSlice(Slice<u8>::from(
+    data_buffer.ptr + data_start, 
+    data_buffer.len - data_start));
+
+  compiled->strings.setSlice(Slice<u8>::from(
+    data_buffer.ptr + data_buffer.len,
+    strings_buffer.len));
+
+  data_file.write(data_buffer.asBytes());
+  data_file.write(strings_buffer.asBytes());
+  data_file.close();
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 DataCompiler::compile(String type, void* ptr)
+{
+  switch (type.hash())
+  {
+$ defs:eachDecl(function(name, decl)
+$   if decl:is(ast.Struct) and name ~= "gfx::CompiledTexture" and
+$      name ~= "CompiledData" and 
+$      name ~= "RefLoader" then
+  case "$(name)"_hashed:
+    return compile<$(name)>(*($(name)*)ptr);
+$   end
+$ end)
+
+$ defs:eachDecl(function(name, decl)
+$   if decl:is(ast.Struct) and name ~= "gfx::CompiledTexture" and
+$      name ~= "CompiledData" and
+$      name ~= "RefLoader" then
+  case "TypedPtr<$(name)>"_hashed:
+    return compileTypedPtr<$(name)>(*(TypedPtr<$(name)>*)ptr);
+$   end
+$ end)
+  default:
+    assert(!"unhandled typed pointer");
+  }
+
+  return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+CompiledData* CompiledData::load(
+    String name, 
+    String type, 
+    AssetMgr& assetmgr,
+    Asset** out_asset)
+{
+  using namespace fs;
+
+  PathBuffer data_path_buffer;
+
+  String data_path = 
+    getDataAssetPath(
+      &data_path_buffer, 
+      assetmgr.getDataDir(),
+      name,
+      type);
+
+  if (isnil(data_path))
+    return nullptr;
+
+  Asset* asset = assetmgr.findAsset(data_path);
+  if (asset == nullptr)
+  {
+    asset = assetmgr.loadAssetFromDisk(data_path);
+    if (asset == nullptr)
+    {
+      @log.error("failed to allocate compiled data asset\n");
+      return nullptr;
+    }
+    ((CompiledData*)asset->data)->makeDataPointersAbsolute();
+  }
+
+  if (out_asset)
+    *out_asset = asset;
+
+  return (CompiledData*)asset->data;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void getRefs(CompiledData::Refs* refs, String type, void* ptr)
+{
+  switch (type.hash())
+  {
+$ defs:eachDecl(function(name, decl)
+$   if decl:is(ast.Struct) and name ~= "gfx::CompiledTexture" and
+$     name ~= "CompiledData" and
+$     name ~= "RefLoader" then
+  case "$(name)"_hashed:
+    ::getRefs(refs, ($(name)*)ptr);
+    return;
+$   end
+$ end)
+  }
+
+  assert(!"unhandled type in getRefs");
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void CompiledData::getRefs(Refs* refs)
+{
+  ::getRefs(refs, type.getString(), data.ptr.get());
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void makeDataPointersAbsolute(String type, void* data);
+
+template<typename T>
+void makeDataPointersAbsolute(T* data);
+
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
+void makeDataPointersAbsolute(TypedPtr<T>* data)
+{
+  data->type = OffsetString::getStringAsOffsetString(&data->type);
+  data->ptr = ((OffsetPtr<T>*)&data->ptr)->get();
+  makeDataPointersAbsolute(data->type, data->ptr);
+}
+
+$ local function putMakeStructPointersAbsolute(name, decl)
+$   local TAssetRef = defs.p.decls.map["struct AssetRef"]
+/* ----------------------------------------------------------------------------
+ */
+template<>
+void makeDataPointersAbsolute<$(name)>($(name)* data)
+{
+$ for field in decl:eachFieldWithIndex() do
+  {
+    auto& f = data->$(field.name);
+$   local type = field.type
+$   if type.name == "String" then
+    f = OffsetString::getStringAsOffsetString(&f);
+$   else
+$     type = type:getDesugared()
+$     if type:is(ast.TagType) then
+$       local decl = type:getDecl()
+$       if decl then
+$         if decl:is(ast.Record) and decl:isDerivedFrom(TAssetRef) then
+    f.name = OffsetString::getStringAsOffsetString(&f.name);
+$         elseif decl:is(ast.TemplateSpecialization) then
+$           if decl.specialized_name == "ArrayDef" then
+$             local elemdecl = decl.template_args[1]:getDecl()
+    f.arr = ((OffsetPtr<$(elemdecl.name)>*)&f.arr)->get();
+    for (auto& elem : f)
+      makeDataPointersAbsolute(&elem);
+$           elseif decl.specialized_name == "EnumArray" then
+    for (auto& elem : f)
+      makeDataPointersAbsolute(&elem);
+$           elseif decl.specialized_name == "TypedPtr" then
+    f.type = OffsetString::getStringAsOffsetString(&f.type);
+    f.ptr = ((OffsetPtr<decltype(data->$(field.name))::TPtr>*)&f.ptr)->get();
+  makeDataPointersAbsolute(f.type, f.ptr);
+$           end
+$         elseif decl:is(ast.Struct) and decl.is_complete then
+  makeDataPointersAbsolute<$(Defs.removeTag(decl.name))>(&f);
+$         end
+$       end
+$     end
+$   end
+  }
+$ end
+}
+
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ defs:eachDecl(function(name, decl)
+$   if decl:is(ast.Struct) and decl.is_complete and 
+$      name ~= "CompiledData" then
+$     putMakeStructPointersAbsolute(name, decl)
+$   end
+$ end)
+
+/* ----------------------------------------------------------------------------
+ */
+void CompiledData::makeDataPointersAbsolute()
+{
+  switch (type.getString().hash())
+  {
+$ defs:eachDecl(function(name, decl)
+$   if decl:is(ast.Struct) and decl.is_complete and
+$      name ~= "CompiledData" then
+  case "$(name)"_hashed:
+    ::makeDataPointersAbsolute(($(name)*)data.getSlice().ptr);
+    return;
+$   end
+$ end)
+  }
+
+  assert(!"unhandled type in makeDataPointersAbsolute");
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void makeDataPointersAbsolute(String type, void* data)
+{
+  switch (type.hash())
+  {
+$ defs:eachDecl(function(name, decl)
+$   if decl:is(ast.Struct) and decl.is_complete and
+$      name ~= "CompiledData" then
+  case "$(name)"_hashed:
+    makeDataPointersAbsolute(($(name)*)data);
+    break;
+$   end
+$ end)
+  }
+}

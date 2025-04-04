@@ -8,11 +8,16 @@
 
 $ local cmn = require "common"
 $ local Ref = require "asset.Ref"
-
-@@lpp.import "RefCounting.lh"
+$ local metadata = require "reflect.Metadata"
 
 #include "iro/Common.h"
 #include "iro/Unicode.h"
+
+@@lpp.import "asset/Ref.lh"
+
+@@lpp.import "asset/CompiledData.lh"
+
+@@lpp.import "reflect/RTR.lh"
 
 using namespace iro;
 
@@ -25,7 +30,6 @@ struct AssetMgr;
 struct Asset 
 {
   u64 hash = 0;
-  RefCounter rc = {};
 
   static u64 getHash(const Asset* asset) { return asset->hash; }
 
@@ -34,74 +38,107 @@ struct Asset
   // Asset it was retrieved from.
   String name;
 
-  virtual void onLoad() {}
-  virtual void onReload() {}
-  virtual void onUnload() {}
-
   // A Asset's position in the linked pool. This kinda sucks really bad.
   // TODO(sushi) manually implement a better linked list solution here.
   void* node;
 
-  AssetMgr* rsrcmgr;
-
-  friend AssetMgr;
+  void* data = nullptr;
+  u64   size = 0;
 };
 
 /* ============================================================================
  */
-struct AssetRef
+@metadata.inline_value(name)
+struct AssetRef : Ref
 {
-  AssetRef() {}
+  // The name of the asset, which is specified in source data.
+  String name = {};
   
-  ~AssetRef()
+  // The data being referenced.
+  @metadata.hidden
+  Asset* asset = nullptr;
+
+  static AssetRef invalid() { return {{}, nullptr}; }
+
+  b8 isValid() const
   {
-    if (ptr != nullptr)
-      release();
+    return asset != nullptr && asset->data != nullptr;
   }
 
-  AssetRef(const AssetRef& rhs)
+  void* getData() const
   {
-    assert(!"copying asset refs is not allowed");
+    return isValid()? asset->data : nullptr;
   }
 
-  void trackNoRef(Asset* asset)
+  bool operator == (const AssetRef& rhs) const
   {
-    if (ptr != nullptr)
-      release();
-    ptr = asset;
+    return asset == rhs.asset;
   }
-
-  void track(Asset* asset)
-  {
-    if (ptr != nullptr)
-      release();
-    ptr = asset;
-    if (ptr != nullptr)
-      ptr->rc.addRef();
-  }
-
-  void release();
-
-  b8 isValid() const { return ptr != nullptr; }
-
-  Asset* getAsset() const
-  {
-    return ptr;
-  }
-
-private:
-  Asset* ptr = nullptr;
-
-  friend AssetMgr;
 };
 
 /* ============================================================================
- *  Helper for defining a typed asset handle.
  */
 template<typename T>
-struct TypedAssetRef : public AssetRef
+struct TypedSourceAssetRef : AssetRef
 {
-  TypedAssetRef() : AssetRef() {}
+  T* operator ->()
+  {
+    assert(isValid());
+    return ((CompiledData*)asset->data)->getRootAs<T>();
+  }
 
-  T* getData() const { return (T*)getAsset(); }
+  const T* operator ->() const
+  {
+    assert(isValid());
+    return ((CompiledData*)asset->data)->getRootAs<T>();
+  }
+
+  T& operator *()
+  {
+    assert(isValid());
+    return *((CompiledData*)asset->data)->getRootAs<T>();
+  }
+
+  const T& operator *() const
+  {
+    assert(isValid());
+    return *((CompiledData*)asset->data)->getRootAs<T>();
+  }
+
+  b8 load(LoadParams& params)
+  {
+    return 
+      ((TypedSourceAssetRef<int>*)this)->load(rtr::getTypename<T>(), params);
+  }
+
+  b8 load(String type, LoadParams& params);
+};
+
+/* ============================================================================
+ */
+template<typename T>
+struct TypedAssetRef : AssetRef
+{
+  T* operator ->() 
+  {
+    assert(isValid());
+    return (T*)getData();
+  }
+
+  T& operator*()
+  {
+    assert(isValid());
+    return *(T*)getData();
+  }
+
+  const T& operator*() const
+  {
+    assert(isValid());
+    return *(T*)getData();
+  }
+
+  b8 load(LoadParams& params)
+  {
+    return AssetRef::load(rtr::getTypename<T>(), params);
+  }
 };

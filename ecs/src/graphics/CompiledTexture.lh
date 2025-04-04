@@ -7,9 +7,15 @@
 #include "iro/memory/Allocator.h"
 
 @@lpp.import "asset/Asset.lh"
+@@lpp.import "asset/OffsetPtr.lh"
 @@lpp.import "graphics/Texture.lh"
 
 struct AssetMgr;
+
+namespace iro::fs
+{
+struct File;
+}
 
 namespace gfx
 {
@@ -29,20 +35,20 @@ struct CompiledTextureData
   s32 width;
   s32 height;
 
-  void* pixels;
-
-  b8 serialize(io::IO* out);
+  OffsetPtr<void> pixels;
 };
+
+typedef TypedAssetRef<CompiledTextureData> CompiledTextureDataRef;
 
 /* ============================================================================
  */
-struct CompiledTexture : public Asset
+struct CompiledTexture
 {
-  CompiledTextureData* data;
+  CompiledTextureDataRef asset;
 
-  CompiledTextureData* getData()
+  const CompiledTextureData& getData() const
   {
-    return data;
+    return *asset;
   }
 
   // The texture loaded on the gpu.
@@ -73,6 +79,10 @@ struct CompiledTexture : public Asset
 
   // In this case 'asset_path' is unused.
   static b8 compileFromMemory(void* data, CompileParams& params);
+
+  // Compiles some memory into the given file.
+  static b8 compileFromMemory(
+    void* data, fs::File* file, CompileParams& params);
 };
 
 typedef TypedAssetRef<CompiledTexture> CompiledTextureRef;

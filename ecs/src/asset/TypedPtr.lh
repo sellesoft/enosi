@@ -1,0 +1,22 @@
+/*
+ *  A pointer which internally stores its type. For polymorphic 
+ *  data like Components.
+ */
+
+$ require "common"
+
+#include "iro/Unicode.h"
+
+using namespace iro;
+
+/* ============================================================================
+ */
+template<typename T>
+struct TypedPtr
+{
+  using TPtr = T;
+
+  String type;
+
+  T* ptr;
+};

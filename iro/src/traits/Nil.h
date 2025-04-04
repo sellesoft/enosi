@@ -48,6 +48,14 @@ struct NilValue {};
     inline static b8 isNil(const T& x) F \
   }                                        \
 
+#define DefineNilValueT(T, V, F) \
+  template<typename X>              \
+  struct NilValue<T<X>>             \
+  {                                 \
+    constexpr static const T<X> Value = V; \
+    inline static b8 isNil(const T<X>& x) F \
+  } 
+
 /* ----------------------------------------------------------------------------
  *  Concept used to require a type to have implemented NilValue and so compiler 
  *  errors aren't so horrible.

@@ -10,6 +10,10 @@ $ local metadata = require "reflect.Metadata"
 #include "iro/containers/EnumArray.h"
 #include "math/vec.h"
 
+@@lpp.import "asset/AssetRef.lh"
+@@lpp.import "asset/ArrayDef.lh"
+@@lpp.import "graphics/Ref.defs.lh"
+
 using namespace iro;
 
 struct EntityDef;
@@ -33,11 +37,43 @@ enum class TileKind
 
 /* ============================================================================
  */
-struct MapTileDef
+enum class TileKindConfig
+{
+  TopLeftCorner,
+  TopRightCorner,
+  BottomLeftCorner,
+  BottomRightCorner,
+  Horizontal,
+  HorizontalLeftCap,
+  HorizontalRightCap,
+  Vertical,
+  VerticalTopCap,
+  VerticalBottomCap,
+  FourWayIntersection,
+  ThreeWayIntersection,
+
+  Default,
+
+  COUNT,
+};
+
+/* ============================================================================
+ */
+@metadata.source_types(tile_kind)
+struct TileKindDef
 {
   TileKind kind;
-  gfx::CompiledTexture* texture;
-  Array<EntityDef> entities;
+  EnumArray<TileKindConfig, gfx::TextureRef> textures;
+};
+
+typedef TypedSourceAssetRef<TileKindDef> TileKindRef;
+  
+/* ============================================================================
+ */
+struct MapTileDef
+{
+  TileKindRef kind;
+  ArrayDef<EntityDef> entities;
 };
 
 /* ============================================================================
@@ -46,21 +82,15 @@ struct MapLayerDef
 {
   vec2i size;
   vec2i pos;
-  Array<MapTileDef> tiles;
+  ArrayDef<MapTileDef> tiles;
 };
 
 /* ============================================================================
  */
-@Schema.def(MapDef,
+@metadata.source_types(map)
+struct MapDef
 {
   String name;
   vec2i size;
-  Array<MapLayerDef> layers;
-})
-
-/* ============================================================================
- */
-@Schema.def(MapTileKindDefs,
-{
-  EnumArray<TileKind, Array<gfx::CompiledTexture*>> tile_kinds;
-})
+  ArrayDef<MapLayerDef> layers;
+};

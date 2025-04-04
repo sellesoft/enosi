@@ -8,6 +8,8 @@ $ local cmn = require "common"
 
 @@lpp.import "graphics/Font.lh"
 
+@@lpp.import "graphics/Renderer.lh"
+
 @@lpp.import "asset/AssetMgr.lh"
 
 @defFileLogger(font, Debug)
@@ -22,26 +24,29 @@ namespace gfx
 static b8 codepointInRange(PackRange* range, u32 codepoint)
 {
   return codepoint >= range->first_codepoint &&
-         codepoint < range->first_codepoint + range->num_chars;
+         codepoint < range->first_codepoint + range->chars.len;
 }
 
 /* ----------------------------------------------------------------------------
  */
 PackRange* Font::getRangeOfCodepoint(u32 codepoint) const
 {
-  if (data->num_ranges == 1)
+  const FontData& data = getData();
+  const Slice<PackRange> ranges = data.ranges.getSlice();
+
+  if (ranges.len == 1)
   {
-    if (codepointInRange(data->ranges, codepoint))
-      return data->ranges;
+    if (codepointInRange(ranges.ptr, codepoint))
+      return ranges.ptr;
     else
       return nullptr;
   }
 
-  for (s32 rangeidx = 0; rangeidx < data->num_ranges; ++rangeidx)
+  for (s32 rangeidx = 0; rangeidx < ranges.len; ++rangeidx)
   {
-    PackRange* range = data->ranges + rangeidx;
+    PackRange* range = ranges.ptr + rangeidx;
     
-    if (codepointInRange(data->ranges, codepoint))
+    if (codepointInRange(range, codepoint))
       return range;
   }
 
@@ -77,7 +82,7 @@ void Font::getPackedChar(
     PackRange* range, 
     u32 codepoint) const
 {
-  *out = *(range->chardata + codepoint - range->first_codepoint);
+  *out = *(range->chars.ptr.get() + codepoint - range->first_codepoint);
 }
 
 /* ----------------------------------------------------------------------------
@@ -97,14 +102,15 @@ Font* Font::load(
 {
   using namespace fs;
 
+  if (Font* existing = renderer.resource_mgr.findFont(name))
+    return existing;
+
   PathBuffer data_path_buf;
   writeDataPath(&data_path_buf, name, assetmgr);
 
   String data_path = data_path_buf.asStr();
 
-  Asset* existing = assetmgr.findAsset(data_path);
-  if (existing != nullptr)
-    return (Font*)existing;
+  assert(nullptr == assetmgr.findAsset(data_path));
 
   if (!Path::exists(data_path))
   {
@@ -113,94 +119,34 @@ Font* Font::load(
     return nullptr;
   }
 
-  auto* font = assetmgr.allocateAsset<Font>(data_path);
+  Asset* asset = assetmgr.loadAssetFromDisk(data_path);
+  if (asset == nullptr)
+  {
+    @log.error("failed to load font asset '", data_path, "'\n");
+    return nullptr;
+  }
+
+  // TODO(sushi) need somewhere to put these.
+  auto* font = renderer.resource_mgr.createFont(name);
   if (font == nullptr)
   {
     ERROR("failed to allocate font asset\n");
     return nullptr;
   }
 
-  // Open the compiled data from disk.
-  auto compiled_data_file = File::from(data_path, OpenFlag::Read);
-  if (isnil(compiled_data_file))
-  {
-    ERROR("failed to open compiled font data from '", data_path, "'\n");
-    return nullptr;
-  }
-
-  u64 file_size = compiled_data_file.getInfo().byte_size;
-  font->data = (FontData*)mem::stl_allocator.allocate(file_size);
-
-  compiled_data_file.read({(u8*)font->data, file_size});
-
-  FontData* data = font->data;
-
-  // Adjust pointers to point at correct data.
-  data->ranges = (PackRange*)(data + 1);
-
-  for (s32 range_idx = 0; range_idx < data->num_ranges; ++range_idx)
-  {
-    PackRange& range = data->ranges[range_idx];
-    range.chardata = 
-      (PackedChar*)((u8*)data + (u64)range.chardata);
-  }
+  font->asset.asset = asset;
 
   INFO("loading font's texture\n");
 
   // Load the texture.
-  font->r_texture.trackNoRef(
-    gfx::CompiledTexture::load(name, assetmgr, renderer));
-  if (!font->r_texture.isValid())
+  font->texture = gfx::CompiledTexture::load(name, assetmgr, renderer);
+  if (font->texture == nullptr)
   {
     ERROR("failed to load font texture\n");
     return nullptr;
   }
 
   return font;
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 FontData::serialize(io::IO* out)
-{
-  out->write({(u8*)this, offsetof(FontData, ranges)});
-
-  // Write dummy pointer memory to be readjusted when loaded.
-  void* dummy = (void*)0xff;
-  out->write(&dummy);
-
-  u64 char_data_offset = sizeof(FontData) + num_ranges * sizeof(PackRange);
-  
-  if (ranges)
-  {
-    // Serialize the ranges array.
-    for (s32 range_idx = 0; range_idx < num_ranges; ++range_idx)
-    {
-      PackRange& range = ranges[range_idx];
-
-      out->write({(u8*)&range, offsetof(PackRange, chardata)});
-
-      // Store offset to this range's char data array from the beginning 
-      // of the data.
-      out->write(&char_data_offset);
-
-      char_data_offset += range.num_chars * sizeof(PackedChar);
-    }
-
-    // Serialize the char data arrays.
-    for (s32 range_idx = 0; range_idx < num_ranges; ++range_idx)
-    {
-      PackRange& range = ranges[range_idx];
-
-      out->write(
-        {
-          (u8*)range.chardata, 
-          range.num_chars*sizeof(PackedChar)
-        });
-    }
-  }
-
-  return true;
 }
 
 }

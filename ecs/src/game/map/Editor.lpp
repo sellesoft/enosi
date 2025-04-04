@@ -17,6 +17,7 @@ p:run()
 $$$
 @imported:get
 
+
 $ local decls = 
 $ {
 $   editor = p.decls.map["struct ui::MapEditor"],
@@ -82,43 +83,43 @@ struct TextureDisplay : public Item
     return 
       fs::Path::removeFirstDir(
         fs::Path::removeExtension(
-          (*kind_textures)[displayed_kind][selected_texture]->name));
+          (*kind_textures)[displayed_kind][selected_texture]->asset.name));
   }
 
   /* --------------------------------------------------------------------------
    */
-  void setFromTileKindDefs(UI& ui, const MapTileKindDefs& defs)
-  {
-    // Clear any previous draw commands.
-    for (auto& arr : kind_drawcmds)
-    {
-      for (DrawCmd* cmd : arr)
-        cmd->remove(&ui);
-      arr.clear();
-    }
-
-    for (auto& arr : defs.tile_kinds)
-    {
-      if (arr.isEmpty())
-        continue;
-
-      TileKind kind = (TileKind)(&arr - defs.tile_kinds.arr);
-
-      auto& display_arr = kind_drawcmds[kind];
-
-      for (auto tex : arr)
-      {
-        DrawCmd* cmd = ui.drawcmds.add();
-
-        cmd->alloc(&ui, gfx::putFilledRectCounts());
-        cmd->tex = tex->gfx_texture;
-
-        display_arr.push(cmd);
-      }
-    }
-
-    kind_textures = &defs.tile_kinds;
-  }
+  // void setFromTileKindDefs(UI& ui, const MapTileKindDefs& defs)
+  // {
+  //   // Clear any previous draw commands.
+  //   for (auto& arr : kind_drawcmds)
+  //   {
+  //     for (DrawCmd* cmd : arr)
+  //       cmd->remove(&ui);
+  //     arr.clear();
+  //   }
+  // 
+  //   for (auto& arr : defs.tile_kinds)
+  //   {
+  //     if (arr.isEmpty())
+  //       continue;
+  // 
+  //     TileKind kind = (TileKind)(&arr - defs.tile_kinds.arr);
+  // 
+  //     auto& display_arr = kind_drawcmds[kind];
+  // 
+  //     for (auto tex : arr)
+  //     {
+  //       DrawCmd* cmd = ui.drawcmds.add();
+  // 
+  //       cmd->alloc(&ui, gfx::putFilledRectCounts());
+  //       cmd->tex = tex->gfx_texture;
+  // 
+  //       display_arr.push(cmd);
+  //     }
+  //   }
+  // 
+  //   kind_textures = &defs.tile_kinds;
+  // }
 
   /* --------------------------------------------------------------------------
    */
@@ -464,18 +465,18 @@ void MapEditor::selectMap(
   SourceDataFile* sfile = h_selected_map.getFile();
   SourceData* returned_data = sfile->returned_data;
 
-  PackContext pack_context = 
-  {
-    .assetmgr  = &assetmgr,
-    .renderer  = &renderer,
-  };
+  // PackContext pack_context = 
+  // {
+  //   .assetmgr  = &assetmgr,
+  //   .renderer  = &renderer,
+  // };
 
-  packSourceDataIntoType(
-    *h_selected_map_tile_kinds.getFile()->returned_data,
-    &maptiledefs,
-    pack_context);
+  // packSourceDataIntoType(
+  //   *h_selected_map_tile_kinds.getFile()->returned_data,
+  //   &maptiledefs,
+  //   pack_context);
 
-  texture_display->setFromTileKindDefs(ui, maptiledefs);
+  // texture_display->setFromTileKindDefs(ui, maptiledefs);
 
   sdedit->setSourceData(ui, returned_data, sfile, "MapDef"_hashed);
 }
@@ -617,6 +618,15 @@ void MapEditor::update(UI* ui, UpdateReason reason)
               vec2f tile_pos = map.getTilePos(*layer, *tile);
               io::formatv(&buffer, "editing tile at ", tile_pos);
               selected_sdata_info->set(buffer.asStr());
+
+              INFO("tile is ", rtr::getEnumElementName(tile->configuration),
+                   "\n");
+
+              debug_tile = true;
+              debug_tile_pos = layer->getTilePos(*tile);
+              debug_tile_layer_idx = map.getLayerIndex(*layer);
+
+              INFO(debug_tile_pos, "\n");
             }
           }
 
@@ -859,21 +869,35 @@ void MapEditor::renderMap(UI& ui)
   if (notnil(map.layers))
   {
     map.deinit();
-    destroyPackedData(&mapdef);
+    // destroyPackedData(&mapdef);
   }
 
   renderer->pushBindFramebuffer(framebuffer);
+
+  packed_map_def.clear();
 
   PackContext pack_context = 
   {
     .assetmgr = &assetmgr,
     .renderer = renderer,
+    .packed = &packed_map_def,
   };
 
-  packSourceDataIntoType(
-    *h_selected_map.getFile()->returned_data,
-    &mapdef,
-    pack_context);
+  if (!packSourceDataIntoType<MapDef>(
+        *h_selected_map.getFile()->returned_data, pack_context))
+    return;
+
+  Ref::LoadParams load_params = 
+  {
+    .renderer = *renderer,
+    .assetmgr = assetmgr,
+    .sfile_reg = ui.eng->source_data_file_reg,
+  };
+
+  for (PackedRef* ref = packed_map_def.refs; ref; ref = ref->next)
+  {
+    ref->ref->load(ref->type, load_params);
+  }
 
   Map::InitParams map_params =
   {
@@ -882,7 +906,7 @@ void MapEditor::renderMap(UI& ui)
     .renderer = *renderer,
   };
 
-  map.init(mapdef, map_params);
+  map.init(*packed_map_def.getRootAs<MapDef>(), map_params);
 
   RenderSys::UpdateParams params =
   {
