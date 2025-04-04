@@ -14,6 +14,9 @@ b8 ResourceMgr::init()
   if (!textures.init())
     return false;
 
+  if (!fonts.init())
+    return false;
+
   return true;
 }
 
@@ -22,6 +25,7 @@ b8 ResourceMgr::init()
 void ResourceMgr::deinit()
 {
   textures.deinit();
+  fonts.deinit(); 
 }
 
 /* ----------------------------------------------------------------------------
@@ -45,5 +49,28 @@ CompiledTexture* ResourceMgr::findTexture(String name)
     return &texture->resource;
   return nullptr;
 }
+
+/* ----------------------------------------------------------------------------
+ */
+Font* ResourceMgr::createFont(String name)
+{
+  auto* f = mem::stl_allocator.construct<Resource<Font>>();
+
+  f->name = name.allocateCopy();
+
+  fonts.insert(f);
+
+  return &f->resource;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Font* ResourceMgr::findFont(String name)
+{
+  if (auto* font = fonts.find(name.hash()))
+    return &font->resource;
+  return nullptr;
+}
+
 
 }

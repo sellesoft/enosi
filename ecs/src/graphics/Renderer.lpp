@@ -1348,9 +1348,12 @@ $ end -- if ECS_VULKAN
  */
 b8 Renderer::loadTexture(CompiledTexture* texture)
 {
-  if (texture->gfx_texture.handle != nullptr)
-    return ERROR("call to loadTexture with a texture that has already "
-                 "been assigned a gfx::Texture\n");
+  // if (texture->gfx_texture.handle != 0)
+  // {
+  //   assert(false);
+  //   return ERROR("call to loadTexture with a texture that has already "
+  //                "been assigned a gfx::Texture\n");
+  // }
 
   const CompiledTextureData& data = texture->getData();
 

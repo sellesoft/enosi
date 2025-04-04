@@ -53,7 +53,6 @@ b8 GameMgr::init(Engine* eng)
 
   auto* data = CompiledData::load(
     "assets/maps/Test.map"_str, "MapDef"_str, eng->assetmgr);
-  data->makeDataPointersAbsolute();
 
   auto* mapdef = data->getRootAs<MapDef>();
 
@@ -69,12 +68,10 @@ b8 GameMgr::init(Engine* eng)
 
   for (auto& ref : refs)
   {
-    INFO(ref.type, "\n");
-
     ref.ref->load(ref.type, load_params);
   }
 
-$ if false then
+$ if true then
   Map::InitParams map_params =
   {
     .assetmgr = engine->assetmgr,
@@ -84,8 +81,11 @@ $ if false then
     .mind     = &mindsys,
   };
 
-  if(!map.init(*map_def, map_params))
-    return ERROR("failed to initialize the map '", map_def->name, "'\n");
+  if(!map.init(*mapdef, map_params))
+    return ERROR("failed to initialize map '", mapdef->name, "'\n");
+
+  SourceDataFileHandle h_test_map = 
+    eng->source_data_file_reg.loadFromDisk("assets/maps/Test.map"_str);
 
   SourceDataFileHandle h_test_map_tile_kinds =
     eng->source_data_file_reg.loadFromDisk("assets/maps/Test.map_tiles"_str);

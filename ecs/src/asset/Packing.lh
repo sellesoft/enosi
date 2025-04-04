@@ -27,7 +27,7 @@ struct PackContext
   AssetMgr* assetmgr;
   gfx::Renderer* renderer;
 
-  PackedData packed;
+  PackedData* packed;
 };
 
 template<typename T>
@@ -38,10 +38,10 @@ b8 packSourceDataIntoType(
   const SourceData& data, 
   PackContext& ctx)
 {
-  ctx.packed.buffer.init();
-  ctx.packed.data.ptr = (u8*)ctx.packed.buffer.allocateType<T>();
-  ctx.packed.data.len = sizeof(T);
-  return packSourceDataIntoType(data, (T*)ctx.packed.data.ptr, ctx);
+  ctx.packed->buffer.init();
+  ctx.packed->data.ptr = (u8*)ctx.packed->buffer.allocateType<T>();
+  ctx.packed->data.len = sizeof(T);
+  return packSourceDataIntoType(data, (T*)ctx.packed->data.ptr, ctx);
 }
 
 // Packs some SourceData based on what its type value is.

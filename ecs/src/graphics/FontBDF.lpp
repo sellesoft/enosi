@@ -370,12 +370,15 @@ b8 Font::compileBDF(CompileParams& params)
   auto cursor = vec2i(0,tex_size.y-1);
 
   io::Memory data_buffer;
-  buffer.open();
+  data_buffer.open();
+  defer { data_buffer.close(); };
 
   // Prep font data for writing while rendering.
   FontData* data = 
-    (FontData*)buffer.allocateBytes(
+    (FontData*)data_buffer.allocateBytes(
       sizeof(FontData) + sizeof(PackRange) * params.ranges.len);
+
+  
 
   data->height = bbx.y;
   data->count = num_codepoints;
@@ -398,10 +401,11 @@ b8 Font::compileBDF(CompileParams& params)
     PackRange* prange = ranges + rangeidx;
     prange->font_size = bbx.y;
     prange->first_codepoint = range.first_codepoint;
-    prange->num_chars = range.num_codepoints;
+    prange->chars.setSlice(
+      (PackedChar*)(data_buffer.ptr + data_buffer.len), range.num_codepoints);
 
-    prange->chardata = 
-      allocator.allocateType<PackedChar>(range.num_codepoints);
+    auto* packed_chars = (PackedChar*)
+      data_buffer.allocateBytes(sizeof(PackedChar) * range.num_codepoints);
 
     for (u32 i = 0; i < range.num_codepoints; ++i)
     {
@@ -420,7 +424,7 @@ b8 Font::compileBDF(CompileParams& params)
       u32 top_offset = bbx.y - (c->bbx.w - bbx.w) - c->bbx.y;
       u32 left_offset = c->bbx.z - bbx.z;
 
-      PackedChar* pc = prange->chardata + i;
+      PackedChar* pc = packed_chars + i;
 
       *pc = {};
 

@@ -25,8 +25,13 @@ b8 CompiledTexture::compilePNG(CompileParams& params)
 {
   PathBuffer asset_path_buffer;
   
-  if (params.name.endsWith(".png"_str))
+  String name = params.name;
+    
+  if (name.endsWith(".png"_str))
+  {
     io::formatv(&asset_path_buffer, params.name);
+    name = name.subToLast('.');
+  }
   else
     io::formatv(&asset_path_buffer, params.name, ".png"_str);
 
@@ -34,7 +39,7 @@ b8 CompiledTexture::compilePNG(CompileParams& params)
 
   PathBuffer data_path_buffer;
   io::formatv(&data_path_buffer, 
-    params.assetmgr->getDataDir(), '/', params.name, ".cmp_texture"_str);
+    params.assetmgr->getDataDir(), '/', name, ".cmp_texture"_str);
   String data_path = data_path_buffer.asStr();
 
   if (!fs::Path::exists(asset_path))
@@ -113,7 +118,7 @@ b8 CompiledTexture::compilePNG(CompileParams& params)
   params.width = width;
   params.height = height;
 
-  if (!CompiledTexture::compileFromMemory(pixels, params))
+  if (!CompiledTexture::compileFromMemory(pixels, &data_file, params))
     return false;
   
   delete_data_file_if_failure.cancel();

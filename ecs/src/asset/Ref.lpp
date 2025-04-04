@@ -22,10 +22,17 @@ $ local TRef = defs.p.decls.map["struct Ref"]
   case "Ref"_hashed:
     return ERROR("Ref::load called with type Ref\n");
 
-$ for der in TRef.derived:each() do
+$ local function placeDer(der)
 $   local name = Defs.removeTag(der.name)
   case "$(name)"_hashed:
     return (($(name)*)this)->load(params);
+$   for der in der.derived:each() do
+$     placeDer(der)
+$   end
+$ end
+
+$ for der in TRef.derived:each() do
+$   placeDer(der)
 $ end
   }
 

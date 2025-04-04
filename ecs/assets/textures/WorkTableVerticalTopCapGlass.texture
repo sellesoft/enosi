@@ -3,6 +3,7 @@ return gfx::TextureDef
   name = "assets/textures/WorkTableVerticalTopCapGlass.png",
   kind = "TwoD",
   filter = "Nearest",
+  format = "RGBA",
   address_mode = "ClampToWhite",
 }
   

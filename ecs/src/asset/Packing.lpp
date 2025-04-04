@@ -48,7 +48,7 @@ b8 packTextureRef(
   if (!data.hasStringValue())
     return ERROR("expected a string value to pack TextureRef\n");
 
-  out->name = data.val.str.allocateCopy(&ctx.packed.buffer);
+  out->name = data.val.str.allocateCopy(&ctx.packed->buffer);
 
   return true;
 }
@@ -77,7 +77,7 @@ b8 packTypedPtr<Component>(
   if (isnil(data.type))
     return ERROR("packTypedPtr passed untyped data\n");
 
-  out->type = data.type.allocateCopy(&ctx.packed.buffer);
+  out->type = data.type.allocateCopy(&ctx.packed->buffer);
   if (!packComponent(data, &out->ptr, ctx))
     return false;
 
@@ -92,7 +92,7 @@ b8 packArray(
     ArrayDef<T>* out, 
     PackContext& ctx)
 {
-  out->init(data.children.len(), &ctx.packed.buffer);
+  out->init(data.children.len(), &ctx.packed->buffer);
 
   for (u32 i = 0; i < data.children.len(); ++i)
   {
@@ -115,7 +115,7 @@ b8 packArray(
     ArrayDef<TypedPtr<T>>* out,
     PackContext& ctx)
 {
-  out->init(data.children.len(), &ctx.packed.buffer);
+  out->init(data.children.len(), &ctx.packed->buffer);
 
   for (u32 i = 0; i < data.children.len(); ++i)
   {
@@ -138,7 +138,7 @@ b8 packArray<gfx::TextureRef>(
     ArrayDef<gfx::TextureRef>* out,
     PackContext& ctx)
 {
-  out->init(data.children.len(), &ctx.packed.buffer);
+  out->init(data.children.len(), &ctx.packed->buffer);
 
   for (u32 i = 0; i < data.children.len(); ++i)
   {
@@ -161,7 +161,7 @@ b8 packArray<Component*>(
     ArrayDef<Component*>* out,
     PackContext& ctx)
 {
-  out->init(data.children.len(), &ctx.packed.buffer);
+  out->init(data.children.len(), &ctx.packed->buffer);
 
   for (u32 i = 0; i < data.children.len(); ++i)
   {
@@ -207,7 +207,7 @@ b8 packString(const SourceData& data, String* out, PackContext& ctx)
   if (!data.hasStringValue())
     return ERROR("expected a string\n");
 
-  *out = data.val.str.allocateCopy(&ctx.packed.buffer);
+  *out = data.val.str.allocateCopy(&ctx.packed->buffer);
   return true;
 }
 
@@ -341,7 +341,6 @@ b8 packAssetRef(
     return @log.error("expected a string to pack asset ref\n");
 
   out->name = data.val.str;
-  ctx.packed.recordAssetRef(type, out);
   return true;
 }
 
@@ -455,7 +454,7 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
-$ local putTypedAssetRefPackCase = function(declname, addrname, decl)
+$ local putAssetRefPackCase = function(declname, addrname, decl)
 $   local asset_type = decl.template_args[1]:getDesugared()
 $   local asset_typename = Defs.removeTag(asset_type.name)
   if (!packAssetRef(*child, &$(addrname), "$(asset_typename)"_str, ctx))
@@ -466,6 +465,7 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local putPackCase = function(declname, addrname, type, prereqs)
+$   local TRef = defs.p.decls.map["struct Ref"]
 $   if type.name == "String" then
 $     return (putStringPackCase(declname, addrname, type, prereqs))
 $   end
@@ -477,6 +477,11 @@ $   end
 $
 $   if type:is(ast.TagType) then
 $     local decl = type:getDecl()
+$     if decl:is(ast.Record) then 
+$       if decl:isDerivedFrom(TRef) then
+  ctx.packed->recordRef("$(Defs.removeTag(decl.name))"_str, &$(addrname));
+$       end
+$     end
 $     if decl:is(ast.TemplateSpecialization) then
 $       if decl.specialized_name == "Array" then
 $         print(declname)
@@ -487,8 +492,13 @@ $       elseif decl.specialized_name == "vec2" then
 $         return (putVec2PackCase(declname, addrname, type, prereqs))
 $       elseif decl.specialized_name == "Flags" then
 $         -- TODO(sushi) handle Flags
-$       elseif decl.specialized_name == "TypedAssetRef" then
-$         return (putTypedAssetRefPackCase(declname, addrname, decl, prereqs))
+$       elseif decl.specialized_name == "OffsetPtr" or 
+$              decl.specialized_name == "OffsetSlice" then
+$         -- TODO(sushi) fix includes or implement better filtering so things
+$         --             using these don't show up here
+$       elseif decl.specialized_name == "TypedAssetRef" or 
+$              decl.specialized_name == "TypedSourceAssetRef" then
+$         return (putAssetRefPackCase(declname, addrname, decl, prereqs))
 $       elseif decl.specialized_name == "EnumArray" then
 $         return (putEnumArrayPackCase(declname, addrname, type, prereqs))
 $       else
@@ -587,7 +597,7 @@ b8 packSourceDataIntoType<$(name)>(
   if (data.children.isEmpty())
     return true;
 
-  BitArray<$(decl:getFieldCount())> found_fields;
+  BitArray<$(decl:getFieldCount())> found_fields = {};
 
   for (const SourceData* child : data.children)
   {
@@ -723,7 +733,7 @@ b8 packComponent(const SourceData& data, Component** out, PackContext& ctx)
 $ for comp in component.components.list:each() do
   case "$(comp.name)"_hashed:
     {
-      auto* comp = ctx.packed.buffer.allocateType<$(comp.name)>();
+      auto* comp = ctx.packed->buffer.allocateType<$(comp.name)>();
       if (!packSourceDataIntoType(data, comp, ctx))
       {
         // TODO(sushi) it might be more appropriate to call 'destroy' here

@@ -7,6 +7,7 @@ $ require "common"
 #include "iro/containers/AVL.h"
 
 @@lpp.import "graphics/CompiledTexture.lh"
+@@lpp.import "graphics/Font.lh"
 
 using namespace iro;
 
@@ -30,6 +31,7 @@ struct ResourceMgr
     Resource<T>, [](const Resource<T>* r) { return r->name.hash(); }>;
 
   ResourceMap<CompiledTexture> textures;
+  ResourceMap<Font> fonts;
 
   b8 init();
   void deinit();
@@ -37,6 +39,9 @@ struct ResourceMgr
   // TODO(sushi) this should be handing out the Texture handle.
   CompiledTexture* createTexture(String name);
   CompiledTexture* findTexture(String name);
+
+  Font* createFont(String name);
+  Font* findFont(String name);
 
 };
 

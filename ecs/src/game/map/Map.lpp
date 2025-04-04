@@ -22,6 +22,10 @@ $ local cmn = require "common"
 
 @cmn.defFileLogger(game.map, Info)
 
+b8 debug_tile = false;
+vec2i debug_tile_pos;
+u32 debug_tile_layer_idx = 0;
+
 /* ----------------------------------------------------------------------------
  */
 b8 Tile::init(
@@ -96,6 +100,72 @@ b8 Layer::init(
       return false;
   }
 
+  // Determine tile configurations. This can probably be done in the loop
+  // above but keeping it separated for simplicity for now.
+  for (s32 x = 0; x < def.size.x; ++x)
+  {
+    for (s32 y = 0; y < def.size.y; ++y)
+    {
+      if (debug_tile && debug_tile_pos == vec2i(x,y) && 
+          debug_tile_layer_idx == layer_idx)
+      {
+        debug_tile = false;
+        platform::debugBreak();
+      }
+
+      Tile* tile = getTileAtPos(x,y);
+      assert(tile != nullptr);
+
+      Tile* top    = getTileAtPos(x,y+1);
+      Tile* bottom = getTileAtPos(x,y-1);
+      Tile* right  = getTileAtPos(x+1,y);
+      Tile* left   = getTileAtPos(x-1,y);
+
+      u8 mask = 
+          ((top    && top->def->kind    == tile->def->kind) ? 1 << 0 : 0)
+        | ((bottom && bottom->def->kind == tile->def->kind) ? 1 << 1 : 0)
+        | ((right  && right->def->kind  == tile->def->kind) ? 1 << 2 : 0)
+        | ((left   && left->def->kind   == tile->def->kind) ? 1 << 3 : 0);
+
+      static const TileKindConfig configs[] = 
+      {
+        [0b0000] = TileKindConfig::Default,
+        // Bordered only on top.
+        [0b0001] = TileKindConfig::VerticalBottomCap,
+        // Bordered only on bottom.
+        [0b0010] = TileKindConfig::VerticalTopCap,
+        // Bordered on top and bottom.
+        [0b0011] = TileKindConfig::Vertical,
+        // Bordered only on right.
+        [0b0100] = TileKindConfig::HorizontalLeftCap,
+        // Bordered on top and right.
+        [0b0101] = TileKindConfig::BottomLeftCorner,
+        // Bordered on bottom and right.
+        [0b0110] = TileKindConfig::TopLeftCorner,
+        // Bordered on top, bottom and right.
+        [0b0111] = TileKindConfig::ThreeWayIntersection,
+        // Bordered only on left.
+        [0b1000] = TileKindConfig::HorizontalRightCap,
+        // Bordered on left and top.
+        [0b1001] = TileKindConfig::BottomRightCorner,
+        // Bordered on left and bottom.
+        [0b1010] = TileKindConfig::TopRightCorner,
+        // Bordered on left, bottom, and top,
+        [0b1011] = TileKindConfig::ThreeWayIntersection,
+        // Bordered on left and right.
+        [0b1100] = TileKindConfig::Horizontal,
+        // Bordered on left, right, and top.
+        [0b1101] = TileKindConfig::ThreeWayIntersection,
+        // Bordered on left, right, and bottom.
+        [0b1110] = TileKindConfig::ThreeWayIntersection,
+        // Bordered on all sides.
+        [0b1111] = TileKindConfig::FourWayIntersection,
+      };
+
+      tile->configuration = configs[mask];
+    }
+  }
+
   return true;
 }
 
@@ -115,6 +185,20 @@ vec2f Layer::getTilePos(const Tile& tile) const
 {
   u32 tile_idx = getTileIndex(tile);
   return { f32(tile_idx % def->size.x), f32(tile_idx / def->size.x) };
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Tile* Layer::getTileAtPos(s32 x, s32 y)
+{ 
+  if (x < 0 || x >= def->size.x ||
+      y < 0 || y >= def->size.y)
+    return nullptr;
+
+  u32 tile_idx = x + def->size.x * y;
+  if (tile_idx < def->size.y * def->size.x)
+    return &tiles[tile_idx];
+  return nullptr;
 }
 
 /* ----------------------------------------------------------------------------
@@ -145,6 +229,7 @@ b8 Map::init(const MapDef& def, InitParams& params)
       return false;
   }
 
+$ if false then
   // Iterate over PlayerSpawners 
   if (params.mind && params.eye)
   {
@@ -172,6 +257,7 @@ b8 Map::init(const MapDef& def, InitParams& params)
       player_transform->placement_layer = spawner_transform->placement_layer;
     }
   }
+$ end
 
   return true;
 }

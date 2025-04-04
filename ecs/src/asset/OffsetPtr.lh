@@ -55,6 +55,11 @@ struct OffsetSlice
       len = 0;
     }
   }
+
+  void setSlice(T* ptr, u32 len)
+  {
+    setSlice(Slice<T>::from(ptr, len));
+  }
 };
 
 DefineNilValueT(OffsetSlice, { nil }, { return isnil(x.ptr); });

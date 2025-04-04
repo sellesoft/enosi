@@ -54,7 +54,10 @@ local function isExplicitlyFiltered(name)
      name == "defer_dummy" or 
      name == "defer_with_cancel_dummy" or
      name == "Nil" or
-     name == "gfx::Renderer"
+     name == "gfx::Renderer" or 
+     name == "OffsetPtr" or 
+     name == "OffsetString" or 
+     name == "OffsetSlice"
   then
     return true
   end

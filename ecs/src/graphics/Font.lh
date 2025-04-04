@@ -52,8 +52,7 @@ struct PackRange
 {
   f32 font_size;
   s32 first_codepoint;
-  s32 num_chars;
-  PackedChar* chardata;
+  OffsetSlice<PackedChar> chars;
 };
 
 /* ============================================================================

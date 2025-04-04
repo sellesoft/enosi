@@ -15,8 +15,9 @@ $ local ui = require "ui.UI"
 @@lpp.import "ui/widgets/Button.lh"
 @@lpp.import "ui/widgets/ComboBox.lh"
 
-@@lpp.import "asset/SourceDataFileHandle.lh"
+@@lpp.import "asset/PackedData.lh"
 @@lpp.import "asset/SourceDataEditor.lh"
+@@lpp.import "asset/SourceDataFileHandle.lh"
 
 @@lpp.import "graphics/Texture.lh"
 @@lpp.import "graphics/Framebuffer.lh"
@@ -80,7 +81,6 @@ struct
   EyeSys    eye;
   RenderSys rendersys;
   EntityMgr entmgr;
-  MapDef    mapdef;
   Map       map;
 
   Text* world_pos;
@@ -89,6 +89,8 @@ struct
   SDEditInterface sdinterface;
 
   Text* selected_sdata_info;
+
+  PackedData packed_map_def;
 
   enum class ControlState
   {

@@ -41,8 +41,8 @@ struct SourceDataFileHandle
   SourceDataFileHandle() {}
   ~SourceDataFileHandle() 
   { 
-    if (header != nullptr)
-      release();
+    // if (header != nullptr)
+    //   release();
   }
 
   SourceDataFileHandle(const SourceDataFileHandle& rhs)

@@ -19,6 +19,11 @@ namespace gfx
  */
 b8 TextureRef::load(LoadParams& params)
 {
+  // TODO(sushi) need a way to determine this outside of this function.
+  //             like when we have TextureDefs that are not set in data.
+  if (isnil(name))
+    return true;
+
   PathBuffer src_path_buffer;
   io::formatv(&src_path_buffer, name, ".texture"_str);
   String src_path = src_path_buffer.asStr();
@@ -39,14 +44,10 @@ b8 TextureRef::load(LoadParams& params)
   if (data == nullptr)
     return ERROR("failed to load '", src_path, "' data");
 
-  data->makeDataPointersAbsolute();
-
   auto* def = data->getRootAs<TextureDef>();
 
   if (isnil(def->name))
     return ERROR("loaded texture def has a nil name\n");
-
-  platform::debugBreak();
 
   gfx::CompiledTexture::CompileParams texture_params = 
   {
@@ -61,6 +62,16 @@ b8 TextureRef::load(LoadParams& params)
 
   if (!gfx::CompiledTexture::compilePNG(texture_params))
     return ERROR("failed to compile texture\n");
+
+  String name = def->name.subToLast('.');
+
+  auto* compiled_texture = 
+    gfx::CompiledTexture::load(name, params.assetmgr, params.renderer);
+
+  if (compiled_texture == nullptr)
+    return ERROR("failed to load texture '", name, "'\n");
+
+  texture = compiled_texture->gfx_texture;
 
   return true;
 }

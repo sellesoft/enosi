@@ -15,6 +15,10 @@ $ local metadata = require "reflect.Metadata"
 
 @@lpp.import "asset/Ref.lh"
 
+@@lpp.import "asset/CompiledData.lh"
+
+@@lpp.import "reflect/RTR.lh"
+
 using namespace iro;
 
 struct AssetMgr;
@@ -54,6 +58,8 @@ struct AssetRef : Ref
   @metadata.hidden
   Asset* asset = nullptr;
 
+  static AssetRef invalid() { return {{}, nullptr}; }
+
   b8 isValid() const
   {
     return asset != nullptr && asset->data != nullptr;
@@ -63,6 +69,49 @@ struct AssetRef : Ref
   {
     return isValid()? asset->data : nullptr;
   }
+
+  bool operator == (const AssetRef& rhs) const
+  {
+    return asset == rhs.asset;
+  }
+};
+
+/* ============================================================================
+ */
+template<typename T>
+struct TypedSourceAssetRef : AssetRef
+{
+  T* operator ->()
+  {
+    assert(isValid());
+    return ((CompiledData*)asset->data)->getRootAs<T>();
+  }
+
+  const T* operator ->() const
+  {
+    assert(isValid());
+    return ((CompiledData*)asset->data)->getRootAs<T>();
+  }
+
+  T& operator *()
+  {
+    assert(isValid());
+    return *((CompiledData*)asset->data)->getRootAs<T>();
+  }
+
+  const T& operator *() const
+  {
+    assert(isValid());
+    return *((CompiledData*)asset->data)->getRootAs<T>();
+  }
+
+  b8 load(LoadParams& params)
+  {
+    return 
+      ((TypedSourceAssetRef<int>*)this)->load(rtr::getTypename<T>(), params);
+  }
+
+  b8 load(String type, LoadParams& params);
 };
 
 /* ============================================================================
@@ -86,5 +135,10 @@ struct TypedAssetRef : AssetRef
   {
     assert(isValid());
     return *(T*)getData();
+  }
+
+  b8 load(LoadParams& params)
+  {
+    return AssetRef::load(rtr::getTypename<T>(), params);
   }
 };

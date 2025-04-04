@@ -22,6 +22,11 @@ struct TextureRef : Ref
   gfx::Texture texture;
 
   b8 load(LoadParams&);
+
+  b8 isValid() const
+  {
+    return notnil(texture);
+  }
 };
 
 }

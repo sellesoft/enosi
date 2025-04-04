@@ -8,6 +8,8 @@ $ local cmn = require "common"
 
 @@lpp.import "graphics/Font.lh"
 
+@@lpp.import "graphics/Renderer.lh"
+
 @@lpp.import "asset/AssetMgr.lh"
 
 @defFileLogger(font, Debug)
@@ -22,7 +24,7 @@ namespace gfx
 static b8 codepointInRange(PackRange* range, u32 codepoint)
 {
   return codepoint >= range->first_codepoint &&
-         codepoint < range->first_codepoint + range->num_chars;
+         codepoint < range->first_codepoint + range->chars.len;
 }
 
 /* ----------------------------------------------------------------------------
@@ -80,7 +82,7 @@ void Font::getPackedChar(
     PackRange* range, 
     u32 codepoint) const
 {
-  *out = *(range->chardata + codepoint - range->first_codepoint);
+  *out = *(range->chars.ptr.get() + codepoint - range->first_codepoint);
 }
 
 /* ----------------------------------------------------------------------------
@@ -100,14 +102,15 @@ Font* Font::load(
 {
   using namespace fs;
 
+  if (Font* existing = renderer.resource_mgr.findFont(name))
+    return existing;
+
   PathBuffer data_path_buf;
   writeDataPath(&data_path_buf, name, assetmgr);
 
   String data_path = data_path_buf.asStr();
 
-  Asset* existing = assetmgr.findAsset(data_path);
-  if (existing != nullptr)
-    return (Font*)existing;
+  assert(nullptr == assetmgr.findAsset(data_path));
 
   if (!Path::exists(data_path))
   {
@@ -124,7 +127,7 @@ Font* Font::load(
   }
 
   // TODO(sushi) need somewhere to put these.
-  auto* font = mem::stl_allocator.allocateType<Font>();
+  auto* font = renderer.resource_mgr.createFont(name);
   if (font == nullptr)
   {
     ERROR("failed to allocate font asset\n");

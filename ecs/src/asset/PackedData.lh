@@ -7,22 +7,23 @@ $ require "common"
 
 #include "iro/memory/Bump.h"
 
+struct Ref;
 struct AssetRef;
 
 /* ============================================================================
- *  An AssetRef found in the data that was packed, intended to be resolved
+ *  A Ref found in the data that was packed, intended to be resolved
  *  later by whoever is using this data.
  */
-struct PackedAssetRef
+struct PackedRef
 {
   // The next ref in the linked list.
-  PackedAssetRef* next;
+  PackedRef* next;
 
-  // The type of asset being referenced.
+  // The type of Ref.
   String type;
 
   // A pointer to the reference in the data.
-  AssetRef* ref;
+  Ref* ref;
 };
 
 /* ============================================================================
@@ -34,19 +35,32 @@ struct PackedData
   mem::LenientBump buffer;
 
   // A linked list of asset refs found during packing.
-  PackedAssetRef* refs;
+  PackedRef* refs;
 
   // A slice containing the ROOT data of this PackedData, eg. if we packed a 
   // MapDef, this will span said def, not including strings or other data
   // that may have been allocated.
   Bytes data;
 
-  void recordAssetRef(String type, AssetRef* assetref)
+  template<typename T>
+  T* getRootAs() const
   {
-    auto* ref = buffer.allocateType<PackedAssetRef>();
-    ref->next = refs;
-    ref->type = type;
-    ref->ref = assetref;
-    refs = ref;
+    return (T*)data.ptr;
+  }
+
+  void recordRef(String type, Ref* ref)
+  {
+    auto* pref = buffer.allocateType<PackedRef>();
+    pref->next = refs;
+    pref->type = type;
+    pref->ref = ref;
+    refs = pref;
+  }
+
+  void clear()
+  {
+    buffer.deinit();
+    refs = nullptr;
+    data = nil;
   }
 };

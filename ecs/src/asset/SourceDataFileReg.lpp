@@ -44,11 +44,18 @@ SourceDataFileHandle SourceDataFileReg::loadFromDisk(String path)
 {
   using namespace fs;
 
+  @log.debug("loading ", path, "\n");
+
   u64 path_hash = path.hash();
+
+  @log.debug("  path hash: ", path_hash, "\n");
 
   SourceDataFileSlot* slot = map.find(path_hash);
   if (slot != nullptr)
+  {
+    @log.debug(path, " already loaded\n");
     return SourceDataFileHandle(&slot->header);
+  }
 
   auto file = File::from(path, OpenFlag::Read);
   if (isnil(file))
@@ -130,10 +137,15 @@ void SourceDataFileReg::releaseSourceDataFile(SourceDataFileHeader* header)
   // At this point we should know that this source data file is no longer 
   // referenced as we can only get into this function from a handle to it.
 
+$ if false then
   SourceDataFileSlot* slot = (SourceDataFileSlot*)header;
+
+  @log.debug("releasing ", slot->path, "\n");
 
   slot->file.deinit();
 
   map.remove(slot);
   pool.remove(slot);
+
+$ end
 }

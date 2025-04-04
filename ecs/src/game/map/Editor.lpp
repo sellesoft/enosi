@@ -618,6 +618,15 @@ void MapEditor::update(UI* ui, UpdateReason reason)
               vec2f tile_pos = map.getTilePos(*layer, *tile);
               io::formatv(&buffer, "editing tile at ", tile_pos);
               selected_sdata_info->set(buffer.asStr());
+
+              INFO("tile is ", rtr::getEnumElementName(tile->configuration),
+                   "\n");
+
+              debug_tile = true;
+              debug_tile_pos = layer->getTilePos(*tile);
+              debug_tile_layer_idx = map.getLayerIndex(*layer);
+
+              INFO(debug_tile_pos, "\n");
             }
           }
 
@@ -865,16 +874,30 @@ void MapEditor::renderMap(UI& ui)
 
   renderer->pushBindFramebuffer(framebuffer);
 
+  packed_map_def.clear();
+
   PackContext pack_context = 
   {
     .assetmgr = &assetmgr,
     .renderer = renderer,
+    .packed = &packed_map_def,
   };
 
-  packSourceDataIntoType(
-    *h_selected_map.getFile()->returned_data,
-    &mapdef,
-    pack_context);
+  if (!packSourceDataIntoType<MapDef>(
+        *h_selected_map.getFile()->returned_data, pack_context))
+    return;
+
+  Ref::LoadParams load_params = 
+  {
+    .renderer = *renderer,
+    .assetmgr = assetmgr,
+    .sfile_reg = ui.eng->source_data_file_reg,
+  };
+
+  for (PackedRef* ref = packed_map_def.refs; ref; ref = ref->next)
+  {
+    ref->ref->load(ref->type, load_params);
+  }
 
   Map::InitParams map_params =
   {
@@ -883,7 +906,7 @@ void MapEditor::renderMap(UI& ui)
     .renderer = *renderer,
   };
 
-  map.init(mapdef, map_params);
+  map.init(*packed_map_def.getRootAs<MapDef>(), map_params);
 
   RenderSys::UpdateParams params =
   {

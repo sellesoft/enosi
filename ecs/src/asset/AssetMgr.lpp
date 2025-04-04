@@ -61,9 +61,9 @@ Asset* AssetMgr::allocateAsset(String name)
   Asset* asset = pool.pushTail()->data;
   
   asset->hash = name_hash;
-  map.insert(asset);
-
   asset->name = name.allocateCopy(allocator);
+
+  map.insert(asset);
 
   return asset;
 }
@@ -76,7 +76,10 @@ Asset* AssetMgr::loadAssetFromDisk(String name)
 
   u64 name_hash = name.hash();
   if (Asset* existing = map.find(name_hash))
+  {
+    @log.debug("asset '", name, "' already loaded\n");
     return existing;
+  }
 
   @log.debug("loading asset '", name, "' from disk\n");
 

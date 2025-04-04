@@ -9,6 +9,7 @@ $ require "common"
 
 #include "iro/containers/SmallArray.h"
 
+struct Asset;
 struct AssetMgr;
 struct SourceDataFileReg;
 
@@ -38,7 +39,11 @@ struct CompiledData
 
   static b8 compile(const CompileParams& params);
 
-  static CompiledData* load(String name, String type, AssetMgr& assetmgr);
+  static CompiledData* load(
+    String name, 
+    String type, 
+    AssetMgr& assetmgr,
+    Asset** out_asset = nullptr);
 
   template<typename T>
   T* getRootAs() const
@@ -58,3 +63,4 @@ struct CompiledData
 
   void getRefs(Refs* refs);
 };
+

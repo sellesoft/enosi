@@ -71,6 +71,10 @@ CompiledTexture* CompiledTexture::load(
 
   texture->asset.asset = asset;
 
+  auto& data = texture->getData();
+
+  assert(data.width != 0 && data.height != 0);
+
   renderer.loadTexture(texture);
 
   return texture;
@@ -102,6 +106,8 @@ b8 CompiledTexture::compileFromMemory(void* pixels, CompileParams& params)
   data.width = params.width;
   data.height = params.height;
 
+  assert(data.width != 0 && data.height != 0);
+
   data.pixels.set(&data + 1);
 
   u64 pixel_stride = 0;
@@ -119,16 +125,55 @@ b8 CompiledTexture::compileFromMemory(void* pixels, CompileParams& params)
         OpenFlag::Create
       | OpenFlag::Truncate
       | OpenFlag::Write);
+
   if (isnil(data_file))
     return ERROR("failed to open texture data file for writing at '", 
                  data_path, "'\n");
 
-  data_file.write({(u8*)&data, sizeof(data)});
+  data_file.write({(u8*)&data, sizeof(CompiledTextureData)});
   data_file.write({(u8*)pixels, pixels_size});
 
   data_file.close();
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 CompiledTexture::compileFromMemory(
+    void* pixels, 
+    fs::File* file, 
+    CompileParams& params)
+{
+  CompiledTextureData data;
+
+  data.format       = params.format;
+  data.filter       = params.filter;
+  data.address_mode = params.address_mode;
+  data.kind         = params.kind;
+
+  data.width = params.width;
+  data.height = params.height;
+
+  assert(data.width != 0 && data.height != 0);
+
+  data.pixels.set(&data + 1);
+
+  u64 pixel_stride = 0;
+  switch (data.format)
+  {
+    case ImageFormat::BW:   pixel_stride = 1; break;
+    case ImageFormat::BWA:  pixel_stride = 2; break;
+    case ImageFormat::RGB:  pixel_stride = 3; break;
+    case ImageFormat::RGBA: pixel_stride = 4; break;
+  }
+  u64 pixels_size = pixel_stride * data.width * data.height;
+
+  file->write({(u8*)&data, sizeof(CompiledTextureData)});
+  file->write({(u8*)pixels, pixels_size});
+
+  return true;
+
 }
 
 }
