@@ -153,6 +153,7 @@ struct Memory : public IO
     Bytes reserved = reserve(size);
     assert(reserved.len == size);
     commit(size);
+    mem::zero(reserved.ptr, size);
     return reserved.ptr;
   }
 
