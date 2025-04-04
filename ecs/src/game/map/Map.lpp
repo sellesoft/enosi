@@ -229,7 +229,7 @@ b8 Map::init(const MapDef& def, InitParams& params)
       return false;
   }
 
-$ if false then
+$ if true then
   // Iterate over PlayerSpawners 
   if (params.mind && params.eye)
   {

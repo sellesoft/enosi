@@ -170,18 +170,20 @@ EntityId loadEntity(
     AssetMgr& assetmgr,
     gfx::Renderer& renderer)
 {
-  EntityDef def;
+  PackedData packed;
 
   PackContext pack_context = 
   {
     .assetmgr = &assetmgr,
     .renderer = &renderer,
+    .packed = &packed,
   };
 
-  packSourceDataIntoType(
-    *sfile.returned_data,
-    &def,
-    pack_context);
+  packSourceDataIntoType<EntityDef>(*sfile.returned_data, pack_context);
 
-  return loadEntity(def, entmgr, assetmgr, renderer);
+  return loadEntity(
+    *packed.getRootAs<EntityDef>(), 
+    entmgr, 
+    assetmgr, 
+    renderer);
 }

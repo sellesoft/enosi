@@ -417,6 +417,20 @@ b8 CompiledData::compile(const CompileParams& params)
   if (isnil(source_path))
     return false;
 
+ PathBuffer data_path_buffer;
+  String data_path = 
+    getDataAssetPath(
+      &data_path_buffer, 
+      params.assetmgr.getDataDir(),
+      params.name,
+      params.type);
+
+  if (isnil(data_path))
+    return false;
+
+  if (!AssetMgr::checkNeedsCompiled(source_path, data_path))
+    return true;
+  
   SourceDataFileHandle source_data_file = 
     params.sfile_reg.loadFromDisk(source_path);
 
@@ -445,17 +459,7 @@ b8 CompiledData::compile(const CompileParams& params)
   if (!packSourceDataFromType(*root_data, pack_context))
     return ERROR("failed to pack data of ", source_path, "\n");
 
-  PathBuffer data_path_buffer;
-  String data_path = 
-    getDataAssetPath(
-      &data_path_buffer, 
-      params.assetmgr.getDataDir(),
-      params.name,
-      params.type);
-
-  if (isnil(data_path))
-    return false;
-
+ 
   if (!platform::makeDir(Path::removeBasename(data_path), true))
     return @log.error("failed to make directories\n");
 
