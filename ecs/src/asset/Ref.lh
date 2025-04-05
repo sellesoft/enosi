@@ -27,7 +27,9 @@ struct Ref
   { 
     gfx::Renderer& renderer;
     AssetMgr& assetmgr;
-    SourceDataFileReg& sfile_reg;
+    // Optional, if we want to compile the asset this is referencing.
+    // TODO(sushi) separate compiling and loading.
+    SourceDataFileReg* sfile_reg;
   };
 
   b8 load(String type, LoadParams&);
