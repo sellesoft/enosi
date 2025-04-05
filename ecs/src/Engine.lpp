@@ -94,6 +94,7 @@ $ end
 
   texture_compile_allocator.deinit();
 
+$ if false then
   io::StaticBuffer<511> texture_data_path_buffer;
   auto png_glob = fs::Globber::create("assets/textures/*.png"_str);
   png_glob.run([&](fs::Path& asset_path)
@@ -118,6 +119,7 @@ $ end
       return true;
     });
   png_glob.destroy();
+$ end
 
   CodepointRange ascii =
   {

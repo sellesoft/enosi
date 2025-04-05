@@ -44,7 +44,7 @@ namespace ui
 {
 
 struct MapEditor;
-struct TextureDisplay;
+struct TileKindDisplay;
 struct SDEditInterface;
 
 /* ============================================================================
@@ -118,7 +118,7 @@ struct
 
   Item* add_options;
 
-  TextureDisplay* texture_display;
+  TileKindDisplay* tile_kind_display;
 
   enum class Border
   {

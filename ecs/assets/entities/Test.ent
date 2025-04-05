@@ -3,7 +3,6 @@ return EntityDef
   name = "Test",
   components = 
   { 
-    Transform { pos = {x=1.2, y=5.4} },
     Sprite {},
     Movement
     {

@@ -31,6 +31,7 @@ $ }
 
 #include "iro/Platform.h"
 #include "math/util.h"
+#include "iro/fs/Glob.h"
 
 namespace ui
 {
@@ -42,221 +43,228 @@ const f32 layer_border_thickness = 0.25f;
 /* ============================================================================
  *  Helper for displaying textures.
  */
-struct TextureDisplay : public Item
+struct TileKindDisplay : public Item
 {
-  TileKind displayed_kind = TileKind::COUNT;
+  struct TileKindState
+  {
+    u32 displayed_texture = 0;
 
-  EnumArray<TileKind, Array<DrawCmd*>> kind_drawcmds;
-  const EnumArray<TileKind, Array<gfx::CompiledTexture*>>* kind_textures;
+    struct
+    {
+      DrawCmd* name = nullptr;
+      DrawCmd* texture = nullptr;
+      DrawCmd* background = nullptr;
+    } dc;
+
+    TileKindRef asset;
+  };
+
+  Array<TileKindState> tile_kinds;
 
   const f32 texture_size = 64.f;
   const f32 texture_padding = 4.f;
   const f32 texture_stride = texture_size + texture_padding;
+  const f32 texture_name_spacing = 5.f;
+  const f32 font_height = 11.f;
+  const f32 row_height = texture_size;
+  const f32 row_sep = 4.f;
 
-  u32 selected_texture = 0;
+  DrawCmd* selected_bg;
+  u32 selected_kind = 0;
 
-  DrawCmd* selected_border;
+  TimePoint preview_timer;
+
+  const f32 preview_time = 2.f;
 
   /* --------------------------------------------------------------------------
    */
-  static TextureDisplay* create(UI& ui, String id)
+  static TileKindDisplay* create(UI& ui, String id)
   {
-    auto* td = ui.allocateAndInitItem<TextureDisplay>(id);
-    if (td == nullptr)
-      return nullptr;
+    auto* td = 
+      ui.allocateAndInitItem<TileKindDisplay>("tile_kind_display"_str);
 
-    for (auto& arr : td->kind_drawcmds)
-      arr.init();
+    td->tile_kinds.init();
 
-    td->update_triggers = UpdateReason::MouseReleased;
+    td->selected_bg = ui.drawcmds.add();
+    td->selected_bg->alloc(&ui, gfx::putFilledRectCounts());
 
-    td->selected_border = ui.drawcmds.add();
-    td->selected_border->alloc(&ui, gfx::putBordersCounts());
+    auto glob = fs::Globber::create("assets/**/*.tile_kind"_str);
+    glob.run([&](fs::Path& path)
+    {
+      auto* kind = td->tile_kinds.push();
+      kind->asset.name = path.asStr().allocateCopy();
+      return true;
+    });
+    glob.destroy();
 
+    Ref::LoadParams params = 
+    {
+      .renderer = ui.eng->renderer,
+      .assetmgr = ui.eng->assetmgr,
+      .sfile_reg = ui.eng->source_data_file_reg,
+    };
+
+    for (auto& kind : td->tile_kinds)
+    {
+      kind.asset.load(params);
+      kind.dc.name = ui.drawcmds.add();
+      kind.dc.name->tex = ui.gohu_font_texture;
+      kind.dc.texture = ui.drawcmds.add();
+      kind.dc.texture->alloc(&ui, gfx::putFilledRectCounts());
+      td->setNextTileKindPreviewTexture(kind);
+    }
+
+    td->preview_timer = TimePoint::now();
+    td->update_triggers = 
+        UpdateReason::MouseReleased
+      | UpdateReason::Fin;
+    
     return td;
   }
 
   /* --------------------------------------------------------------------------
    */
-  String getSelectedTextureName() const
+  void setNextTileKindPreviewTexture(TileKindState& state)
   {
-    return 
-      fs::Path::removeFirstDir(
-        fs::Path::removeExtension(
-          (*kind_textures)[displayed_kind][selected_texture]->asset.name));
+    auto& textures = state.asset->textures;
+    for (u32 scan = (state.displayed_texture + 1) % textures.getCapacity();
+         scan != state.displayed_texture;
+         scan = (scan + 1) % textures.getCapacity())
+    {
+      if (textures.arr[scan].isValid())
+      {
+        state.displayed_texture = scan;
+        state.dc.texture->tex = textures.arr[scan].texture;
+        break;
+      }
+    }
   }
 
   /* --------------------------------------------------------------------------
    */
-  // void setFromTileKindDefs(UI& ui, const MapTileKindDefs& defs)
-  // {
-  //   // Clear any previous draw commands.
-  //   for (auto& arr : kind_drawcmds)
-  //   {
-  //     for (DrawCmd* cmd : arr)
-  //       cmd->remove(&ui);
-  //     arr.clear();
-  //   }
-  // 
-  //   for (auto& arr : defs.tile_kinds)
-  //   {
-  //     if (arr.isEmpty())
-  //       continue;
-  // 
-  //     TileKind kind = (TileKind)(&arr - defs.tile_kinds.arr);
-  // 
-  //     auto& display_arr = kind_drawcmds[kind];
-  // 
-  //     for (auto tex : arr)
-  //     {
-  //       DrawCmd* cmd = ui.drawcmds.add();
-  // 
-  //       cmd->alloc(&ui, gfx::putFilledRectCounts());
-  //       cmd->tex = tex->gfx_texture;
-  // 
-  //       display_arr.push(cmd);
-  //     }
-  //   }
-  // 
-  //   kind_textures = &defs.tile_kinds;
-  // }
+  String getSelectedKindAssetName()
+  {
+    return tile_kinds[selected_kind].asset.name;
+  }
 
   /* --------------------------------------------------------------------------
    */
   void evaluate(UI* ui) override
   {
-    if (displayed_kind == TileKind::COUNT)
-    {
-      size = {0.f,0.f};
-      return;
-    }
-
-    auto& displayed_arr = kind_drawcmds[displayed_kind];
-
-    u32 num_textures = displayed_arr.len();
-    u32 rows = ceil((num_textures * texture_stride) / size.x);
-    u32 per_row = num_textures / rows;
-
-    size.y = rows * texture_stride - texture_padding;
+    $ local this = ui.createItemContext("Item", "this")
+    @@this.style:lookup(border, margin)
+    size.y = 
+      row_height * tile_kinds.len() +
+      @this.style.margin.top + @this.style.margin.bottom +
+      @this.style.border.top + @this.style.border.bottom;
   }
 
   /* --------------------------------------------------------------------------
    */
   void generate(UI* ui) override
   {
-    if (displayed_kind == TileKind::COUNT)
-      return;
-
-    auto& displayed_arr = kind_drawcmds[displayed_kind];
-
-    u32 num_textures = displayed_arr.len();
-    u32 rows = ceil((num_textures * texture_stride) / size.x);
-    u32 per_row = num_textures / rows;
-
-    u32 row_width = (per_row * texture_stride - texture_padding);
-
-    f32 cursor_start_x = 0.5f * (size.x - row_width);
-    vec2f cursor = {cursor_start_x, 0.f};
-
-    for (auto drawcmd : displayed_arr)
+    u32 kind_idx = 0;
+    for (auto& kind : tile_kinds)
     {
-      auto [vp,ip] = drawcmd->getPtrs(ui);
+      String name = kind.asset.name;
 
-      drawcmd->counts_used = {};
+      f32 y = kind_idx * (row_height + row_sep);
+      
+      vec2f texture_pos = {};
+      texture_pos.x = texture_padding;
+      texture_pos.y = y;
 
-      drawcmd->counts_used +=
+      vec2f text_size = 
+        gfx::measureText(name, ui->gohu_font, font_height, 1.f);
+
+      vec2f text_pos = {};
+      text_pos.x = texture_padding + texture_size + texture_name_spacing;
+      text_pos.y = texture_pos.y;
+
+      {
+        auto [vp, ip] = kind.dc.name->realloc(ui, gfx::putTextCounts(name));
+        kind.dc.name->counts_used = {};
+
+        gfx::putText(
+          vp, ip,
+          &kind.dc.name->counts_used,
+          text_pos,
+          name,
+          ui->gohu_font,
+          font_height,
+          1.f,
+          0xffffffff,
+          nullptr);
+      }
+
+      {
+        auto [vp, ip] = kind.dc.texture->getPtrs(ui);
+        kind.dc.texture->counts_used = {};
+
         gfx::putFilledRect(
           vp, ip,
-          drawcmd->counts_used,
-          cursor,
-          {texture_size, texture_size},
-          {0.f, 0.f},
-          {1.f, 0.f},
-          {1.f, 1.f},
-          {0.f, 1.f},
-          {255,255,255,255});
-
-      cursor.x += texture_stride;
-
-      if (cursor.x + texture_stride > size.x)
-      {
-        cursor.x = cursor_start_x;
-        cursor.y += texture_stride;
+          &kind.dc.texture->counts_used,
+          texture_pos,
+          vec2f(texture_size, texture_size),
+          0xffffffff);
       }
+
+      if (kind_idx == selected_kind)
+      {
+        auto [vp, ip] = selected_bg->getPtrs(ui);
+        selected_bg->counts_used = {};
+
+        gfx::putFilledRect(
+          vp, ip,
+          &selected_bg->counts_used,
+          texture_pos,
+          vec2f(size.x, row_height),
+          0x4e1a1aff);
+      }
+      
+      kind_idx += 1;
     }
-
-    u32 selected_row = selected_texture / per_row;
-    u32 selected_col = selected_texture % per_row;
-
-    vec2f border_pos = texture_stride * vec2f(selected_col, selected_row);
-    border_pos.x += cursor_start_x;
-
-    auto [vp, ip] = selected_border->getPtrs(ui);
-    selected_border->counts_used = {};
-    selected_border->counts_used +=
-      gfx::putBorders(
-        vp, ip,
-        selected_border->counts_used,
-        {2,2,2,2},
-        border_pos,
-        vec2f(texture_size, texture_size),
-        {255,255,255,255});
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void reportDrawCmds(UI* ui, DrawCmdLists& lists) override
-  {
-    if (displayed_kind == TileKind::COUNT)
-      return;
-
-    for (auto drawcmd : kind_drawcmds[displayed_kind])
-      lists.pre_children.push(drawcmd);
-
-    lists.pre_children.push(selected_border);
   }
 
   /* --------------------------------------------------------------------------
    */
   void update(UI* ui, UpdateReason reason) override
   {
-    if (displayed_kind == TileKind::COUNT)
-      return;
-  
-    auto& displayed_arr = kind_drawcmds[displayed_kind];
+    auto now = TimePoint::now();
+    if ((now - preview_timer).toSeconds() > preview_time)
+    {
+      for (auto& kind : tile_kinds)
+      {
+        setNextTileKindPreviewTexture(kind);
+      }
+      preview_timer = now;
+    }
 
-    u32 num_textures = displayed_arr.len();
-    u32 rows = ceil((num_textures * texture_stride) / size.x);
-    u32 per_row = num_textures / rows;
-
-    u32 row_width = (per_row * texture_stride - texture_padding);
-
-    f32 texture_start_x = 0.5f * (size.x - row_width);
-
-    f32 texture_extent_x = 
-      texture_start_x + texture_stride * per_row - texture_padding;
-
-    vec2f cursor_local = ui->eng->input.mouse.window - pos_screen;
-
-    if (cursor_local.x < texture_start_x || cursor_local.x > texture_extent_x)
-      return;
-
-    vec2f cursor_grid_local = cursor_local.xadd(-texture_start_x);
-
-    u32 hovered_col = cursor_grid_local.x / texture_stride;
-    u32 hovered_row = cursor_grid_local.y / texture_stride;
-
-    vec2f cursor_texture_local = 
-      cursor_grid_local - texture_stride * vec2f(hovered_col, hovered_row);
-
-    if (cursor_texture_local.x > texture_size || 
-        cursor_texture_local.y > texture_size)
-      return;
-
-    selected_texture = hovered_col + hovered_row * per_row;
-
-    dirty = true;
+    if (reason == UpdateReason::MouseReleased)
+    {
+      for (u32 kind_idx = 0; kind_idx < tile_kinds.len(); ++kind_idx)
+      {
+        vec2f pos = vec2f(0.f, kind_idx * (row_height + row_sep));
+        vec2f siz = vec2f(size.x, row_height);
+        if (ui->testFocusableRegion(pos, siz))
+        {
+          selected_kind = kind_idx;
+          dirty = true;
+        }
+      }
+    }
   }
+
+  void reportDrawCmds(UI* ui, DrawCmdLists& lists) override
+  {
+    lists.pre_children.push(selected_bg);
+    for (auto& kind : tile_kinds)
+    {
+      lists.pre_children.push(kind.dc.texture);
+      lists.pre_children.push(kind.dc.name);
+    }
+  }
+
 };
 
 /* ----------------------------------------------------------------------------
@@ -330,13 +338,26 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
 
   editor->left_panel = Item::begin(ui, "left_panel"_str);
   {
-    // editor->world_pos = Text::make(ui, "world_pos"_str);
-
     @ui.style(editor->left_panel, Item,
     | size: 300 100%
     | border: 2
     | padding: 3
     | background_color: 0x111111ff)
+    
+    auto* sdedit_box = ui::Item::begin(ui);
+    {
+      @ui.style(sdedit_box, Item, 
+      | size: 100% 200
+      | border: 2
+      | margin: 0 0 0 5)
+
+      editor->selected_sdata_info = Text::make(ui);
+      @ui.style(editor->selected_sdata_info, Text, display: hidden);
+
+      editor->sdedit = SourceDataEditor::create(ui, &editor->sdinterface);
+      editor->sdinterface.editor = editor;
+    }
+    ui.endItem();
 
     $ local ToolEnum = decls.editor.members.map.Tool.type.decl
 
@@ -393,42 +414,15 @@ $     for elem in decls.tile_kind.elems:each() do
 $     end
       };
       
-      editor->add_tile_type = 
-        ComboBox::make<MapEditor>(
-          ui,
-          editor,
-          [](MapEditor* editor,u32 selected) 
-          {
-            editor->texture_display->displayed_kind = (TileKind)selected;
-          },
-          Slice<String>::from(add_type_options),
-          "tile_kind"_str);
+      editor->tile_kind_display = 
+        TileKindDisplay::create(ui, "tile_kind_display"_str);
 
-      @ui.style(editor->add_tile_type, ComboBox, 
-      | size: 100% auto
-      | background_color: 0x570000ff)
-
-      editor->texture_display = 
-        TextureDisplay::create(ui, "texture_display"_str);
-
-      @ui.style(editor->texture_display, Item, 
-      | size: 100% auto
-      | margin: 0 5 0 5)
+      @ui.style(editor->tile_kind_display, Item, 
+      | size: 100% 100
+      | border: 3 3 3 3)
     }
     ui.endItem();
 
-    auto* sdedit_box = ui::Item::begin(ui);
-    @ui.style(sdedit_box, Item, 
-    | size: 100% 300
-    | border: 2)
-
-    editor->selected_sdata_info = Text::make(ui);
-    @ui.style(editor->selected_sdata_info, Text, display: hidden);
-
-    editor->sdedit = SourceDataEditor::create(ui, &editor->sdinterface);
-    editor->sdinterface.editor = editor;
-
-    ui.endItem();
   }
   ui.endItem();
 
@@ -476,7 +470,7 @@ void MapEditor::selectMap(
   //   &maptiledefs,
   //   pack_context);
 
-  // texture_display->setFromTileKindDefs(ui, maptiledefs);
+  // tile_kind_display->setFromTileKindDefs(ui, maptiledefs);
 
   sdedit->setSourceData(ui, returned_data, sfile, "MapDef"_hashed);
 }
@@ -618,15 +612,6 @@ void MapEditor::update(UI* ui, UpdateReason reason)
               vec2f tile_pos = map.getTilePos(*layer, *tile);
               io::formatv(&buffer, "editing tile at ", tile_pos);
               selected_sdata_info->set(buffer.asStr());
-
-              INFO("tile is ", rtr::getEnumElementName(tile->configuration),
-                   "\n");
-
-              debug_tile = true;
-              debug_tile_pos = layer->getTilePos(*tile);
-              debug_tile_layer_idx = map.getLayerIndex(*layer);
-
-              INFO(debug_tile_pos, "\n");
             }
           }
 
@@ -655,19 +640,19 @@ void MapEditor::update(UI* ui, UpdateReason reason)
           {
           case Tool::Add:
             {
-              auto* kind = sdfile->allocateSourceData();
-              auto* texture = sdfile->allocateSourceData();
+              // auto* kind = sdfile->allocateSourceData();
+              // auto* texture = sdfile->allocateSourceData();
+              // 
+              // kind->name = "kind"_str;
+              // kind->val.str = 
+              //   add_tile_type->getSelectedOptionName()
+              //     .allocateCopy(&sdfile->string_cache);
 
-              kind->name = "kind"_str;
-              kind->val.str = 
-                add_tile_type->getSelectedOptionName()
-                  .allocateCopy(&sdfile->string_cache);
+              // texture->name = "texture"_str;
+              // texture->val.str = tile_kind_display->getSelectedTextureName();
 
-              texture->name = "texture"_str;
-              texture->val.str = texture_display->getSelectedTextureName();
-
-              tile_data->children.push(kind);
-              tile_data->children.push(texture);
+              // tile_data->children.push(kind);
+              // tile_data->children.push(texture);
             }
             break;
 
@@ -682,6 +667,63 @@ void MapEditor::update(UI* ui, UpdateReason reason)
         need_render = true;
       }
     }
+    else if (input.isMouseButtonDown(MouseButton::Left))
+    {
+      Tile* tile;
+      Layer* layer;
+      if (map.getTileAndLayerAtPos(&layer, &tile, mw))
+      {
+        u32 layer_idx = layer - map.layers.arr;
+        u32 tile_idx = tile - layer->tiles.arr;
+
+        SourceData* map_data = sdfile->returned_data;
+        SourceData* layers_data = map_data->findChildByName("layers"_str);
+        SourceData* layer_data = layers_data->children[layer_idx];
+        SourceData* tiles_data = layer_data->findChildByName("tiles"_str);
+        SourceData* tile_data = tiles_data->children[tile_idx];
+        tile_data->dump();
+
+        switch (tool)
+        {
+        case Tool::Add:
+          {
+            SourceData* kind = tile_data->findChildByName("kind"_str);
+            if (kind == nullptr)
+            {
+              kind = sdfile->allocateSourceData();
+              kind->name = "kind"_str;
+              tile_data->children.push(kind);
+            }
+
+            kind->setStringValue(
+              tile_kind_display->getSelectedKindAssetName());
+
+            need_render = true;
+
+            // auto* kind = sdfile->allocateSourceData();
+            // auto* texture = sdfile->allocateSourceData();
+            // 
+            // kind->name = "kind"_str;
+            // kind->val.str = 
+            //   add_tile_type->getSelectedOptionName()
+            //     .allocateCopy(&sdfile->string_cache);
+
+            // texture->name = "texture"_str;
+            // texture->val.str = tile_kind_display->getSelectedTextureName();
+
+            // tile_data->children.push(kind);
+            // tile_data->children.push(texture);
+          }
+          break;
+        }
+      }
+    }
+    else if (input.wasMouseButtonPressed(MouseButton::Middle))
+    {
+      drag_start_viewport = mvp;
+      drag_start_eye = eye.pos;
+      control_state = ControlState::Dragging;
+    }
     break;
 
   case ControlState::Dragging:
@@ -695,7 +737,8 @@ void MapEditor::update(UI* ui, UpdateReason reason)
         need_render = true;
       }
         
-      if (input.wasMouseButtonReleased(MouseButton::Left))
+      if (input.wasMouseButtonReleased(MouseButton::Left) ||
+          input.wasMouseButtonReleased(MouseButton::Middle))
         control_state = ControlState::None;
     }
     break;

@@ -19,10 +19,6 @@ struct EntityMgr;
 struct EyeSys;
 struct MindSys;
 
-extern b8 debug_tile;
-extern u32 debug_tile_layer_idx;
-extern vec2i debug_tile_pos;
-
 /* ============================================================================
  */
 struct Tile
