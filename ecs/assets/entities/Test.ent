@@ -1,9 +1,8 @@
 return EntityDef
 {
   name = "Test",
-  components = 
-  { 
-    Transform { pos = {x=1.2, y=5.4} },
+  components =
+  {
     Movement
     {
       speed = 0.2,

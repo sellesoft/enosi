@@ -120,4 +120,10 @@ struct SourceData
 
   void        setVec2(SourceDataFile& file, vec2f v);
   SourceData* addVec2(SourceDataFile& file, String name, vec2f v);
+
+  void setStringValue(String value)
+  {
+    val.kind = Value::Kind::String;
+    val.str = value;
+  }
 };

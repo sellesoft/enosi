@@ -13,8 +13,8 @@ M.__index = function(_,k)
     if v then
       v = v:gsub("[%c\"]",
         {
-         ["\n"] = "\\n",
-         ['"'] = '\\"',
+          ["\n"] = "\\n",
+          ['"'] = '\\"',
         })
     else
       v = true

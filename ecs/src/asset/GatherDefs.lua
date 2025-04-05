@@ -19,8 +19,8 @@ defs.gather = function()
     end)
   end
 
-  importPattern "**/*.defs.lh"
-  importPattern "**/*.comp.lh"
+  importPattern "src/**/*.defs.lh"
+  importPattern "src/**/*.comp.lh"
 
   local p = Processor.new(tostring(imported))
   p:run()

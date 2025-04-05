@@ -66,12 +66,13 @@ $ end
   @initSystem(renderer.init(*this, mem::stl_allocator), renderer);
   @initSystem(assetmgr.init(&mem::stl_allocator),       asset mgr);
 
-  //TODO(delle) move initial asset compilation somewhere else
-  TRACE("compiling white texture\n");
+  //TODO(delle) move required asset compilation somewhere else
+  TRACE("compiling white and null textures\n");
   {
     mem::LenientBump texture_compile_allocator;
     if (!texture_compile_allocator.init())
       return ERROR("failed to initialize texture compile allocator\n");
+    defer { texture_compile_allocator.deinit(); };
 
     gfx::CompiledTexture::CompileParams white_texture_params =
     {
@@ -88,48 +89,23 @@ $ end
 
     u8 pixels[16] = { 0xff, 0xff, 0xff, 0xff, };
 
-    b8 compiled = gfx::CompiledTexture::compileFromMemory(pixels,
-      white_texture_params);
-    if (!compiled)
-      return ERROR("failed to compile the white texture\n");
+    gfx::CompiledTexture::compileFromMemory(pixels, white_texture_params);
+    gfx::CompiledTexture::load("assets/textures/white"_str,
+      assetmgr, renderer);
 
-    auto compiled_white_texture =
-      gfx::CompiledTexture::load("assets/textures/white"_str,
-        assetmgr, renderer);
-    if (compiled_white_texture == nullptr)
-      return ERROR("failed to load the white texture\n");
-
-    white_texture = compiled_white_texture->gfx_texture;
-
-    texture_compile_allocator.deinit();
-  }
-
-  TRACE("compiling textures\n");
-  {
-    io::StaticBuffer<511> texture_data_path_buffer;
-    auto png_glob = fs::Globber::create("assets/textures/*.png"_str);
-    png_glob.run([&](fs::Path& asset_path)
+    gfx::CompiledTexture::CompileParams null_texture_params =
     {
-      texture_data_path_buffer.len = 0;
-      String name = fs::Path::removeExtension(asset_path.asStr());
-      gfx::CompiledTexture::writeDataPath(
-        &texture_data_path_buffer, name, assetmgr);
+      .name         = "assets/textures/null"_str,
+      .format       = gfx::ImageFormat::RGBA,
+      .filter       = gfx::ImageFilter::Nearest,
+      .address_mode = gfx::ImageAddressMode::ClampToWhite,
+      .allocator    = &texture_compile_allocator,
+      .assetmgr     = &assetmgr,
+    };
 
-      gfx::CompiledTexture::CompileParams params =
-      { //TODO(delle) add TextureDef for specifying these params
-        .name         = name,
-        .format       = gfx::ImageFormat::RGBA,
-        .usage        = gfx::ImageUsage::Sampled,
-        .filter       = gfx::ImageFilter::Nearest,
-        .address_mode = gfx::ImageAddressMode::ClampToWhite,
-        .allocator    = &mem::stl_allocator,
-        .assetmgr     = &assetmgr,
-      };
-
-      gfx::CompiledTexture::compilePNG(params);
-      return true;
-    });
-    png_glob.destroy();
+    gfx::CompiledTexture::compilePNG(null_texture_params);
+    gfx::CompiledTexture::load("assets/textures/null"_str,
+      assetmgr, renderer);
   }
 
   TRACE("compiling shaders\n");
@@ -234,7 +210,7 @@ $ if true then
   //    source_data_file_reg.loadFromDisk("assets/maps/Test.map"_str);
 
   //   sdata_edit_test->setSourceData(
-  //     ui, 
+  //     ui,
   //     h_test.getFile()->returned_data,
   //     h_test.getFile(),
   //     "MapDef"_hashed);
@@ -245,7 +221,7 @@ $ else
 
   base = ui::Item::begin(ui, "base"_str);
   {
-    @ui.style(base, Item, 
+    @ui.style(base, Item,
     | size: 200 200
     | display: flex
     | background_color: 0xff0000ff)
