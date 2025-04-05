@@ -13,6 +13,7 @@ $ require "common"
 @@lpp.import "Buffer.lh"
 @@lpp.import "DrawCmd.lh"
 @@lpp.import "Framebuffer.lh"
+@@lpp.import "graphics/ResourceMgr.lh"
 @@lpp.import "Pipeline.lh"
 @@lpp.import "Shader.lh"
 @@lpp.import "Texture.lh"
@@ -35,6 +36,9 @@ struct Renderer
   u64 frame;
   Array<DrawCmd> drawcmds;
 
+  ResourceMgr resource_mgr;
+
+  b8 loadTexture(CompiledTexture* texture);
 
   b8 init(Engine& engine, mem::Allocator& allocator);
   b8 deinit();

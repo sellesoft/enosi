@@ -6,6 +6,7 @@ $ local ui = require "ui.UI"
 @@lpp.import "Engine.lh"
 
 @@lpp.import "asset/Packing.lh"
+@@lpp.import "asset/CompiledData.lh"
 @@lpp.import "asset/SourceDataFile.lh"
 @@lpp.import "asset/SourceDataParser.lh"
 
@@ -40,25 +41,37 @@ b8 GameMgr::init(Engine* eng)
 
   using namespace fs;
 
-  SourceDataFileHandle h_test_map =
-    eng->source_data_file_reg.loadFromDisk("assets/maps/Test.map"_str);
-
-  if (!h_test_map.isValid())
-    return ERROR("failed to load test map\n");
-
-  auto* map_def = mem::stl_allocator.construct<MapDef>();
-
-  PackContext pack_context = 
+  CompiledData::CompileParams params = 
   {
-    .assetmgr  = &eng->assetmgr,
-    .renderer  = &eng->renderer,
+    .name = "assets/maps/Test"_str,
+    .type = "MapDef"_str,
+    .assetmgr = eng->assetmgr,
+    .sfile_reg = eng->source_data_file_reg,
   };
 
-  packSourceDataIntoType(
-    *h_test_map.getFile()->returned_data,
-    map_def,
-    pack_context);
+  CompiledData::compile(params);
 
+  auto* data = CompiledData::load(
+    "assets/maps/Test.map"_str, "MapDef"_str, eng->assetmgr);
+
+  auto* mapdef = data->getRootAs<MapDef>();
+
+  CompiledData::Refs refs;
+  data->getRefs(&refs);
+
+  Ref::LoadParams load_params = 
+  {
+    .renderer = eng->renderer,
+    .assetmgr = eng->assetmgr,
+    .sfile_reg = eng->source_data_file_reg,
+  };
+
+  for (auto& ref : refs)
+  {
+    ref.ptr->load(ref.type, load_params);
+  }
+
+$ if true then
   Map::InitParams map_params =
   {
     .assetmgr = engine->assetmgr,
@@ -68,8 +81,11 @@ b8 GameMgr::init(Engine* eng)
     .mind     = &mindsys,
   };
 
-  if(!map.init(*map_def, map_params))
-    return ERROR("failed to initialize the map '", map_def->name, "'\n");
+  if(!map.init(*mapdef, map_params))
+    return ERROR("failed to initialize map '", mapdef->name, "'\n");
+
+  SourceDataFileHandle h_test_map = 
+    eng->source_data_file_reg.loadFromDisk("assets/maps/Test.map"_str);
 
   SourceDataFileHandle h_test_map_tile_kinds =
     eng->source_data_file_reg.loadFromDisk("assets/maps/Test.map_tiles"_str);
@@ -84,6 +100,7 @@ b8 GameMgr::init(Engine* eng)
     engine->ui,
     engine->assetmgr,
     engine->renderer);
+$ end
 
   return true;
 }

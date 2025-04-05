@@ -143,10 +143,10 @@ void TextRenderer::draw(
   u32 nchars = text.countCharacters();
   vec2i nucounts = gfx::putFilledRectCounts() * nchars;
   auto [vp, ip] = dc->realloc(ui, nucounts);
-  dc->tex = font->r_texture.getData()->gfx_texture;
+  dc->tex = font->texture->gfx_texture;
   
   vec2f cursor = pos;
-  gfx::FontData* font_data = font->data;
+  const gfx::FontData& font_data = font->getData();
 
   for (s32 breakidx = 0; breakidx < breaks.len - 1; ++breakidx)
   {
@@ -161,9 +161,9 @@ void TextRenderer::draw(
       font->getPackedChar(&pc, *(text.ptr + this_break.offset + charidx));
 
       auto uv0 = 
-        vec2f(f32(pc.x0) / font_data->size_x, f32(pc.y0) / font_data->size_y);
+        vec2f(f32(pc.x0) / font_data.size_x, f32(pc.y0) / font_data.size_y);
       auto uv1 = 
-        vec2f(f32(pc.x1) / font_data->size_x, f32(pc.y1) / font_data->size_y);
+        vec2f(f32(pc.x1) / font_data.size_x, f32(pc.y1) / font_data.size_y);
 
       counts += 
         gfx::putFilledRect(
@@ -210,8 +210,7 @@ b8 TextState::init(UI* ui, String init)
 void TextState::deinit()
 {
   buffer.close();
-  if (font.isValid())
-    font.release();
+  font = nullptr;
   font_name = nil;
 }
 
@@ -219,7 +218,7 @@ void TextState::deinit()
  */
 void TextState::checkFont(String name, UI* ui)
 {
-  if (!font.isValid())
+  if (font == nullptr)
   {
     DEBUG("font not loaded yet\n");
 
@@ -231,9 +230,9 @@ void TextState::checkFont(String name, UI* ui)
 
     DEBUG("item specifies font ", name, "\n");
 
-    font.track(gfx::Font::load(name, ui->eng->assetmgr, ui->eng->renderer));
+    font = gfx::Font::load(name, ui->eng->assetmgr, ui->eng->renderer);
 
-    if (!font.isValid())
+    if (font == nullptr)
     {
       ERROR("evaluate called on a Text item with font '", name, "' ",
             "but the font failed to load\n");
@@ -272,7 +271,7 @@ void TextState::initRenderer(
 
   renderer->init(
     buffer.asStr(),
-    font.getData(),
+    font,
     font_height,
     tab_spaces,
     max_width,

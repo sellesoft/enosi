@@ -376,6 +376,14 @@ LppObj.defineTask = function(self, cmd)
 
   local lpp_cmd, cpp_cmd = cmd:complete(lfile, cfile, ofile, dfile, mfile)
 
+  if false then
+    local cmd = ""
+    for arg in lake.flatten(lpp_cmd):each() do
+      cmd = cmd..arg.." "
+    end
+    print(cmd)
+  end
+
   sys.trackCompileCommandsCmd(self.proj.root, cfile, cpp_cmd)
   sys.trackCompileCommandsCmd(self.proj.root, self.src, lpp_cmd)
 

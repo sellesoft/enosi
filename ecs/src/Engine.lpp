@@ -27,9 +27,9 @@ using namespace iro;
 @@lpp.import "game/component/Component.lh"
 
 @@lpp.import "asset/Packing.lh"
+@@lpp.import "asset/CompiledData.lh"
 @@lpp.import "asset/SourceDataFile.lh"
 @@lpp.import "asset/SourceDataParser.lh"
-
 @@lpp.import "asset/SourceDataEditor.lh"
 
 static Logger logger =

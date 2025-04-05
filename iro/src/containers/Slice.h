@@ -22,6 +22,11 @@ struct Slice
 
   static Slice<T> from(T* ptr, u64 len) { return { ptr, len }; }
 
+  static Slice<T> from(T* ptr, T* ptrend) 
+  { 
+    return Slice<T>::from(ptr, ptrend - ptr); 
+  }
+
   template<u64 size>
   static Slice<T> from(T (&buffer)[size]) { return from(buffer, size); }
 

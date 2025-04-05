@@ -1,0 +1,79 @@
+$ require "common"
+
+@@lpp.import "graphics/Ref.defs.lh"
+@@lpp.import "graphics/Texture.defs.lh"
+
+@@lpp.import "asset/AssetMgr.lh"
+@@lpp.import "asset/CompiledData.lh"
+
+@@lpp.import "graphics/Renderer.lh"
+
+#include "iro/Platform.h"
+
+namespace gfx
+{
+
+@log.ger(ref.texture, Debug);
+
+/* ----------------------------------------------------------------------------
+ */
+b8 TextureRef::load(LoadParams& params)
+{
+  // TODO(sushi) need a way to determine this outside of this function.
+  //             like when we have TextureDefs that are not set in data.
+  if (isnil(name))
+    return true;
+
+  PathBuffer src_path_buffer;
+  io::formatv(&src_path_buffer, name, ".texture"_str);
+  String src_path = src_path_buffer.asStr();
+
+  CompiledData::CompileParams compile_params = 
+  {
+    .name = src_path,
+    .type = "gfx::TextureDef"_str,
+    .assetmgr = params.assetmgr,
+    .sfile_reg = params.sfile_reg,
+  };
+
+  if (!CompiledData::compile(compile_params))
+    return false;
+
+  auto* data = 
+    CompiledData::load(src_path, "gfx::TextureDef"_str, params.assetmgr);
+  if (data == nullptr)
+    return ERROR("failed to load '", src_path, "' data");
+
+  auto* def = data->getRootAs<TextureDef>();
+
+  if (isnil(def->name))
+    return ERROR("loaded texture def has a nil name\n");
+
+  gfx::CompiledTexture::CompileParams texture_params = 
+  {
+    .name = def->name,
+    .kind = def->kind,
+    .format = def->format,
+    .filter = def->filter,
+    .address_mode = def->address_mode,
+    .allocator = &mem::stl_allocator,
+    .assetmgr = &params.assetmgr,
+  };
+
+  if (!gfx::CompiledTexture::compilePNG(texture_params))
+    return ERROR("failed to compile texture\n");
+
+  String name = def->name.subToLast('.');
+
+  auto* compiled_texture = 
+    gfx::CompiledTexture::load(name, params.assetmgr, params.renderer);
+
+  if (compiled_texture == nullptr)
+    return ERROR("failed to load texture '", name, "'\n");
+
+  texture = compiled_texture->gfx_texture;
+
+  return true;
+}
+
+}

@@ -178,6 +178,15 @@ b8 UI::init(Engine& engine)
   engine.subscribeToBroadcast<WindowResized>(this, &UI::onWindowResized);
   engine.subscribeToBroadcast<PostReload>(this, &UI::onPostReload);
 
+  gohu_font = 
+    gfx::Font::load(
+      "assets/fonts/gohu"_str,
+      assetmgr,
+      renderer);
+  if (gohu_font == nullptr)
+    return ERROR("failed to load gohu font\n");
+  gohu_font_texture = gohu_font->texture->gfx_texture;
+
   // Store a reference to the engine in case widgets need to access
   // information from it.
   eng = &engine;

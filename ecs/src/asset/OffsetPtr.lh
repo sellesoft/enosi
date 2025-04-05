@@ -1,0 +1,89 @@
+/*
+ *  A pointer to T who's value is relative to its own address.
+ */ 
+
+/* ============================================================================
+ */
+template<typename T>
+struct OffsetPtr
+{
+  s32 offset = 0;
+
+  T* get() const
+  {
+    return offset == 0? nullptr : (T*)((u8*)(this) + offset);
+  }
+
+  void set(T* x)
+  {
+    if (x != nullptr)
+      offset = ((u8*)x) - ((u8*)this);
+    else
+      offset = 0;
+  }
+};
+
+DefineNilValueT(OffsetPtr, { 0 }, { return x.offset == 0; });
+
+/* ============================================================================
+ *  A helper for pointing at an array 
+ */
+template<typename T> 
+struct OffsetSlice
+{
+  OffsetPtr<T> ptr;
+  u32 len;
+
+  Slice<T> getSlice() const
+  {
+    if (notnil(ptr))
+      return Slice<T>::from(ptr.get(), len);
+    else
+      return nil;
+  }
+
+  void setSlice(Slice<T> slice)
+  {
+    if (notnil(slice))
+    {
+      ptr.set(slice.ptr);
+      len = slice.len;
+    }
+    else
+    {
+      ptr.set(nullptr);
+      len = 0;
+    }
+  }
+
+  void setSlice(T* ptr, u32 len)
+  {
+    setSlice(Slice<T>::from(ptr, len));
+  }
+};
+
+DefineNilValueT(OffsetSlice, { nil }, { return isnil(x.ptr); });
+
+/* ============================================================================
+ */
+struct OffsetString : OffsetSlice<u8>
+{
+  String getString() const { return String::from(getSlice()); }
+  void setString(String s) { setSlice(s); }
+
+  // Coerces a String into an OffsetString and sets it as though it 
+  // were pointing at 'realstr'. Ideally String never gets smaller so 
+  // this never breaks :).
+  static void setStringAsOffsetString(String* s, String realstr)
+  {
+    auto* ostr = (OffsetString*)s;
+    ostr->setString(realstr);
+  }
+
+  // Does the opposite of the above function.
+  static String getStringAsOffsetString(String* s)
+  {
+    auto* ostr = (OffsetString*)s;
+    return ostr->getString();
+  }
+};

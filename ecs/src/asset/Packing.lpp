@@ -7,6 +7,8 @@ $ local List = require "List"
 $ local util = require "Util"
 $ local component = require "game.component.Component"
 $ local metadata = require "reflect.Metadata"
+$ local Defs = require "asset.GatherDefs"
+
 
 #include "iro/Logger.h"
 #include "iro/containers/BitArray.h"
@@ -17,40 +19,19 @@ using namespace iro;
 
 @cmn.defFileLogger(packing, Info)
 
+struct Renderer;
+
+$ local defs = Defs.gather()
+@defs.imported:get
+
 @@lpp.import "asset/Packing.lh"
+@@lpp.import "asset/AssetMgr.lh"
+@@lpp.import "asset/ArrayDef.lh"
 @@lpp.import "asset/SourceData.lh"
 @@lpp.import "asset/SourceDataFile.lh"
 @@lpp.import "asset/SourceDataParser.lh"
-@@lpp.import "asset/AssetMgr.lh"
+
 @@lpp.import "graphics/CompiledTexture.lh"
-
-struct Renderer;
-
-$$$
-local imported = cmn.buffer.new()
-
-local importPattern = function(pattern)
-  glob(pattern):each(function(path)
-    if path and path:find("%S") then
-      imported:put(lpp.import(path))
-    end
-  end)
-end
-
-importPattern "**/*.defs.lh"
-importPattern "**/*.comp.lh"
-
-local p = Processor.new(tostring(imported))
-p:run()
-$$$
-@imported:get
-
-$ local removeTypeTag = function(name)
-$   return name
-$     :gsub("struct ", "")
-$     :gsub("union ", "")
-$     :gsub("enum ", "")
-$ end
 
 template<typename T>
 b8 packSourceDataIntoEnum(const SourceData& data, T* out);
@@ -59,23 +40,15 @@ b8 packComponent(const SourceData& data, Component** out, PackContext& ctx);
 
 /* ----------------------------------------------------------------------------
  */
-b8 packCompiledTexture(
+b8 packTextureRef(
     const SourceData& data, 
-    gfx::CompiledTexture** out, 
+    gfx::TextureRef* out, 
     PackContext& ctx)
 {
   if (!data.hasStringValue())
-    return ERROR("expected a string value to pack gfx::CompiledTexture*");
+    return ERROR("expected a string value to pack TextureRef\n");
 
-  *out = 
-    gfx::CompiledTexture::load(
-      data.val.str,
-      *ctx.assetmgr,
-      *ctx.renderer);
-
-  if (*out == nullptr)
-    return ERROR("failed to load compiled texture with name ", 
-                 data.val.str, "\n");
+  out->name = data.val.str.allocateCopy(&ctx.packed->buffer);
 
   return true;
 }
@@ -91,18 +64,44 @@ b8 destroyCompiledTexture(gfx::CompiledTexture** data)
 /* ----------------------------------------------------------------------------
  */
 template<typename T>
+b8 packTypedPtr(const SourceData& data, TypedPtr<T>* out, PackContext& ctx);
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 packTypedPtr<Component>(
+    const SourceData& data,
+    TypedPtr<Component>* out,
+    PackContext& ctx)
+{
+  if (isnil(data.type))
+    return ERROR("packTypedPtr passed untyped data\n");
+
+  out->type = data.type.allocateCopy(&ctx.packed->buffer);
+  if (!packComponent(data, &out->ptr, ctx))
+    return false;
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
 b8 packArray(
     const SourceData& data, 
-    Array<T>* out, 
+    ArrayDef<T>* out, 
     PackContext& ctx)
 {
-  for (const SourceData* child : data.children)
+  out->init(data.children.len(), &ctx.packed->buffer);
+
+  for (u32 i = 0; i < data.children.len(); ++i)
   {
+    const SourceData* child = data.children[i];
     if (notnil(child->name))
       return ERROR("arrays cannot contain named elements\n");
-    
-    T* elem = out->push();
-    packSourceDataIntoType<T>(*child, elem, ctx);
+
+    if (!packSourceDataIntoType<T>(*child, &(*out)[i], ctx))
+      return false;
   }
 
   return true;
@@ -110,37 +109,44 @@ b8 packArray(
 
 /* ----------------------------------------------------------------------------
  */
-template<>
-b8 packArray<const SourceData*>(
-    const SourceData& data, 
-    Array<const SourceData*>* out,
-    PackContext& ctx)
-{
-  for (const SourceData* child : data.children)
-  {
-    if (notnil(child->name))
-      return ERROR("arrays cannot contain named elements\n");
-
-    out->push(child);
-  }
-
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-template<>
-b8 packArray<gfx::CompiledTexture*>(
+template<typename T>
+b8 packArray(
     const SourceData& data,
-    Array<gfx::CompiledTexture*>* out,
+    ArrayDef<TypedPtr<T>>* out,
     PackContext& ctx)
 {
-  for (const SourceData* child : data.children)
+  out->init(data.children.len(), &ctx.packed->buffer);
+
+  for (u32 i = 0; i < data.children.len(); ++i)
   {
+    const SourceData* child = data.children[i];
     if (notnil(child->name))
       return ERROR("arrays cannot contain named elements\n");
 
-    if (!packCompiledTexture(*child, out->push(), ctx))
+    if (!packTypedPtr(*child, &(*out)[i], ctx))
+      return false;
+  }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 packArray<gfx::TextureRef>(
+    const SourceData& data,
+    ArrayDef<gfx::TextureRef>* out,
+    PackContext& ctx)
+{
+  out->init(data.children.len(), &ctx.packed->buffer);
+
+  for (u32 i = 0; i < data.children.len(); ++i)
+  {
+    const SourceData* child = data.children[i];
+    if (notnil(child->name))
+      return ERROR("arrays cannot contain named elements\n");
+
+    if (!packTextureRef(*child, &(*out)[i], ctx))
       return false;
   }
 
@@ -152,15 +158,18 @@ b8 packArray<gfx::CompiledTexture*>(
 template<>
 b8 packArray<Component*>(
     const SourceData& data,
-    Array<Component*>* out,
+    ArrayDef<Component*>* out,
     PackContext& ctx)
 {
-  for (const SourceData* child : data.children)
+  out->init(data.children.len(), &ctx.packed->buffer);
+
+  for (u32 i = 0; i < data.children.len(); ++i)
   {
+    const SourceData* child = data.children[i];
     if (notnil(child->name))
       return ERROR("arrays cannot contain named elements\n");
 
-    if (!packComponent(*child, out->push(), ctx))
+    if (!packComponent(*child, &(*out)[i], ctx))
       return false;
   }
 
@@ -193,12 +202,12 @@ b8 destroyArray<const SourceData*>(Array<const SourceData*>* data)
 
 /* ----------------------------------------------------------------------------
  */
-b8 packString(const SourceData& data, String* out)
+b8 packString(const SourceData& data, String* out, PackContext& ctx)
 {
   if (!data.hasStringValue())
     return ERROR("expected a string\n");
 
-  *out = data.val.str.allocateCopy();
+  *out = data.val.str.allocateCopy(&ctx.packed->buffer);
   return true;
 }
 
@@ -320,10 +329,25 @@ b8 packSourceDataPointer(const SourceData& data, const SourceData** out)
   return true;
 }
 
+/* ----------------------------------------------------------------------------
+ */
+b8 packAssetRef(
+    const SourceData& data, 
+    AssetRef* out, 
+    String type,
+    PackContext& ctx)
+{
+  if (!data.hasStringValue())
+    return @log.error("expected a string to pack asset ref\n");
+
+  out->name = data.val.str;
+  return true;
+}
+
 $ -- * ------------------------------------------------------------------------
 
 $ local putEnumPacker = function(name, decl)
-$   local typename = removeTypeTag(decl.name)
+$   local typename = Defs.removeTag(decl.name)
 /* ----------------------------------------------------------------------------
  */
 template<>
@@ -356,7 +380,6 @@ $ -- * ------------------------------------------------------------------------
 
 $ local putArrayPackCase = function(declname, addrname, type, decl, prereqs)
 $   prereqs:push(decl.template_args[1]:getDecl())
-    $(addrname).init();
     if (!child->hasObjectData())
       return ERROR("expected an object for array field $(addrname)\n");
     if (!packArray(
@@ -369,7 +392,7 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local putStringPackCase = function(declname, addrname, type, prereqs)
-    if (!packString(*child, &$(addrname)))
+    if (!packString(*child, &$(addrname), ctx))
       return ERROR("failed to pack string data for field $(addrname)");
 $ end
 
@@ -423,15 +446,26 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
-$ local putCompiledTexturePackCase = function(declname, addrname)
-    if (!packCompiledTexture( *child, &$(addrname), ctx))
+$ local putTextureRefPackCase = function(declname, addrname)
+    if (!packTextureRef( *child, &$(addrname), ctx))
       return ERROR(
         "failed to pack $(declname) data for field $(addrname)\n");
 $ end
 
 $ -- * ------------------------------------------------------------------------
 
+$ local putAssetRefPackCase = function(declname, addrname, decl)
+$   local asset_type = decl.template_args[1]:getDesugared()
+$   local asset_typename = Defs.removeTag(asset_type.name)
+  if (!packAssetRef(*child, &$(addrname), "$(asset_typename)"_str, ctx))
+    return ERROR(
+      "failed to pack asset ref to $(declname) for field $(addrname)\n");
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
 $ local putPackCase = function(declname, addrname, type, prereqs)
+$   local TRef = defs.p.decls.map["struct Ref"]
 $   if type.name == "String" then
 $     return (putStringPackCase(declname, addrname, type, prereqs))
 $   end
@@ -443,21 +477,38 @@ $   end
 $
 $   if type:is(ast.TagType) then
 $     local decl = type:getDecl()
+$     if decl:is(ast.Record) then 
+$       if decl:isDerivedFrom(TRef) then
+  ctx.packed->recordRef("$(Defs.removeTag(decl.name))"_str, &$(addrname));
+$       end
+$     end
 $     if decl:is(ast.TemplateSpecialization) then
 $       if decl.specialized_name == "Array" then
+$         print(declname)
+$         error "Arrays are not allowed in defs! use ArrayDef instead"
+$       elseif decl.specialized_name == "ArrayDef" then
 $         return (putArrayPackCase(declname, addrname, type, decl, prereqs))
 $       elseif decl.specialized_name == "vec2" then
 $         return (putVec2PackCase(declname, addrname, type, prereqs))
 $       elseif decl.specialized_name == "Flags" then
 $         -- TODO(sushi) handle Flags
+$       elseif decl.specialized_name == "OffsetPtr" or 
+$              decl.specialized_name == "OffsetSlice" then
+$         -- TODO(sushi) fix includes or implement better filtering so things
+$         --             using these don't show up here
+$       elseif decl.specialized_name == "TypedAssetRef" or 
+$              decl.specialized_name == "TypedSourceAssetRef" then
+$         return (putAssetRefPackCase(declname, addrname, decl, prereqs))
 $       elseif decl.specialized_name == "EnumArray" then
 $         return (putEnumArrayPackCase(declname, addrname, type, prereqs))
 $       else
 $         error("unhandled specialized template "..decl.specialized_name)
 $       end
 $     elseif decl:is(ast.Struct) then
-$       if removeTypeTag(decl.name) == "Color" then
+$       if Defs.removeTag(decl.name) == "Color" then
 $         return (putColorPackCase(declname, addrname, type, prereqs))
+$       elseif Defs.removeTag(decl.name) == "gfx::TextureRef" then
+$         return (putTextureRefPackCase(declname, addrname))
 $       else
 $         return (putStructPackCase(declname, addrname, type, prereqs))
 $       end
@@ -475,10 +526,14 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local putEnumArrayPacker = function(name, decl, prereqs)
-$   local typename = removeTypeTag(decl.name)
+$   local typename = Defs.removeTag(decl.name)
 $   local enum_type = decl.template_args[1].decl
-$   local enum_typename = removeTypeTag(enum_type.name)
+$   local enum_typename = Defs.removeTag(enum_type.name)
 $   local elem_decl = decl.template_args[2].decl
+$   if not elem_decl then 
+$     io.write(name, " has element with no decl\n")
+$     return 
+$   end
 $   local elem_type = elem_decl.type
 /* ----------------------------------------------------------------------------
  */
@@ -505,7 +560,6 @@ b8 packSourceDataIntoEnumArray(
     switch (child->name.hash())
     {
 $ for elem in enum_type.elems:each() do
-$   if elem.comment then metadata.parse(elem.comment) end
     case "$(elem.name)"_hashed:
 $     putPackCase(
 $       decl.name, 
@@ -538,21 +592,12 @@ b8 packSourceDataIntoType<$(name)>(
   if (isnil(data.children))
     return ERROR("expected an object to pack into $(name)\n");
 
-  // Zero the memory we are writing to, then call placement new on its 
-  // address so that it will fill out any default values the reflected 
-  // type specifies and zero inits the rest.
   mem::zero(out, sizeof($(name)));
-
-  // TODO(sushi) this will require more advanced filtering of abstract types
-  //             and types that dont have a no-args contructor. These are 
-  //             most iro types that we probably dont want to be packed 
-  //             anyways.
-  // new (out) $(name);
 
   if (data.children.isEmpty())
     return true;
 
-  BitArray<$(decl:getFieldCount())> found_fields;
+  BitArray<$(decl:getFieldCount())> found_fields = {};
 
   for (const SourceData* child : data.children)
   {
@@ -616,14 +661,18 @@ $   String = true
 $ }
 $ local function putPacker(name, decl, prereqs)
 $   if not decl or placed_packers[decl.name] then return end
+$   if name == "gfx::Renderer" then return end
 $   placed_packers[decl.name] = true
 $   if decl:is(ast.Struct) then
-$     for field in decl:eachFieldWithIndex() do
-$       putPacker(field.type.name, field.type:getDecl(), prereqs)
+$     if decl.is_complete then
+$       for field in decl:eachFieldWithIndex() do
+$         putPacker(field.type.name, field.type:getDecl(), prereqs)
+$       end
+$       putStructPacker(name, decl, prereqs)
 $     end
-$     putStructPacker(name, decl, prereqs)
 $   elseif decl:is(ast.TemplateSpecialization) then
 $     if decl.specialized_name == "Array" then
+$     elseif decl.specialized_name == "ArrayDef" then
 $       local elem_type = decl.template_args[1]
 $       if not elem_type:is(ast.PointerType) then
 $         local elem_decl = decl.template_args[1]:getDecl()
@@ -637,18 +686,34 @@ $     putEnumPacker(name, decl)
 $   end
 $ end
 
-$ for decl in p.decls.list:each() do
-$   local name = decl.name
-$     :gsub("struct ", "")
-$     :gsub("union ", "")
-$     :gsub("enum ", "")
+$ defs:eachDecl(function(name, decl)
 $   local prereqs = List{}
-$   if decl.decl:is(ast.Record) then
-$     -- util.dumpValue(decl.decl)
-$     putPacker(name, decl.decl, prereqs)
-$     placed_packers[decl.name] = true
+$   if decl:is(ast.Record) then
+$     putPacker(name, decl, prereqs)
 $   end
-$ end
+$ end)
+
+/* ----------------------------------------------------------------------------
+ */
+b8 packSourceDataFromType(
+    const SourceData& data, 
+    PackContext& ctx)
+{
+  if (isnil(data.type))
+    return @log.error("packSourceDataFromType passed untyped data\n");
+
+  switch (data.type.hash())
+  {
+$ defs:eachDecl(function(name, decl)
+$   if decl:is(ast.Struct) and decl.is_complete then
+  case "$(name)"_hashed:
+    return packSourceDataIntoType<$(name)>(data, ctx);
+$   end
+$ end)
+  }
+
+  return false;
+}
 
 /* ----------------------------------------------------------------------------
  *  NOTE(sushi) this is placed after packing structs as if not we will be 
@@ -668,7 +733,7 @@ b8 packComponent(const SourceData& data, Component** out, PackContext& ctx)
 $ for comp in component.components.list:each() do
   case "$(comp.name)"_hashed:
     {
-      auto* comp = mem::stl_allocator.allocateType<$(comp.name)>();
+      auto* comp = ctx.packed->buffer.allocateType<$(comp.name)>();
       if (!packSourceDataIntoType(data, comp, ctx))
       {
         // TODO(sushi) it might be more appropriate to call 'destroy' here
@@ -677,7 +742,7 @@ $ for comp in component.components.list:each() do
         //             to nicely 'destroy' or 'deinit' things even when they
         //             aren't already init. We need to handle this better 
         //             throughout the code base.
-        mem::stl_allocator.free(comp);
+        // mem::stl_allocator.free(comp);
         return false;
       }
 
@@ -692,128 +757,3 @@ $ end
   return true;
 }
 
-/* ----------------------------------------------------------------------------
- */
-template<>
-b8 destroyPackedData<Component*>(Component** comp)
-{
-  // TODO(sushi) this needs to properly switch on the component kind 
-  //             and deallocate anything it may have allocated during packing.
-  //             Honestly, at this point, I'm not sure just packing Component
-  //             data directly like this is such a good idea anymore!
-  //             An alternative is using some kinda hash map structure where
-  //             we just key it by member name of the component and use 
-  //             plain source data values, maybe.. I'm really not sure, but 
-  //             this should probably be rethought in the future once we 
-  //             have a greater idea of what Components have packed into them.
-  if (*comp != nullptr)
-    mem::stl_allocator.free(*comp);
-
-  return true;
-}
-
-$ -- * ------------------------------------------------------------------------
-
-$ local putStringDestroyCase = function(declname, field, prereqs)
-  if (!destroyString(&data->$(field.name)))
-    return false;
-$ end
-
-$ -- * ------------------------------------------------------------------------
-
-$ local putArrayDestroyCase = function(declname, field, prereqs)
-  if (!destroyArray(&data->$(field.name)))
-    return false;
-$ end
-
-$ -- * ------------------------------------------------------------------------
-
-$ local putCompiledTextureDestroyCase = function(declname, field, prereqs)
-  if (!destroyCompiledTexture(&data->$(field.name)))
-    return false;
-$ end
-
-$ -- * ------------------------------------------------------------------------
-
-$ local putStructDestroyCase = function(declname, field, prereqs)
-  if (!destroyPackedData(&data->$(field.name)))
-    return false;
-$ end
-
-$ -- * ------------------------------------------------------------------------
-
-$ local putDestroyCase = function(declname, field, prereqs)
-$   local type = field.type
-$   if type.name == "String" then
-$     return (putStringDestroyCase(declname, field, prereqs))
-$   end
-$   
-$   type = type:getDesugared()
-$
-$   if type:is(ast.TagType) then
-$     local decl = type:getDecl()
-$     if decl:is(ast.TemplateSpecialization) then
-$       if decl.specialized_name == "Array" then
-$         return (putArrayDestroyCase(declname, field, decl, prereqs))
-$       end
-$     elseif decl:is(ast.Struct) then
-$       return (putStructDestroyCase(declname, field, prereqs))
-$     end
-$   elseif type:is(ast.PointerType) then
-$     type = type.subtype
-$     if type.name == "gfx::CompiledTexture" then
-$       return (putCompiledTextureDestroyCase(declname, field, prereqs))
-$     end
-$   end
-$ end
-
-$ local putStructDestroyer = function(name, decl, prereqs)
-/* ----------------------------------------------------------------------------
- */
-template<>
-b8 destroyPackedData<$(name)>($(name)* data)
-{
-$ for field in decl:eachFieldWithIndex() do
-$   putDestroyCase(decl.name, field, prereqs)
-$ end
-  
-  return true;
-}
-$ end
-
-$ -- * ------------------------------------------------------------------------
-
-$ local placed_destroyers = 
-$ {
-$   String = true
-$ }
-$ local function putDestroyer(name, decl, prereqs)
-$   if not decl or placed_destroyers[decl.name] then return end
-$   placed_destroyers[decl.name] = true
-$   if decl:is(ast.Struct) then
-$     for field in decl:eachFieldWithIndex() do
-$       putDestroyer(field.type.name, field.type:getDecl(), prereqs)
-$     end
-$     putStructDestroyer(name, decl, prereqs)
-$   elseif decl:is(ast.TemplateSpecialization) then
-$     if decl.specialized_name == "Array" then
-$       local elem_type = decl.template_args[1]
-$       if not elem_type:is(ast.PointerType) then
-$         local elem_decl = decl.template_args[1]:getDecl()
-$         putDestroyer(elem_decl.name, elem_decl, prereqs)
-$       end
-$     end
-$   end
-$ end
-
-$ for decl in p.decls.list:each() do
-$   local name = decl.name
-$     :gsub("struct ", "")
-$     :gsub("union ", "")
-$     :gsub("enum ", "")
-$   local prereqs = List{}
-$   if decl.decl:is(ast.Record) then
-$     putDestroyer(name, decl.decl, prereqs)
-$     placed_destroyers[decl.name] = true
-$   end
-$ end

@@ -7,6 +7,8 @@ $ local cmn = require "common"
 #include "iro/Unicode.h"
 #include "math/vec.h"
 
+@@lpp.import "game/map/Map.defs.lh"
+
 using namespace iro;
 
 struct GameMgr;
@@ -18,11 +20,17 @@ struct EntityMgr;
 struct EyeSys;
 struct MindSys;
 
+extern b8 debug_tile;
+extern u32 debug_tile_layer_idx;
+extern vec2i debug_tile_pos;
+
 /* ============================================================================
  */
 struct Tile
 {
   const MapTileDef* def = nullptr;
+
+  TileKindConfig configuration = TileKindConfig::Default;
 
   b8 init(
     const MapTileDef& def, 
@@ -61,6 +69,15 @@ struct Layer
   // Returns the coordinate of a Tile from this Layer in Layer space.
   // Asserts if the given Tile does not belong to this Layer.
   vec2f getTilePos(const Tile& tile) const;
+
+  // Returns a Tile at the given position, which must be local to the 
+  // Layer. If the given index is out of bounds, nullptr is returned.
+  Tile* getTileAtPos(s32 x, s32 y);
+
+  Tile* getTileAtPos(vec2f pos) 
+  { 
+    return getTileAtPos(s32(pos.x), s32(pos.y)); 
+  }
 };
 
 /* ============================================================================

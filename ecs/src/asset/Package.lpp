@@ -1,0 +1,55 @@
+$ require "common"
+
+#include "iro/Logger.h"
+
+$ if false then
+
+@log.ger(package, Debug)
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Package::init()
+{
+  if (!map.init())
+    return @log.error("failed to initialize Package data map\n");
+
+  if (!pool.init())
+    return @log.error("failed to initialize Package data pool\n");
+
+  if (!buffer.open())
+    return @log.error("failed to initialize Package data buffer\n");
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Package::deinit()
+{
+  map.deinit();
+  pool.deinit();
+  buffer.close();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Package::addData(String name, String type, void* ptr, u64 size)
+{
+  if (nullptr != map.find(name.hash()))
+    return @log.error("attempt to add duplicate data '", name, "' of type",
+                      type, "\n");
+
+  Data* data = pool.add();
+  data->name = name;
+  data->type = type;
+  data->offset = buffer.len;
+  data->size = size;
+
+  buffer.write({(u8*)ptr, size});
+
+  map.insert(data);
+
+  return true;
+}
+
+$ end

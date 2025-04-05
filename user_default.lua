@@ -12,7 +12,7 @@ return
 {
   -- TODO(sushi) make an 'auto' option for this and have that be default.
   -- The maximum amount of build processes to allow running at the same time.
-  max_jobs = 6,
+  max_jobs = 10,
 
   -- What projects we want to build. This expects there to be a directory
   --   'enosi/<proj-name>'
@@ -27,6 +27,7 @@ return
     "lake",
     --"hreload",
     --"experimental/eog",
+    -- "experimental/lamu",
     "ecs",
   },
 
@@ -41,7 +42,7 @@ return
       cpp =
       {
         compiler = "clang++",
-        linker = "ld",
+        linker = "mold",
       }
     },
 
@@ -76,7 +77,7 @@ return
   asan = false,
 
   -- Report files successfully built.
-  report_success = false,
+  report_success = true,
 
   -- Configuration intended to be applied to all projects.
   -- Note that any configuration specified in project specific

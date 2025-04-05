@@ -388,6 +388,9 @@ b8 Renderer::init(Engine& engine, mem::Allocator& allocator)
 
   this->frame = 0;
 
+  if (!resource_mgr.init())
+    return @log.error("failed to initialize resource manager\n");
+
   if (!this->drawcmds.init(16))
     return ERROR("failed to initialize draw cmd array\n");
 

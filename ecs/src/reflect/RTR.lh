@@ -1,0 +1,26 @@
+/*
+ *  Provides an API for getting various reflected info at run time,
+ *  "Runtime Reflection."
+ */
+
+$ require "common"
+
+namespace rtr
+{
+
+// Gets the typename of T.
+template<typename T>
+String getTypename();
+
+// Retrieves the value of some metadata on a type or nil if it doesn't 
+// exist or is an unsupported type.
+template<typename T>
+String getMetadataValue(String name);
+
+String getMetadataValue(String type, String name);
+
+// Gets a string for some element of an enum.
+template<typename T>
+String getEnumElementName(T x);
+
+}

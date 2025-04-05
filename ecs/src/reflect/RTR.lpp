@@ -1,0 +1,73 @@
+$ local cmn = require "common"
+$ local ast = require "reflect.AST"
+$ local Defs = require "asset.GatherDefs"
+
+$ local defs = Defs.gather()
+@defs.imported:get
+
+@@lpp.import "reflect/RTR.lh"
+
+namespace rtr
+{
+
+$ defs:eachDecl(function(name, decl)
+/* ----------------------------------------------------------------------------
+ */
+template<>
+String getTypename<$(name)>()
+{
+  return "$(name)"_str;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+String getMetadataValue<$(name)>(String name)
+{
+  switch (name.hash())
+  {
+$ for k,v in pairs(decl.metadata) do
+  case "$(k)"_hashed:
+    return "$(v)"_str;
+$ end
+  }
+  return nil;
+}
+
+$ if decl:is(ast.Enum) then
+/* ----------------------------------------------------------------------------
+ */
+template<>
+String getEnumElementName($(name) x)
+{
+  switch (x)
+  {
+$ for elem in decl.elems:each() do
+  case $(name)::$(elem.name):
+    return "$(elem.name)"_str;
+$ end
+  }
+
+  return "** Invalid value for enum $(name) **"_str;
+}
+
+$ end
+
+$ end)
+
+/* ----------------------------------------------------------------------------
+ */
+String getMetadataValue(String type, String name)
+{
+  switch (type.hash())
+  {
+$ defs:eachDecl(function(name, decl)
+  case "$(name)"_hashed:
+    return getMetadataValue<$(name)>(name);
+$ end)
+  }
+  return nil;
+}
+
+
+}

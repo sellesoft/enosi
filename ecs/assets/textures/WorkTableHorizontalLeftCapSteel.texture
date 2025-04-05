@@ -1,0 +1,9 @@
+return gfx::TextureDef
+{
+  name = "assets/textures/WorkTableHorizontalLeftCapSteel.png",
+  kind = "TwoD",
+  filter = "Nearest",
+  format = "RGBA",
+  address_mode = "ClampToWhite",
+}
+  

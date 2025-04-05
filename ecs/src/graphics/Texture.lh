@@ -23,7 +23,7 @@ struct Texture
 {
   u32 index;
 
-  b8 init(
+  static Texture create(
     Renderer&        renderer,
     u32              width,
     u32              height,

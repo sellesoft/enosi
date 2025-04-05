@@ -23,7 +23,7 @@ end
 
 metadata.__parse = function(x)
   local o = {}
-  for k,v in x:gmatch '%.metadata%s+(%w+)%s+=%s+"(.+)"' do
+  for k,v in x:gmatch '%.metadata%s+([%w_]+)%s+=%s+"(.+)"' do
     o[k] = v:gsub("\\n", "\n")
   end
   return o

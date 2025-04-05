@@ -228,25 +228,30 @@ Processor.resolveType = function(self, ctype)
   if ctype:isPointer() then
     if ctype:isFunctionPointer() then
       type = ast.FunctionPointerType.new()
+      type.size = ctype:size() / 8
     else
       local subctype = ctype:getPointeeType()
       local subtype = self:resolveType(subctype)
       type = ast.PointerType.new(subtype)
+      type.size = ctype:size() / 8
     end
   elseif ctype:isReference() then
     local subctype = ctype:getPointeeType()
     local subtype = self:resolveType(subctype)
     type = ast.ReferenceType.new(subtype)
+    type.size = ctype:size() / 8
   elseif ctype:isArray() then
     local subctype = ctype:getArrayElementType()
     local subtype = self:resolveType(subctype)
     local len = ctype:getArrayLen()
     type = ast.CArray.new(subtype, len)
+    type.size = ctype:size() / 8
   elseif ctype:isElaborated() then
     type =
       ast.ElaboratedType.new(
         ctype:getTypeName(),
         self:resolveType(ctype:getDesugaredType()))
+    type.size = type.desugared.size
   elseif ctype:isBuiltin() then
     type =
       ast.BuiltinType.new(
@@ -273,6 +278,9 @@ Processor.resolveType = function(self, ctype)
 
     if decl:is(ast.TagDecl) then
       type = ast.TagType.new(ctype:getTypeName(), decl)
+      if cdecl:isComplete() then
+        type.size = ctype:size() / 8
+      end
     else
       error("unhandled decl kind of type '"..ctype:getCanonicalTypeName()..
             "'")
@@ -296,6 +304,26 @@ end
 
 -- * --------------------------------------------------------------------------
 
+Processor.collectBaseAndDerived = function(self, cdecl, record)
+  local bases = cdecl:getBaseIter()
+  if bases then
+    local base = bases:next()
+    while base do
+      local basedecl = base:getDecl()
+      if basedecl then
+        local decl = self:resolveDecl(basedecl)
+        if decl then
+          decl.derived:push(record)
+          record.bases:push(decl)
+        end
+      end
+      base = bases:next()
+    end
+  end
+end
+
+-- * --------------------------------------------------------------------------
+
 Processor.processStruct = function(self, cdecl, ctype)
   local struct = ast.Struct.new(ctype:getCanonicalTypeName())
   self:recordProcessed(ctype:getCanonicalTypeName(), struct)
@@ -305,23 +333,16 @@ Processor.processStruct = function(self, cdecl, ctype)
   cdecl = self:ensureDefinitionDecl(cdecl)
 
   if cdecl:isComplete() then
-    local bases = cdecl:getBaseIter()
-    if bases then
-      local base = bases:next()
-      while base do
-        local basedecl = base:getDecl()
-        if basedecl then
-          local decl = self:resolveDecl(basedecl)
-          if decl then
-            decl.derived = decl.derived or List{}
-            decl.derived:push(struct)
-            struct.bases = struct.bases or List{}
-            struct.bases:push(decl)
-          end
-        end
-        base = bases:next()
-      end
+    self:collectBaseAndDerived(cdecl, struct)
+
+    struct.comment = cdecl:getComment()
+    if struct.comment then
+      struct.metadata = metadata.__parse(struct.comment)
     end
+
+    struct.is_complete = true
+  else
+    struct.is_complete = false
   end
 
   return struct
@@ -361,6 +382,10 @@ Processor.processTemplateSpecialization = function(self, cdecl, ctype)
     else
       log:warn("unhandled template arg kind in ", spec.name, "\n")
     end
+  end
+
+  if cdecl:isComplete() then
+    self:collectBaseAndDerived(cdecl, spec)
   end
 
   self:processRecordMembers(cdecl, ctype, spec)

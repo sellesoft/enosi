@@ -1,0 +1,9 @@
+return gfx::TextureDef
+{
+  name = "assets/textures/WallTopLeftCornerLeftCapOlive.png",
+  kind = "TwoD",
+  filter = "Nearest",
+  format = "RGBA",
+  address_mode = "ClampToWhite",
+}
+  

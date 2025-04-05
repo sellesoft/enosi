@@ -125,11 +125,13 @@ cmd.CppObj.getIOIndependentFlags = function(params)
       "-Wno-switch",
       "-Wno-return-type-c-linkage",
       "-Wno-reorder-init-list",
+      "-Wno-c99-designator",
       "-fmessage-length=80",
       "-fdiagnostics-absolute-paths",
       params.static_msvcrt and "-fms-runtime-lib=static",
       "-D_DISABLE_STRING_ANNOTATION",
-      "-D_DISABLE_VECTOR_ANNOTATION")
+      "-D_DISABLE_VECTOR_ANNOTATION",
+      "-D_CRT_SECURE_NO_WARNINGS")
       -- "-D_DLL",
       -- "-D_MT")
 

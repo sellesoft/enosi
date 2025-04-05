@@ -1,9 +1,14 @@
 $ require "common"
 $ if IRO_WIN32 then
 
-#include "Windows.h"
+#define WIN32_LEAN_AND_MEAN
+#include "windows.h"
 #include "Windowsx.h"
 #include "hidusage.h"
+#undef ERROR
+#undef max
+#undef min
+#undef interface
 
 struct Win32Stuff
 {

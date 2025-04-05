@@ -1,4 +1,4 @@
-return Entity
+return EntityDef
 {
   name = "Test",
   components = 

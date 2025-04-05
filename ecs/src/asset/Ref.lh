@@ -1,0 +1,38 @@
+/*
+ *  Ref serves as a base for any def type that is a reference to something
+ *  outside of the def it is used in, like other assets or gfx resources.
+ *
+ *  Anything that inherits this type will be collected by CompiledData in
+ *  getRefs.
+ */
+
+$ require "common"
+
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+
+using namespace iro;
+
+namespace gfx 
+{
+struct Renderer;
+}
+
+struct AssetMgr;
+struct SourceDataFileReg;
+
+struct Ref 
+{ 
+  struct LoadParams
+  { 
+    gfx::Renderer& renderer;
+    AssetMgr& assetmgr;
+    SourceDataFileReg& sfile_reg;
+  };
+
+  b8 load(String type, LoadParams&);
+
+protected:
+
+  b8 load(LoadParams&) { return false; }
+}; 

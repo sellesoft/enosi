@@ -28,16 +28,16 @@ static Logger logger =
 b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
 {
   //load the null texture
-  gfx::CompiledTextureRef compiled_null_texture;
-  compiled_null_texture.trackNoRef(
+  null_texture = 
     gfx::CompiledTexture::load(
-      "assets/textures/null"_str, assetmgr, renderer));
+      "assets/textures/null"_str, assetmgr, renderer)->gfx_texture;
 
-  if (!compiled_null_texture.isValid())
+  if (isnil(null_texture))
   {
-    compiled_null_texture.track(
-        assetmgr.findAsset("assets/textures/white"_str));
-    if (!compiled_null_texture.isValid())
+    null_texture = 
+      gfx::CompiledTexture::load(
+        "assets/textures/white"_str, assetmgr, renderer)->gfx_texture;
+    if (isnil(null_texture))
       return ERROR("failed to find a valid null texture\n");
   }
   assert(compiled_null_texture.isValid());
@@ -104,6 +104,7 @@ b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
     return ERROR("failed to init the quads index buffer\n");
 
   //init quads batches
+  batches[0].texture = null_texture;
   batches[0].texture = null_texture;
   batch_count = 1;
   quad_count = 0;
@@ -334,12 +335,21 @@ b8 RenderSys::update(const UpdateParams& params)
 
       for (const Tile& tile : layer.tiles)
       {
-        if (tile.def == nullptr)
+        const MapTileDef* tiledef = tile.def;
+
+        if (tiledef == nullptr || !tiledef->kind.isValid())
           continue;
-        if (tile.def->texture == nullptr)
-          continue;
-        if (isnil(tile.def->texture->gfx_texture))
-          continue;
+
+        const TileKindDef& tilekind = *tiledef->kind;
+        
+        gfx::Texture texture = null_texture;
+
+        gfx::TextureRef texref = tilekind.textures[tile.configuration];
+        if (!texref.isValid())
+          texref = tilekind.textures[TileKindConfig::Default];
+
+        if (texref.isValid())
+          texture = texref.texture;
 
         vec2f pos = map.getTilePos(layer, tile);
         drawQuad(renderer, pos, tile.def->texture->gfx_texture, tint);
@@ -384,8 +394,7 @@ b8 RenderSys::update(const UpdateParams& params)
         Layer& layer = map.layers[transform->placement_layer];
 
         vec2f pos = layer.def->pos + transform->pos;
-        gfx::CompiledTexture* compiledtexture = sprite.texture;
-        gfx::Texture texture = compiledtexture->gfx_texture;
+        gfx::Texture texture = sprite.texture.texture;
         Color color = sprite.color;
         if (isnil(texture))
         {

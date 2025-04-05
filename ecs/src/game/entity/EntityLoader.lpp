@@ -131,12 +131,12 @@ EntityId loadEntity(
 
   Entity* ent = entmgr.getEntity(entid);
 
-  for (Component* defcomp : def.components)
+  for (ComponentPtr defcomp : def.components)
   {
-    if (defcomp == nullptr)
+    if (defcomp.ptr == nullptr)
       continue;
 
-    switch (defcomp->kind)
+    switch (defcomp.ptr->kind)
     {
 $ for comp, i in Comp.components.list:eachWithIndex() do
 $  print(comp.name)
@@ -144,7 +144,7 @@ $  print(comp.name)
       {
         auto* comp = 
           cmpmgr.allocateComponentFromInitialData(
-            *($(comp.name)*)defcomp);
+            *($(comp.name)*)defcomp.ptr);
         entmgr.addComp(ent, comp);
       }
       break;
@@ -170,18 +170,20 @@ EntityId loadEntity(
     AssetMgr& assetmgr,
     gfx::Renderer& renderer)
 {
-  EntityDef def;
+  PackedData packed;
 
   PackContext pack_context = 
   {
     .assetmgr = &assetmgr,
     .renderer = &renderer,
+    .packed = &packed,
   };
 
-  packSourceDataIntoType(
-    *sfile.returned_data,
-    &def,
-    pack_context);
+  packSourceDataIntoType<EntityDef>(*sfile.returned_data, pack_context);
 
-  return loadEntity(def, entmgr, assetmgr, renderer);
+  return loadEntity(
+    *packed.getRootAs<EntityDef>(), 
+    entmgr, 
+    assetmgr, 
+    renderer);
 }
