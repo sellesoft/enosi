@@ -92,6 +92,20 @@ $ end
   gfx::CompiledTexture::compileFromMemory(pixels, white_texture_params);
   gfx::CompiledTexture::load("assets/textures/white"_str, assetmgr, renderer);
 
+  gfx::CompiledTexture::CompileParams null_texture_params =
+  {
+    .name         = "assets/textures/null"_str,
+    .format       = gfx::ImageFormat::RGBA,
+    .kind         = gfx::ImageKind::TwoD,
+    .filter       = gfx::ImageFilter::Nearest,
+    .address_mode = gfx::ImageAddressMode::ClampToWhite,
+    .allocator    = &texture_compile_allocator,
+    .assetmgr     = &assetmgr,
+  };
+
+  gfx::CompiledTexture::compilePNG(null_texture_params);
+  gfx::CompiledTexture::load("assets/textures/null"_str, assetmgr, renderer);
+
   texture_compile_allocator.deinit();
 
 $ if false then
@@ -163,7 +177,7 @@ $ if true then
   //    source_data_file_reg.loadFromDisk("assets/maps/Test.map"_str);
 
   //   sdata_edit_test->setSourceData(
-  //     ui, 
+  //     ui,
   //     h_test.getFile()->returned_data,
   //     h_test.getFile(),
   //     "MapDef"_hashed);
@@ -174,7 +188,7 @@ $ else
 
   base = ui::Item::begin(ui, "base"_str);
   {
-    @ui.style(base, Item, 
+    @ui.style(base, Item,
     | size: 200 200
     | display: flex
     | background_color: 0xff0000ff)
