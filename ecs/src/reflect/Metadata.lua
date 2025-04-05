@@ -11,7 +11,11 @@ local metadata = setmetatable({}, M)
 M.__index = function(_,k)
   return function(v)
     if v then
-      v = v:gsub("[%c]", { ["\n"] = "\\n" })
+      v = v:gsub("[%c\"]", 
+        { 
+          ["\n"] = "\\n",
+          ['"'] = '\\"',
+        })
     else
       v = true
     end
