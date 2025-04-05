@@ -13,7 +13,7 @@ using namespace iro;
 @@lpp.import "event/BroadcastEventBus.lh"
 
 @@lpp.import "graphics/Font.lh"
-
+@@lpp.import "graphics/CompiledShader.lh"
 @@lpp.import "ui/widgets/Text.lh"
 @@lpp.import "ui/widgets/Button.lh"
 @@lpp.import "ui/widgets/Separator.lh"
@@ -43,15 +43,18 @@ ui::SourceDataEditor* sdata_edit_test;
 b8 Engine::init()
 {
   INFO("initializing engine...\n");
-  start_time = TimePoint::now();
+  TimePoint start_time = TimePoint::monotonic();
+  frame_start_time = TimeSpan::fromSeconds(start_time.s).toSeconds()
+    + TimeSpan::fromNanoseconds(start_time.ns).toSeconds();
 
 $ local initSystem = function(act, name)
     {
-      auto start = TimePoint::now();
+      INFO("initializing $(name)\n");
+      auto start = TimePoint::monotonic();
       if (!$(act))
         return FATAL("failed to initialize $(name)\n");
       INFO("finished initializing $(name) in ",
-           WithUnits(TimePoint::now() - start), "\n");
+           WithUnits(TimePoint::monotonic() - start), "\n");
     }
 $ end
 
@@ -63,93 +66,139 @@ $ end
   @initSystem(renderer.init(*this, mem::stl_allocator), renderer);
   @initSystem(assetmgr.init(&mem::stl_allocator),       asset mgr);
 
-  //TODO(delle) update the bump allocators to have a reset() and clear()
-  mem::LenientBump texture_compile_allocator;
-  if (!texture_compile_allocator.init())
-    return ERROR("failed to initialize texture compile allocator\n");
-
-  gfx::CompiledTexture::CompileParams white_texture_params =
+  //TODO(delle) move required asset compilation somewhere else
+  TRACE("compiling white and null textures\n");
   {
-    .name         = "assets/textures/white"_str,
-    .width        = 4,
-    .height       = 4,
-    .format       = gfx::ImageFormat::BW,
-    .kind         = gfx::ImageKind::TwoD,
-    .filter       = gfx::ImageFilter::Nearest,
-    .address_mode = gfx::ImageAddressMode::ClampToWhite,
-    .allocator    = &texture_compile_allocator,
-    .assetmgr     = &assetmgr,
-  };
+    mem::LenientBump texture_compile_allocator;
+    if (!texture_compile_allocator.init())
+      return ERROR("failed to initialize texture compile allocator\n");
+    defer { texture_compile_allocator.deinit(); };
 
-  u8 pixels[16] =
-  {
-    0xff, 0xff, 0xff, 0xff,
-    0xff, 0xff, 0xff, 0xff,
-    0xff, 0xff, 0xff, 0xff,
-    0xff, 0xff, 0xff, 0xff,
-  };
-
-  gfx::CompiledTexture::compileFromMemory(pixels, white_texture_params);
-  gfx::CompiledTexture::load("assets/textures/white"_str, assetmgr, renderer);
-
-  gfx::CompiledTexture::CompileParams null_texture_params =
-  {
-    .name         = "assets/textures/null"_str,
-    .format       = gfx::ImageFormat::RGBA,
-    .kind         = gfx::ImageKind::TwoD,
-    .filter       = gfx::ImageFilter::Nearest,
-    .address_mode = gfx::ImageAddressMode::ClampToWhite,
-    .allocator    = &texture_compile_allocator,
-    .assetmgr     = &assetmgr,
-  };
-
-  gfx::CompiledTexture::compilePNG(null_texture_params);
-  gfx::CompiledTexture::load("assets/textures/null"_str, assetmgr, renderer);
-
-  texture_compile_allocator.deinit();
-
-$ if false then
-  io::StaticBuffer<511> texture_data_path_buffer;
-  auto png_glob = fs::Globber::create("assets/textures/*.png"_str);
-  png_glob.run([&](fs::Path& asset_path)
+    gfx::CompiledTexture::CompileParams white_texture_params =
     {
-      texture_data_path_buffer.len = 0;
-      String name = fs::Path::removeExtension(asset_path.asStr());
-      gfx::CompiledTexture::writeDataPath(
-        &texture_data_path_buffer, name, assetmgr);
+      .name         = "assets/textures/white"_str,
+      .width        = 2,
+      .height       = 2,
+      .format       = gfx::ImageFormat::BW,
+      .usage        = gfx::ImageUsage::Sampled,
+      .filter       = gfx::ImageFilter::Nearest,
+      .address_mode = gfx::ImageAddressMode::ClampToWhite,
+      .allocator    = &texture_compile_allocator,
+      .assetmgr     = &assetmgr,
+    };
 
-      gfx::CompiledTexture::CompileParams params =
-      { //TODO(delle) add TextureDef for specifying these params
-        .name         = name,
-        .format       = gfx::ImageFormat::RGBA,
-        .kind         = gfx::ImageKind::TwoD,
-        .filter       = gfx::ImageFilter::Nearest,
-        .address_mode = gfx::ImageAddressMode::ClampToWhite,
-        .allocator    = &mem::stl_allocator,
-        .assetmgr     = &assetmgr,
-      };
+    u8 pixels[16] = 
+    { 
+      0xff, 0xff, 0xff, 0xff, 
+      0xff, 0xff, 0xff, 0xff, 
+      0xff, 0xff, 0xff, 0xff, 
+      0xff, 0xff, 0xff, 0xff, 
+    };
 
-      gfx::CompiledTexture::compilePNG(params);
-      return true;
-    });
-  png_glob.destroy();
-$ end
+    gfx::CompiledTexture::compileFromMemory(pixels, white_texture_params);
 
-  CodepointRange ascii =
+    auto* white_texture_compiled = 
+      gfx::CompiledTexture::load(
+        "assets/textures/white"_str,assetmgr, renderer);
+    if (white_texture_compiled == nullptr)
+      return ERROR("failed to load white texture\n");
+    white_texture = white_texture_compiled->gfx_texture;
+
+    gfx::CompiledTexture::CompileParams null_texture_params =
+    {
+      .name         = "assets/textures/null"_str,
+      .format       = gfx::ImageFormat::RGBA,
+      .usage        = gfx::ImageUsage::Sampled,
+      .filter       = gfx::ImageFilter::Nearest,
+      .address_mode = gfx::ImageAddressMode::ClampToWhite,
+      .allocator    = &texture_compile_allocator,
+      .assetmgr     = &assetmgr,
+    };
+
+    gfx::CompiledTexture::compilePNG(null_texture_params);
+
+    auto* null_texture_compiled = 
+      gfx::CompiledTexture::load(
+        "assets/textures/null"_str, assetmgr, renderer);
+    if (null_texture_compiled == nullptr)
+      return ERROR("failed to load null texture\n");
+  }
+
+  TRACE("compiling shaders\n");
   {
-    .first_codepoint = 32,
-    .num_codepoints = 94,
-  };
+    gfx::CompiledShader::CompileParams scene_vertex_shader_params =
+    {
+      .name      = "assets/shaders/scene.vertex"_str,
+      .type      = gfx::ShaderType::Vertex,
+      .allocator = &mem::stl_allocator,
+      .assetmgr  = &assetmgr,
+    };
+    gfx::CompiledShader::compileGLSL(scene_vertex_shader_params);
 
-  gfx::Font::CompileParams params =
+    gfx::CompiledShader::CompileParams scene_fragment_shader_params =
+    {
+      .name      = "assets/shaders/scene.fragment"_str,
+      .type      = gfx::ShaderType::Fragment,
+      .allocator = &mem::stl_allocator,
+      .assetmgr  = &assetmgr,
+    };
+    gfx::CompiledShader::compileGLSL(scene_fragment_shader_params);
+
+    gfx::CompiledShader::CompileParams fullscreen_vertex_shader_params =
+    {
+      .name      = "assets/shaders/fullscreen.vertex"_str,
+      .type      = gfx::ShaderType::Vertex,
+      .allocator = &mem::stl_allocator,
+      .assetmgr  = &assetmgr,
+    };
+    gfx::CompiledShader::compileGLSL(fullscreen_vertex_shader_params);
+
+    gfx::CompiledShader::CompileParams stars_fragment_shader_params =
+    {
+      .name      = "assets/shaders/stars.fragment"_str,
+      .type      = gfx::ShaderType::Fragment,
+      .allocator = &mem::stl_allocator,
+      .assetmgr  = &assetmgr,
+    };
+    gfx::CompiledShader::compileGLSL(stars_fragment_shader_params);
+
+    gfx::CompiledShader::CompileParams ui_vertex_shader_params =
+    {
+      .name      = "assets/shaders/ui.vertex"_str,
+      .type      = gfx::ShaderType::Vertex,
+      .allocator = &mem::stl_allocator,
+      .assetmgr  = &assetmgr,
+    };
+    gfx::CompiledShader::compileGLSL(ui_vertex_shader_params);
+
+    gfx::CompiledShader::CompileParams ui_fragment_shader_params =
+    {
+      .name      = "assets/shaders/ui.fragment"_str,
+      .type      = gfx::ShaderType::Fragment,
+      .allocator = &mem::stl_allocator,
+      .assetmgr  = &assetmgr,
+    };
+    gfx::CompiledShader::compileGLSL(ui_fragment_shader_params);
+  }
+
+  TRACE("compiling gohu font\n");
   {
-    .name       = "assets/fonts/gohu"_str,
-    .ranges     = CodepointRanges::from(&ascii, 1),
-    .allocator  = &mem::stl_allocator,
-    .assetmgr   = &assetmgr,
-  };
+    CodepointRange ascii =
+    {
+      .first_codepoint = 32,
+      .num_codepoints = 94,
+    };
 
-  gfx::Font::compileBDF(params);
+    gfx::Font::CompileParams params =
+    {
+      .name       = "assets/fonts/gohu"_str,
+      .ranges     = CodepointRanges::from(&ascii, 1),
+      .allocator  = &mem::stl_allocator,
+      .assetmgr   = &assetmgr,
+    };
+
+    gfx::Font::compileBDF(params);
+  }
 
   @initSystem(ui.init(*this),              ui);
   @initSystem(gamemgr.init(this),          gamemgr);
@@ -161,7 +210,7 @@ $ end
 #endif
 
   INFO("done initializing in ",
-    WithUnits(TimePoint::now() - start_time), "\n");
+    WithUnits(TimePoint::monotonic() - start_time), "\n");
 
 
 
@@ -276,7 +325,9 @@ b8 Engine::checkReload()
  */
 b8 Engine::update()
 {
-  auto start = TimePoint::now();
+  iro::TimePoint time_point = iro::TimePoint::monotonic();
+  frame_start_time = TimeSpan::fromSeconds(time_point.s).toSeconds()
+    + TimeSpan::fromNanoseconds(time_point.ns).toSeconds();
 
   if (!checkReload())
     return ERROR("error occured while reloading\n");

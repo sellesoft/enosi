@@ -11,10 +11,11 @@ $ local defs = Defs.gather()
 
 #include "iro/fs/Path.h"
 #include "iro/fs/File.h"
+#include "iro/Logger.h"
 
 using namespace fs;
 
-@log.ger(asset, Info)
+@log.ger(asset, Debug)
 
 /* ----------------------------------------------------------------------------
  */
@@ -51,16 +52,19 @@ b8 TypedSourceAssetRef<int>::load(String type, LoadParams& params)
 
   // platform::debugBreak();
 
-  CompiledData::CompileParams compile_params = 
+  if (params.sfile_reg != nullptr)
   {
-    .name = src_path,
-    .type = type,
-    .assetmgr = params.assetmgr,
-    .sfile_reg = params.sfile_reg,
-  };
+    CompiledData::CompileParams compile_params = 
+    {
+      .name = src_path,
+      .type = type,
+      .assetmgr = params.assetmgr,
+      .sfile_reg = *params.sfile_reg,
+    };
 
-  if (!CompiledData::compile(compile_params))
-    return false;
+    if (!CompiledData::compile(compile_params))
+      return false;
+  }
 
   auto compiled_data = 
     CompiledData::load(src_path, type, params.assetmgr, &asset);
@@ -74,6 +78,26 @@ b8 TypedSourceAssetRef<int>::load(String type, LoadParams& params)
   {
     ref.ptr->load(ref.type, params);
   }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 TypedAssetRef<int>::load(String type, LoadParams& params)
+{
+  if (isnil(name))
+    return ERROR(
+      "TypedAssetRef::load called on a reference that has no name\n");
+
+  if (!Path::hasExtension(name))
+    return ERROR("TypedAssetRef::load called on a reference whose name has "
+                 "no extension\n");
+  
+  asset = params.assetmgr.loadAssetFromDisk(name);
+  if (asset == nullptr)
+    return ERROR("failed to load asset '", name, "' from disk\n");
 
   return true;
 }

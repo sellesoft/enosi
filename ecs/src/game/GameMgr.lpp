@@ -63,7 +63,7 @@ b8 GameMgr::init(Engine* eng)
   {
     .renderer = eng->renderer,
     .assetmgr = eng->assetmgr,
-    .sfile_reg = eng->source_data_file_reg,
+    .sfile_reg = &eng->source_data_file_reg,
   };
 
   for (auto& ref : refs)

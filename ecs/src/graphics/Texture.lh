@@ -7,12 +7,10 @@ $ require "common"
 
 #include "iro/Common.h"
 #include "iro/Unicode.h"
-#include "iro/memory/Allocator.h"
 
-#include "math/vec.h"
-
-@@lpp.import "asset/Asset.lh"
 @@lpp.import "graphics/TextureParams.lh"
+
+using namespace iro;
 
 namespace gfx
 {
@@ -23,39 +21,32 @@ struct Renderer;
  */
 struct Texture
 {
-  void* handle = nullptr;
-  
-  // laziness
-  bool operator == (const Texture& rhs) const
-  {
-    return handle == rhs.handle;
-  }
+  u32 index;
 
   static Texture create(
     Renderer&        renderer,
     u32              width,
     u32              height,
     ImageFormat      format,
+    ImageUsageFlags  usage,
     ImageAddressMode address_mode,
     ImageFilter      filter,
-    ImageKind        kind,
-    void*            pixels);
+    void*            pixels,
+    String           name = "unnamed"_str);
 
-  void destroy();
+  b8 deinit(Renderer& renderer);
 
-  // TODO(sushi) once we move to Vulkan figure out if we can just update 
-  //             specific information about the Texture w/o having to store
-  //             all the properties it was originally created with.
-  void recreate(
-    u32              width,
-    u32              height,
-    ImageFormat      format,
-    ImageAddressMode address_mode,
-    ImageFilter      filter,
-    ImageKind        kind,
-    void*            pixels);
+  inline b8 operator==(const Texture& other) const
+  {
+    return index == other.index;
+  }
+
+  inline b8 operator!=(const Texture& other) const
+  {
+    return index != other.index;
+  }
 };
 
 }
 
-DefineNilValue(gfx::Texture, { 0 }, { return x.handle == nullptr; });
+DefineNilValue(gfx::Texture, { 0 }, { return x.index == 0; });

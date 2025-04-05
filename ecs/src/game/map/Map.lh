@@ -5,6 +5,7 @@ $ local cmn = require "common"
 #include "iro/Common.h"
 #include "iro/containers/Array.h"
 #include "iro/Unicode.h"
+#include "math/vec.h"
 
 @@lpp.import "game/map/Map.defs.lh"
 

@@ -1,12 +1,12 @@
 $ require "common"
 
-@@lpp.import "Renderer.lh"
-@@lpp.import "RendererInternal.lh"
-@@lpp.import "Texture.lh"
+@@lpp.import "graphics/RendererInternal.lh" //includes win32
+@@lpp.import "graphics/Renderer.lh"
+@@lpp.import "graphics/Texture.lh"
 
 #include "iro/Logger.h"
 
-@defFileLogger(texture, Info)
+@defFileLogger(gfx.texture, Info)
 
 using namespace iro;
 
@@ -15,146 +15,582 @@ namespace gfx
 
 /* ----------------------------------------------------------------------------
  */
-Texture Texture::create(
-    Renderer&        renderer,
-    u32              width,
-    u32              height,
-    ImageFormat      format,
-    ImageAddressMode address_mode,
-    ImageFilter      filter,
-    ImageKind        kind,
-    void*            pixels)
+VkFormat imageFormatToVulkan(ImageFormat x)
 {
-$ if ECS_OPENGL then
-  Texture out = {};
-  
-  glGenTextures(1, (u32*)&out.handle);
-
-  out.recreate(
-    width,
-    height,
-    format,
-    address_mode,
-    filter,
-    kind,
-    pixels);
-
-  return out;
-
-$ elseif ECS_VULKAN then
-$ end
-}
-
-/* ----------------------------------------------------------------------------
- */
-void Texture::destroy()
-{
-  glDeleteTextures(1, (u32*)&handle);
-}
-
-/* ----------------------------------------------------------------------------
- */
-void Texture::recreate(
-    u32              width,
-    u32              height,
-    ImageFormat      format,
-    ImageAddressMode address_mode,
-    ImageFilter      filter,
-    ImageKind        kind,
-    void*            pixels)
-{
-
-$ if ECS_OPENGL then
-  glBindTexture(GL_TEXTURE_2D, *(u32*)&handle);
-
-  if (width % 4 != 0)
+  switch(x)
   {
-    // TODO(sushi) handle alignments of 2 as well.
-    WARN("provided texture has a width that is not "
-         "aligned to 4 and will likely be loaded improperly\n");
+  case ImageFormat::BW:
+    return VK_FORMAT_R8_UNORM;
+  case ImageFormat::BWA:
+    return VK_FORMAT_R8G8_UNORM;
+  case ImageFormat::RGB:
+    return VK_FORMAT_R8G8B8_UNORM;
+  case ImageFormat::RGBA:
+    return VK_FORMAT_R8G8B8A8_UNORM;
+  case ImageFormat::BGRA:
+    return VK_FORMAT_B8G8R8A8_UNORM;
   }
+  FATAL("invalid ImageFormat: ", (u32)x);
+  return VK_FORMAT_UNDEFINED;
+}
 
-  struct GLFormat { GLint internal; GLint format; };
-
-  GLFormat formats[] =
+/* ----------------------------------------------------------------------------
+ */
+static u32 imageFormatToBytesPerPixel(ImageFormat x)
+{
+  switch(x)
   {
-    { GL_R8,    GL_RED  },
-    { GL_RG8,   GL_RG   },
-    { GL_RGB8,  GL_RGB  },
-    { GL_RGBA8, GL_RGBA },
-  };
+  case ImageFormat::BW:
+    return 1;
+  case ImageFormat::BWA:
+    return 2;
+  case ImageFormat::RGB:
+    return 3;
+  case ImageFormat::RGBA:
+    return 4;
+  case ImageFormat::BGRA:
+    return 4;
+  }
+  FATAL("invalid ImageFormat: ", (u32)x);
+  return 0;
+}
 
-  GLFormat gl_format = formats[(u32)format];
-
-  glTexImage2D(
-    GL_TEXTURE_2D,
-    0,
-    gl_format.internal,
-    width,
-    height,
-    0,
-    gl_format.format,
-    GL_UNSIGNED_BYTE,
-    pixels);
-
-  assert(glGetError() == GL_NO_ERROR);
-
-  GLint address_modes[] =
+/* ----------------------------------------------------------------------------
+ */
+static VkFilter imageFilterToVulkan(ImageFilter x)
+{
+  switch(x)
   {
-    GL_REPEAT,
-    GL_MIRRORED_REPEAT,
-    GL_CLAMP_TO_EDGE,
-  };
+  case ImageFilter::Nearest:
+    return VK_FILTER_NEAREST;
+  case ImageFilter::Linear:
+    return VK_FILTER_LINEAR;
+  }
+  FATAL("invalid ImageFilter: ", (u32)x);
+  return VK_FILTER_NEAREST;
+}
 
-  f32 border_colors[6][4] =
+/* ----------------------------------------------------------------------------
+ */
+static VkSamplerAddressMode imageAddressModeToVulkan(ImageAddressMode x)
+{
+  switch(x)
   {
-    {},{},{},
-    { 1.f, 1.f, 1.f, 1.f },
-    { 0.f, 0.f, 0.f, 1.f },
-    { 0.f, 0.f, 0.f, 0.f },
-  };
-
-  GLint gl_address_mode;
-
-  switch (address_mode)
-  {
+  case ImageAddressMode::Repeat:
+    return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+  case ImageAddressMode::MirroredRepeat:
+    return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+  case ImageAddressMode::ClampToEdge:
+    return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
   case ImageAddressMode::ClampToWhite:
+    return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
   case ImageAddressMode::ClampToBlack:
+    return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
   case ImageAddressMode::ClampToTransparent:
-    gl_address_mode = GL_CLAMP_TO_BORDER;
-    glTexParameterfv(
-      GL_TEXTURE_2D,
-      GL_TEXTURE_BORDER_COLOR,
-      border_colors[(u32)address_mode]);
-    break;
-  default:
-    gl_address_mode = address_modes[(u32)address_mode];
-    break;
+    return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+  }
+  FATAL("invalid ImageAddressMode: ", (u32)x);
+  return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Texture Texture::create(
+  Renderer&        renderer,
+  u32              width,
+  u32              height,
+  ImageFormat      format,
+  ImageUsageFlags  usage,
+  ImageAddressMode address_mode,
+  ImageFilter      filter,
+  void*            pixels,
+  String           name)
+{
+  RendererInternal& ri = *(RendererInternal*)renderer.internal;
+  TRACE("creating a texture of size ", width, "x", height, "\n");
+
+  if (ri.texture_count >= ri.texture_pool.MAX_COUNT)
+  {
+    ERROR("failed to initialize a texture because the maximum"
+      " number of textures has been reached (", ri.texture_pool.MAX_COUNT,
+      ")\n");
+    return {0};
   }
 
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, gl_address_mode);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, gl_address_mode);
-
-  GLint filters[] =
+  if (width == 0 || height == 0)
   {
-    GL_NEAREST,
-    GL_LINEAR,
+    ERROR("failed to initialize a texture because the width or"
+      " height is not positive\n");
+    return {0};
+  }
+
+  if (usage.isNone())
+  {
+    ERROR("failed to initialize a texture because the usage is not set\n");
+    return {0};
+  }
+  else if (usage.test(ImageUsage::FramebufferColor) && 
+           format != ImageFormat::RGBA)
+  {
+    ERROR("failed to initialize a texture because the format is"
+      " not RGBA but was specified as a framebuffer color texture\n");
+    return {0};
+  }
+
+  VkFormat vk_format = imageFormatToVulkan(format);
+
+  VkImageCreateInfo image_create_info =
+  {
+    .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+    .imageType = VK_IMAGE_TYPE_2D,
+    .format = vk_format,
+    .extent = {
+      .width = width,
+      .height = height,
+      .depth = 1
+    },
+    .mipLevels = 1,
+    .arrayLayers = 1,
+    .samples = VK_SAMPLE_COUNT_1_BIT,
+    .tiling = VK_IMAGE_TILING_OPTIMAL,
+    .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
   };
 
-  GLint gl_filter = filters[(u32)filter];
+  if (usage.test(ImageUsage::Sampled))
+    image_create_info.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+  if (usage.test(ImageUsage::FramebufferColor))
+    image_create_info.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_filter);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_filter);
-
-  if (format == ImageFormat::BW)
+  VkImage image;
+  if (VK_SUCCESS != vkCreateImage(ri.device, &image_create_info,
+    &ri.allocator, &image))
   {
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_G, GL_RED);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_B, GL_RED);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_A, GL_RED);
+    ERROR("failed to create a vulkan image\n");
+    return {0};
   }
-$ elseif ECS_VULKAN then
 
-$ end
+  auto destroy_image_if_failure = deferWithCancel
+  {
+    vkDestroyImage(ri.device, image, &ri.allocator);
+  };
+
+  VkMemoryRequirements memory_requirements;
+  vkGetImageMemoryRequirements(ri.device, image, &memory_requirements);
+
+  VkPhysicalDeviceMemoryProperties memory_properties;
+  vkGetPhysicalDeviceMemoryProperties(ri.physical_device,
+    &memory_properties);
+
+  VkMemoryPropertyFlags vk_properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+  u32 memory_type = 0;
+  for (u32 i = 0; i < memory_properties.memoryTypeCount; i++)
+  {
+    if (   (memory_requirements.memoryTypeBits & (1 << i))
+        && (  (  memory_properties.memoryTypes[i].propertyFlags
+               & vk_properties)
+            == vk_properties))
+    {
+      memory_type = i;
+      break;
+    }
+  }
+
+  VkMemoryAllocateInfo alloc_info =
+  {
+    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+    .allocationSize = memory_requirements.size,
+    .memoryTypeIndex = memory_type,
+  };
+
+  VkDeviceMemory memory;
+  if (VK_SUCCESS != vkAllocateMemory(ri.device, &alloc_info,
+    &ri.allocator, &memory))
+  {
+    ERROR("failed to allocate memory for a vulkan image\n");
+    return {0};
+  }
+
+  auto free_memory_if_failure = deferWithCancel
+  {
+    vkFreeMemory(ri.device, memory, &ri.allocator);
+  };
+
+  if (VK_SUCCESS != vkBindImageMemory(ri.device, image, memory, 0))
+  {
+    ERROR("failed to bind memory to a vulkan image\n");
+    return {0};
+  }
+
+  VkImageViewCreateInfo view_create_info =
+  {
+    .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+    .image = image,
+    .viewType = VK_IMAGE_VIEW_TYPE_2D,
+    .format = vk_format,
+    .subresourceRange =
+    {
+      .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+      .levelCount = 1,
+      .layerCount = 1,
+    }
+  };
+
+  switch (format)
+  {
+    case ImageFormat::BW:
+      view_create_info.components.r = VK_COMPONENT_SWIZZLE_R;
+      view_create_info.components.g = VK_COMPONENT_SWIZZLE_R;
+      view_create_info.components.b = VK_COMPONENT_SWIZZLE_R;
+      view_create_info.components.a = VK_COMPONENT_SWIZZLE_R;
+      break;
+    case ImageFormat::BWA:
+      view_create_info.components.r = VK_COMPONENT_SWIZZLE_R;
+      view_create_info.components.g = VK_COMPONENT_SWIZZLE_R;
+      view_create_info.components.b = VK_COMPONENT_SWIZZLE_R;
+      view_create_info.components.a = VK_COMPONENT_SWIZZLE_A;
+      break;
+    case ImageFormat::RGB:
+      view_create_info.components.r = VK_COMPONENT_SWIZZLE_R;
+      view_create_info.components.g = VK_COMPONENT_SWIZZLE_G;
+      view_create_info.components.b = VK_COMPONENT_SWIZZLE_B;
+      view_create_info.components.a = VK_COMPONENT_SWIZZLE_ONE;
+      break;
+  }
+
+  VkImageView view;
+  if (VK_SUCCESS != vkCreateImageView(ri.device, &view_create_info,
+    &ri.allocator, &view))
+  {
+    ERROR("failed to create a vulkan image view\n");
+    return {0};
+  }
+
+  auto destroy_view_if_failure = deferWithCancel
+  {
+    vkDestroyImageView(ri.device, view, &ri.allocator);
+  };
+
+  if (pixels != nullptr)
+  {
+    VkBufferCreateInfo staging_buffer_create_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .size = memory_requirements.size,
+      .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
+
+    VkBuffer staging_buffer;
+    if (VK_SUCCESS != vkCreateBuffer(ri.device, &staging_buffer_create_info,
+      &ri.allocator, &staging_buffer))
+    {
+      ERROR("failed to create a staging buffer when uploading"
+        " initial texture data\n");
+      return {0};
+    }
+
+    defer
+    {
+      vkDestroyBuffer(ri.device, staging_buffer, &ri.allocator);
+    };
+
+    VkMemoryRequirements staging_memory_requirements;
+    vkGetBufferMemoryRequirements(ri.device, staging_buffer,
+      &staging_memory_requirements);
+
+    VkPhysicalDeviceMemoryProperties staging_memory_properties;
+    vkGetPhysicalDeviceMemoryProperties(ri.physical_device,
+      &staging_memory_properties);
+
+    VkMemoryPropertyFlags vk_staging_buffer_properties =
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+      | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+
+    u32 staging_buffer_memory_type = 0;
+    for (u32 i = 0; i < staging_memory_properties.memoryTypeCount; i++)
+    {
+      if (   (staging_memory_requirements.memoryTypeBits & (1 << i))
+          && (  (  staging_memory_properties.memoryTypes[i].propertyFlags
+                 & vk_staging_buffer_properties)
+              == vk_staging_buffer_properties))
+      {
+        staging_buffer_memory_type = i;
+        break;
+      }
+    }
+
+    VkMemoryAllocateInfo staging_buffer_alloc_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize = staging_memory_requirements.size,
+      .memoryTypeIndex = staging_buffer_memory_type,
+    };
+
+    VkDeviceMemory staging_buffer_memory;
+    if (VK_SUCCESS != vkAllocateMemory(ri.device, &staging_buffer_alloc_info,
+      &ri.allocator, &staging_buffer_memory))
+    {
+      ERROR("failed to allocate memory for a staging buffer when"
+        " uploading initial texture data\n");
+      return {0};
+    }
+
+    defer
+    {
+      vkFreeMemory(ri.device, staging_buffer_memory, &ri.allocator);
+    };
+
+    if (VK_SUCCESS != vkBindBufferMemory(ri.device, staging_buffer,
+      staging_buffer_memory, 0))
+    {
+      ERROR("failed to bind memory to a staging buffer when"
+        " uploading initial texture data\n");
+      return {0};
+    }
+
+    void* data;
+    if (VK_SUCCESS != vkMapMemory(ri.device, staging_buffer_memory, 0,
+      staging_memory_requirements.size, 0, &data))
+    {
+      ERROR("failed to map memory for a staging buffer when"
+        " uploading initial texture data\n");
+      return {0};
+    }
+
+    u64 requested_size = width * height * imageFormatToBytesPerPixel(format);
+    mem::copy(data, pixels, requested_size);
+
+    vkUnmapMemory(ri.device, staging_buffer_memory);
+
+    VkCommandBuffer single_use_command_buffer;
+    if (!beginSingleUseCommandBuffer(renderer, &single_use_command_buffer))
+      return {0};
+
+    VkImageMemoryBarrier barrier =
+    {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+      .srcAccessMask = 0,
+      .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+      .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .image = image,
+      .subresourceRange =
+      {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .levelCount = 1,
+        .layerCount = 1,
+      },
+    };
+
+    vkCmdPipelineBarrier(single_use_command_buffer,
+      VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+      0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+    VkBufferImageCopy copy_region =
+    {
+      .imageSubresource =
+      {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .layerCount = 1,
+      },
+      .imageOffset = {0, 0, 0},
+      .imageExtent = {width, height, 1},
+    };
+
+    vkCmdCopyBufferToImage(single_use_command_buffer, staging_buffer, image,
+      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy_region);
+
+    VkImageMemoryBarrier barrier2 =
+    {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+      .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+      .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+      .oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+      .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .image = image,
+      .subresourceRange =
+      {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .levelCount = 1,
+        .layerCount = 1,
+      },
+    };
+
+    vkCmdPipelineBarrier(single_use_command_buffer,
+      VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+      0, 0, nullptr, 0, nullptr, 1, &barrier2);
+
+    if(!endSingleUseCommandBuffer(renderer, single_use_command_buffer))
+      return {0};
+  }
+  else
+  {
+    VkImageMemoryBarrier barrier =
+    {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+      .srcAccessMask = 0,
+      .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+      .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .image = image,
+      .subresourceRange =
+      {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .levelCount = 1,
+        .layerCount = 1,
+      },
+    };
+
+    VkCommandBuffer single_use_command_buffer;
+    if (!beginSingleUseCommandBuffer(renderer, &single_use_command_buffer))
+      return {0};
+
+    vkCmdPipelineBarrier(single_use_command_buffer,
+      VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+      0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+    if(!endSingleUseCommandBuffer(renderer, single_use_command_buffer))
+      return {0};
+  }
+
+  VkSamplerCreateInfo sampler_create_info =
+  {
+    .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+    .magFilter = imageFilterToVulkan(filter),
+    .minFilter = imageFilterToVulkan(filter),
+    .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+    .addressModeU = imageAddressModeToVulkan(address_mode),
+    .addressModeV = imageAddressModeToVulkan(address_mode),
+    .addressModeW = imageAddressModeToVulkan(address_mode),
+    .mipLodBias = 0.0f,
+    .anisotropyEnable = VK_FALSE,
+    .maxAnisotropy = 1.0f,
+    .compareEnable = VK_FALSE,
+    .minLod = 0.0f,
+    .maxLod = 0.0f,
+    .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
+    .unnormalizedCoordinates = VK_FALSE,
+  };
+
+  VkSampler sampler;
+  if (VK_SUCCESS != vkCreateSampler(ri.device, &sampler_create_info,
+    &ri.allocator, &sampler))
+  {
+    ERROR("failed to create a vulkan sampler\n");
+    return {0};
+  }
+
+  auto destroy_sampler_if_failure = deferWithCancel
+  {
+    vkDestroySampler(ri.device, sampler, &ri.allocator);
+  };
+
+  VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
+  {
+    VkDescriptorSetAllocateInfo alloc_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+      .descriptorPool = ri.descriptor_pool,
+      .descriptorSetCount = 1,
+      .pSetLayouts = &ri.default_sampler_descriptor_set_layout,
+    };
+
+    if (VK_SUCCESS != vkAllocateDescriptorSets(ri.device, &alloc_info,
+      &descriptor_set))
+    {
+      ERROR("failed to allocate a descriptor set for a vulkan texture\n");
+      return {0};
+    }
+
+    VkDescriptorImageInfo descriptor_info =
+    {
+      .sampler = sampler,
+      .imageView = view,
+      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+    };
+
+    VkWriteDescriptorSet descriptor_set_write =
+    {
+      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+      .dstSet = descriptor_set,
+      .dstBinding = 0,
+      .dstArrayElement = 0,
+      .descriptorCount = 1,
+      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+      .pImageInfo = &descriptor_info,
+    };
+
+    vkUpdateDescriptorSets(ri.device, 1, &descriptor_set_write, 0, nullptr);
+  }
+
+  RendererTexture* texture = ri.texture_pool.add();
+  texture->image = image;
+  texture->memory = memory;
+  texture->view = view;
+  texture->sampler = sampler;
+  texture->descriptor_set = descriptor_set;
+  ri.texture_count++;
+
+  debugSetObjectName(renderer, VK_OBJECT_TYPE_IMAGE, image,
+    "<", name, " image>");
+  debugSetObjectName(renderer, VK_OBJECT_TYPE_DEVICE_MEMORY, memory,
+    "<", name, " memory>");
+  debugSetObjectName(renderer, VK_OBJECT_TYPE_IMAGE_VIEW, view,
+    "<", name, " image view>");
+  debugSetObjectName(renderer, VK_OBJECT_TYPE_SAMPLER, sampler,
+    "<", name, " sampler>");
+  debugSetObjectName(renderer, VK_OBJECT_TYPE_DESCRIPTOR_SET, descriptor_set,
+    "<", name, " descriptor>");
+
+  destroy_image_if_failure.cancel();
+  free_memory_if_failure.cancel();
+  destroy_view_if_failure.cancel();
+  destroy_sampler_if_failure.cancel();
+  return {(u32)ri.texture_pool.index_of(texture)};
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Texture::deinit(Renderer& renderer)
+{
+  RendererInternal& ri = *(RendererInternal*)renderer.internal;
+  TRACE("deinitializing a texture at index ", index, "\n");
+
+  if (index == 0)
+    return true;
+
+  RendererTexture* texture = ri.texture_pool.at_index(index);
+  if (texture == nullptr)
+    return ERROR("attempted to destroy a texture at index ", index,
+      " which is out of bounds\n");
+
+  if (texture->image == VK_NULL_HANDLE)
+    return ERROR("attempted to destroy an uninitialized texture\n");
+
+  vkDestroySampler(ri.device, texture->sampler, &ri.allocator);
+  vkDestroyImageView(ri.device, texture->view, &ri.allocator);
+  vkDestroyImage(ri.device, texture->image, &ri.allocator);
+  vkFreeMemory(ri.device, texture->memory, &ri.allocator);
+
+  texture->image = VK_NULL_HANDLE;
+  texture->memory = VK_NULL_HANDLE;
+  texture->view = VK_NULL_HANDLE;
+  texture->sampler = VK_NULL_HANDLE;
+
+  index = 0;
+  ri.texture_pool.remove(texture);
+  ri.texture_count--;
+
+  return true;
 }
 
 }

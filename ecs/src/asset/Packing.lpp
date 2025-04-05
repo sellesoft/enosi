@@ -464,6 +464,16 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
+$ local putEnumFlagsPackCase = function(declname, addrname, decl)
+$   local TEnum = decl.template_args[1]:getDesugared()
+$   local DEnum = TEnum:getDecl()
+  if (!packSourceDataIntoEnumFlags(*child, &$(addrname), ctx))
+    return ERROR(
+      "failed to pack flags into $(declname)'s field $(addrname)\n");
+$ end 
+
+$ -- * ------------------------------------------------------------------------
+
 $ local putPackCase = function(declname, addrname, type, prereqs)
 $   local TRef = defs.p.decls.map["struct Ref"]
 $   if type.name == "String" then
@@ -491,7 +501,7 @@ $         return (putArrayPackCase(declname, addrname, type, decl, prereqs))
 $       elseif decl.specialized_name == "vec2" then
 $         return (putVec2PackCase(declname, addrname, type, prereqs))
 $       elseif decl.specialized_name == "Flags" then
-$         -- TODO(sushi) handle Flags
+$         return (putEnumFlagsPackCase(declname, addrname, decl))
 $       elseif decl.specialized_name == "OffsetPtr" or 
 $              decl.specialized_name == "OffsetSlice" then
 $         -- TODO(sushi) fix includes or implement better filtering so things
@@ -521,6 +531,60 @@ $     if type.name == "gfx::CompiledTexture" then
 $       return (putCompiledTexturePackCase(declname, addrname, type, prereqs))
 $     end
 $   end
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local putEnumFlagsPacker = function(name, decl)
+$   local typename = Defs.removeTag(decl.name)
+$   local TEnum = decl.template_args[1]:getDesugared()
+$   local DEnum = TEnum:getDecl()
+$   if not DEnum then
+$     error("enum flags type "..name.." has no decl!")
+$   end
+$   local enumname = Defs.removeTag(DEnum.name)
+/* ----------------------------------------------------------------------------
+ */
+b8 packSourceDataIntoEnumFlags(
+    const SourceData& data,
+    $(typename)* out,
+    PackContext& ctx)
+{
+  using TEnum = $(enumname);
+
+  if (!data.hasObjectData())
+    return ERROR("expected an array of $(enumname) to packing to $(name)\n");
+
+  if (data.children.isEmpty())
+  {
+    out->clear();
+    return true;
+  }
+
+  for (const SourceData* child : data.children)
+  {
+    if (notnil(child->name))
+      return ERROR("elements of $(typename) data cannot be named\n");
+
+    if (!child->hasStringValue())
+      return ERROR("elements of $(typename) data must be strings\n");
+    
+    switch (child->val.str.hash())
+    {
+$ for elem in DEnum.elems:each() do
+$   if not elem.metadata.hidden then
+    case "$(elem.name)"_hashed:
+      out->set(TEnum::$(elem.name));
+      break;
+$   end
+$ end
+    default:
+      return ERROR("no element named ", child->val.str, " in $(typename)\n");
+    }
+  }
+
+  return true;
+}
 $ end
 
 $ -- * ------------------------------------------------------------------------
@@ -652,7 +716,6 @@ $ end
 }
 $ end
 
-
 $ -- * ------------------------------------------------------------------------
 
 $ local placed_packers = 
@@ -672,6 +735,8 @@ $       putStructPacker(name, decl, prereqs)
 $     end
 $   elseif decl:is(ast.TemplateSpecialization) then
 $     if decl.specialized_name == "Array" then
+$     elseif decl.specialized_name == "Flags" then
+$       putEnumFlagsPacker(name, decl)
 $     elseif decl.specialized_name == "ArrayDef" then
 $       local elem_type = decl.template_args[1]
 $       if not elem_type:is(ast.PointerType) then

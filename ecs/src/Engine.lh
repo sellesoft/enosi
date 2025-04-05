@@ -2,19 +2,16 @@ $ local cmn = require "common"
 
 #include "iro/time/Time.h"
 
-// #include "dlfcn.h"
-
-@@lpp.import "ui/UI.lh"
 @@lpp.import "window/Window.lh"
 @@lpp.import "graphics/Renderer.lh"
+@@lpp.import "graphics/Texture.lh"
+@@lpp.import "ui/UI.lh"
 
 @@lpp.import "asset/AssetMgr.lh"
 @@lpp.import "asset/SourceDataFileReg.lh"
 
 @@lpp.import "input/InputMgr.lh"
 @@lpp.import "input/Input.events.lh"
-
-@@lpp.import "window/Window.lh"
 
 @@lpp.import "game/GameMgr.lh"
 
@@ -32,33 +29,35 @@ struct Reloader;
 
 /* ============================================================================
  */
+//NOTE(delle) fields are in order of initialization
 struct Engine
 {
+  f64 frame_start_time;
+
+  SourceDataFileReg source_data_file_reg;
+
   struct
   {
     BroadcastEventBus broadcast;
   } eventbus;
+
+  InputMgr input;
 
   Window window;
 
   gfx::Renderer renderer;
 
   AssetMgr assetmgr;
-  SourceDataFileReg source_data_file_reg;
+
+  gfx::Texture white_texture;
 
   ui::UI ui;
 
-  InputMgr input;
-
-  TimePoint start_time;
+  GameMgr gamemgr;
 
   hr::Reloader* reloader;
 
   ui::Inspector* inspector;
-
-  ui::MapEditor* map_editor;
-
-  GameMgr gamemgr;
 
   b8 init();
   void deinit();

@@ -10,6 +10,7 @@ $ require "common"
 @@lpp.import "graphics/Texture.lh"
 @@lpp.import "graphics/Framebuffer.lh"
 @@lpp.import "graphics/Buffer.lh"
+@@lpp.import "graphics/Pipeline.lh"
 
 namespace gfx
 {
@@ -18,27 +19,57 @@ namespace gfx
  */
 struct DrawCmd
 {
+  static constexpr u64 MAX_PUSH_CONSTANT_SIZE = 128;
+
   enum class Kind
   {
-    Invalid,
-    BindBuffer,
-    Draw,
     SetScissor,
     SetViewport,
-    BindTexture,
     BindFramebuffer,
-    PushUniformVec2,
-    PushUniformFloat,
-    PushUniformBool,
-    PushUniformMat3x2,
-    UseProgram,
+    BindPipeline,
+    BindTexture,
+    BindUniformBuffer,
+    BindStorageBuffer,
+    BindVertexBuffer,
+    BindIndexBuffer,
+    PushConstant,
+    Draw,
+$ if ECS_DEBUG then
+    DebugBeginLabel,
+    DebugEndLabel,
+    DebugInsertLabel,
+$ end -- if ECS_DEBUG
   };
 
   Kind kind;
 
   union
   {
+    struct
+    {
+      vec2i pos;
+      vec2u size;
+    } set_scissor;
+
+    struct
+    {
+      vec2f pos;
+      vec2f size;
+    } set_viewport;
+
+    Framebuffer bind_framebuffer;
+
+    Pipeline bind_pipeline;
+
+    Texture bind_texture;
+
     Buffer bind_buffer;
+
+    struct
+    {
+      u8 data[MAX_PUSH_CONSTANT_SIZE];
+      u64 size;
+    } push_constant;
 
     struct
     {
@@ -47,38 +78,14 @@ struct DrawCmd
       u64 vertex_start;
     } draw;
 
+$ if ECS_DEBUG then
     struct
     {
-      vec2i pos;
-      vec2i size;
-    } set_scissor;
-
-    struct
-    {
-      vec2i pos;
-      vec2i size;
-    } set_viewport;
-
-    Texture bind_texture;
-
-    Framebuffer bind_framebuffer;
-
-    struct
-    {
-      String name;
-      union
-      {
-        vec2f v;
-        f32 f;
-        b8 b;
-        mat3x2 m;
-      };
-    } push_uniform;
-
-    u32 use_program;
+      char label[64];
+      vec4f color;
+    } debug_label;
+$ end -- if ECS_DEBUG
   };
-
-  DrawCmd() : kind(Kind::Invalid), bind_buffer() {}
 };
 
 }

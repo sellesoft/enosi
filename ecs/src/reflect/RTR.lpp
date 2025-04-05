@@ -2,15 +2,36 @@ $ local cmn = require "common"
 $ local ast = require "reflect.AST"
 $ local Defs = require "asset.GatherDefs"
 
-$ local defs = Defs.gather()
+$$$
+local defs = Defs.gather
+{
+  extra_patterns = cmn.List
+  {
+    "src/**/*.lh"
+  }
+}
+  
+$$$
+
 @defs.imported:get
 
 @@lpp.import "reflect/RTR.lh"
 
+$ local function eachDecl(f)
+$   defs:eachDecl(function(name, decl)
+$     if decl.is_anonymous then return end
+$     f(name, decl)
+$   end)
+$ end
+
 namespace rtr
 {
 
-$ defs:eachDecl(function(name, decl)
+template<typename T>
+struct Typename { };
+
+$ local decls_with_metadata = {}
+$ eachDecl(function(name, decl)
 /* ----------------------------------------------------------------------------
  */
 template<>
@@ -19,6 +40,14 @@ String getTypename<$(name)>()
   return "$(name)"_str;
 }
 
+$ local has_metadata = false
+$ for _ in pairs(decl.metadata) do
+$   has_metadata = true
+$   decls_with_metadata[name] = true
+$   break
+$ end
+
+$ if has_metadata then
 /* ----------------------------------------------------------------------------
  */
 template<>
@@ -33,6 +62,8 @@ $ end
   }
   return nil;
 }
+$ end
+
 
 $ if decl:is(ast.Enum) then
 /* ----------------------------------------------------------------------------
@@ -40,11 +71,15 @@ $ if decl:is(ast.Enum) then
 template<>
 String getEnumElementName($(name) x)
 {
+$ local placed_values = {}
   switch (x)
   {
 $ for elem in decl.elems:each() do
+$   if not placed_values[elem.value] then
+$     placed_values[elem.value] = true
   case $(name)::$(elem.name):
     return "$(elem.name)"_str;
+$   end
 $ end
   }
 
@@ -61,9 +96,11 @@ String getMetadataValue(String type, String name)
 {
   switch (type.hash())
   {
-$ defs:eachDecl(function(name, decl)
+$ eachDecl(function(name, decl)
+$   if decls_with_metadata[name] then
   case "$(name)"_hashed:
     return getMetadataValue<$(name)>(name);
+$   end
 $ end)
   }
   return nil;

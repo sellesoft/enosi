@@ -1,9 +1,10 @@
 $ require "common"
 
 @@lpp.import "game/Eye.sys.lh"
-
 @@lpp.import "game/GameMgr.lh"
 @@lpp.import "game/Transform.comp.lh"
+
+#include "iro/Logger.h"
 
 @defFileLogger(eye, Info)
 

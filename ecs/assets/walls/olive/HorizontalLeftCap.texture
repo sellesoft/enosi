@@ -1,9 +1,7 @@
 return gfx::TextureDef
 {
   name = "assets/walls/olive/HorizontalLeftCap.png",
-  kind = "TwoD",
   filter = "Nearest",
   format = "RGBA",
   address_mode = "ClampToWhite",
 }
-  

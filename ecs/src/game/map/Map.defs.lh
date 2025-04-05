@@ -53,7 +53,8 @@ enum class TileKindConfig
   ThreeWayIntersection,
 
   Default,
-
+  
+  @metadata.hidden
   COUNT,
 };
 

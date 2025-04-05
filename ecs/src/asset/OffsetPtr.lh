@@ -1,6 +1,6 @@
 /*
  *  A pointer to T who's value is relative to its own address.
- */ 
+ */
 
 /* ============================================================================
  */
@@ -26,13 +26,13 @@ struct OffsetPtr
 DefineNilValueT(OffsetPtr, { 0 }, { return x.offset == 0; });
 
 /* ============================================================================
- *  A helper for pointing at an array 
+ *  A helper for pointing at an array
  */
-template<typename T> 
+template<typename T>
 struct OffsetSlice
 {
   OffsetPtr<T> ptr;
-  u32 len;
+  u64 len;
 
   Slice<T> getSlice() const
   {
@@ -56,7 +56,7 @@ struct OffsetSlice
     }
   }
 
-  void setSlice(T* ptr, u32 len)
+  void setSlice(T* ptr, u64 len)
   {
     setSlice(Slice<T>::from(ptr, len));
   }
@@ -71,8 +71,8 @@ struct OffsetString : OffsetSlice<u8>
   String getString() const { return String::from(getSlice()); }
   void setString(String s) { setSlice(s); }
 
-  // Coerces a String into an OffsetString and sets it as though it 
-  // were pointing at 'realstr'. Ideally String never gets smaller so 
+  // Coerces a String into an OffsetString and sets it as though it
+  // were pointing at 'realstr'. Ideally String never gets smaller so
   // this never breaks :).
   static void setStringAsOffsetString(String* s, String realstr)
   {

@@ -22,7 +22,7 @@ return
     "lppclang",
     "iro",
     "lpp",
-    "lppls",
+    --"lppls",
     "elua",
     "lake",
     --"hreload",
@@ -32,7 +32,6 @@ return
   },
 
   mode = "debug",
-  --renderer = "vulkan",
 
   -- OS specific config.
   os =

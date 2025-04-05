@@ -108,6 +108,8 @@ struct File : public io::IO
   static b8 copy(String dst, String src);
   static b8 unlink(String path);
 
+  static b8 exists(String path);
+
   [[deprecated("File cannot be opened without OpenFlags!")]]
   b8 open() override 
     { assert(!"File cannot be opened without OpenFlags!"); return false; }

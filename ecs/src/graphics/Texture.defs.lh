@@ -18,9 +18,12 @@ struct TextureDef
   @metadata.source_types(png)
   String name;
 
-  ImageKind kind;
   ImageFormat format;
   ImageFilter filter;
+
+  @metadata.default({ "Sampled" })
+  ImageUsageFlags usage;
+
   ImageAddressMode address_mode;
 };
 

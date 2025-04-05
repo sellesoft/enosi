@@ -494,7 +494,7 @@ $ end
     .width        = u32(tex_size.x),
     .height       = u32(tex_size.y),
     .format       = gfx::ImageFormat::BW,
-    .kind         = gfx::ImageKind::TwoD,
+    .usage        = gfx::ImageUsage::Sampled,
     .filter       = gfx::ImageFilter::Nearest,
     .address_mode = gfx::ImageAddressMode::ClampToWhite,
     .allocator    = params.allocator,

@@ -1,9 +1,9 @@
 ---
---- Module for attaching metadata via comments to C++ declarations. 
---- Clang keeps track of comments on decls and we use this to attach 
+--- Module for attaching metadata via comments to C++ declarations.
+--- Clang keeps track of comments on decls and we use this to attach
 --- information to C++ things without needing to perform complex parsing
 --- ourselves.
---- 
+---
 
 local M = {}
 local metadata = setmetatable({}, M)
@@ -11,8 +11,8 @@ local metadata = setmetatable({}, M)
 M.__index = function(_,k)
   return function(v)
     if v then
-      v = v:gsub("[%c\"]", 
-        { 
+      v = v:gsub("[%c\"]",
+        {
           ["\n"] = "\\n",
           ['"'] = '\\"',
         })
@@ -33,4 +33,4 @@ metadata.__parse = function(x)
   return o
 end
 
-return metadata 
+return metadata

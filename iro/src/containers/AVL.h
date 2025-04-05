@@ -12,6 +12,7 @@
 #define _iro_AVL_h
 
 #include "../Common.h"
+#include "../Unicode.h"
 #include "Pool.h"
 
 namespace iro

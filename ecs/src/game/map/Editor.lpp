@@ -18,7 +18,7 @@ $$$
 @imported:get
 
 
-$ local decls = 
+$ local decls =
 $ {
 $   editor = p.decls.map["struct ui::MapEditor"],
 $   tile_kind = p.decls.map["enum TileKind"],
@@ -29,6 +29,7 @@ $ }
 @@lpp.import "asset/Packing.lh"
 @@lpp.import "ui/widgets/Separator.lh"
 
+#include "iro/Logger.h"
 #include "iro/Platform.h"
 #include "math/util.h"
 #include "iro/fs/Glob.h"
@@ -80,7 +81,7 @@ struct TileKindDisplay : public Item
    */
   static TileKindDisplay* create(UI& ui, String id)
   {
-    auto* td = 
+    auto* td =
       ui.allocateAndInitItem<TileKindDisplay>("tile_kind_display"_str);
 
     td->tile_kinds.init();
@@ -97,11 +98,11 @@ struct TileKindDisplay : public Item
     });
     glob.destroy();
 
-    Ref::LoadParams params = 
+    Ref::LoadParams params =
     {
       .renderer = ui.eng->renderer,
       .assetmgr = ui.eng->assetmgr,
-      .sfile_reg = ui.eng->source_data_file_reg,
+      .sfile_reg = &ui.eng->source_data_file_reg,
     };
 
     for (auto& kind : td->tile_kinds)
@@ -115,10 +116,10 @@ struct TileKindDisplay : public Item
     }
 
     td->preview_timer = TimePoint::now();
-    td->update_triggers = 
+    td->update_triggers =
         UpdateReason::MouseReleased
       | UpdateReason::Fin;
-    
+
     return td;
   }
 
@@ -153,7 +154,7 @@ struct TileKindDisplay : public Item
   {
     $ local this = ui.createItemContext("Item", "this")
     @@this.style:lookup(border, margin)
-    size.y = 
+    size.y =
       row_height * tile_kinds.len() +
       @this.style.margin.top + @this.style.margin.bottom +
       @this.style.border.top + @this.style.border.bottom;
@@ -169,12 +170,12 @@ struct TileKindDisplay : public Item
       String name = kind.asset.name;
 
       f32 y = kind_idx * (row_height + row_sep);
-      
+
       vec2f texture_pos = {};
       texture_pos.x = texture_padding;
       texture_pos.y = y;
 
-      vec2f text_size = 
+      vec2f text_size =
         gfx::measureText(name, ui->gohu_font, font_height, 1.f);
 
       vec2f text_pos = {};
@@ -221,7 +222,7 @@ struct TileKindDisplay : public Item
           vec2f(size.x, row_height),
           0x4e1a1aff);
       }
-      
+
       kind_idx += 1;
     }
   }
@@ -269,7 +270,7 @@ struct TileKindDisplay : public Item
 
 /* ----------------------------------------------------------------------------
  */
-void SDEditInterface::onEdit(SourceData* data) 
+void SDEditInterface::onEdit(SourceData* data)
 {
   editor->dirty = true;
 }
@@ -284,7 +285,7 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
 
   ui.beginItem(editor);
 
-  @ui.style(editor, MapEditor, 
+  @ui.style(editor, MapEditor,
   | size: 100% 100%
   | display: hidden
   | background_color: 0x000000ff)
@@ -293,25 +294,28 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
   editor->update_triggers.set(UpdateReason::MouseHover);
 
   DrawCmd* map_render = ui.drawcmds.add();
-  map_render->tex = 
-    gfx::Texture::create(
-      *renderer,
-      600,
-      400,
-      gfx::ImageFormat::RGBA,
-      gfx::ImageAddressMode::ClampToBlack,
-      gfx::ImageFilter::Nearest,
-      gfx::ImageKind::TwoD,
-      nullptr);
+  map_render->tex = gfx::Texture::create(
+    *renderer,
+    600,
+    400,
+    gfx::ImageFormat::RGBA,
+      gfx::ImageUsage::Sampled
+    | gfx::ImageUsage::FramebufferColor,
+    gfx::ImageAddressMode::ClampToBlack,
+    gfx::ImageFilter::Nearest,
+    nullptr,
+    "map_editor"_str);
   map_render->alloc(&ui, gfx::putFilledRectCounts());
 
   editor->map_render = map_render;
 
-  editor->framebuffer = 
-    gfx::Framebuffer::create(
-      *renderer,
-      map_render->tex,
-      {0,0,0,255});
+  editor->framebuffer.init(
+    *renderer,
+    600,
+    400,
+    map_render->tex,
+    {0,0,0,255},
+    "map_editor"_str);
 
   if (!editor->entmgr.init())
   {
@@ -319,6 +323,10 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
     return nullptr;
   }
 
+  //TODO(delle) Look into updating the renderer to support multiple
+  // viewports so we dont have to make an entire new render system for
+  // this. Might also be cool in gameplay to have a "security camera"
+  // view that we could use to render the map from a different perspective.
   if (!editor->rendersys.init(*renderer, ui.eng->assetmgr))
   {
     ERROR("failed to init rendersys\n");
@@ -343,10 +351,10 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
     | border: 2
     | padding: 3
     | background_color: 0x111111ff)
-    
+
     auto* sdedit_box = ui::Item::begin(ui);
     {
-      @ui.style(sdedit_box, Item, 
+      @ui.style(sdedit_box, Item,
       | size: 100% 200
       | border: 2
       | margin: 0 0 0 5)
@@ -361,14 +369,14 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
 
     $ local ToolEnum = decls.editor.members.map.Tool.type.decl
 
-    String options[] = 
+    String options[] =
     {
 $   for elem in ToolEnum.elems:each() do
       "$(elem.name)"_str,
 $   end
     };
 
-    editor->tool_selection = 
+    editor->tool_selection =
       ComboBox::make<MapEditor>(
         ui,
         editor,
@@ -391,13 +399,13 @@ $   end
         Slice<String>::from(options),
         "tool_selection"_str);
 
-    @ui.style(editor->tool_selection, ComboBox, 
+    @ui.style(editor->tool_selection, ComboBox,
     | size: 100% auto
     | background_color: 0x570000ff)
 
     auto* separator = Separator::make(ui);
-    
-    @ui.style(separator, Separator, 
+
+    @ui.style(separator, Separator,
     | size: 100% 1
     | margin: 0 5 0 5)
 
@@ -407,22 +415,21 @@ $   end
       | size: 100% auto
       | display: hidden)
 
-      String add_type_options[] = 
+      String add_type_options[] =
       {
 $     for elem in decls.tile_kind.elems:each() do
         "$(elem.name)"_str,
 $     end
       };
-      
-      editor->tile_kind_display = 
+
+      editor->tile_kind_display =
         TileKindDisplay::create(ui, "tile_kind_display"_str);
 
-      @ui.style(editor->tile_kind_display, Item, 
+      @ui.style(editor->tile_kind_display, Item,
       | size: 100% 100
       | border: 3 3 3 3)
     }
     ui.endItem();
-
   }
   ui.endItem();
 
@@ -459,7 +466,7 @@ void MapEditor::selectMap(
   SourceDataFile* sfile = h_selected_map.getFile();
   SourceData* returned_data = sfile->returned_data;
 
-  // PackContext pack_context = 
+  // PackContext pack_context =
   // {
   //   .assetmgr  = &assetmgr,
   //   .renderer  = &renderer,
@@ -492,10 +499,10 @@ void MapEditor::generate(UI* ui)
         map_render->counts_used,
         pos_screen,
         size,
-        {0.f, 1.f},
-        {1.f, 1.f},
-        {1.f, 0.f},
         {0.f, 0.f},
+        {1.f, 0.f},
+        {1.f, 1.f},
+        {0.f, 1.f},
         {255,255,255,255});
   }
 }
@@ -505,25 +512,40 @@ void MapEditor::generate(UI* ui)
 void MapEditor::evaluate(UI* ui)
 {
   // Rerender the map in case our size changed.
-  // TODO(sushi) it would be nice if UI Item provided a callback for 
-  //             an Item's size changing so we could detect this a little 
+  // TODO(sushi) it would be nice if UI Item provided a callback for
+  //             an Item's size changing so we could detect this a little
   //             better. Look into that when we get around to reworking UI
   //             Items to be transform based.
 
-  map_render->tex.recreate(
+  map_render->tex.deinit(*renderer);
+  map_render->tex = gfx::Texture::create(
+    *renderer,
     size.x,
     size.y,
     gfx::ImageFormat::RGBA,
+      gfx::ImageUsage::Sampled
+    | gfx::ImageUsage::FramebufferColor,
     gfx::ImageAddressMode::ClampToBlack,
     gfx::ImageFilter::Nearest,
-    gfx::ImageKind::TwoD,
-    nullptr);
+    nullptr,
+    "map_editor"_str);
+  if (!notnil(map_render->tex))
+    return;
+
+  framebuffer.deinit(*renderer);
+  framebuffer.init(
+    *renderer,
+    size.x,
+    size.y,
+    map_render->tex,
+    {0,0,0,255},
+    "map_editor"_str);
 
   need_render = true;
 }
 
 /* ----------------------------------------------------------------------------
- *  TODO(sushi) map rendering needs to be moved back into here so that it 
+ *  TODO(sushi) map rendering needs to be moved back into here so that it
  *              doesnt render before we adjust position.
  */
 void MapEditor::update(UI* ui, UpdateReason reason)
@@ -554,9 +576,9 @@ void MapEditor::update(UI* ui, UpdateReason reason)
           border_pos.y = layer.def->pos.y - layer_border_thickness;
 
           vec2f border_ext;
-          border_ext.x = 
+          border_ext.x =
             layer.def->pos.x + layer.def->size.x + layer_border_thickness;
-          border_ext.y = 
+          border_ext.y =
             layer.def->pos.y + layer.def->size.y + layer_border_thickness;
 
           border_flags.clear();
@@ -594,15 +616,15 @@ void MapEditor::update(UI* ui, UpdateReason reason)
               u32 tile_idx = tile - layer->tiles.arr;
 
               SourceData* map_data = sdfile->returned_data;
-              SourceData* layers_data = 
+              SourceData* layers_data =
                 map_data->findChildByName("layers"_str);
               SourceData* layer_data = layers_data->children[layer_idx];
-              SourceData* tiles_data = 
+              SourceData* tiles_data =
                 layer_data->findChildByName("tiles"_str);
               SourceData* tile_data = tiles_data->children[tile_idx];
               sdedit->setSourceData(
-                *ui, 
-                tile_data, 
+                *ui,
+                tile_data,
                 h_selected_map.getFile(),
                 "MapTileDef"_hashed);
 
@@ -638,24 +660,6 @@ void MapEditor::update(UI* ui, UpdateReason reason)
 
           switch (tool)
           {
-          case Tool::Add:
-            {
-              // auto* kind = sdfile->allocateSourceData();
-              // auto* texture = sdfile->allocateSourceData();
-              // 
-              // kind->name = "kind"_str;
-              // kind->val.str = 
-              //   add_tile_type->getSelectedOptionName()
-              //     .allocateCopy(&sdfile->string_cache);
-
-              // texture->name = "texture"_str;
-              // texture->val.str = tile_kind_display->getSelectedTextureName();
-
-              // tile_data->children.push(kind);
-              // tile_data->children.push(texture);
-            }
-            break;
-
           case Tool::Remove:
             {
               tile_data->children.clear();
@@ -700,11 +704,13 @@ void MapEditor::update(UI* ui, UpdateReason reason)
 
             need_render = true;
 
+            tile_data->dump();
+
             // auto* kind = sdfile->allocateSourceData();
             // auto* texture = sdfile->allocateSourceData();
-            // 
+            //
             // kind->name = "kind"_str;
-            // kind->val.str = 
+            // kind->val.str =
             //   add_tile_type->getSelectedOptionName()
             //     .allocateCopy(&sdfile->string_cache);
 
@@ -728,15 +734,15 @@ void MapEditor::update(UI* ui, UpdateReason reason)
 
   case ControlState::Dragging:
     {
-      vec2f new_pos = 
+      vec2f new_pos =
         drag_start_eye + eye.screenToWorld(drag_start_viewport, size) - mw;
-      
+
       if (eye.pos != new_pos)
       {
         eye.pos = new_pos;
         need_render = true;
       }
-        
+
       if (input.wasMouseButtonReleased(MouseButton::Left) ||
           input.wasMouseButtonReleased(MouseButton::Middle))
         control_state = ControlState::None;
@@ -886,7 +892,7 @@ void MapEditor::setLayerSourceData(u32 idx, SourceData* data)
 /* ----------------------------------------------------------------------------
  */
 SourceData* MapEditor::getTileSourceData(
-    SourceData* tiles, 
+    SourceData* tiles,
     vec2i size,
     vec2i pos)
 {
@@ -897,7 +903,7 @@ SourceData* MapEditor::getTileSourceData(
  */
 void MapEditor::renderMap(UI& ui)
 {
-  if (!need_render)
+  if (!need_render || size.x <= 0 || size.y <= 0)
     return;
 
   need_render = false;
@@ -915,11 +921,11 @@ void MapEditor::renderMap(UI& ui)
     // destroyPackedData(&mapdef);
   }
 
-  renderer->pushBindFramebuffer(framebuffer);
+  renderer->bindFramebuffer(framebuffer);
 
   packed_map_def.clear();
 
-  PackContext pack_context = 
+  PackContext pack_context =
   {
     .assetmgr = &assetmgr,
     .renderer = renderer,
@@ -930,11 +936,11 @@ void MapEditor::renderMap(UI& ui)
         *h_selected_map.getFile()->returned_data, pack_context))
     return;
 
-  Ref::LoadParams load_params = 
+  Ref::LoadParams load_params =
   {
     .renderer = *renderer,
     .assetmgr = assetmgr,
-    .sfile_reg = ui.eng->source_data_file_reg,
+    .sfile_reg = &ui.eng->source_data_file_reg,
   };
 
   for (PackedRef* ref = packed_map_def.refs; ref; ref = ref->next)
@@ -968,10 +974,6 @@ void MapEditor::renderMap(UI& ui)
   eye.getViewMat(&params.view);
 
   rendersys.update(params);
-
-  renderer->pushBindFramebuffer({0});
-  renderer->pushSetViewport(
-    {0,0},{ui.eng->window.size.x,ui.eng->window.size.y});
 }
 
 /* ----------------------------------------------------------------------------
@@ -985,12 +987,12 @@ void MapEditor::onPreMapRender(PreMapRender& event)
  */
 void MapEditor::onPreSpriteRender(PreSpriteRender& event)
 {
-  auto* vp = (gfx::Vertex*)rendersys.external_buffer.mapped.vp;
-  auto* ip = (gfx::Index*)rendersys.external_buffer.mapped.ip;
+  auto* vp = (gfx::Vertex*)rendersys.external_vertex_buffer.mapped_data;
+  auto* ip = (gfx::Index*)rendersys.external_index_buffer.mapped_data;
 
   // Draw grid lines.
   {
-    // TODO(sushi) dynamically size lines relative to zoom and 
+    // TODO(sushi) dynamically size lines relative to zoom and
     //             their separation.
     vec2f bl_world = floor(eye.screenToWorld({0.f, size.y}, size));
     vec2f tr_world = ceil(eye.screenToWorld({size.x, 0.f}, size));
@@ -1054,8 +1056,6 @@ void MapEditor::onPreSpriteRender(PreSpriteRender& event)
  */
 void MapEditor::onPostRender(PostRender& event)
 {
-  auto* vp = (gfx::Vertex*)rendersys.external_buffer.mapped.vp;
-  auto* ip = (gfx::Index*)rendersys.external_buffer.mapped.ip;
 }
 
 /* ----------------------------------------------------------------------------

@@ -1,14 +1,14 @@
 ---
---- Generates our internal representation of C types and decls and what not 
+--- Generates our internal representation of C types and decls and what not
 --- from a given input string.
 ---
 --- We do this to avoid interacting with clang's AST directly in reflection
---- code and to provide a stable api for interacting with it so that when 
+--- code and to provide a stable api for interacting with it so that when
 --- (or if) we update llvm we don't have to worry about fixing all reflection
 --- code that uses it.
 ---
---- In the future we should experiment with caching this information and 
---- only generate it when whatever being parsed actually changes. We could 
+--- In the future we should experiment with caching this information and
+--- only generate it when whatever being parsed actually changes. We could
 --- possibly do this by intercepting includes/imports and doing this process
 --- when we don't already have recently cached data
 ---
@@ -29,12 +29,12 @@ Processor.new = function(input)
   local o = {}
   o.clang = require "reflect.ClangContext" ()
   o.clang:parseString(input)
-  -- Map from the original clang object to our internal 
+  -- Map from the original clang object to our internal
   -- representation of it.
   o.processed_clang_objs = {}
   o.record_stack = List{}
   o.top_level = List{}
-  o.decls = 
+  o.decls =
   {
     list = List{},
     map = {},
@@ -119,9 +119,9 @@ Processor.processTopLevelDecls = function(self, iter)
     
     if decl then
 
-      -- We defer recording tag decls until we finish a top level decl to 
+      -- We defer recording tag decls until we finish a top level decl to
       -- ensure that cyclic dependencies, eg.
-      --   
+      --
       --   struct Object;
       --
       --   struct Thing
@@ -134,10 +134,10 @@ Processor.processTopLevelDecls = function(self, iter)
       --     Thing thing;
       --   };
       --
-      -- are ordered correctly. Since we eagerly resolve the declarations 
-      -- of types of members, Object will be resolved and recorded before 
+      -- are ordered correctly. Since we eagerly resolve the declarations
+      -- of types of members, Object will be resolved and recorded before
       -- Thing, and so placed before it in the decl list. Making sure the order
-      -- is correct here makes it easier to generate code dependent on the 
+      -- is correct here makes it easier to generate code dependent on the
       -- order in which things are declared being correct, eg. the Inspector.
       local function recordPrereqs(decl)
         if decl.prereqs then
@@ -203,7 +203,7 @@ Processor.resolveDecl = function(self, cdecl)
   if cdecl:isTemplateSpecialization() then
     decl = self:processTemplateSpecialization(cdecl, ctype)
   elseif cdecl:isStruct() then
-    decl = self:processStruct(cdecl, ctype) 
+    decl = self:processStruct(cdecl, ctype)
   elseif cdecl:isUnion() then
     decl = self:processUnion(cdecl, ctype)
   elseif cdecl:isEnum() then
@@ -213,6 +213,9 @@ Processor.resolveDecl = function(self, cdecl)
   if decl then
     decl.type = self:resolveType(ctype)
     decl.comment = cdecl:getComment()
+    if decl:is(ast.Record) and cdecl:isAnonymous() then
+      decl.is_anonymous = true
+    end
   end
 
   return decl
@@ -247,15 +250,15 @@ Processor.resolveType = function(self, ctype)
     type = ast.CArray.new(subtype, len)
     type.size = ctype:size() / 8
   elseif ctype:isElaborated() then
-    type = 
+    type =
       ast.ElaboratedType.new(
         ctype:getTypeName(),
         self:resolveType(ctype:getDesugaredType()))
     type.size = type.desugared.size
   elseif ctype:isBuiltin() then
-    type = 
+    type =
       ast.BuiltinType.new(
-        ctype:getCanonicalTypeName(), 
+        ctype:getCanonicalTypeName(),
         ctype:size() / 8)
   else
     local builtin = ast.BuiltinType[ctype:getTypeName()]
@@ -363,7 +366,7 @@ end
 
 Processor.processTemplateSpecialization = function(self, cdecl, ctype)
   local specdecl = cdecl:getSpecializedDecl()
-  local spec = 
+  local spec =
     ast.TemplateSpecialization.new(
       ctype:getCanonicalTypeName(),
       specdecl:name())
@@ -398,13 +401,13 @@ end
 Processor.processRecordMembers = function(self, cdecl, ctype, record)
   local member_iter = cdecl:getDeclIter()
 
-  record.prereqs = 
+  record.prereqs =
   {
     map = {},
     list = List{},
   }
 
-  local function recordPrereq(decl) 
+  local function recordPrereq(decl)
     if record.prereqs.map[decl] then
       return
     end
@@ -418,10 +421,14 @@ Processor.processRecordMembers = function(self, cdecl, ctype, record)
     if not member_cdecl then
       break
     end
-    
+
     if member_cdecl:isField() then
       local field_ctype = member_cdecl:type()
       local field_type = self:resolveType(field_ctype)
+
+      if member_cdecl:isAnonymousField() then
+        print("is_anonymous")
+      end
 
       local type = field_type
       while true do
@@ -435,11 +442,17 @@ Processor.processRecordMembers = function(self, cdecl, ctype, record)
         end
       end
 
-      local field = 
+      local field =
         ast.Field.new(
           member_cdecl:name(),
           field_type,
           member_cdecl:getFieldOffset() / 8)
+
+      local field_cdecl = field_ctype:getDecl()
+
+      if field_cdecl and field_cdecl:isAnonymous() then
+        field_type:getDecl().is_anonymous = true
+      end
 
       field.comment = member_cdecl:getComment()
 
@@ -478,6 +491,8 @@ Processor.processEnum = function(self, cdecl, ctype)
       else
         e.metadata = {}
       end
+
+      e.value = elem:getEnumValue()
 
       enum.elems:push(e)
     end

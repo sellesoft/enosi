@@ -4,6 +4,7 @@ $ local List = require "List"
 #include "iro/io/IO.h"
 #include "iro/fs/File.h"
 #include "iro/Platform.h"
+#include "iro/Logger.h"
 
 @@lpp.import "graphics/Font.lh"
 
@@ -245,7 +246,7 @@ $ end
     .width        = tex_size_x,
     .height       = tex_size_y,
     .format       = gfx::ImageFormat::BW,
-    .kind         = gfx::ImageKind::TwoD,
+    .usage        = gfx::ImageUsage::Sampled,
     .filter       = gfx::ImageFilter::Nearest,
     .address_mode = gfx::ImageAddressMode::ClampToWhite,
     .allocator    = params.allocator,

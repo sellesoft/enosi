@@ -2,30 +2,29 @@
  *  For drawing things to the screen.
  */
 
-$ local cmn = require "common"
+$ require "common"
 
 #include "iro/Common.h"
+#include "iro/containers/Array.h"
 #include "iro/Unicode.h"
-#include "iro/containers/LinkedPool.h"
+#include "math/mat.h"
+#include "math/vec.h"
+
+@@lpp.import "graphics/Buffer.lh"
+@@lpp.import "graphics/DrawCmd.lh"
+@@lpp.import "graphics/Framebuffer.lh"
+@@lpp.import "graphics/Pipeline.lh"
+@@lpp.import "graphics/ResourceMgr.lh"
+@@lpp.import "graphics/Shader.lh"
+@@lpp.import "graphics/Texture.lh"
 
 using namespace iro;
 
-#include "math/vec.h"
-#include "math/mat.h"
-
-@@lpp.import "Buffer.lh"
-@@lpp.import "DrawCmd.lh"
-@@lpp.import "Framebuffer.lh"
-@@lpp.import "graphics/ResourceMgr.lh"
-
 struct Engine;
-struct Window;
 struct WindowResized;
 
 namespace gfx
 {
-
-struct CompiledTexture;
 
 /* ============================================================================
  */
@@ -34,56 +33,42 @@ struct Renderer
   Engine* engine;
   mem::Allocator* allocator;
   void* internal;
-
   u64 frame;
-
-  u32 shader_program;
-  u32 stars_program;
-
   Array<DrawCmd> drawcmds;
-
   ResourceMgr resource_mgr;
 
-  b8   init(Engine& engine, mem::Allocator& allocator);
-  void deinit();
-  b8   update();
+  b8 init(Engine& engine, mem::Allocator& allocator);
+  b8 deinit();
+  b8 update();
 
-  b8 compileShaders();
-  b8 updateSwapchain();
-  b8 updateFramebuffers();
+  void setScissor(vec2i pos, vec2i size);
+  void setViewport(vec2i pos, vec2i size);
+  void bindFramebuffer(Framebuffer framebuffer); //{0} for default
+  void bindPipeline(Pipeline pipeline);
+  void bindTexture(Texture texture);
+  void bindUniformBuffer(Buffer buffer);
+  void bindStorageBuffer(Buffer buffer);
+  void bindVertexBuffer(Buffer buffer);
+  void bindIndexBuffer(Buffer buffer);
+  void pushConstant(void* data, u64 size);
+  void draw(u64 index_start, u64 index_count, u64 vertex_start);
 
-  // Loads a texture into opengl and sets the proper reference to it
-  // on the given texture.
-  b8 loadTexture(CompiledTexture* texture);
+  u64 getMaxPushConstantSize();
 
-  void pushBindBuffer(Buffer buffer);
-  void pushDraw(u64 index_start, u64 index_count, u64 vertex_start);
-  void pushSetScissor(vec2i pos, vec2i size);
-  void pushBindTexture(Texture texture);
-
-  // send {} to use the default framebuffer
-  void pushBindFramebuffer(Framebuffer framebuffer);
-
-  void pushUniformVec2(String name, vec2f v);
-  void pushUniformFloat(String name, f32 f);
-  void pushUniformBool(String name, b8 b);
-  void pushUniformMat3x2(String name, const mat3x2& m);
-  void pushUseProgram(u32 program);
-  void pushSetViewport(vec2i pos, vec2i size);
-
-  Renderer() {}
+  void debugBeginLabel(vec4f color, utf8::String label);
+  void debugEndLabel();
+  void debugInsertLabel(vec4f color, utf8::String label);
 
   // NOTE(sushi) explicitly deleting the copy constructor of Renderer
   //             to prevent accidental copies since operating on a copy
   //             of it has potential to cause really really awesome bugs
   //             that are hard to find.
+  Renderer() {}
   Renderer(const Renderer& rhs) = delete;
   Renderer operator=(const Renderer& rhs) = delete;
 
 private:
-
   void onWindowResized(WindowResized& event);
-
 };
 
 }

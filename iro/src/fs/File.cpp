@@ -53,6 +53,16 @@ b8 File::unlink(String path)
 
 /* ----------------------------------------------------------------------------
  */
+b8 File::exists(String path)
+{
+  FileInfo info = {};
+  if (!platform::stat(&info, path))
+    return false;
+  return info.kind != FileKind::NotFound;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 File::open(Moved<Path> path, OpenFlags flags)
 {
   if (isOpen())

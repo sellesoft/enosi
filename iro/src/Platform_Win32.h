@@ -12,9 +12,10 @@
 #define WIN32_LEAN_AND_MEAN
 #include "windows.h"
 #undef ERROR
-#undef min
 #undef max
+#undef min
 #undef interface
+
 #include "Common.h"
 #include "Unicode.h"
 #include "io/Format.h"

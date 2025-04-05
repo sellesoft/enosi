@@ -1,0 +1,47 @@
+/*
+ * Graphics shader representation and management
+ */
+
+$ require "common"
+
+#include "iro/containers/Slice.h"
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+
+@@lpp.import "graphics/ShaderParams.lh"
+
+using namespace iro;
+
+namespace gfx
+{
+
+struct Renderer;
+
+/* ============================================================================
+ */
+struct Shader
+{
+  u32 index;
+
+  b8 init(
+    Renderer& renderer,
+    ShaderType type,
+    Slice<u8> spv_binary,
+    String name = "unnamed"_str);
+
+  b8 deinit(Renderer& renderer);
+
+  inline b8 operator==(const Shader& other) const
+  {
+    return index == other.index;
+  }
+
+  inline b8 operator!=(const Shader& other) const
+  {
+    return index != other.index;
+  }
+};
+
+}
+
+DefineNilValue(gfx::Shader, { 0 }, { return x.index == 0; });

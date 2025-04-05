@@ -2,6 +2,9 @@
  *  A Texture we compile from some raw asset on disk.
  */
 
+$ require "common"
+$ local metadata = require "reflect.Metadata"
+
 #include "iro/Common.h"
 #include "iro/Unicode.h"
 #include "iro/memory/Allocator.h"
@@ -17,6 +20,11 @@ namespace iro::fs
 struct File;
 }
 
+namespace iro::io
+{
+struct IO;
+}
+
 namespace gfx
 {
 
@@ -25,12 +33,13 @@ struct Renderer;
 /* ============================================================================
  *  Note that this structure represents exactly what we save to disk.
  */
+@metadata.data_type(cmp_texture)
 struct CompiledTextureData
 {
   ImageFormat      format;
+  ImageUsageFlags  usage;
   ImageFilter      filter;
   ImageAddressMode address_mode;
-  ImageKind        kind;
 
   s32 width;
   s32 height;
@@ -67,7 +76,7 @@ struct CompiledTexture
     u32              width;
     u32              height;
     ImageFormat      format;
-    ImageKind        kind;
+    ImageUsageFlags  usage;
     ImageFilter      filter;
     ImageAddressMode address_mode;
     mem::Allocator*  allocator;

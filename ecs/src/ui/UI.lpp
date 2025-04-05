@@ -4,6 +4,7 @@ $ local ui = require "ui.UI"
 @@lpp.import "ui/UI.lh"
 @@lpp.import "Engine.lh"
 @@lpp.import "Engine.events.lh"
+@@lpp.import "graphics/CompiledShader.lh"
 @@lpp.import "graphics/Renderer.lh"
 @@lpp.import "window/Window.lh"
 @@lpp.import "window/Window.events.lh"
@@ -21,6 +22,31 @@ namespace ui
 {
 
 @log.ger(ui, Info)
+
+/* ----------------------------------------------------------------------------
+ */
+void pushConstantFromTransform(
+  gfx::Renderer& renderer,
+  const Window& window,
+  const mat3x2& transform)
+{
+  f32 push_constant[16];
+  transform.toMat4(push_constant);
+
+  f32 scale_x = 2.0f / window.size.x;
+  f32 scale_y = 2.0f / window.size.y;
+  push_constant[0] *= scale_x;
+  push_constant[1] *= scale_x;
+  push_constant[4] *= scale_y;
+  push_constant[5] *= scale_y;
+
+  push_constant[12] = push_constant[2] * scale_x;
+  push_constant[13] = push_constant[6] * scale_y;
+  push_constant[2] = 0.0f;
+  push_constant[6] = 0.0f;
+
+  renderer.pushConstant(push_constant, ui::PUSH_CONSTANT_SIZE);
+}
 
 /* ----------------------------------------------------------------------------
  */
@@ -79,6 +105,7 @@ void UI::endItem()
  */
 b8 UI::init(Engine& engine)
 {
+  AssetMgr& assetmgr = engine.assetmgr;
   gfx::Renderer& renderer = engine.renderer;
   Window& window = engine.window;
 
@@ -95,12 +122,37 @@ b8 UI::init(Engine& engine)
   if (!free_drawcmds_index_sorted.init())
     return ERROR("failed to init index sorted free drawcmds array\n");
 
-  if (!buffer.init(
-        sizeof(gfx::Vertex) * 0xffffff,
-        sizeof(gfx::Index) * 0xffffff))
-    return ERROR("failed to init gfx::Buffer\n");
+  gfx::CompiledShader* compiled_vertex_shader =
+    gfx::CompiledShader::load("assets/shaders/ui.vertex"_str,
+      assetmgr, renderer);
+  if (compiled_vertex_shader == nullptr)
+    return ERROR("failed to load ui vertex shader\n");
+  vertex_shader = compiled_vertex_shader->gfx_shader;
 
-  buffer.setGfxAttributes();
+  gfx::CompiledShader* compiled_fragment_shader =
+    gfx::CompiledShader::load("assets/shaders/ui.fragment"_str,
+      assetmgr, renderer);
+  if (compiled_fragment_shader == nullptr)
+    return ERROR("failed to load ui fragment shader\n");
+  fragment_shader = compiled_fragment_shader->gfx_shader;
+
+  if (!pipeline.init(renderer, vertex_shader, fragment_shader,
+      ui::PUSH_CONSTANT_SIZE, "ui"_str))
+    return ERROR("failed to init ui pipeline\n");
+
+  if (!vertex_buffer.init(renderer, nullptr,
+    sizeof(gfx::Vertex) * ui::MAX_VERTICES,
+    gfx::Buffer::Usage::VertexBuffer,
+    gfx::Buffer::MemoryProperty::DeviceMappable,
+    gfx::Buffer::MappingBehavior::Occasional))
+    return ERROR("failed to init ui vertex buffer\n");
+
+  if (!index_buffer.init(renderer, nullptr,
+    sizeof(gfx::Index) * ui::MAX_INDICES,
+    gfx::Buffer::Usage::IndexBuffer,
+    gfx::Buffer::MemoryProperty::DeviceMappable,
+    gfx::Buffer::MappingBehavior::Occasional))
+    return ERROR("failed to init ui index buffer\n");
 
   // NOTE(sushi) I do not like making root manually here but in order
   //             to not have to put a branch in make just to handle this
@@ -126,30 +178,13 @@ b8 UI::init(Engine& engine)
   engine.subscribeToBroadcast<WindowResized>(this, &UI::onWindowResized);
   engine.subscribeToBroadcast<PostReload>(this, &UI::onPostReload);
 
-  u8 white_pixels[16] =
-  {
-    0xff, 0xff, 0xff, 0xff,
-    0xff, 0xff, 0xff, 0xff,
-    0xff, 0xff, 0xff, 0xff,
-    0xff, 0xff, 0xff, 0xff,
-  };
-
-  white_texture =
-    gfx::Texture::create(
-      renderer,
-      4, 4,
-      gfx::ImageFormat::BW,
-      gfx::ImageAddressMode::ClampToWhite,
-      gfx::ImageFilter::Nearest,
-      gfx::ImageKind::TwoD,
-      white_pixels);
-
   gohu_font = 
     gfx::Font::load(
       "assets/fonts/gohu"_str,
-      engine.assetmgr,
-      engine.renderer);
-
+      assetmgr,
+      renderer);
+  if (gohu_font == nullptr)
+    return ERROR("failed to load gohu font\n");
   gohu_font_texture = gohu_font->texture->gfx_texture;
 
   // Store a reference to the engine in case widgets need to access
@@ -177,31 +212,23 @@ b8 UI::update(Engine& engine)
   //             also make this need to be retriggered as well.
   // findHoveredItem(item_tree.root);
 
-  renderer.pushBindBuffer(buffer);
+  renderer.bindPipeline(pipeline);
+  renderer.setViewport(vec2i(0,0), window.size);
+  renderer.setScissor(vec2i(0,0), window.size);
+  renderer.bindVertexBuffer(vertex_buffer);
+  renderer.bindIndexBuffer(index_buffer);
+  pushConstantFromTransform(renderer, window,
+    mat3x2::createTransform({0.f, 0.f}, 0.f));
 
-  mat3x2 proj, view;
-  mat3x2::calcScreenMatrices(engine.window.size, &proj, &view);
-
-  mat3x2 model =
-    mat3x2::createTransform(
-      vec2f(0.f, 0.f),
-      0.f);
-
-  renderer.pushUniformMat3x2("proj"_str, proj);
-  renderer.pushUniformMat3x2("view"_str, view);
-  renderer.pushUniformMat3x2("model"_str, model);
-
-  renderer.pushSetViewport(vec2i(0,0), window.size);
-  renderer.pushSetScissor(vec2i(0,0), window.size);
-
-  TRACE("  mapping buffer\n");
-  buffer.map();
+  TRACE("  mapping buffers\n");
+  vertex_buffer.map(renderer, 0, gfx::Buffer::MAP_WHOLE_BUFFER);
+  index_buffer.map(renderer, 0, gfx::Buffer::MAP_WHOLE_BUFFER);
 
   temp_alloc.init();
 
   focus_consumed = false;
 
-  auto base_transform = 
+  auto base_transform =
     mat3x2::createTransform({0.f,0.f}, 0.f);
 
   DeferredDrawCmdList top_most_drawcmds;
@@ -217,10 +244,10 @@ b8 UI::update(Engine& engine)
   updateTree(root->node, ctx);
 
   // Draw top most drawcmds with no scissor.
-  renderer.pushSetScissor(vec2i(0,0), window.size);
+  renderer.setScissor(vec2i(0,0), window.size);
   emitDrawCmds(top_most_drawcmds);
 
-  renderer.pushUniformMat3x2("model"_str, 
+  pushConstantFromTransform(renderer, window,
     mat3x2::createTransform({0.f, 0.f}, 0.f));
 
   for (ReportedDrawCmd& ddc : debug_drawcmds)
@@ -230,11 +257,9 @@ b8 UI::update(Engine& engine)
 
   temp_alloc.deinit();
 
-  TRACE("  unmapping buffer\n");
-  buffer.unmap();
-
-  // idk
-  buffer.num_indexes = buffer.index_size / sizeof(gfx::Index);
+  TRACE("  unmapping buffers\n");
+  vertex_buffer.unmap(renderer, true);
+  index_buffer.unmap(renderer, true);
 
   if (scrolling_item)
   {
@@ -349,6 +374,9 @@ void UI::updateTree(ItemNode* node, UpdateTreeContext& ctx)
   Item* item = node->data;
   Item* parent = (node->parent? node->parent->data : nullptr);
 
+  eng->renderer.debugBeginLabel(vec4f(0.5f, 0.2f, 0.2f, 1.f),
+    notnil(item->name) ? item->name : "unnamed ui item"_str);
+  defer { eng->renderer.debugEndLabel(); };
 
   vec2f init_scroll = item->scroll;
   item->scroll = min(vec2f(0.f,0.f), max(item->scroll, item->max_scroll));
@@ -504,9 +532,6 @@ $ end
   {
     const mat3x2& current_transform = *ctx.current_transform;
 
-    // Flip the scissor for OpenGL.
-    scoff = vec2f(scoff.x, window.size.y - (scoff.y + scsiz.y));
-
     vec2f item_margined_pos = item->pos_local   + @style.margin.top_left;
     vec2f item_bordered_pos = item_margined_pos + @style.border.top_left;
     vec2f item_padded_pos   = item_bordered_pos + @style.padding.top_left;
@@ -536,19 +561,19 @@ $ end
       switch (current_space = desired_space)
       {
       case ItemSpace::Padded:
-        renderer.pushUniformMat3x2("model"_str, item_padded_transform);
+        pushConstantFromTransform(renderer, window, item_padded_transform);
         break;
       case ItemSpace::Bordered:
-        renderer.pushUniformMat3x2("model"_str, item_bordered_transform);
+        pushConstantFromTransform(renderer, window, item_bordered_transform);
         break;
       case ItemSpace::Margined:
-        renderer.pushUniformMat3x2("model"_str, item_margined_transform);
+        pushConstantFromTransform(renderer, window, item_margined_transform);
         break;
       }
     };
 
     pushTransform(ItemSpace::Bordered);
-    renderer.pushSetScissor(scoff, scsiz);
+    renderer.setScissor(scoff, scsiz);
 
     // Emit background if we have one.
     if (item->builtin.background)
@@ -611,10 +636,7 @@ $ end
       ctx.hovered = child_ctx.hovered;
 
     // Children likely changed scissor, so we have to set it back.
-    renderer.pushSetScissor(scoff, scsiz);
-
-    // Child will have pushed a different transform so restore ours.
-    pushTransform(ItemSpace::Padded, true);
+    renderer.setScissor(scoff, scsiz);
 
     // Emit post-children commands.
     for (ReportedDrawCmd& cmd : drawcmd_lists.post_children)
@@ -1547,8 +1569,6 @@ void UI::emitDrawCmd(
     f32 scissor_w = min(item->size.x, drawcmd->scissor.z);
     f32 scissor_h = min(item->size.y, drawcmd->scissor.w);
 
-    scissor_y = eng->window.size.y - (scissor_y + scissor_h);
-
     f32 ext_x = scissor_x + scissor_w;
     f32 ext_y = scissor_y + scissor_h;
 
@@ -1563,20 +1583,22 @@ void UI::emitDrawCmd(
         scissor_h,
         max(0.f, current_scissor.y + current_scissor.w - scissor_y));
 
+    if (scissor_w == 0 || scissor_h == 0)
+      return;
 
-    eng->renderer.pushSetScissor(
+    eng->renderer.setScissor(
       vec2i(scissor_x, scissor_y), vec2i(scissor_w, scissor_h));
   }
 
   if (notnil(drawcmd->tex))
   {
-    TRACE("  drawcmd has tex ", drawcmd->tex.handle, "\n");
-    eng->renderer.pushBindTexture(drawcmd->tex);
+    TRACE("  drawcmd has tex ", drawcmd->tex.index, "\n");
+    eng->renderer.bindTexture(drawcmd->tex);
   }
   else
   {
     TRACE("  drawcmd has no tex\n");
-    eng->renderer.pushBindTexture(white_texture);
+    eng->renderer.bindTexture(eng->white_texture);
   }
 
   TRACE("  pushing draw \n",
@@ -1584,14 +1606,14 @@ void UI::emitDrawCmd(
       "\n    ic: ", drawcmd->counts_used.y,
       "\n    vo: ", drawcmd->vertex_offset, "\n");
 
-  eng->renderer.pushDraw(
+  eng->renderer.draw(
     drawcmd->index_offset,
     drawcmd->counts_used.y,
     drawcmd->vertex_offset);
 
   if (drawcmd_scissor)
   {
-    eng->renderer.pushSetScissor(current_scissor.xy(), current_scissor.zw());
+    eng->renderer.setScissor(current_scissor.xy(), current_scissor.zw());
   }
 }
 
@@ -1602,7 +1624,9 @@ void UI::emitDrawCmds( DeferredDrawCmdList& drawcmds)
   for (DeferredDrawCmd& cmd : drawcmds)
   {
     if (cmd.drawcmd->counts_used.x != 0)
-      eng->renderer.pushUniformMat3x2("model"_str, cmd.transform);
+    {
+      pushConstantFromTransform(eng->renderer, eng->window, cmd.transform);
+    }
     emitDrawCmd(cmd.drawcmd, nullptr, {});
   }
 }

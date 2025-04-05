@@ -1,0 +1,103 @@
+$ require "common"
+
+@@lpp.import "graphics/RendererInternal.lh"
+
+@@lpp.import "graphics/Renderer.lh"
+@@lpp.import "graphics/Shader.lh"
+
+#include "iro/Logger.h"
+#include "iro/fs/File.h"
+
+@defFileLogger(gfx.shader, Info)
+
+namespace gfx
+{
+
+/* ----------------------------------------------------------------------------
+ */
+static VkShaderStageFlagBits shaderTypeToVulkan(ShaderType type)
+{
+  switch (type)
+  {
+    case ShaderType::Vertex:   return VK_SHADER_STAGE_VERTEX_BIT;
+    case ShaderType::Fragment: return VK_SHADER_STAGE_FRAGMENT_BIT;
+    case ShaderType::Compute:  return VK_SHADER_STAGE_COMPUTE_BIT;
+    case ShaderType::Geometry: return VK_SHADER_STAGE_GEOMETRY_BIT;
+    default: return VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Shader::init(
+  Renderer& renderer,
+  ShaderType type,
+  iro::Slice<u8> spv_binary,
+  String name)
+{
+  RendererInternal& ri = *(RendererInternal*)renderer.internal;
+  TRACE("initializing a shader\n");
+
+  if (ri.shader_count >= ri.shader_pool.MAX_COUNT)
+    return ERROR("failed to initialize a shader because the maximum number"
+      " of shaders has been reached (", ri.shader_pool.MAX_COUNT, ")\n");
+
+  if (index != 0)
+    return ERROR("failed to initialize a shader because the shader is"
+      " already initialized\n");
+
+  if (spv_binary.len == 0)
+    return ERROR("failed to initialize a shader because the binary is"
+      " empty\n");
+  assert(spv_binary.ptr != nullptr);
+
+  VkShaderModuleCreateInfo create_info =
+  {
+    .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+    .codeSize = spv_binary.len,
+    .pCode = (const u32*)spv_binary.ptr,
+  };
+
+  VkShaderModule shader_module;
+  if (VK_SUCCESS != vkCreateShaderModule(ri.device, &create_info,
+    &ri.allocator, &shader_module))
+    return ERROR("failed to create shader module\n");
+
+  RendererShader* shader = ri.shader_pool.add();
+  shader->module = shader_module;
+  shader->stage = shaderTypeToVulkan(type);
+  index = ri.shader_pool.index_of(shader);
+  ri.shader_count++;
+
+  debugSetObjectName(renderer, VK_OBJECT_TYPE_SHADER_MODULE, shader_module,
+    "<", name, " shader>");
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Shader::deinit(Renderer& renderer)
+{
+  RendererInternal& ri = *(RendererInternal*)renderer.internal;
+
+  if (index == 0)
+    return true;
+
+  RendererShader* shader = ri.shader_pool.at_index(index);
+  if (shader == nullptr)
+    return ERROR("invalid shader index ", index, "\n");
+
+  if (shader->module == VK_NULL_HANDLE)
+    return ERROR("attempted to destroy an uninitialized shader\n");
+
+  vkDestroyShaderModule(ri.device, shader->module, &ri.allocator);
+
+  index = 0;
+  ri.shader_pool.remove(shader);
+  ri.shader_count--;
+
+  return true;
+}
+
+}

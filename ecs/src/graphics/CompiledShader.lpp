@@ -1,0 +1,190 @@
+$ require "common"
+
+#include "iro/io/IO.h"
+#include "iro/fs/File.h"
+#include "iro/fs/Path.h"
+#include "iro/Platform.h"
+#include "iro/Logger.h"
+
+#include <shaderc/shaderc.h>
+
+@@lpp.import "asset/AssetMgr.lh"
+@@lpp.import "graphics/Renderer.lh"
+@@lpp.import "graphics/CompiledShader.lh"
+
+namespace gfx
+{
+
+@defFileLogger(gfx.shader, Debug)
+
+typedef io::StaticBuffer<512> PathBuffer;
+
+/* ----------------------------------------------------------------------------
+ */
+static shaderc_shader_kind shaderTypeToShaderc(ShaderType type)
+{
+  switch (type)
+  {
+    case ShaderType::Vertex:   return shaderc_vertex_shader;
+    case ShaderType::Fragment: return shaderc_fragment_shader;
+    case ShaderType::Compute:  return shaderc_compute_shader;
+    case ShaderType::Geometry: return shaderc_geometry_shader;
+    default: return shaderc_glsl_infer_from_source;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+s64 CompiledShader::writeDataPath(io::IO* io, String name, AssetMgr& assetmgr)
+{
+  return io::formatv(io,
+      assetmgr.getDataDir(), '/', name, ".cmp_shader");
+}
+
+/* ----------------------------------------------------------------------------
+ */
+CompiledShader* CompiledShader::load(
+  String name,
+  AssetMgr& assetmgr,
+  gfx::Renderer& renderer)
+{
+  using namespace fs;
+
+  if (CompiledShader* existing = renderer.resource_mgr.findShader(name))
+    return existing;
+
+  TRACE("loading '", name, "'\n");
+
+  PathBuffer data_path_buf;
+  writeDataPath(&data_path_buf, name, assetmgr);
+
+  String data_path = data_path_buf.asStr();
+  assert(nullptr == assetmgr.findAsset(data_path));
+
+  if (!Path::exists(data_path))
+  {
+    ERROR("attempt to load shader '", name, "' but there is no asset "
+          "at path '", data_path, "'\n");
+    return nullptr;
+  }
+
+  Asset* asset = assetmgr.loadAssetFromDisk(data_path);
+  if (asset == nullptr)
+  {
+    @log.error("failed to load texture '", name, "' from disk\n");
+    return nullptr;
+  }
+
+  auto* shader = renderer.resource_mgr.createShader(name);
+  if (shader == nullptr)
+  {
+    ERROR("failed to allocate shader '", name, "'\n");
+    return nullptr;
+  }
+
+  shader->asset.asset = asset;
+
+  auto& data = shader->getData();
+  shader->gfx_shader.init(renderer, data.type, data.binary.getSlice(), name);
+
+  return shader;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 CompiledShader::compileGLSL(CompileParams& params)
+{
+  using namespace fs;
+
+  PathBuffer asset_path_buffer;
+  io::formatv(&asset_path_buffer, params.name, ".glsl"_str);
+  String asset_path = asset_path_buffer.asStr();
+
+  if (!fs::Path::exists(asset_path))
+    return ERROR("attempt to compile shader '", params.name, "' but there"
+      " is no asset at path '", asset_path, "'\n");
+
+  PathBuffer data_path_buf;
+  writeDataPath(&data_path_buf, params.name, *params.assetmgr);
+  String data_path = data_path_buf.asStr();
+
+  //TODO add a way to force an asset recompile when
+  //  we need to update the compiled data format
+  if (!AssetMgr::checkNeedsCompiled(asset_path, data_path))
+    return true;
+
+  INFO("compiling '", asset_path, "'\n");
+  SCOPED_INDENT;
+
+  // Ensure the data directories exist
+  if (!platform::makeDir(Path::removeBasename(data_path), true))
+    return ERROR("failed to create data directories for data at '",
+                 data_path, "'\n");
+
+  auto source_file = File::from(asset_path, OpenFlag::Read);
+  if (isnil(source_file))
+    return ERROR("failed to open shader source file '", asset_path, "'\n");
+  defer { source_file.close(); };
+
+  io::Memory source_buffer;
+  source_buffer.open();
+  defer { source_buffer.close(); };
+
+  u64 source_size = source_file.getInfo().byte_size;
+  if (source_size != source_buffer.consume(&source_file, source_size))
+    return ERROR("failed to read shader source file\n");
+
+  shaderc_compiler_t compiler = shaderc_compiler_initialize();
+  if (compiler == nullptr)
+    return ERROR("failed to create shader compiler\n");
+  defer { shaderc_compiler_release(compiler); };
+
+  shaderc_compile_options_t options = shaderc_compile_options_initialize();
+  if (options == nullptr)
+  {
+    return ERROR("failed to create shader compile options\n");
+  }
+  defer { shaderc_compile_options_release(options); };
+
+$ if ECS_DEBUG then
+  shaderc_compile_options_set_generate_debug_info(options);
+$ else -- if ECS_DEBUG
+  shaderc_compile_options_set_optimization_level(
+    options, shaderc_optimization_level_performance);
+$ end -- if ECS_DEBUG
+
+  shaderc_compilation_result_t result = shaderc_compile_into_spv(
+    compiler,
+    (const char*)source_buffer.ptr, source_size,
+    shaderTypeToShaderc(params.type),
+    (const char*)asset_path.ptr, "main",
+    options);
+  defer { shaderc_result_release(result); };
+
+  if (   shaderc_result_get_compilation_status(result)
+      != shaderc_compilation_status_success)
+    return ERROR("failed to compile shader: ",
+      shaderc_result_get_error_message(result), "\n");
+
+  auto data_file = File::from(data_path,
+      OpenFlag::Write | OpenFlag::Create | OpenFlag::Truncate);
+  if (isnil(data_file))
+    return ERROR("failed to create shader output file '",
+      data_path, "'\n");
+  defer { data_file.close(); };
+
+  u8* spv_binary_bytes = (u8*)shaderc_result_get_bytes(result);
+  u64 spv_binary_length = shaderc_result_get_length(result);
+
+  CompiledShaderData data;
+  data.type = params.type;
+  data.binary.setSlice((u8*)&data + sizeof(CompiledShaderData),
+    spv_binary_length);
+
+  data_file.write({(u8*)&data, sizeof(CompiledShaderData)});
+  data_file.write({spv_binary_bytes, spv_binary_length});
+
+  return true;
+}
+
+} // namespace gfx

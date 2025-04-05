@@ -4,6 +4,8 @@ $ local Style = require "ui.Style"
 @@lpp.import "ui/Style.lh"
 @@lpp.import "ui/Item.lh"
 
+#include "iro/Logger.h"
+
 static Logger logger =
   Logger::create("style"_str, Logger::Verbosity::Info);
 

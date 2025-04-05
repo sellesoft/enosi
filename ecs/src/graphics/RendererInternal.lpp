@@ -1,0 +1,99 @@
+$ require "common"
+
+@@lpp.import "graphics/RendererInternal.lh"
+
+#include "iro/Logger.h"
+
+@defFileLogger(gfx, Info)
+
+namespace gfx
+{
+
+/* ----------------------------------------------------------------------------
+ */
+b8 beginSingleUseCommandBuffer(
+  Renderer& renderer,
+  VkCommandBuffer* command_buffer)
+{
+  RendererInternal& ri = *(RendererInternal*)renderer.internal;
+
+  VkCommandBufferAllocateInfo alloc_info =
+  {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+    .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+    .commandPool = ri.command_pool,
+    .commandBufferCount = 1,
+  };
+
+  if (VK_SUCCESS != vkAllocateCommandBuffers(ri.device, &alloc_info,
+    command_buffer))
+    return ERROR("failed to allocate a single use vulkan command buffer\n");
+
+  VkCommandBufferBeginInfo begin_info =
+  {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+  };
+
+  if (VK_SUCCESS != vkBeginCommandBuffer(*command_buffer, &begin_info))
+  {
+    vkFreeCommandBuffers(ri.device, ri.command_pool, 1, command_buffer);
+    return ERROR("failed to begin a single use vulkan command buffer\n");
+  }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 endSingleUseCommandBuffer(
+  Renderer& renderer,
+  VkCommandBuffer command_buffer)
+{
+  RendererInternal& ri = *(RendererInternal*)renderer.internal;
+
+  if (VK_SUCCESS != vkEndCommandBuffer(command_buffer))
+    ERROR("failed to end a single use vulkan command buffer\n");
+
+  VkFenceCreateInfo fence_create_info =
+  {
+    .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+  };
+
+  VkFence fence = VK_NULL_HANDLE;
+  if (VK_SUCCESS != vkCreateFence(ri.device, &fence_create_info,
+    &ri.allocator, &fence))
+    ERROR("failed to create a fence when ending a single use vulkan"
+      " command buffer\n");
+
+  VkSubmitInfo submit_info =
+  {
+    .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+    .commandBufferCount = 1,
+    .pCommandBuffers = &command_buffer,
+  };
+
+  if (VK_SUCCESS != vkQueueSubmit(ri.graphics_queue, 1, &submit_info, fence))
+    ERROR("failed to submit a single use vulkan command buffer"
+      " to the graphics queue\n");
+
+  if (fence != VK_NULL_HANDLE)
+  {
+    if (VK_SUCCESS != vkWaitForFences(ri.device, 1, &fence,
+      VK_TRUE, 100000000000/*nanoseconds*/))
+      ERROR("failed to wait for a fence when ending a single use vulkan"
+        " command buffer\n");
+
+    vkDestroyFence(ri.device, fence, &ri.allocator);
+  }
+  else
+  {
+    vkQueueWaitIdle(ri.graphics_queue);
+  }
+
+  vkFreeCommandBuffers(ri.device, ri.command_pool, 1, &command_buffer);
+
+  return true;
+}
+
+}
