@@ -428,7 +428,7 @@ u32 TextEdit::deleteLeftWordPart()
  */
 u32 TextEdit::insertString(String str)
 {
-  s64 initial_len = len;
+  s32 initial_len = len;
   if (cursor.len != 0)
     deleteSelection();
 
@@ -452,7 +452,7 @@ u32 TextEdit::insertString(String str)
   cursor.pos += str.len;
   len += str.len;
 
-  return abs(initial_len - len);
+  return (u32)abs(initial_len - (s32)len);
 }
 
 /* ----------------------------------------------------------------------------

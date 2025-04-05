@@ -7,12 +7,12 @@ $ if IRO_WIN32 and ECS_OPENGL then
 #include "graphics/glad/wgl.h"
 
 #include "iro/Platform_Win32.h"
-#include "iro/Logger.h"
+@lpp.import "../window/Window_win32.lh"
 
 @lpp.import "Renderer.lh"
 @lpp.import "../window/Window.lh"
 
-@lpp.import "../window/Window_win32.lh"
+#include "iro/Logger.h"
 
 namespace gfx
 {

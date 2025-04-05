@@ -3,18 +3,19 @@ $ local cmn = require "common"
 $ if IRO_WIN32 then
 
 #include "iro/Platform_Win32.h"
-#include "iro/Logger.h"
 
 using Win32ErrMsg = iro::platform::Win32ErrMsg;
 
 using namespace iro;
 
-@cmn.defFileLogger(window, Info)
-
 @lpp.import "Window.lh"
 @lpp.import "Window_win32.lh"
 @@lpp.import "Window.events.lh"
 @@lpp.import "../Engine.lh"
+
+#include "iro/Logger.h"
+
+@cmn.defFileLogger(window, Info)
 
 Win32Stuff win32;
 
