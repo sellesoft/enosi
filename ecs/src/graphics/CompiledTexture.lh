@@ -33,7 +33,7 @@ struct Renderer;
 struct CompiledTextureData
 {
   ImageFormat      format;
-  ImageUsage       usage;
+  ImageUsageFlags  usage;
   ImageFilter      filter;
   ImageAddressMode address_mode;
 
@@ -72,7 +72,7 @@ struct CompiledTexture
     u32              width;
     u32              height;
     ImageFormat      format;
-    ImageUsage       usage;
+    ImageUsageFlags  usage;
     ImageFilter      filter;
     ImageAddressMode address_mode;
     mem::Allocator*  allocator;

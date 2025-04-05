@@ -2352,7 +2352,7 @@ $ if ECS_DEBUG then
       .color = color,
     }
   };
-  mem::copy(cmd.debug_label.label, label.ptr, min(label.len, 63ULL));
+  mem::copy(cmd.debug_label.label, label.ptr, min<u64>(label.len, 63ULL));
   drawcmds.push(cmd);
 $ end -- if ECS_DEBUG
 }
@@ -2383,7 +2383,7 @@ $ if ECS_DEBUG then
       .color = color,
     }
   };
-  mem::copy(cmd.debug_label.label, label.ptr, min(label.len, 63ULL));
+  mem::copy(cmd.debug_label.label, label.ptr, min<u64>(label.len, 63ULL));
   drawcmds.push(cmd);
 $ end -- if ECS_DEBUG
 }

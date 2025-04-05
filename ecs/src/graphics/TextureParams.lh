@@ -4,6 +4,9 @@
  */
 
 #include "iro/Common.h"
+#include "iro/Flags.h"
+
+using namespace iro;
 
 namespace gfx
 {
@@ -21,12 +24,14 @@ enum class ImageFormat : u8
 
 /* ============================================================================
  */
-enum ImageUsage : u8
+enum class ImageUsage
 {
-  None = 0,
-  Sampled = 1 << 0,
-  FramebufferColor = 1 << 1,
+  Sampled,
+  FramebufferColor,
 };
+
+typedef Flags<ImageUsage> ImageUsageFlags;
+DefineFlagsOrOp(ImageUsageFlags, ImageUsage);
 
 /* ============================================================================
  */

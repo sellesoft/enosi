@@ -98,7 +98,7 @@ b8 CompiledTexture::compileFromMemory(void* pixels, CompileParams& params)
     return ERROR("failed to create data directories for data at '",
                  data_path);
 
-  if (params.usage == 0)
+  if (params.usage.isNone())
     return ERROR("failed to compile texture '", params.name, "' because "
                  "the usage is not set\n");
 

@@ -21,8 +21,8 @@ struct TextureDef
   ImageFormat format;
   ImageFilter filter;
 
-  @metadata.default("Sampled")
-  ImageUsage usage;
+  @metadata.default({ "Sampled" })
+  ImageUsageFlags usage;
 
   ImageAddressMode address_mode;
 };

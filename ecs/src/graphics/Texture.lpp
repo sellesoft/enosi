@@ -100,7 +100,7 @@ Texture Texture::create(
   u32              width,
   u32              height,
   ImageFormat      format,
-  ImageUsage       usage,
+  ImageUsageFlags  usage,
   ImageAddressMode address_mode,
   ImageFilter      filter,
   void*            pixels,
@@ -124,12 +124,13 @@ Texture Texture::create(
     return {0};
   }
 
-  if (usage == ImageUsage::None)
+  if (usage.isNone())
   {
     ERROR("failed to initialize a texture because the usage is not set\n");
     return {0};
   }
-  else if (usage & ImageUsage::FramebufferColor && format != ImageFormat::RGBA)
+  else if (usage.test(ImageUsage::FramebufferColor) && 
+           format != ImageFormat::RGBA)
   {
     ERROR("failed to initialize a texture because the format is"
       " not RGBA but was specified as a framebuffer color texture\n");
@@ -157,9 +158,9 @@ Texture Texture::create(
     .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
   };
 
-  if (usage & ImageUsage::Sampled)
+  if (usage.test(ImageUsage::Sampled))
     image_create_info.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
-  if (usage & ImageUsage::FramebufferColor)
+  if (usage.test(ImageUsage::FramebufferColor))
     image_create_info.usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 
   VkImage image;
