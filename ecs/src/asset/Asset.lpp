@@ -15,7 +15,7 @@ $ local defs = Defs.gather()
 
 using namespace fs;
 
-@log.ger(asset, Debug)
+@log.ger(asset, Info)
 
 /* ----------------------------------------------------------------------------
  */
