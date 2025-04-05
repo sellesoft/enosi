@@ -5,6 +5,8 @@ $ local ui = require "ui.UI"
 @@lpp.import "ui/UI.lh"
 @@lpp.import "Engine.lh"
 
+#include "iro/Logger.h"
+
 namespace ui
 {
 

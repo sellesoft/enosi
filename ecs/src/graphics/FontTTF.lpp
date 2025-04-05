@@ -4,6 +4,7 @@ $ local List = require "List"
 #include "iro/io/IO.h"
 #include "iro/fs/File.h"
 #include "iro/Platform.h"
+#include "iro/Logger.h"
 
 @@lpp.import "graphics/Font.lh"
 

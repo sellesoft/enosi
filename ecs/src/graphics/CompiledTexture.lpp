@@ -4,6 +4,7 @@ $ local cmn = require "common"
 #include "iro/fs/File.h"
 #include "iro/fs/Path.h"
 #include "iro/Platform.h"
+#include "iro/Logger.h"
 
 @@lpp.import "asset/AssetMgr.lh"
 @@lpp.import "graphics/Renderer.lh"
@@ -23,7 +24,7 @@ typedef io::StaticBuffer<512> PathBuffer;
  */
 s64 CompiledTexture::writeDataPath(io::IO* io, String name, AssetMgr& assetmgr)
 {
-  return io::formatv(io, 
+  return io::formatv(io,
       assetmgr.getDataDir(), '/', name, ".cmp_texture");
 }
 
@@ -72,10 +73,11 @@ CompiledTexture* CompiledTexture::load(
   texture->asset.asset = asset;
 
   auto& data = texture->getData();
-
   assert(data.width != 0 && data.height != 0);
 
-  renderer.loadTexture(texture);
+  texture->gfx_texture = Texture::create(renderer, data.width, data.height,
+    data.format, data.usage, data.address_mode, data.filter,
+    data.pixels.get(), name);
 
   return texture;
 }
@@ -87,7 +89,7 @@ b8 CompiledTexture::compileFromMemory(void* pixels, CompileParams& params)
   using namespace fs;
 
   PathBuffer data_path_buffer;
-  io::formatv(&data_path_buffer, 
+  io::formatv(&data_path_buffer,
     params.assetmgr->getDataDir(), '/', params.name, ".cmp_texture"_str);
   String data_path = data_path_buffer.asStr();
 
@@ -124,14 +126,14 @@ b8 CompiledTexture::compileFromMemory(void* pixels, CompileParams& params)
   }
   u64 pixels_size = pixel_stride * data.width * data.height;
 
-  auto data_file = 
-    File::from(data_path, 
+  auto data_file =
+    File::from(data_path,
         OpenFlag::Create
       | OpenFlag::Truncate
       | OpenFlag::Write);
 
   if (isnil(data_file))
-    return ERROR("failed to open texture data file for writing at '", 
+    return ERROR("failed to open texture data file for writing at '",
                  data_path, "'\n");
 
   data_file.write({(u8*)&data, sizeof(CompiledTextureData)});
@@ -145,16 +147,16 @@ b8 CompiledTexture::compileFromMemory(void* pixels, CompileParams& params)
 /* ----------------------------------------------------------------------------
  */
 b8 CompiledTexture::compileFromMemory(
-    void* pixels, 
-    fs::File* file, 
+    void* pixels,
+    fs::File* file,
     CompileParams& params)
 {
   CompiledTextureData data;
 
   data.format       = params.format;
   data.filter       = params.filter;
+  data.usage        = params.usage;
   data.address_mode = params.address_mode;
-  data.kind         = params.kind;
 
   data.width = params.width;
   data.height = params.height;

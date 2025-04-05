@@ -2,15 +2,10 @@ $ require "common"
 $ require "Log"
 
 @@lpp.import "graphics/RendererInternal.lh"
-
 $ if IRO_LINUX then
 @lpp.import "../window/Window_linux.lh"
 $ elseif IRO_WIN32 then --if IRO_LINUX
 @lpp.import "../window/Window_win32.lh"
-#undef ERROR
-#undef min
-#undef max
-#undef interface
 $ else -- elseif IRO_WIN32
 #error "unhandled platform"
 $ end -- if IRO_LINUX
@@ -25,8 +20,6 @@ $ end -- if IRO_LINUX
 #include "iro/Logger.h"
 
 #include <string.h>
-
-@defFileLogger(gfx, Info)
 
 namespace gfx
 {

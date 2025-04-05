@@ -1,9 +1,10 @@
 $ local cmn = require "common"
 
+@lpp.import "Engine.lh"
 @lpp.import "input/InputMgr.lh"
 @lpp.import "input/Input.events.lh"
 
-@lpp.import "Engine.lh"
+#include "iro/Logger.h"
 
 @log.ger(inputmgr, Info)
 

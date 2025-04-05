@@ -9,6 +9,7 @@ $ require "common"
 @@lpp.import "graphics/Renderer.lh"
 
 #include "iro/Platform.h"
+#include "iro/Logger.h"
 
 namespace gfx
 {
@@ -28,7 +29,7 @@ b8 TextureRef::load(LoadParams& params)
   io::formatv(&src_path_buffer, name, ".texture"_str);
   String src_path = src_path_buffer.asStr();
 
-  CompiledData::CompileParams compile_params = 
+  CompiledData::CompileParams compile_params =
   {
     .name = src_path,
     .type = "gfx::TextureDef"_str,
@@ -39,7 +40,7 @@ b8 TextureRef::load(LoadParams& params)
   if (!CompiledData::compile(compile_params))
     return false;
 
-  auto* data = 
+  auto* data =
     CompiledData::load(src_path, "gfx::TextureDef"_str, params.assetmgr);
   if (data == nullptr)
     return ERROR("failed to load '", src_path, "' data");
@@ -49,12 +50,12 @@ b8 TextureRef::load(LoadParams& params)
   if (isnil(def->name))
     return ERROR("loaded texture def has a nil name\n");
 
-  gfx::CompiledTexture::CompileParams texture_params = 
+  gfx::CompiledTexture::CompileParams texture_params =
   {
     .name = def->name,
-    .kind = def->kind,
     .format = def->format,
     .filter = def->filter,
+    .usage = def->usage,
     .address_mode = def->address_mode,
     .allocator = &mem::stl_allocator,
     .assetmgr = &params.assetmgr,
@@ -65,7 +66,7 @@ b8 TextureRef::load(LoadParams& params)
 
   String name = def->name.subToLast('.');
 
-  auto* compiled_texture = 
+  auto* compiled_texture =
     gfx::CompiledTexture::load(name, params.assetmgr, params.renderer);
 
   if (compiled_texture == nullptr)

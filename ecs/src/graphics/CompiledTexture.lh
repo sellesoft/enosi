@@ -17,6 +17,11 @@ namespace iro::fs
 struct File;
 }
 
+namespace iro::io
+{
+struct IO;
+}
+
 namespace gfx
 {
 

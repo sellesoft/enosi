@@ -1,5 +1,5 @@
 /*
- *  Some parameters used for textures uploaded to the GPU that need to be 
+ *  Some parameters used for textures uploaded to the GPU that need to be
  *  shared.
  */
 
@@ -23,6 +23,7 @@ enum class ImageFormat : u8
  */
 enum ImageUsage : u8
 {
+  None = 0,
   Sampled = 1 << 0,
   FramebufferColor = 1 << 1,
 };

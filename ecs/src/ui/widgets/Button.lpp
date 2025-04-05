@@ -6,6 +6,7 @@ $ local ui = require "ui.UI"
 @@lpp.import "Engine.lh"
 
 #include "iro/containers/SmallArray.h"
+#include "iro/Logger.h"
 
 static Logger logger = 
   Logger::create("ui.text"_str, Logger::Verbosity::Debug);

@@ -1,7 +1,6 @@
 $ require "common"
 
-@@lpp.import "graphics/RendererInternal.lh"
-
+@@lpp.import "graphics/RendererInternal.lh" //includes win32
 @@lpp.import "graphics/Renderer.lh"
 @@lpp.import "graphics/Texture.lh"
 
@@ -96,7 +95,7 @@ static VkSamplerAddressMode imageAddressModeToVulkan(ImageAddressMode x)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Texture::init(
+Texture Texture::create(
   Renderer&        renderer,
   u32              width,
   u32              height,
@@ -110,22 +109,32 @@ b8 Texture::init(
   RendererInternal& ri = *(RendererInternal*)renderer.internal;
   TRACE("creating a texture of size ", width, "x", height, "\n");
 
-  if (index != 0)
-    return ERROR("failed to initialize a texture because the texture is"
-      " already initialized\n");
-
   if (ri.texture_count >= ri.texture_pool.MAX_COUNT)
-    return ERROR("failed to initialize a texture because the maximum"
+  {
+    ERROR("failed to initialize a texture because the maximum"
       " number of textures has been reached (", ri.texture_pool.MAX_COUNT,
       ")\n");
+    return {0};
+  }
 
   if (width == 0 || height == 0)
-    return ERROR("failed to initialize a texture because the width or"
+  {
+    ERROR("failed to initialize a texture because the width or"
       " height is not positive\n");
+    return {0};
+  }
 
-  if (usage & ImageUsage::FramebufferColor && format != ImageFormat::RGBA)
-    return ERROR("failed to initialize a texture because the format is"
+  if (usage == ImageUsage::None)
+  {
+    ERROR("failed to initialize a texture because the usage is not set\n");
+    return {0};
+  }
+  else if (usage & ImageUsage::FramebufferColor && format != ImageFormat::RGBA)
+  {
+    ERROR("failed to initialize a texture because the format is"
       " not RGBA but was specified as a framebuffer color texture\n");
+    return {0};
+  }
 
   VkFormat vk_format = imageFormatToVulkan(format);
 
@@ -156,7 +165,10 @@ b8 Texture::init(
   VkImage image;
   if (VK_SUCCESS != vkCreateImage(ri.device, &image_create_info,
     &ri.allocator, &image))
-    return ERROR("failed to create a vulkan image\n");
+  {
+    ERROR("failed to create a vulkan image\n");
+    return {0};
+  }
 
   auto destroy_image_if_failure = deferWithCancel
   {
@@ -195,7 +207,10 @@ b8 Texture::init(
   VkDeviceMemory memory;
   if (VK_SUCCESS != vkAllocateMemory(ri.device, &alloc_info,
     &ri.allocator, &memory))
-    return ERROR("failed to allocate memory for a vulkan image\n");
+  {
+    ERROR("failed to allocate memory for a vulkan image\n");
+    return {0};
+  }
 
   auto free_memory_if_failure = deferWithCancel
   {
@@ -203,7 +218,10 @@ b8 Texture::init(
   };
 
   if (VK_SUCCESS != vkBindImageMemory(ri.device, image, memory, 0))
-    return ERROR("failed to bind memory to a vulkan image\n");
+  {
+    ERROR("failed to bind memory to a vulkan image\n");
+    return {0};
+  }
 
   VkImageViewCreateInfo view_create_info =
   {
@@ -244,7 +262,10 @@ b8 Texture::init(
   VkImageView view;
   if (VK_SUCCESS != vkCreateImageView(ri.device, &view_create_info,
     &ri.allocator, &view))
-    return ERROR("failed to create a vulkan image view\n");
+  {
+    ERROR("failed to create a vulkan image view\n");
+    return {0};
+  }
 
   auto destroy_view_if_failure = deferWithCancel
   {
@@ -264,8 +285,11 @@ b8 Texture::init(
     VkBuffer staging_buffer;
     if (VK_SUCCESS != vkCreateBuffer(ri.device, &staging_buffer_create_info,
       &ri.allocator, &staging_buffer))
-      return ERROR("failed to create a staging buffer when uploading"
+    {
+      ERROR("failed to create a staging buffer when uploading"
         " initial texture data\n");
+      return {0};
+    }
 
     defer
     {
@@ -307,8 +331,11 @@ b8 Texture::init(
     VkDeviceMemory staging_buffer_memory;
     if (VK_SUCCESS != vkAllocateMemory(ri.device, &staging_buffer_alloc_info,
       &ri.allocator, &staging_buffer_memory))
-      return ERROR("failed to allocate memory for a staging buffer when"
+    {
+      ERROR("failed to allocate memory for a staging buffer when"
         " uploading initial texture data\n");
+      return {0};
+    }
 
     defer
     {
@@ -317,14 +344,20 @@ b8 Texture::init(
 
     if (VK_SUCCESS != vkBindBufferMemory(ri.device, staging_buffer,
       staging_buffer_memory, 0))
-      return ERROR("failed to bind memory to a staging buffer when"
+    {
+      ERROR("failed to bind memory to a staging buffer when"
         " uploading initial texture data\n");
+      return {0};
+    }
 
     void* data;
     if (VK_SUCCESS != vkMapMemory(ri.device, staging_buffer_memory, 0,
       staging_memory_requirements.size, 0, &data))
-      return ERROR("failed to map memory for a staging buffer when"
+    {
+      ERROR("failed to map memory for a staging buffer when"
         " uploading initial texture data\n");
+      return {0};
+    }
 
     u64 requested_size = width * height * imageFormatToBytesPerPixel(format);
     mem::copy(data, pixels, requested_size);
@@ -333,7 +366,7 @@ b8 Texture::init(
 
     VkCommandBuffer single_use_command_buffer;
     if (!beginSingleUseCommandBuffer(renderer, &single_use_command_buffer))
-      return false;
+      return {0};
 
     VkImageMemoryBarrier barrier =
     {
@@ -394,7 +427,7 @@ b8 Texture::init(
       0, 0, nullptr, 0, nullptr, 1, &barrier2);
 
     if(!endSingleUseCommandBuffer(renderer, single_use_command_buffer))
-      return false;
+      return {0};
   }
   else
   {
@@ -418,14 +451,14 @@ b8 Texture::init(
 
     VkCommandBuffer single_use_command_buffer;
     if (!beginSingleUseCommandBuffer(renderer, &single_use_command_buffer))
-      return false;
+      return {0};
 
     vkCmdPipelineBarrier(single_use_command_buffer,
       VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
       0, 0, nullptr, 0, nullptr, 1, &barrier);
 
     if(!endSingleUseCommandBuffer(renderer, single_use_command_buffer))
-      return false;
+      return {0};
   }
 
   VkSamplerCreateInfo sampler_create_info =
@@ -450,7 +483,10 @@ b8 Texture::init(
   VkSampler sampler;
   if (VK_SUCCESS != vkCreateSampler(ri.device, &sampler_create_info,
     &ri.allocator, &sampler))
-    return ERROR("failed to create a vulkan sampler\n");
+  {
+    ERROR("failed to create a vulkan sampler\n");
+    return {0};
+  }
 
   auto destroy_sampler_if_failure = deferWithCancel
   {
@@ -469,7 +505,10 @@ b8 Texture::init(
 
     if (VK_SUCCESS != vkAllocateDescriptorSets(ri.device, &alloc_info,
       &descriptor_set))
-      return ERROR("failed to allocate a descriptor set for a vulkan texture\n");
+    {
+      ERROR("failed to allocate a descriptor set for a vulkan texture\n");
+      return {0};
+    }
 
     VkDescriptorImageInfo descriptor_info =
     {
@@ -498,7 +537,6 @@ b8 Texture::init(
   texture->view = view;
   texture->sampler = sampler;
   texture->descriptor_set = descriptor_set;
-  index = ri.texture_pool.index_of(texture);
   ri.texture_count++;
 
   debugSetObjectName(renderer, VK_OBJECT_TYPE_IMAGE, image,
@@ -516,7 +554,7 @@ b8 Texture::init(
   free_memory_if_failure.cancel();
   destroy_view_if_failure.cancel();
   destroy_sampler_if_failure.cancel();
-  return true;
+  return {(u32)ri.texture_pool.index_of(texture)};
 }
 
 /* ----------------------------------------------------------------------------

@@ -29,6 +29,7 @@ $ }
 @@lpp.import "asset/Packing.lh"
 @@lpp.import "ui/widgets/Separator.lh"
 
+#include "iro/Logger.h"
 #include "iro/Platform.h"
 #include "math/util.h"
 
@@ -80,7 +81,7 @@ struct TextureDisplay : public Item
    */
   String getSelectedTextureName() const
   {
-    return 
+    return
       fs::Path::removeFirstDir(
         fs::Path::removeExtension(
           (*kind_textures)[displayed_kind][selected_texture]->asset.name));
@@ -97,27 +98,27 @@ struct TextureDisplay : public Item
   //       cmd->remove(&ui);
   //     arr.clear();
   //   }
-  // 
+  //
   //   for (auto& arr : defs.tile_kinds)
   //   {
   //     if (arr.isEmpty())
   //       continue;
-  // 
+  //
   //     TileKind kind = (TileKind)(&arr - defs.tile_kinds.arr);
-  // 
+  //
   //     auto& display_arr = kind_drawcmds[kind];
-  // 
+  //
   //     for (auto tex : arr)
   //     {
   //       DrawCmd* cmd = ui.drawcmds.add();
-  // 
+  //
   //       cmd->alloc(&ui, gfx::putFilledRectCounts());
   //       cmd->tex = tex->gfx_texture;
-  // 
+  //
   //       display_arr.push(cmd);
   //     }
   //   }
-  // 
+  //
   //   kind_textures = &defs.tile_kinds;
   // }
 
@@ -222,7 +223,7 @@ struct TextureDisplay : public Item
   {
     if (displayed_kind == TileKind::COUNT)
       return;
-  
+
     auto& displayed_arr = kind_drawcmds[displayed_kind];
 
     u32 num_textures = displayed_arr.len();
@@ -233,7 +234,7 @@ struct TextureDisplay : public Item
 
     f32 texture_start_x = 0.5f * (size.x - row_width);
 
-    f32 texture_extent_x = 
+    f32 texture_extent_x =
       texture_start_x + texture_stride * per_row - texture_padding;
 
     vec2f cursor_local = ui->eng->input.mouse.window - pos_screen;
@@ -246,10 +247,10 @@ struct TextureDisplay : public Item
     u32 hovered_col = cursor_grid_local.x / texture_stride;
     u32 hovered_row = cursor_grid_local.y / texture_stride;
 
-    vec2f cursor_texture_local = 
+    vec2f cursor_texture_local =
       cursor_grid_local - texture_stride * vec2f(hovered_col, hovered_row);
 
-    if (cursor_texture_local.x > texture_size || 
+    if (cursor_texture_local.x > texture_size ||
         cursor_texture_local.y > texture_size)
       return;
 
@@ -261,7 +262,7 @@ struct TextureDisplay : public Item
 
 /* ----------------------------------------------------------------------------
  */
-void SDEditInterface::onEdit(SourceData* data) 
+void SDEditInterface::onEdit(SourceData* data)
 {
   editor->dirty = true;
 }
@@ -276,7 +277,7 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
 
   ui.beginItem(editor);
 
-  @ui.style(editor, MapEditor, 
+  @ui.style(editor, MapEditor,
   | size: 100% 100%
   | display: hidden
   | background_color: 0x000000ff)
@@ -285,13 +286,13 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
   editor->update_triggers.set(UpdateReason::MouseHover);
 
   DrawCmd* map_render = ui.drawcmds.add();
-  map_render->tex.init(
+  map_render->tex = gfx::Texture::create(
     *renderer,
     600,
     400,
     gfx::ImageFormat::RGBA,
     (gfx::ImageUsage)(  gfx::ImageUsage::Sampled
-                      | gfx::ImageUsage::FramebufferColor),
+                    | gfx::ImageUsage::FramebufferColor),
     gfx::ImageAddressMode::ClampToBlack,
     gfx::ImageFilter::Nearest,
     nullptr,
@@ -347,14 +348,14 @@ MapEditor* MapEditor::create(UI& ui, gfx::Renderer* renderer)
 
     $ local ToolEnum = decls.editor.members.map.Tool.type.decl
 
-    String options[] = 
+    String options[] =
     {
 $   for elem in ToolEnum.elems:each() do
       "$(elem.name)"_str,
 $   end
     };
 
-    editor->tool_selection = 
+    editor->tool_selection =
       ComboBox::make<MapEditor>(
         ui,
         editor,
@@ -377,13 +378,13 @@ $   end
         Slice<String>::from(options),
         "tool_selection"_str);
 
-    @ui.style(editor->tool_selection, ComboBox, 
+    @ui.style(editor->tool_selection, ComboBox,
     | size: 100% auto
     | background_color: 0x570000ff)
 
     auto* separator = Separator::make(ui);
-    
-    @ui.style(separator, Separator, 
+
+    @ui.style(separator, Separator,
     | size: 100% 1
     | margin: 0 5 0 5)
 
@@ -393,39 +394,39 @@ $   end
       | size: 100% auto
       | display: hidden)
 
-      String add_type_options[] = 
+      String add_type_options[] =
       {
 $     for elem in decls.tile_kind.elems:each() do
         "$(elem.name)"_str,
 $     end
       };
-      
-      editor->add_tile_type = 
+
+      editor->add_tile_type =
         ComboBox::make<MapEditor>(
           ui,
           editor,
-          [](MapEditor* editor,u32 selected) 
+          [](MapEditor* editor,u32 selected)
           {
             editor->texture_display->displayed_kind = (TileKind)selected;
           },
           Slice<String>::from(add_type_options),
           "tile_kind"_str);
 
-      @ui.style(editor->add_tile_type, ComboBox, 
+      @ui.style(editor->add_tile_type, ComboBox,
       | size: 100% auto
       | background_color: 0x570000ff)
 
-      editor->texture_display = 
+      editor->texture_display =
         TextureDisplay::create(ui, "texture_display"_str);
 
-      @ui.style(editor->texture_display, Item, 
+      @ui.style(editor->texture_display, Item,
       | size: 100% auto
       | margin: 0 5 0 5)
     }
     ui.endItem();
 
     auto* sdedit_box = ui::Item::begin(ui, "sdedit_box"_str);
-    @ui.style(sdedit_box, Item, 
+    @ui.style(sdedit_box, Item,
     | size: 100% 300
     | border: 2)
 
@@ -472,7 +473,7 @@ void MapEditor::selectMap(
   SourceDataFile* sfile = h_selected_map.getFile();
   SourceData* returned_data = sfile->returned_data;
 
-  // PackContext pack_context = 
+  // PackContext pack_context =
   // {
   //   .assetmgr  = &assetmgr,
   //   .renderer  = &renderer,
@@ -524,7 +525,7 @@ void MapEditor::evaluate(UI* ui)
   //             Items to be transform based.
 
   map_render->tex.deinit(*renderer);
-  b8 tex_init = map_render->tex.init(
+  map_render->tex = gfx::Texture::create(
     *renderer,
     size.x,
     size.y,
@@ -535,8 +536,7 @@ void MapEditor::evaluate(UI* ui)
     gfx::ImageFilter::Nearest,
     nullptr,
     "map_editor"_str);
-
-  if (!tex_init)
+  if (!notnil(map_render->tex))
     return;
 
   framebuffer.deinit(*renderer);
@@ -583,9 +583,9 @@ void MapEditor::update(UI* ui, UpdateReason reason)
           border_pos.y = layer.def->pos.y - layer_border_thickness;
 
           vec2f border_ext;
-          border_ext.x = 
+          border_ext.x =
             layer.def->pos.x + layer.def->size.x + layer_border_thickness;
-          border_ext.y = 
+          border_ext.y =
             layer.def->pos.y + layer.def->size.y + layer_border_thickness;
 
           border_flags.clear();
@@ -623,15 +623,15 @@ void MapEditor::update(UI* ui, UpdateReason reason)
               u32 tile_idx = tile - layer->tiles.arr;
 
               SourceData* map_data = sdfile->returned_data;
-              SourceData* layers_data = 
+              SourceData* layers_data =
                 map_data->findChildByName("layers"_str);
               SourceData* layer_data = layers_data->children[layer_idx];
-              SourceData* tiles_data = 
+              SourceData* tiles_data =
                 layer_data->findChildByName("tiles"_str);
               SourceData* tile_data = tiles_data->children[tile_idx];
               sdedit->setSourceData(
-                *ui, 
-                tile_data, 
+                *ui,
+                tile_data,
                 h_selected_map.getFile(),
                 "MapTileDef"_hashed);
 
@@ -682,7 +682,7 @@ void MapEditor::update(UI* ui, UpdateReason reason)
               auto* texture = sdfile->allocateSourceData();
 
               kind->name = "kind"_str;
-              kind->val.str = 
+              kind->val.str =
                 add_tile_type->getSelectedOptionName()
                   .allocateCopy(&sdfile->string_cache);
 
@@ -866,7 +866,7 @@ void MapEditor::setLayerSourceData(u32 idx, SourceData* data)
 /* ----------------------------------------------------------------------------
  */
 SourceData* MapEditor::getTileSourceData(
-    SourceData* tiles, 
+    SourceData* tiles,
     vec2i size,
     vec2i pos)
 {
@@ -899,7 +899,7 @@ void MapEditor::renderMap(UI& ui)
 
   packed_map_def.clear();
 
-  PackContext pack_context = 
+  PackContext pack_context =
   {
     .assetmgr = &assetmgr,
     .renderer = renderer,
@@ -910,7 +910,7 @@ void MapEditor::renderMap(UI& ui)
         *h_selected_map.getFile()->returned_data, pack_context))
     return;
 
-  Ref::LoadParams load_params = 
+  Ref::LoadParams load_params =
   {
     .renderer = *renderer,
     .assetmgr = assetmgr,

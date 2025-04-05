@@ -10,13 +10,13 @@ $ require "common"
 #include "math/mat.h"
 #include "math/vec.h"
 
-@@lpp.import "Buffer.lh"
-@@lpp.import "DrawCmd.lh"
-@@lpp.import "Framebuffer.lh"
+@@lpp.import "graphics/Buffer.lh"
+@@lpp.import "graphics/DrawCmd.lh"
+@@lpp.import "graphics/Framebuffer.lh"
+@@lpp.import "graphics/Pipeline.lh"
 @@lpp.import "graphics/ResourceMgr.lh"
-@@lpp.import "Pipeline.lh"
-@@lpp.import "Shader.lh"
-@@lpp.import "Texture.lh"
+@@lpp.import "graphics/Shader.lh"
+@@lpp.import "graphics/Texture.lh"
 
 using namespace iro;
 
@@ -35,10 +35,7 @@ struct Renderer
   void* internal;
   u64 frame;
   Array<DrawCmd> drawcmds;
-
   ResourceMgr resource_mgr;
-
-  b8 loadTexture(CompiledTexture* texture);
 
   b8 init(Engine& engine, mem::Allocator& allocator);
   b8 deinit();

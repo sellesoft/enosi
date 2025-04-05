@@ -1,9 +1,7 @@
 return gfx::TextureDef
 {
   name = "assets/walls/olive/BottomRight.png",
-  kind = "TwoD",
   filter = "Nearest",
   format = "RGBA",
   address_mode = "ClampToWhite",
 }
-  

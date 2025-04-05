@@ -1,12 +1,14 @@
 /*
  *  A manager for GPU resources that originate from assets.
- */ 
+ */
 
 $ require "common"
 
 #include "iro/containers/AVL.h"
+#include "iro/Unicode.h"
 
 @@lpp.import "graphics/CompiledTexture.lh"
+@@lpp.import "graphics/CompiledShader.lh"
 @@lpp.import "graphics/Font.lh"
 
 using namespace iro;
@@ -31,6 +33,7 @@ struct ResourceMgr
     Resource<T>, [](const Resource<T>* r) { return r->name.hash(); }>;
 
   ResourceMap<CompiledTexture> textures;
+  ResourceMap<CompiledShader> shaders;
   ResourceMap<Font> fonts;
 
   b8 init();
@@ -39,6 +42,9 @@ struct ResourceMgr
   // TODO(sushi) this should be handing out the Texture handle.
   CompiledTexture* createTexture(String name);
   CompiledTexture* findTexture(String name);
+
+  CompiledShader* createShader(String name);
+  CompiledShader* findShader(String name);
 
   Font* createFont(String name);
   Font* findFont(String name);

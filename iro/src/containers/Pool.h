@@ -14,8 +14,6 @@
 
 #include "../traits/Container.h"
 
-#include "../Logger.h"
-
 namespace iro
 {
 

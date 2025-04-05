@@ -11,6 +11,7 @@ $ local defs = Defs.gather()
 
 #include "iro/fs/Path.h"
 #include "iro/fs/File.h"
+#include "iro/Logger.h"
 
 using namespace fs;
 

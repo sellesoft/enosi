@@ -94,7 +94,7 @@ u64 Scanner::scanIdentifier(io::IO* out)
   u64 len = 0;
   if (atFirstIdentifierChar())
   {
-    while (atIdentifierChar())
+    while (not eof() and atIdentifierChar())
     {
       len += 1;
       scan(out);
@@ -119,11 +119,11 @@ String Scanner::scanNumber()
     u64 start = cache_offset;
     if (at('-'))
       advance(true);
-    while (atDigit())
+    while (not eof() and atDigit())
       advance(true);
     if (at('.'))
       advance(true);
-    while (atDigit())
+    while (not eof() and atDigit())
       advance(true);
     return String::from(cache.ptr+start, cache_offset-start);
   }
@@ -139,7 +139,7 @@ String Scanner::scanIdentifier()
   if (atFirstIdentifierChar())
   {
     u64 start = cache_offset;
-    while (atIdentifierChar())
+    while (not eof() and atIdentifierChar())
       advance(true);
     return String::from(cache.ptr+start, cache_offset-start);
   }
