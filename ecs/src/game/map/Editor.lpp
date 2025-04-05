@@ -924,9 +924,6 @@ void MapEditor::renderMap(UI& ui)
   eye.getViewMat(&params.view);
 
   rendersys.update(params);
-
-  renderer->bindFramebuffer({0});
-  renderer->setViewport({0,0}, {ui.eng->window.size.x,ui.eng->window.size.y});
 }
 
 /* ----------------------------------------------------------------------------
