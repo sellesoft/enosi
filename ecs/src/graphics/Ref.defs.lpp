@@ -34,7 +34,7 @@ b8 TextureRef::load(LoadParams& params)
     .name = src_path,
     .type = "gfx::TextureDef"_str,
     .assetmgr = params.assetmgr,
-    .sfile_reg = params.sfile_reg,
+    .sfile_reg = *params.sfile_reg,
   };
 
   if (!CompiledData::compile(compile_params))

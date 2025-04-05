@@ -520,6 +520,10 @@ LPPCFUNC EnumIter* createEnumIter(Context* ctx, Decl* decl);
 LPPCFUNC Decl*     getNextEnum(EnumIter* iter);
 
 /* ----------------------------------------------------------------------------
+ */
+LPPCFUNC s64 getEnumValue(Decl* decl);
+
+/* ----------------------------------------------------------------------------
  |  Asks clang to dump the loaded ast to stdout for debug purposes.
  */
 LPPCFUNC void dumpAST(Context* ctx);

@@ -87,16 +87,28 @@ $ end
       .assetmgr     = &assetmgr,
     };
 
-    u8 pixels[16] = { 0xff, 0xff, 0xff, 0xff, };
+    u8 pixels[16] = 
+    { 
+      0xff, 0xff, 0xff, 0xff, 
+      0xff, 0xff, 0xff, 0xff, 
+      0xff, 0xff, 0xff, 0xff, 
+      0xff, 0xff, 0xff, 0xff, 
+    };
 
     gfx::CompiledTexture::compileFromMemory(pixels, white_texture_params);
-    gfx::CompiledTexture::load("assets/textures/white"_str,
-      assetmgr, renderer);
+
+    auto* white_texture_compiled = 
+      gfx::CompiledTexture::load(
+        "assets/textures/white"_str,assetmgr, renderer);
+    if (white_texture_compiled == nullptr)
+      return ERROR("failed to load white texture\n");
+    white_texture = white_texture_compiled->gfx_texture;
 
     gfx::CompiledTexture::CompileParams null_texture_params =
     {
       .name         = "assets/textures/null"_str,
       .format       = gfx::ImageFormat::RGBA,
+      .usage        = gfx::ImageUsage::Sampled,
       .filter       = gfx::ImageFilter::Nearest,
       .address_mode = gfx::ImageAddressMode::ClampToWhite,
       .allocator    = &texture_compile_allocator,
@@ -104,8 +116,12 @@ $ end
     };
 
     gfx::CompiledTexture::compilePNG(null_texture_params);
-    gfx::CompiledTexture::load("assets/textures/null"_str,
-      assetmgr, renderer);
+
+    auto* null_texture_compiled = 
+      gfx::CompiledTexture::load(
+        "assets/textures/null"_str, assetmgr, renderer);
+    if (null_texture_compiled == nullptr)
+      return ERROR("failed to load null texture\n");
   }
 
   TRACE("compiling shaders\n");

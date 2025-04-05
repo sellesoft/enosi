@@ -70,14 +70,35 @@ CompiledTexture* CompiledTexture::load(
     return nullptr;
   }
 
+  texture->asset.name = asset->name;
   texture->asset.asset = asset;
+
+  Ref::LoadParams load_params = 
+  {
+    .assetmgr = assetmgr,
+    .renderer = renderer,
+  };
+
+  if (!texture->asset.load(load_params))
+  {
+    ERROR("failed to load asset\n");
+    return nullptr;
+  }
 
   auto& data = texture->getData();
   assert(data.width != 0 && data.height != 0);
 
-  texture->gfx_texture = Texture::create(renderer, data.width, data.height,
-    data.format, data.usage, data.address_mode, data.filter,
-    data.pixels.get(), name);
+  texture->gfx_texture = 
+    Texture::create(
+      renderer, 
+      data.width, 
+      data.height,
+      data.format, 
+      data.usage, 
+      data.address_mode, 
+      data.filter,
+      data.pixels.get(), 
+      name);
 
   return texture;
 }

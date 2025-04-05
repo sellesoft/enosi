@@ -102,7 +102,7 @@ struct TileKindDisplay : public Item
     {
       .renderer = ui.eng->renderer,
       .assetmgr = ui.eng->assetmgr,
-      .sfile_reg = ui.eng->source_data_file_reg,
+      .sfile_reg = &ui.eng->source_data_file_reg,
     };
 
     for (auto& kind : td->tile_kinds)
@@ -660,24 +660,6 @@ void MapEditor::update(UI* ui, UpdateReason reason)
 
           switch (tool)
           {
-          case Tool::Add:
-            {
-              // auto* kind = sdfile->allocateSourceData();
-              // auto* texture = sdfile->allocateSourceData();
-              //
-              // kind->name = "kind"_str;
-              // kind->val.str =
-              //   add_tile_type->getSelectedOptionName()
-              //     .allocateCopy(&sdfile->string_cache);
-
-              // texture->name = "texture"_str;
-              // texture->val.str = tile_kind_display->getSelectedTextureName();
-
-              // tile_data->children.push(kind);
-              // tile_data->children.push(texture);
-            }
-            break;
-
           case Tool::Remove:
             {
               tile_data->children.clear();
@@ -721,6 +703,8 @@ void MapEditor::update(UI* ui, UpdateReason reason)
               tile_kind_display->getSelectedKindAssetName());
 
             need_render = true;
+
+            tile_data->dump();
 
             // auto* kind = sdfile->allocateSourceData();
             // auto* texture = sdfile->allocateSourceData();
@@ -956,7 +940,7 @@ void MapEditor::renderMap(UI& ui)
   {
     .renderer = *renderer,
     .assetmgr = assetmgr,
-    .sfile_reg = ui.eng->source_data_file_reg,
+    .sfile_reg = &ui.eng->source_data_file_reg,
   };
 
   for (PackedRef* ref = packed_map_def.refs; ref; ref = ref->next)

@@ -3,27 +3,10 @@ $ local ui = require "ui.UI"
 $ local glob = require "Glob"
 $ local Processor = require "reflect.Processor"
 $ local ast = require "reflect.AST"
+$ local Defs = require "asset.GatherDefs"
 
-$$$
-local imported = cmn.buffer.new()
-
-local importPattern = function(pattern)
-  glob(pattern):each(function(path)
-    if path and path:find("%S") then
-      imported:put(lpp.import(path))
-    end
-  end)
-end
-
-importPattern "**/*.defs.lh"
-importPattern "**/*.comp.lh"
-
-local p = Processor.new(tostring(imported))
-p:run()
-
-$$$
-
-@imported:get
+$ local defs = Defs.gather()
+@defs.imported:get
 
 @@lpp.import "asset/SourceDataEditor.lh"
 
@@ -37,66 +20,6 @@ $$$
 @@lpp.import "ui/widgets/CollapsingHeader.lh"
 
 #include "math/util.h"
-
-$ local function removeTag(name)
-$   return name
-$     :gsub("struct ", "")
-$     :gsub("union ", "")
-$     :gsub("enum ", "")
-$ end
-
-$$$
-local function isExplicitlyFiltered(name)
-  name = removeTag(name)
-
-  if name:find "^iro::Log" or 
-     name:find "^iro::io" or
-     name:find "^iro::color" or
-     name:find "^iro::fs" or
-     name:find "^iro::mem" or
-     name == "iro::ScopedIndent" or 
-     name == "defer_dummy" or 
-     name == "defer_with_cancel_dummy" or
-     name == "Nil" or
-     name == "gfx::Renderer"
-  then
-    return true
-  end
-end
-
-local eachDecl = function(f)
-  for decl in p.decls.list:each() do
-    local can_emit = false
-    local decl = decl.decl
-    if decl then
-      local name = removeTag(decl.name)
-      if not isExplicitlyFiltered(name) then
-        if decl:is(ast.TemplateSpecialization) then
-          if decl.specialized_name == "ArrayDef" then
-            local subtype = decl.template_args[1]
-            local subdecl = subtype:getDecl()
-            if subdecl then
-              if not isExplicitlyFiltered(subdecl.name) then
-                can_emit = true
-              end
-            else
-              if subtype:is(ast.PointerType) then
-                can_emit = true
-              end
-            end
-          end
-        elseif decl:is(ast.Struct) or decl:is(ast.Enum) then
-          can_emit = true
-        end
-      end
-    end
-    
-    if can_emit then
-      f(removeTag(decl.name), decl)
-    end
-  end
-end
-$$$
 
 namespace ui
 { 
@@ -1590,24 +1513,30 @@ $ local function getDeclDatumType(decl)
 $   if decl:is(ast.TemplateSpecialization) then
 $     if decl.specialized_name == "vec2" then
 $       return "Vec2State"
+$     elseif decl.specialized_name == "TypedPtr" then
+$       local TPtr = decl.template_args[1]
+$       local DPtr = TPtr:getDecl()
+$       return "TypedPointerState<"..Defs.removeTag(DPtr.name)..">"
 $     elseif decl.specialized_name == "ArrayDef" then
 $       local subtype = decl.template_args[1]
 $       local subdecl = subtype:getDecl()
 $       if subdecl then
-$         return "ArrayState<"..removeTag(subdecl.name)..">"
+$         return "ArrayState<"..Defs.removeTag(subdecl.name)..">"
 $       elseif subtype:is(ast.PointerType) then
 $         return "ArrayState<"..getTypeDatumType(subtype)..">"
 $       end
 $     end
 $   elseif decl:is(ast.Struct) then
-$     local name = removeTag(decl.name)
-$     if name == "Color" then
-$       return "ColorState"
-$     else
-$       return "StructState<"..removeTag(decl.name)..">"
+$     if not decl.metadata.inline_value then
+$       local name = Defs.removeTag(decl.name)
+$       if name == "Color" then
+$         return "ColorState"
+$       else
+$         return "StructState<"..Defs.removeTag(decl.name)..">"
+$       end
 $     end
 $   elseif decl:is(ast.Enum) then
-$     return "EnumState<"..removeTag(decl.name)..">"
+$     return "EnumState<"..Defs.removeTag(decl.name)..">"
 $   end
 $   return "ValueState"
 $ end
@@ -1626,7 +1555,7 @@ $  elseif type:is(ast.PointerType) then
 $    local decl = type.subtype:getDecl()
 $    if decl then
 $      if decl.derived then
-$        return "TypedPointerState<"..removeTag(decl.name)..">"
+$        return "TypedPointerState<"..Defs.removeTag(decl.name)..">"
 $      end
 $    end
 $  end
@@ -1689,7 +1618,7 @@ struct TypedPointerState<$(name)> : ObjectState
     {
 $ for derived in decl.derived:each() do
 $   local datum_type  = getDeclDatumType(derived)
-    case "$(removeTag(derived.name))"_hashed:
+    case "$(Defs.removeTag(derived.name))"_hashed:
       subdatum = 
         (DatumState*)mem::stl_allocator.construct<$(datum_type)>();
       if (!subdatum->init(ui, 
@@ -1746,7 +1675,7 @@ $ end
   void getTypeOptions(Options* options) const
   {
 $ for derived in decl.derived:each() do
-    options->push("$(removeTag(derived.name))"_str);
+    options->push("$(Defs.removeTag(derived.name))"_str);
 $ end
   }
 
@@ -1840,14 +1769,22 @@ $ local function putStructState(name, decl)
 template<>
 struct StructState<$(name)> : ObjectState
 {
+$ local function eachField(f)
 $   for field,i in decl:eachFieldWithIndex() do
+$     if not field.metadata.hidden then
+$       f(field, i)
+$     end
+$   end
+$ end
+
+$ eachField(function(field, i)
   // $(field.name): $(field.type:tostring())
 $     if field.type:is(ast.PointerType) then
   ValueState member$(i);
 $     else
   $(getTypeDatumType(field.type)) member$(i);
 $     end
-$   end
+$ end)
 
 $ local function getFieldDefaultValue(field)
 $   if not field.metadata.default then
@@ -1863,13 +1800,13 @@ $ end
     if (!data->hasObjectData())
       return ERROR("improper data for $(name) (", params.name, ")\n");
 
-$ for field,i in decl:eachFieldWithIndex() do
+$ eachField(function(field, i)
     member$(i).init(ui, params.inherit(
       this,
       data->findChildByName("$(field.name)"_str),
       "$(field.name)"_str,
       $(getFieldDefaultValue(field))));
-$ end
+$ end)
 
     return true;
   }
@@ -1878,9 +1815,9 @@ $ end
    */
   void obj_deinit(UI& ui) override
   {
-$ for field,i in decl:eachFieldWithIndex() do
+$ eachField(function(field, i)
     member$(i).deinit(ui);
-$ end
+$ end)
   }
 
   /* --------------------------------------------------------------------------
@@ -1892,13 +1829,13 @@ $ end
 
     if (open)
     {
-$ for field,i in decl:eachFieldWithIndex() do
+$ eachField(function(field, i)
       member$(i).eval(ui, params.inherit(
         "$(field.name)"_str,
         data->findChildByName("$(field.name)"_str),
         params.x + (parent != nullptr? 6.f : 0.f),
         $(getFieldDefaultValue(field))));
-$ end
+$ end)
     }
   }
 
@@ -1908,9 +1845,9 @@ $ end
   {
     if (open)
     {
-$ for field,i in decl:eachFieldWithIndex() do
+$ eachField(function(field, i)
       member$(i).draw(ui, params.inherit("$(field.name)"_str));
-$ end
+$ end)
     }
   }
 
@@ -1923,9 +1860,9 @@ $ end
   {
     if (open)
     {
-$ for field,i in decl:eachFieldWithIndex() do
+$ eachField(function(field, i)
       member$(i).update(ui, reason, editor);
-$ end
+$ end)
     }
   }
 
@@ -1935,10 +1872,10 @@ $ end
   {
     if (open)
     {
-$ for field,i in decl:eachFieldWithIndex() do
+$ eachField(function(field, i)
       if (member$(i).onHitTest(local_cursor))
         return true;
-$ end
+$ end)
     }
     return false;
   }
@@ -1952,9 +1889,9 @@ $ end
   {
     if (open)
     {
-$ for _,i in decl:eachFieldWithIndex() do
+$ eachField(function(field, i)
       member$(i).reportDrawCmds(ui, lists, editor);
-$ end
+$ end)
     }
   }
 };
@@ -1970,12 +1907,19 @@ $   local subtype = decl.template_args[1]
 $   local subdecl = subtype:getDecl()
 $   local subname
 $   if subdecl then 
-$     subname = removeTag(subdecl.name)
+$     subname = Defs.removeTag(subdecl.name)
+$     if subdecl:is(ast.TemplateSpecialization) then
+$       if subdecl.specialized_name == "TypedPtr" then
+$         local TPtr = subdecl.template_args[1]:getDesugared()
+$         local DPtr = TPtr:getDecl()
+$         putTypedPointerState(Defs.removeTag(DPtr.name), DPtr)
+$       end
+$     end
 $   else
 $     if subtype:is(ast.PointerType) then
 $       subdecl = subtype:tryUnwrapToRecordDecl()
 $       subname = getTypeDatumType(subtype)
-$       putTypedPointerState(removeTag(subdecl.name), subdecl)
+$       putTypedPointerState(Defs.removeTag(subdecl.name), subdecl)
 $     else
 $       error("decl passed to ArrayState has no decl and is not a pointer")
 $     end
@@ -2358,13 +2302,15 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
-$ eachDecl(function(name, decl)
+$ defs:eachDecl(function(name, decl)
 $   if decl:is(ast.TemplateSpecialization) then
 $     if decl.specialized_name == "ArrayDef" then
 $       putArrayState(name, decl)
 $     end
 $   elseif decl:is(ast.Struct) then
-$     putStructState(name, decl)
+$     if not decl.metadata.inline_value then
+$       putStructState(name, decl)
+$     end
 $   elseif decl:is(ast.Enum) then
 $     putEnumState(name, decl)
 $   end
@@ -2495,7 +2441,7 @@ void SourceDataEditor::setSourceData(
          type_id, ")\n");
     break;
 
-$ eachDecl(function(name, decl)
+$ defs:eachDecl(function(name, decl)
 $   local datum_type = getDeclDatumType(decl)
   case "$(name)"_hashed:
     {

@@ -1583,6 +1583,9 @@ void UI::emitDrawCmd(
         scissor_h,
         max(0.f, current_scissor.y + current_scissor.w - scissor_y));
 
+    if (scissor_w == 0 || scissor_h == 0)
+      return;
+
     eng->renderer.setScissor(
       vec2i(scissor_x, scissor_y), vec2i(scissor_w, scissor_h));
   }

@@ -181,6 +181,7 @@ typedef struct
  Decl* getNextField(FieldIter* iter);
  EnumIter* createEnumIter(Context* ctx, Decl* decl);
  Decl* getNextEnum(EnumIter* iter);
+s64 getEnumValue(Decl* decl);
  void dumpAST(Context* ctx);
  String getClangDeclSpelling(Decl* decl);
 
@@ -656,6 +657,11 @@ Decl.getEnumIter = function(self)
     self.ctx, 
     assert(lppclang.createEnumIter(self.ctx.handle, self.handle), 
       "failed to create an enum iter!"))
+end
+
+--- Returns the value of an Enum constant Decl.
+Decl.getEnumValue = function(self)
+  return tonumber(lppclang.getEnumValue(self.handle))
 end
 
 --- Dumps clang's pretty printing of this Decl to stdout.

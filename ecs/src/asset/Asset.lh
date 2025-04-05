@@ -139,6 +139,9 @@ struct TypedAssetRef : AssetRef
 
   b8 load(LoadParams& params)
   {
-    return AssetRef::load(rtr::getTypename<T>(), params);
+    return 
+      ((TypedAssetRef<int>*)this)->load(rtr::getTypename<T>(), params);
   }
+
+  b8 load(String type, LoadParams& params);
 };

@@ -1564,7 +1564,7 @@ b8 Renderer::update()
           ri.framebuffer_pool.at_index(cmd.bind_framebuffer.index);
         if (framebuffer == nullptr)
         {
-          ERROR("failed to bind the framebuffer at index ",
+          ERROR("failed to bind framebuffer at index ",
             cmd.bind_framebuffer.index, " because it is out of bounds\n");
           break;
         }
@@ -1681,14 +1681,14 @@ b8 Renderer::update()
         ri.pipeline_pool.at_index(current_pipeline.index);
       if (pipeline == nullptr)
       {
-        ERROR("failed to bind the texture because the pipeline"
+        ERROR("failed to bind texture because the pipeline"
           " is out of bounds\n");
         break;
       }
 
       if (cmd.bind_texture.index == 0)
       {
-        ERROR("failed to bind the texture because it has not"
+        ERROR("failed to bind texture because it has not"
           " been initialized\n");
         break;
       }
@@ -1697,7 +1697,7 @@ b8 Renderer::update()
         ri.texture_pool.at_index(cmd.bind_texture.index);
       if (texture == nullptr)
       {
-        ERROR("failed to bind the texture at index ", cmd.bind_texture.index,
+        ERROR("failed to bind texture at index ", cmd.bind_texture.index,
           " because it is out of bounds\n");
         break;
       }
@@ -1722,14 +1722,14 @@ b8 Renderer::update()
         ri.pipeline_pool.at_index(current_pipeline.index);
       if (pipeline == nullptr)
       {
-        ERROR("failed to bind the uniform buffer because the pipeline"
+        ERROR("failed to bind uniform buffer because the pipeline"
           " is out of bounds\n");
         break;
       }
 
       if (cmd.bind_buffer.index == 0)
       {
-        ERROR("failed to bind the uniform buffer because it has not"
+        ERROR("failed to bind uniform buffer because it has not"
           " been initialized\n");
         break;
       }
@@ -1738,7 +1738,7 @@ b8 Renderer::update()
         ri.buffer_pool.at_index(cmd.bind_buffer.index);
       if (buffer == nullptr)
       {
-        ERROR("failed to bind the uniform buffer at index ",
+        ERROR("failed to bind uniform buffer at index ",
           cmd.bind_texture.index, " because it is out of bounds\n");
         break;
       }
@@ -1762,7 +1762,7 @@ b8 Renderer::update()
 
       if (cmd.bind_buffer.index == 0)
       {
-        ERROR("failed to bind the storage buffer because it has not"
+        ERROR("failed to bind storage buffer because it has not"
           " been initialized\n");
         break;
       }
@@ -1771,7 +1771,7 @@ b8 Renderer::update()
         ri.buffer_pool.at_index(cmd.bind_buffer.index);
       if (buffer == nullptr)
       {
-        ERROR("failed to bind the storage buffer at index ",
+        ERROR("failed to bind storage buffer at index ",
           cmd.bind_texture.index, " because it is out of bounds\n");
         break;
       }
@@ -1780,7 +1780,7 @@ b8 Renderer::update()
         ri.pipeline_pool.at_index(current_pipeline.index);
       if (pipeline == nullptr)
       {
-        ERROR("failed to bind the storage buffer because the pipeline"
+        ERROR("failed to bind storage buffer because the pipeline"
           " is out of bounds\n");
         break;
       }
@@ -1804,7 +1804,7 @@ b8 Renderer::update()
       RendererBuffer* buffer = ri.buffer_pool.at_index(cmd.bind_buffer.index);
       if (buffer == nullptr)
       {
-        ERROR("attempted to bind the buffer at index ",
+        ERROR("attempted to bind buffer at index ",
           cmd.bind_buffer.index, " which is out of bounds\n");
         break;
       }
@@ -1832,7 +1832,7 @@ b8 Renderer::update()
       RendererBuffer* buffer = ri.buffer_pool.at_index(cmd.bind_buffer.index);
       if (buffer == nullptr)
       {
-        ERROR("attempted to bind the buffer at index ",
+        ERROR("attempted to bind buffer at index ",
           cmd.bind_buffer.index, " which is out of bounds\n");
         break;
       }
@@ -2165,7 +2165,8 @@ void Renderer::setScissor(vec2i pos, vec2i size)
 {
   if (size.x <= 0 || size.y <= 0)
   {
-    ERROR("attempted to set a scissor with zero or negative size\n");
+    ERROR("attempt to set a scissor with zero or negative size\n");
+    assert(false);
     return;
   }
 
@@ -2183,7 +2184,7 @@ void Renderer::setViewport(vec2i pos, vec2i size)
 {
   if (size.x <= 0 || size.y <= 0)
   {
-    ERROR("attempted to set a viewport with zero or negative size\n");
+    ERROR("attempt to set a viewport with zero or negative size\n");
     return;
   }
 
@@ -2223,6 +2224,7 @@ void Renderer::bindPipeline(Pipeline pipeline)
  */
 void Renderer::bindTexture(gfx::Texture texture)
 {
+  assert(texture.index != 0);
   DrawCmd cmd =
   {
     .kind = DrawCmd::Kind::BindTexture,

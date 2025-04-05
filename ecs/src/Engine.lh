@@ -59,7 +59,6 @@ struct Engine
 
   ui::Inspector* inspector;
 
-
   b8 init();
   void deinit();
 

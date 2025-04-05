@@ -1453,6 +1453,21 @@ u64 getDeclEnd(Context* ctx, Decl* decl)
 
 /* ----------------------------------------------------------------------------
  */
+b8 isTagDecl(Decl* decl)
+{
+  return clang::TagDecl::classof(getClangDecl(decl));
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static clang::TagDecl* getTagDecl(Decl* decl)
+{
+  assert(decl && isTagDecl(decl));
+  return (clang::TagDecl*)getClangDecl(decl);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 isRecord(Decl* decl)
 {
   return clang::RecordDecl::classof(getClangDecl(decl));
@@ -1535,14 +1550,6 @@ Type* nextBase(BaseIter* iter)
   auto* iiter = (BaseIterator*)iter;
 
   return iiter->next();
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 isTagDecl(Decl* decl)
-{
-  assert(decl);
-  return clang::TagDecl::classof(getClangDecl(decl));
 }
 
 /* ----------------------------------------------------------------------------
@@ -1652,7 +1659,9 @@ b8 isNamespace(Decl* decl)
  */
 b8 isAnonymous(Decl* decl)
 {
-  return getRecordDecl(decl)->isAnonymousStructOrUnion();
+  auto* tag = getTagDecl(decl);
+  return tag->getIdentifier() == nullptr &&
+         tag->getTypedefNameForAnonDecl() == nullptr;
 }
 
 /* ----------------------------------------------------------------------------
@@ -2175,6 +2184,18 @@ Decl* getNextEnum(EnumIter* iter)
 {
   assert(iter);
   return (Decl*)((EnumIterator*)iter)->next();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+s64 getEnumValue(Decl* decl)
+{
+  assert(decl && clang::EnumConstantDecl::classof(getClangDecl(decl)));
+
+  auto* edecl = (clang::EnumConstantDecl*)getClangDecl(decl);
+  auto val = edecl->getInitVal();
+  u64 extval = val.getExtValue();
+  return *(s64*)&extval;
 }
 
 /* ----------------------------------------------------------------------------

@@ -13,6 +13,7 @@ namespace gfx
 
 /* ============================================================================
  */
+@metadata.inline_value(name)
 struct TextureRef : Ref
 {
   @metadata.source_type(png)

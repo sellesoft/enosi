@@ -2,6 +2,9 @@
  *  A Texture we compile from some raw asset on disk.
  */
 
+$ require "common"
+$ local metadata = require "reflect.Metadata"
+
 #include "iro/Common.h"
 #include "iro/Unicode.h"
 #include "iro/memory/Allocator.h"
@@ -30,6 +33,7 @@ struct Renderer;
 /* ============================================================================
  *  Note that this structure represents exactly what we save to disk.
  */
+@metadata.data_type(cmp_texture)
 struct CompiledTextureData
 {
   ImageFormat      format;

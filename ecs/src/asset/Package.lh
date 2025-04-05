@@ -21,7 +21,6 @@ struct Package
     u64    offset;
     u64    size;
 
-    PackedAssetRefList refs;
   };
 
   typedef AVL<Data, [](const Data* x) { return x->name.hash(); }> DataMap;

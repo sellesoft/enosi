@@ -213,6 +213,9 @@ Processor.resolveDecl = function(self, cdecl)
   if decl then
     decl.type = self:resolveType(ctype)
     decl.comment = cdecl:getComment()
+    if decl:is(ast.Record) and cdecl:isAnonymous() then
+      decl.is_anonymous = true
+    end
   end
 
   return decl
@@ -423,6 +426,10 @@ Processor.processRecordMembers = function(self, cdecl, ctype, record)
       local field_ctype = member_cdecl:type()
       local field_type = self:resolveType(field_ctype)
 
+      if member_cdecl:isAnonymousField() then
+        print("is_anonymous")
+      end
+
       local type = field_type
       while true do
         if type:is(ast.ElaboratedType) then
@@ -440,6 +447,12 @@ Processor.processRecordMembers = function(self, cdecl, ctype, record)
           member_cdecl:name(),
           field_type,
           member_cdecl:getFieldOffset() / 8)
+
+      local field_cdecl = field_ctype:getDecl()
+
+      if field_cdecl and field_cdecl:isAnonymous() then
+        field_type:getDecl().is_anonymous = true
+      end
 
       field.comment = member_cdecl:getComment()
 
@@ -478,6 +491,8 @@ Processor.processEnum = function(self, cdecl, ctype)
       else
         e.metadata = {}
       end
+
+      e.value = elem:getEnumValue()
 
       enum.elems:push(e)
     end
