@@ -17,6 +17,10 @@ struct Scanner
 {
   static const u64 chunk_size = 64;
 
+  // TODO(sushi) this could probably be converted to use SmallBuffer.
+  //             We could also try something where we keep a static 
+  //             C array as the buffer and only use a separate SmallBuffer
+  //             to keep track of things that need to be contiguous.
   io::Memory cache = {};
 
   io::IO* in = nullptr;
@@ -116,6 +120,10 @@ struct Scanner
 
   /* --------------------------------------------------------------------------
    */
+  u64 scanNumber(io::IO* out);
+
+  /* --------------------------------------------------------------------------
+   */
   String scanNumber();
 
   /* --------------------------------------------------------------------------
@@ -134,6 +142,14 @@ struct Scanner
   /* --------------------------------------------------------------------------
    */
   void skipComment();
+
+  /* --------------------------------------------------------------------------
+   */
+  void skipLine();
+
+  /* --------------------------------------------------------------------------
+   */
+  String scanLine();
 
 private:
   // Internal stuff not really relevant to the API.

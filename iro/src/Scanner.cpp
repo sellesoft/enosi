@@ -8,7 +8,7 @@ namespace iro
 {
 
 static Logger logger =
-  Logger::create("scanner"_str, Logger::Verbosity::Notice);
+  Logger::create("scanner"_str, Logger::Verbosity::Info);
 
 /* --------------------------------------------------------------------------
  */
@@ -103,11 +103,49 @@ u64 Scanner::scanIdentifier(io::IO* out)
   return len;
 }
 
+
+/* --------------------------------------------------------------------------
+ *  Scans an identifier and returns a temporary string over it.
+ */
+String Scanner::scanIdentifier()
+{
+  if (atFirstIdentifierChar())
+  {
+    u64 start = cache_offset;
+    while (not eof() and atIdentifierChar())
+      advance(true);
+    return String::from(cache.ptr+start, cache_offset-start);
+  }
+  else
+    return nil;
+}
+
+
 /* --------------------------------------------------------------------------
  */
 b8 Scanner::atDigit() const
 {
   return 0 != isdigit(current());
+}
+
+/* --------------------------------------------------------------------------
+ */
+u64 Scanner::scanNumber(io::IO* io)
+{
+  u64 len = 0;
+  if (atDigit() || at('-'))
+  {
+    u64 start = cache_offset;
+    if (at('-'))
+      scan(io), len += 1;
+    while (not eof() and atDigit())
+      scan(io), len += 1;
+    if (at('.'))
+      scan(io), len += 1;
+    while (not eof() and atDigit())
+      scan(io), len += 1;
+  }
+  return len;
 }
 
 /* --------------------------------------------------------------------------
@@ -124,22 +162,6 @@ String Scanner::scanNumber()
     if (at('.'))
       advance(true);
     while (not eof() and atDigit())
-      advance(true);
-    return String::from(cache.ptr+start, cache_offset-start);
-  }
-  else
-    return nil;
-}
-
-/* --------------------------------------------------------------------------
- *  Scans an identifier and returns a temporary string over it.
- */
-String Scanner::scanIdentifier()
-{
-  if (atFirstIdentifierChar())
-  {
-    u64 start = cache_offset;
-    while (not eof() and atIdentifierChar())
       advance(true);
     return String::from(cache.ptr+start, cache_offset-start);
   }
@@ -256,6 +278,29 @@ void Scanner::skipComment()
 
 /* --------------------------------------------------------------------------
  */
+void Scanner::skipLine()
+{
+  while (not at('\n') and not eof())
+    advance();
+  if (not eof())
+    advance(); // past the newline
+}
+
+/* --------------------------------------------------------------------------
+ */
+String Scanner::scanLine()
+{
+  u64 start = cache_offset;
+  while (not at('\n') and not eof())
+    advance(true);
+  auto line = String::from(cache.ptr+start, cache_offset-start);
+  if (not eof())
+    advance(true); // past the newline
+  return line;
+}
+
+/* --------------------------------------------------------------------------
+ */
 void Scanner::scan(io::IO* out)
 {
   out->write({cache.ptr+cache_offset,current_codepoint.advance});
@@ -291,12 +336,19 @@ void Scanner::ensureHaveEnoughToDecode()
  */
 b8 Scanner::readStreamIfNeeded(b8 contiguous, b8 peeking)
 {
-  if (cache_offset + (peeking? current_codepoint.advance : 0) >= cache.len)
+  if (cache_offset + (peeking? current_codepoint.advance : 0) >= cache.len
+      || (!contiguous && cache_offset > chunk_size))
   {
     if (!contiguous)
     {
-      cache.clear();
+      u64 remaining = cache.len - cache_offset;
+      mem::copy(cache.ptr, cache.ptr + cache_offset, remaining);
+      cache.len = remaining;
       cache_offset = 0;
+
+      if (remaining != 0)
+        // Return immediately to consume remaining bytes.
+        return true;
     }
 
     Bytes reserved = cache.reserve(chunk_size);
