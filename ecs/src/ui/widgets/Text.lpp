@@ -173,10 +173,10 @@ void TextRenderer::draw(
           counts, 
           cursor, 
           vec2f(pc.x1 - pc.x0, pc.y1 - pc.y0),
-          { uv0.x, uv1.y },
-          { uv1.x, uv1.y },
-          { uv1.x, uv0.y },
           { uv0.x, uv0.y },
+          { uv1.x, uv0.y },
+          { uv1.x, uv1.y },
+          { uv0.x, uv1.y },
           color);
 
       cursor.x += pc.xadvance;

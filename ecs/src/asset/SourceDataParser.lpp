@@ -6,13 +6,19 @@ $ local cmn = require "common"
 #include "iro/Logger.h"
 #include "iro/Platform.h"
 
-@cmn.defFileLogger(srcdata.parse, Info)
+@cmn.defFileLogger(srcdata.parse, Notice)
 
 /* ----------------------------------------------------------------------------
  */
 void SourceDataParser::ScopedStage::onEnter(const char* funcname)
 {
-  log("> ", funcname, "\n");
+  String preview = 
+    String::from(
+      parser.scanner.cache.ptr + parser.scanner.cache_offset, 
+      min<u64>(10, 
+        parser.scanner.cache.len - parser.scanner.cache_offset));
+
+  log("> ", funcname, ": '", io::SanitizeControlCharacters(preview), "'\n");
 }
 
 /* ----------------------------------------------------------------------------
@@ -331,6 +337,9 @@ Token SourceDataParser::nextToken()
 
   scanner.skipWhitespaceAndComments();
 
+  stage.log(io::SanitizeControlCharacters(
+    String::fromCStr(scanner.cache.ptr + scanner.cache_offset)), "\n");
+
   out.line = scanner.line;
   out.column = scanner.column;
 
@@ -424,5 +433,6 @@ $ end
 template<typename... Args>
 b8 SourceDataParser::errorAt(Token tok, Args... args)
 {
+  platform::debugBreak();
   return ERROR(in_name,":",tok.line,":",tok.column,": ", args...);
 }
