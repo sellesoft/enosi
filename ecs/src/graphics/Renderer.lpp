@@ -34,6 +34,12 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL vkDebugCallback(
   const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
   void* user_data)
 {
+  // NOTE(delle) ignore info message spam before the command pool is created
+  Renderer* renderer = (Renderer*)user_data;
+  if (   renderer == nullptr
+      || ((RendererInternal*)renderer->internal)->command_pool == nullptr)
+    return VK_FALSE;
+
   switch(severity){
     case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
       TRACE(callback_data->pMessage, "\n");
@@ -127,7 +133,7 @@ $ end
   //TODO(delle) user settings for present mode selection
   if (mailbox)
   {
-    ri.swapchain_min_image_count = 2;
+    ri.swapchain_min_image_count = 3;
     ri.surface_present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
     @log.info("selected mailbox\n");
   }
@@ -145,7 +151,7 @@ $ end
   }
   else
   {
-    ri.swapchain_min_image_count = 2;
+    ri.swapchain_min_image_count = 3;
     ri.surface_present_mode = VK_PRESENT_MODE_FIFO_KHR;
     @log.info("selected fifo\n");
   }
@@ -545,6 +551,7 @@ $ if ECS_DEBUG then
       .messageSeverity = callback_severities,
       .messageType = callback_types,
       .pfnUserCallback = vkDebugCallback,
+      .pUserData = this,
     };
 $ end -- if ECS_DEBUG
 
@@ -615,6 +622,7 @@ $ if ECS_DEBUG then
       .messageSeverity = callback_severities,
       .messageType = callback_types,
       .pfnUserCallback = vkDebugCallback,
+      .pUserData = this,
     };
 
     auto vkCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT)
