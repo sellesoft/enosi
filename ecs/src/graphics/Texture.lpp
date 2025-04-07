@@ -144,7 +144,8 @@ Texture Texture::create(
     .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
     .imageType = VK_IMAGE_TYPE_2D,
     .format = vk_format,
-    .extent = {
+    .extent =
+    {
       .width = width,
       .height = height,
       .depth = 1
@@ -170,7 +171,6 @@ Texture Texture::create(
     ERROR("failed to create a vulkan image\n");
     return {0};
   }
-
   auto destroy_image_if_failure = deferWithCancel
   {
     vkDestroyImage(ri.device, image, &ri.allocator);
@@ -179,46 +179,23 @@ Texture Texture::create(
   VkMemoryRequirements memory_requirements;
   vkGetImageMemoryRequirements(ri.device, image, &memory_requirements);
 
-  VkPhysicalDeviceMemoryProperties memory_properties;
-  vkGetPhysicalDeviceMemoryProperties(ri.physical_device,
-    &memory_properties);
+  u32 memory_type = determineMemoryType(renderer, memory_requirements,
+    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-  VkMemoryPropertyFlags vk_properties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-
-  u32 memory_type = 0;
-  for (u32 i = 0; i < memory_properties.memoryTypeCount; i++)
-  {
-    if (   (memory_requirements.memoryTypeBits & (1 << i))
-        && (  (  memory_properties.memoryTypes[i].propertyFlags
-               & vk_properties)
-            == vk_properties))
-    {
-      memory_type = i;
-      break;
-    }
-  }
-
-  VkMemoryAllocateInfo alloc_info =
-  {
-    .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-    .allocationSize = memory_requirements.size,
-    .memoryTypeIndex = memory_type,
-  };
-
-  VkDeviceMemory memory;
-  if (VK_SUCCESS != vkAllocateMemory(ri.device, &alloc_info,
-    &ri.allocator, &memory))
+  RendererHeapAllocation* allocation =
+    gfx::allocate(renderer, memory_type, memory_requirements);
+  if (allocation == nullptr)
   {
     ERROR("failed to allocate memory for a vulkan image\n");
     return {0};
   }
-
-  auto free_memory_if_failure = deferWithCancel
+  auto deallocate_if_failure = deferWithCancel
   {
-    vkFreeMemory(ri.device, memory, &ri.allocator);
+    gfx::deallocate(renderer, allocation);
   };
 
-  if (VK_SUCCESS != vkBindImageMemory(ri.device, image, memory, 0))
+  if (VK_SUCCESS != vkBindImageMemory(ri.device, image,
+    allocationToMemory(renderer, allocation), allocation->aligned_offset))
   {
     ERROR("failed to bind memory to a vulkan image\n");
     return {0};
@@ -267,7 +244,6 @@ Texture Texture::create(
     ERROR("failed to create a vulkan image view\n");
     return {0};
   }
-
   auto destroy_view_if_failure = deferWithCancel
   {
     vkDestroyImageView(ri.device, view, &ri.allocator);
@@ -291,7 +267,6 @@ Texture Texture::create(
         " initial texture data\n");
       return {0};
     }
-
     defer
     {
       vkDestroyBuffer(ri.device, staging_buffer, &ri.allocator);
@@ -301,50 +276,29 @@ Texture Texture::create(
     vkGetBufferMemoryRequirements(ri.device, staging_buffer,
       &staging_memory_requirements);
 
-    VkPhysicalDeviceMemoryProperties staging_memory_properties;
-    vkGetPhysicalDeviceMemoryProperties(ri.physical_device,
-      &staging_memory_properties);
-
     VkMemoryPropertyFlags vk_staging_buffer_properties =
         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
       | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 
-    u32 staging_buffer_memory_type = 0;
-    for (u32 i = 0; i < staging_memory_properties.memoryTypeCount; i++)
-    {
-      if (   (staging_memory_requirements.memoryTypeBits & (1 << i))
-          && (  (  staging_memory_properties.memoryTypes[i].propertyFlags
-                 & vk_staging_buffer_properties)
-              == vk_staging_buffer_properties))
-      {
-        staging_buffer_memory_type = i;
-        break;
-      }
-    }
+    u32 staging_memory_type = determineMemoryType(renderer,
+      staging_memory_requirements, vk_staging_buffer_properties);
 
-    VkMemoryAllocateInfo staging_buffer_alloc_info =
-    {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .allocationSize = staging_memory_requirements.size,
-      .memoryTypeIndex = staging_buffer_memory_type,
-    };
-
-    VkDeviceMemory staging_buffer_memory;
-    if (VK_SUCCESS != vkAllocateMemory(ri.device, &staging_buffer_alloc_info,
-      &ri.allocator, &staging_buffer_memory))
+    RendererHeapAllocation* staging_allocation =
+      gfx::allocate(renderer, staging_memory_type,
+        staging_memory_requirements);
+    if (staging_allocation == nullptr)
     {
       ERROR("failed to allocate memory for a staging buffer when"
         " uploading initial texture data\n");
       return {0};
     }
+    defer { gfx::deallocate(renderer, staging_allocation); };
 
-    defer
-    {
-      vkFreeMemory(ri.device, staging_buffer_memory, &ri.allocator);
-    };
+    VkDeviceMemory staging_buffer_memory =
+      allocationToMemory(renderer, staging_allocation);
 
     if (VK_SUCCESS != vkBindBufferMemory(ri.device, staging_buffer,
-      staging_buffer_memory, 0))
+      staging_buffer_memory, staging_allocation->aligned_offset))
     {
       ERROR("failed to bind memory to a staging buffer when"
         " uploading initial texture data\n");
@@ -352,8 +306,9 @@ Texture Texture::create(
     }
 
     void* data;
-    if (VK_SUCCESS != vkMapMemory(ri.device, staging_buffer_memory, 0,
-      staging_memory_requirements.size, 0, &data))
+    if (VK_SUCCESS != vkMapMemory(ri.device, staging_buffer_memory,
+      staging_allocation->aligned_offset, staging_memory_requirements.size, 0,
+      &data))
     {
       ERROR("failed to map memory for a staging buffer when"
         " uploading initial texture data\n");
@@ -488,7 +443,6 @@ Texture Texture::create(
     ERROR("failed to create a vulkan sampler\n");
     return {0};
   }
-
   auto destroy_sampler_if_failure = deferWithCancel
   {
     vkDestroySampler(ri.device, sampler, &ri.allocator);
@@ -534,7 +488,7 @@ Texture Texture::create(
 
   RendererTexture* texture = ri.texture_pool.add();
   texture->image = image;
-  texture->memory = memory;
+  texture->allocation = allocation;
   texture->view = view;
   texture->sampler = sampler;
   texture->descriptor_set = descriptor_set;
@@ -542,8 +496,6 @@ Texture Texture::create(
 
   debugSetObjectName(renderer, VK_OBJECT_TYPE_IMAGE, image,
     "<", name, " image>");
-  debugSetObjectName(renderer, VK_OBJECT_TYPE_DEVICE_MEMORY, memory,
-    "<", name, " memory>");
   debugSetObjectName(renderer, VK_OBJECT_TYPE_IMAGE_VIEW, view,
     "<", name, " image view>");
   debugSetObjectName(renderer, VK_OBJECT_TYPE_SAMPLER, sampler,
@@ -552,7 +504,7 @@ Texture Texture::create(
     "<", name, " descriptor>");
 
   destroy_image_if_failure.cancel();
-  free_memory_if_failure.cancel();
+  deallocate_if_failure.cancel();
   destroy_view_if_failure.cancel();
   destroy_sampler_if_failure.cancel();
   return {(u32)ri.texture_pool.index_of(texture)};
@@ -579,10 +531,10 @@ b8 Texture::deinit(Renderer& renderer)
   vkDestroySampler(ri.device, texture->sampler, &ri.allocator);
   vkDestroyImageView(ri.device, texture->view, &ri.allocator);
   vkDestroyImage(ri.device, texture->image, &ri.allocator);
-  vkFreeMemory(ri.device, texture->memory, &ri.allocator);
+  gfx::deallocate(renderer, texture->allocation);
 
   texture->image = VK_NULL_HANDLE;
-  texture->memory = VK_NULL_HANDLE;
+  texture->allocation = nullptr;
   texture->view = VK_NULL_HANDLE;
   texture->sampler = VK_NULL_HANDLE;
 

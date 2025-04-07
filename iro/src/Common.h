@@ -2,7 +2,6 @@
  *  Primitive typedefs and defines that are used throughout all projects.
  *  This is literally included everywhere so try not to bloat it!
  */
-
 #ifndef _iro_common_h
 #define _iro_common_h
 
@@ -24,6 +23,8 @@ typedef float    f32;
 typedef double   f64;
 typedef u8       b8; // booean type
 
+/* ----------------------------------------------------------------------------
+ */
 static const u8  MAX_U8  = 0xff;
 static const u16 MAX_U16 = 0xffff;
 static const u32 MAX_U32 = 0xffffffff;
@@ -43,6 +44,8 @@ static const f32 MIN_F32 = -MAX_F32;
 static const f64 MAX_F64 = 1.79769313486231e+308;
 static const f64 MIN_F64 = -MAX_F64;
 
+/* ----------------------------------------------------------------------------
+ */
 // TODO(sushi) move these string things elsewhere
 consteval s64 constevalStrlen(const char* s)
 {
@@ -82,6 +85,8 @@ consteval u64 operator ""_hashed (const char* s, size_t len)
   return staticStringHash(s, len);
 }
 
+/* ----------------------------------------------------------------------------
+ */
 // Nice sugar for matching a single value against any of 'args'.
 template<typename V, typename... T>
 inline b8 matchAny(V v, T... args)
@@ -103,6 +108,8 @@ inline b8 matchSeqRev(V* v, T... args)
   return ((accum -= 1, v[-accum] == args) && ...);
 }
 
+/* ----------------------------------------------------------------------------
+ */
 // Useful to be able to call normally-inlined functions from a debugger
 #if IRO_DEBUG
 #define release_inline
@@ -110,6 +117,8 @@ inline b8 matchSeqRev(V* v, T... args)
 #define release_inline inline
 #endif
 
+/* ----------------------------------------------------------------------------
+ */
 // TODO(sushi) eventually this would be better placed in platform.h, but I don't really like the
 //             idea of having to include all of platform.h into anything that uses this,
 //             so if I eventually reorganize platform to be more modular, move this there
@@ -131,8 +140,9 @@ inline b8 matchSeqRev(V* v, T... args)
 #define EXPORT_DYNAMIC "EXPORT_DYNAMIC is not setup for this platform!"
 #endif
 
+/* ----------------------------------------------------------------------------
+ */
 #ifndef defer
-
 template <class F>
 struct deferrer
 {
@@ -163,30 +173,62 @@ deferrer_with_cancel<F> operator*(defer_with_cancel_dummy, F f) { return {false,
 #  define deferWithCancel defer_with_cancel_dummy{} *[&]()
 #endif //#ifndef defer
 
+/* ----------------------------------------------------------------------------
+ */
 #define STRINGIZE_(a) #a
 #define STRINGIZE(a) STRINGIZE_(a)
 #define GLUE_(a,b) a##b
 #define GLUE(a,b) GLUE_(a,b)
 
+
+/* ----------------------------------------------------------------------------
+ */
 template<typename T>
 inline T max(T a, T b) { return a > b? a : b; }
 
 template<typename T>
 inline T min(T a, T b) { return a > b? b : a; }
 
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
+inline bool isPow2(T a) { return (a & (a - 1)) == 0; }
+
+template<typename T>
+inline bool isAligned(T x, T alignment)
+{
+  return (x % alignment) == 0;
+}
+
+template<typename T>
+inline T alignUp(T x, T alignment)
+{
+  return (x + alignment - 1) & ~(alignment - 1);
+}
+
+template<typename T>
+inline T alignDown(T x, T alignment)
+{
+  return x & ~(alignment - 1);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 namespace unit
 {
 
 /* ----------------------------------------------------------------------------
  *  Returns bytes needed for each unit.
  */
-inline u64 kilobytes(u64 x) { return x << 10; }
-inline u64 megabytes(u64 x) { return x << 20; }
-inline u64 gigabytes(u64 x) { return x << 30; }
-inline u64 terabytes(u64 x) { return x << 40; }
+constexpr u64 kilobytes(u64 x) { return x << 10; }
+constexpr u64 megabytes(u64 x) { return x << 20; }
+constexpr u64 gigabytes(u64 x) { return x << 30; }
+constexpr u64 terabytes(u64 x) { return x << 40; }
 
 }
 
+/* ----------------------------------------------------------------------------
+ */
 #define assertpointer(x, ...) assert((x) != nullptr)
 #define assertrange(x, min, max, ...) assert((x) >= (min) && (x) < (max))
 

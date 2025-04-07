@@ -227,9 +227,10 @@ void RenderSys::drawQuad(
       if (batch_count >= RenderSys::MAX_BATCHES)
       {
         // TODO(delle) investigate if this stalls
-        quads_vertex_buffer.unmap(renderer, true);
+        quads_vertex_buffer.flush(renderer, 0, gfx::Buffer::FLUSH_WHOLE_BUFFER);
+        quads_vertex_buffer.unmap(renderer);
         drawBatches(*this, renderer);
-        quads_vertex_buffer.map(renderer, 0, gfx::Buffer::MAP_WHOLE_BUFFER);
+        quads_vertex_buffer.map(renderer);
       }
       else
       {
@@ -253,9 +254,10 @@ void RenderSys::drawQuad(
   if (quad_count >= RenderSys::MAX_QUADS)
   {
     // TODO(delle) investigate if this stalls
-    quads_vertex_buffer.unmap(renderer, true);
+    quads_vertex_buffer.flush(renderer, 0, gfx::Buffer::FLUSH_WHOLE_BUFFER);
+    quads_vertex_buffer.unmap(renderer);
     drawBatches(*this, renderer);
-    quads_vertex_buffer.map(renderer, 0, gfx::Buffer::MAP_WHOLE_BUFFER);
+    quads_vertex_buffer.map(renderer);
   }
 }
 
@@ -293,14 +295,14 @@ b8 RenderSys::update(const UpdateParams& params)
     scene.resolution_and_time[1] = (f32)params.viewport.h;
     scene.resolution_and_time[2] = (f32)renderer.engine->frame_start_time;
 
-    scene_uniform_buffer.map(renderer, 0, gfx::Buffer::MAP_WHOLE_BUFFER);
-    mem::copy(scene_uniform_buffer.mapped_data, &scene, sizeof(scene));
-    scene_uniform_buffer.unmap(renderer, true);
+    scene_uniform_buffer.map(renderer);
+    scene_uniform_buffer.copy_and_flush(renderer, &scene, sizeof(scene));
+    scene_uniform_buffer.unmap(renderer);
   }
 
   external_counts = {};
-  external_vertex_buffer.map(renderer, 0, gfx::Buffer::MAP_WHOLE_BUFFER);
-  external_index_buffer.map(renderer, 0, gfx::Buffer::MAP_WHOLE_BUFFER);
+  external_vertex_buffer.map(renderer);
+  external_index_buffer.map(renderer);
 
   ///////////////////////////////////////////////
   // 1. Draw Background
@@ -323,7 +325,7 @@ b8 RenderSys::update(const UpdateParams& params)
   TRACE("render.sys draw map tiles\n");
 
   renderer.bindPipeline(quad_pipeline);
-  quads_vertex_buffer.map(renderer, 0, gfx::Buffer::MAP_WHOLE_BUFFER);
+  quads_vertex_buffer.map(renderer);
 
   if (params.broadcast)
     params.broadcast->raise<PreMapRender>({this});
@@ -413,9 +415,12 @@ b8 RenderSys::update(const UpdateParams& params)
   if (params.broadcast)
     params.broadcast->raise<PostRender>({this});
 
-  external_vertex_buffer.unmap(renderer, true);
-  external_index_buffer.unmap(renderer, true);
-  quads_vertex_buffer.unmap(renderer, true);
+  external_vertex_buffer.flush(renderer, 0, gfx::Buffer::FLUSH_WHOLE_BUFFER);
+  external_index_buffer.flush(renderer, 0, gfx::Buffer::FLUSH_WHOLE_BUFFER);
+  quads_vertex_buffer.flush(renderer, 0, gfx::Buffer::FLUSH_WHOLE_BUFFER);
+  external_vertex_buffer.unmap(renderer);
+  external_index_buffer.unmap(renderer);
+  quads_vertex_buffer.unmap(renderer);
   if (batch_count > 0)
   {
     drawBatches(*this, renderer);

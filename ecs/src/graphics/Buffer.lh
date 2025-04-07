@@ -132,8 +132,8 @@ struct Buffer
     Persistent,
   };
 
-  static constexpr u64 MAP_WHOLE_BUFFER = MAX_U64;
 
+  static constexpr u64 FLUSH_WHOLE_BUFFER = MAX_U64;
 
   u32 index;
   void* mapped_data;
@@ -150,13 +150,15 @@ struct Buffer
 
   b8 deinit(Renderer& renderer);
 
-  // If size is MAP_WHOLE_BUFFER, the range from offset to the end
-  // of the buffer is mapped.
-  b8 map(Renderer& renderer, u64 offset, u64 size);
+  b8 map(Renderer& renderer);
 
-  b8 flush(Renderer& renderer);
+  // If size is FLUSH_WHOLE_BUFFER, the range from offset to the end
+  // of the buffer is flushed.
+  b8 flush(Renderer& renderer, u64 offset, u64 size);
 
-  b8 unmap(Renderer& renderer, b8 flush);
+  b8 copy_and_flush(Renderer& renderer, void* data, u64 size);
+
+  b8 unmap(Renderer& renderer);
 };
 
 }

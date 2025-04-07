@@ -778,16 +778,43 @@ $ end -- if IRO_LINUX
         continue; //next physical device
 
       ri.physical_device = devices[i];
-      vkGetPhysicalDeviceProperties(devices[i],
-        &ri.physical_device_properties);
-      vkGetPhysicalDeviceFeatures(devices[i],
-        &ri.physical_device_features);
-
       break; //found suitable physical device
     }
 
     if (ri.physical_device == VK_NULL_HANDLE)
       return FATAL("failed to find a suitable vulkan physical device\n");
+
+    vkGetPhysicalDeviceProperties(ri.physical_device,
+        &ri.physical_device_properties);
+    vkGetPhysicalDeviceMemoryProperties(ri.physical_device,
+      &ri.physical_device_memory_properties);
+    vkGetPhysicalDeviceFeatures(ri.physical_device,
+      &ri.physical_device_features);
+
+    auto& mem_props = ri.physical_device_memory_properties;
+    ri.heaps.len = mem_props.memoryTypeCount;
+    for (u32 i = 0; i < mem_props.memoryTypeCount; i++)
+    {
+      ri.heaps[i].heap =
+        mem_props.memoryHeaps[mem_props.memoryTypes[i].heapIndex];
+
+      ri.heaps[i].alignment =
+        max(ri.physical_device_properties.limits.nonCoherentAtomSize,
+            (VkDeviceSize)32);
+
+      if (ri.heaps[i].heap.size <= (VkDeviceSize)unit::megabytes(1024))
+      {
+        ri.heaps[i].preferred_block_size =
+          alignUp(ri.heaps[i].heap.size / 8, ri.heaps[i].alignment);
+      }
+      else
+      {
+        ri.heaps[i].preferred_block_size = unit::megabytes(256);
+      }
+      ri.heaps[i].blocks.init(8, &allocator);
+      ri.heaps[i].allocations.init(512, &allocator);
+      ri.heaps[i].free_chunks.init(8, &allocator);
+    }
   }
 
   TRACE("creating the vulkan logical device\n");
@@ -1049,7 +1076,7 @@ $ end -- if IRO_LINUX
     if (ri.swapchain_image_count > ri.MAX_DEFAULT_FRAMEBUFFERS)
       return FATAL("vulkan swapchain image count is >",
         ri.MAX_DEFAULT_FRAMEBUFFERS, "; bump the code limit\n");
-    
+
     for (u32 i = 0; i < ri.swapchain_image_count; i++)
     {
       VkImageCreateInfo image_info =
@@ -1240,17 +1267,8 @@ b8 Renderer::deinit()
     RendererTexture* texture = ri.texture_pool.at_index(i);
     if (texture != nullptr && texture->image != VK_NULL_HANDLE)
     {
-      vkDestroySampler(ri.device, texture->sampler, &ri.allocator);
-      texture->sampler = VK_NULL_HANDLE;
-
-      vkDestroyImageView(ri.device, texture->view, &ri.allocator);
-      texture->view = VK_NULL_HANDLE;
-
-      vkDestroyImage(ri.device, texture->image, &ri.allocator);
-      texture->image = VK_NULL_HANDLE;
-
-      vkFreeMemory(ri.device, texture->memory, &ri.allocator);
-      texture->memory = VK_NULL_HANDLE;
+      gfx::Texture api_texture = {i};
+      api_texture.deinit(*this);
     }
   }
   ri.texture_pool.deinit();
@@ -1260,11 +1278,8 @@ b8 Renderer::deinit()
     RendererFramebuffer* framebuffer = ri.framebuffer_pool.at_index(i);
     if (framebuffer != nullptr && framebuffer->framebuffer != VK_NULL_HANDLE)
     {
-      vkDestroyRenderPass(ri.device, framebuffer->renderpass, &ri.allocator);
-      framebuffer->renderpass = VK_NULL_HANDLE;
-
-      vkDestroyFramebuffer(ri.device, framebuffer->framebuffer, &ri.allocator);
-      framebuffer->framebuffer = VK_NULL_HANDLE;
+      gfx::Framebuffer api_framebuffer = {i};
+      api_framebuffer.deinit(*this);
     }
   }
   ri.framebuffer_pool.deinit();
@@ -1274,22 +1289,30 @@ b8 Renderer::deinit()
     RendererShader* shader = ri.shader_pool.at_index(i);
     if (shader != nullptr && shader->module != VK_NULL_HANDLE)
     {
-      vkDestroyShaderModule(ri.device, shader->module, &ri.allocator);
-      shader->module = VK_NULL_HANDLE;
+      gfx::Shader api_shader = {i};
+      api_shader.deinit(*this);
     }
   }
   ri.shader_pool.deinit();
+
+  for (u32 i = 0; i < ri.buffer_pool.MAX_COUNT; i++)
+  {
+    RendererBuffer* buffer = ri.buffer_pool.at_index(i);
+    if (buffer != nullptr && buffer->buffer != VK_NULL_HANDLE)
+    {
+      gfx::Buffer api_buffer = {i};
+      api_buffer.deinit(*this);
+    }
+  }
+  ri.buffer_pool.deinit();
 
   for (u32 i = 0; i < ri.pipeline_pool.MAX_COUNT; i++)
   {
     RendererPipeline* pipeline = ri.pipeline_pool.at_index(i);
     if (pipeline != nullptr && pipeline->pipeline != VK_NULL_HANDLE)
     {
-      vkDestroyPipeline(ri.device, pipeline->pipeline, &ri.allocator);
-      pipeline->pipeline = VK_NULL_HANDLE;
-
-      vkDestroyPipelineLayout(ri.device, pipeline->layout, &ri.allocator);
-      pipeline->layout = VK_NULL_HANDLE;
+      gfx::Pipeline api_pipeline = {i};
+      api_pipeline.deinit(*this);
     }
   }
   ri.pipeline_pool.deinit();
@@ -1351,6 +1374,19 @@ b8 Renderer::deinit()
     ri.default_storage_buffer_descriptor_set_layout, &ri.allocator);
 
   vkDestroyCommandPool(ri.device, ri.command_pool, &ri.allocator);
+
+  for (RendererHeap& heap : ri.heaps)
+  {
+    for (RendererHeapBlock& block : heap.blocks)
+    {
+      vkFreeMemory(ri.device, block.memory, &ri.allocator);
+    }
+    heap.blocks.destroy();
+    heap.allocations.destroy();
+    heap.free_chunks.destroy();
+  }
+
+  vkDestroyDevice(ri.device, &ri.allocator);
 
 $ if ECS_DEBUG then
   auto vkDestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)
@@ -2041,7 +2077,7 @@ $ end -- if ECS_DEBUG
       },
       .dstSubresource =
       {
-        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, 
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
         .mipLevel = 0,
         .baseArrayLayer = 0,
         .layerCount = 1

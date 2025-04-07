@@ -11,6 +11,184 @@ namespace gfx
 
 /* ----------------------------------------------------------------------------
  */
+RendererHeapAllocation* allocate(
+  Renderer& renderer,
+  u32 memory_type,
+  VkMemoryRequirements memory_requirements)
+{
+  RendererInternal& ri = *(RendererInternal*)renderer.internal;
+  RendererHeap& heap = ri.heaps[memory_type];
+
+  VkDeviceSize alignment = max(memory_requirements.alignment, heap.alignment);
+  VkDeviceSize aligned_size = alignUp(memory_requirements.size, alignment);
+
+  if (aligned_size < heap.preferred_block_size)
+  {
+    for (RendererHeapAllocation& free_chunk : heap.free_chunks)
+    {
+      VkDeviceSize chunk_aligned_offset = alignUp(free_chunk.offset, alignment);
+      VkDeviceSize chunk_aligned_end = chunk_aligned_offset + aligned_size;
+      if (chunk_aligned_end > free_chunk.offset + free_chunk.size)
+        continue;
+
+      VkDeviceSize size_after_alloc = free_chunk.size - aligned_size;
+      if (size_after_alloc < alignment)
+      {
+        RendererHeapBlock& block = heap.blocks[free_chunk.block_index];
+        heap.allocations.push(free_chunk);
+        heap.free_chunks.remove(&free_chunk);
+
+        free_chunk.aligned_offset = chunk_aligned_offset;
+        free_chunk.aligned_size = aligned_size;
+
+        assert(isAligned(free_chunk.aligned_offset, alignment));
+        assert(isAligned(free_chunk.aligned_size, alignment));
+        return &free_chunk;
+      }
+      else
+      {
+        RendererHeapBlock& block = heap.blocks[free_chunk.block_index];
+
+        RendererHeapAllocation* allocation = heap.allocations.push();
+        allocation->memory_type = free_chunk.memory_type;
+        allocation->block_index = free_chunk.block_index;
+        allocation->offset = free_chunk.offset;
+        allocation->size = aligned_size;
+        allocation->aligned_offset = chunk_aligned_offset;
+        allocation->aligned_size = aligned_size;
+
+        free_chunk.size = size_after_alloc;
+        free_chunk.offset = chunk_aligned_end;
+
+        assert(isAligned(allocation->aligned_offset, alignment));
+        assert(isAligned(allocation->aligned_size, alignment));
+        return allocation;
+      }
+    }
+  }
+
+  if (   heap.blocks.isEmpty()
+      || (  (VkDeviceSize)heap.blocks.last()->cursor + aligned_size
+          > heap.blocks.last()->size))
+  {
+    RendererHeapBlock* block = heap.blocks.push();
+    block->size = max(heap.preferred_block_size, aligned_size);
+    block->cursor = 0;
+    block->mapped_count = 0;
+
+    VkMemoryAllocateInfo alloc_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize = block->size,
+      .memoryTypeIndex = memory_type,
+    };
+
+    if (VK_SUCCESS != vkAllocateMemory(ri.device, &alloc_info,
+      &ri.allocator, &block->memory))
+    {
+      heap.blocks.pop();
+      ERROR("failed to allocate memory for a vulkan heap block\n");
+      return nullptr;
+    }
+  }
+
+  u32 block_index = heap.blocks.len() - 1;
+  RendererHeapBlock& block = heap.blocks[block_index];
+
+  RendererHeapAllocation* allocation = heap.allocations.push();
+  allocation->memory_type = memory_type;
+  allocation->block_index = block_index;
+  allocation->offset = (VkDeviceSize)block.cursor;
+  allocation->size = aligned_size;
+  allocation->aligned_offset = alignUp(allocation->offset, alignment);
+  allocation->aligned_size = aligned_size;
+
+  VkDeviceSize new_cursor = block.cursor + aligned_size;
+  assert(new_cursor <= (VkDeviceSize)UINT32_MAX);
+  block.cursor = (u32)new_cursor;
+
+  assert(isAligned(allocation->aligned_offset, alignment));
+  assert(isAligned(allocation->aligned_size, alignment));
+  return allocation;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void deallocate(
+  Renderer& renderer,
+  RendererHeapAllocation* allocation)
+{
+  if (allocation == nullptr)
+    return;
+
+  RendererInternal& ri = *(RendererInternal*)renderer.internal;
+  RendererHeap& heap = ri.heaps[allocation->memory_type];
+  RendererHeapBlock& block = heap.blocks[allocation->block_index];
+
+  if (allocation->offset + allocation->size == block.cursor)
+  {
+    block.cursor -= allocation->size;
+  }
+  else
+  {
+    // see if we can merge with an existing free chunk
+    RendererHeapAllocation* merged_chunk = nullptr;
+    for (RendererHeapAllocation& chunk : heap.free_chunks)
+    {
+      if (chunk.block_index != allocation->block_index)
+        continue;
+
+      if (chunk.offset + chunk.size == allocation->offset)
+      {
+        chunk.size += allocation->size;
+        merged_chunk = &chunk;
+        break;
+      }
+      else if (allocation->offset + allocation->size == chunk.offset)
+      {
+        chunk.offset = allocation->offset;
+        chunk.size += allocation->size;
+        merged_chunk = &chunk;
+        break;
+      }
+    }
+
+    if (merged_chunk != nullptr)
+    {
+      // see if we can merge with a free chunk on the other side
+      for (RendererHeapAllocation& chunk : heap.free_chunks)
+      {
+        if (chunk.block_index != allocation->block_index)
+          continue;
+        if (&chunk == merged_chunk)
+          continue;
+
+        if (merged_chunk->offset + merged_chunk->size == chunk.offset)
+        {
+          merged_chunk->size += chunk.size;
+          heap.free_chunks.remove(&chunk);
+          break;
+        }
+        else if (chunk.offset + chunk.size == merged_chunk->offset)
+        {
+          merged_chunk->offset = chunk.offset;
+          merged_chunk->size += chunk.size;
+          heap.free_chunks.remove(&chunk);
+          break;
+        }
+      }
+    }
+    else
+    {
+      heap.free_chunks.push(*allocation);
+    }
+
+    heap.allocations.remove(allocation);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 beginSingleUseCommandBuffer(
   Renderer& renderer,
   VkCommandBuffer* command_buffer)
