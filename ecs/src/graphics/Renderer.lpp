@@ -1565,7 +1565,7 @@ b8 Renderer::update()
           .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
           .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
           .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-          .image = framebuffer->image,
+          .image = framebuffer->texture->image,
           .subresourceRange =
           {
             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -1581,6 +1581,8 @@ b8 Renderer::update()
           VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
           0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        framebuffer->texture->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
       }
 
       if (cmd.bind_framebuffer.index == 0)
@@ -1631,11 +1633,11 @@ b8 Renderer::update()
           .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
           .srcAccessMask = VK_ACCESS_SHADER_READ_BIT,
           .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-          .oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+          .oldLayout = framebuffer->texture->layout,
           .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
           .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
           .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-          .image = framebuffer->image,
+          .image = framebuffer->texture->image,
           .subresourceRange =
           {
             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -1650,6 +1652,8 @@ b8 Renderer::update()
           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
           VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
           0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        framebuffer->texture->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
       }
 
       VkRenderPassBeginInfo begin_info =
@@ -2000,7 +2004,7 @@ $ end -- if ECS_DEBUG
         .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image = framebuffer->image,
+        .image = framebuffer->texture->image,
         .subresourceRange =
         {
           .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -2016,6 +2020,8 @@ $ end -- if ECS_DEBUG
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
         0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+      framebuffer->texture->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
   }
 

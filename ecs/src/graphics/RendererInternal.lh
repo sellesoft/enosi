@@ -79,6 +79,7 @@ struct RendererTexture
   VkImage image;
   VkImageView view;
   VkSampler sampler;
+  VkImageLayout layout;
   VkDescriptorSet descriptor_set;
   RendererHeapAllocation* allocation;
 };
@@ -89,7 +90,7 @@ struct RendererFramebuffer
 {
   VkFramebuffer framebuffer;
   VkRenderPass renderpass;
-  VkImage image;
+  RendererTexture* texture;
   u32 width;
   u32 height;
   vec4f clear_color;
