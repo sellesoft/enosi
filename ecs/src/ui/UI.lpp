@@ -137,7 +137,7 @@ b8 UI::init(Engine& engine)
   fragment_shader = compiled_fragment_shader->gfx_shader;
 
   if (!pipeline.init(renderer, vertex_shader, fragment_shader,
-      ui::PUSH_CONSTANT_SIZE, "ui"_str))
+      ui::PUSH_CONSTANT_SIZE, true, "ui"_str))
     return ERROR("failed to init ui pipeline\n");
 
   if (!vertex_buffer.init(renderer, nullptr,

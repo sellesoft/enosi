@@ -139,9 +139,8 @@ b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
     return ERROR("failed to load the fragment shader\n");
   quad_fragment_shader = compiled_quad_fragment_shader->gfx_shader;
 
-  if (!quad_pipeline.init(renderer,
-    quad_vertex_shader, quad_fragment_shader, 0,
-    "render.sys quad"_str))
+  if (!quad_pipeline.init(renderer, quad_vertex_shader, quad_fragment_shader,
+    0, true, "render.sys quad"_str))
     return ERROR("failed to init the quad pipeline\n");
 
   //init the stars pipeline
@@ -159,9 +158,8 @@ b8 RenderSys::init(gfx::Renderer& renderer, AssetMgr& assetmgr)
     return ERROR("failed to load stars fragment shader\n");
   stars_fragment_shader = compiled_stars_fragment_shader->gfx_shader;
 
-  if (!stars_pipeline.init(renderer,
-    fullscreen_vertex_shader, stars_fragment_shader, 0,
-    "stars"_str))
+  if (!stars_pipeline.init(renderer, fullscreen_vertex_shader,
+    stars_fragment_shader, 0, false, "stars"_str))
     return ERROR("failed to init the stars pipeline\n");
 
   return true;
