@@ -79,7 +79,6 @@ struct RendererTexture
   VkImage image;
   VkImageView view;
   VkSampler sampler;
-  VkImageLayout layout;
   VkDescriptorSet descriptor_set;
   RendererHeapAllocation* allocation;
 };
@@ -203,7 +202,7 @@ $ end -- if ECS_DEBUG
   static constexpr u32 MAX_DEFAULT_FRAMEBUFFERS = 4;
   VkRenderPass default_renderpass;
   VkImage default_framebuffer_images[MAX_DEFAULT_FRAMEBUFFERS];
-  VkDeviceMemory default_framebuffer_image_memories[MAX_DEFAULT_FRAMEBUFFERS];
+  RendererHeapAllocation* default_framebuffer_image_allocations[MAX_DEFAULT_FRAMEBUFFERS];
   VkImageView default_framebuffer_image_views[MAX_DEFAULT_FRAMEBUFFERS];
   VkFramebuffer default_framebuffers[MAX_DEFAULT_FRAMEBUFFERS];
   u32 default_framebuffer_index;
@@ -269,7 +268,7 @@ static inline u32 determineMemoryType(
 
 /* ----------------------------------------------------------------------------
  */
-static inline VkDeviceMemory allocationToMemory(
+static inline VkDeviceMemory allocationMemory(
   Renderer& renderer,
   RendererHeapAllocation* allocation)
 {

@@ -123,7 +123,7 @@ b8 Buffer::init(
   };
 
   if (VK_SUCCESS != vkBindBufferMemory(ri.device, buffer_handle,
-    allocationToMemory(renderer, allocation), allocation->aligned_offset))
+    allocationMemory(renderer, allocation), allocation->aligned_offset))
     return ERROR("failed to bind memory to a vulkan buffer\n");
 
   if (behavior == MappingBehavior::Never)
@@ -175,7 +175,7 @@ b8 Buffer::init(
       defer { gfx::deallocate(renderer, staging_allocation); };
 
       VkDeviceMemory staging_buffer_memory =
-        allocationToMemory(renderer, staging_allocation);
+        allocationMemory(renderer, staging_allocation);
 
       if (VK_SUCCESS != vkBindBufferMemory(ri.device, staging_buffer_handle,
         staging_buffer_memory, staging_allocation->aligned_offset))

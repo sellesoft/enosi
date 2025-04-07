@@ -158,7 +158,6 @@ Texture Texture::create(
     .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
   };
-  VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
   if (usage.test(ImageUsage::Sampled))
     image_create_info.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
@@ -196,7 +195,7 @@ Texture Texture::create(
   };
 
   if (VK_SUCCESS != vkBindImageMemory(ri.device, image,
-    allocationToMemory(renderer, allocation), allocation->aligned_offset))
+    allocationMemory(renderer, allocation), allocation->aligned_offset))
   {
     ERROR("failed to bind memory to a vulkan image\n");
     return {0};
@@ -296,7 +295,7 @@ Texture Texture::create(
     defer { gfx::deallocate(renderer, staging_allocation); };
 
     VkDeviceMemory staging_buffer_memory =
-      allocationToMemory(renderer, staging_allocation);
+      allocationMemory(renderer, staging_allocation);
 
     if (VK_SUCCESS != vkBindBufferMemory(ri.device, staging_buffer,
       staging_buffer_memory, staging_allocation->aligned_offset))
@@ -385,8 +384,40 @@ Texture Texture::create(
 
     if(!endSingleUseCommandBuffer(renderer, single_use_command_buffer))
       return {0};
+  }
+  else
+  {
+    VkCommandBuffer single_use_command_buffer;
+    if (!beginSingleUseCommandBuffer(renderer, &single_use_command_buffer))
+      return {0};
 
-    layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    VkImageMemoryBarrier barrier =
+    {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+      .srcAccessMask = 0,
+      .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
+      .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .image = image,
+      .subresourceRange =
+      {
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+        .baseMipLevel = 0,
+        .levelCount = 1,
+        .baseArrayLayer = 0,
+        .layerCount = 1,
+      },
+    };
+
+    vkCmdPipelineBarrier(single_use_command_buffer,
+      VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+      VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+      0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+    if(!endSingleUseCommandBuffer(renderer, single_use_command_buffer))
+      return {0};
   }
 
   VkSamplerCreateInfo sampler_create_info =
@@ -420,50 +451,47 @@ Texture Texture::create(
     vkDestroySampler(ri.device, sampler, &ri.allocator);
   };
 
-  VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
+  VkDescriptorSetAllocateInfo alloc_info =
   {
-    VkDescriptorSetAllocateInfo alloc_info =
-    {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-      .descriptorPool = ri.descriptor_pool,
-      .descriptorSetCount = 1,
-      .pSetLayouts = &ri.default_sampler_descriptor_set_layout,
-    };
+    .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+    .descriptorPool = ri.descriptor_pool,
+    .descriptorSetCount = 1,
+    .pSetLayouts = &ri.default_sampler_descriptor_set_layout,
+  };
 
-    if (VK_SUCCESS != vkAllocateDescriptorSets(ri.device, &alloc_info,
-      &descriptor_set))
-    {
-      ERROR("failed to allocate a descriptor set for a vulkan texture\n");
-      return {0};
-    }
-
-    VkDescriptorImageInfo descriptor_info =
-    {
-      .sampler = sampler,
-      .imageView = view,
-      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-    };
-
-    VkWriteDescriptorSet descriptor_set_write =
-    {
-      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      .dstSet = descriptor_set,
-      .dstBinding = 0,
-      .dstArrayElement = 0,
-      .descriptorCount = 1,
-      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-      .pImageInfo = &descriptor_info,
-    };
-
-    vkUpdateDescriptorSets(ri.device, 1, &descriptor_set_write, 0, nullptr);
+  VkDescriptorSet descriptor_set;
+  if (VK_SUCCESS != vkAllocateDescriptorSets(ri.device, &alloc_info,
+    &descriptor_set))
+  {
+    ERROR("failed to allocate a descriptor set for a vulkan texture\n");
+    return {0};
   }
+
+  VkDescriptorImageInfo descriptor_info =
+  {
+    .sampler = sampler,
+    .imageView = view,
+    .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+  };
+
+  VkWriteDescriptorSet descriptor_set_write =
+  {
+    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+    .dstSet = descriptor_set,
+    .dstBinding = 0,
+    .dstArrayElement = 0,
+    .descriptorCount = 1,
+    .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+    .pImageInfo = &descriptor_info,
+  };
+
+  vkUpdateDescriptorSets(ri.device, 1, &descriptor_set_write, 0, nullptr);
 
   RendererTexture* texture = ri.texture_pool.add();
   texture->image = image;
   texture->allocation = allocation;
   texture->view = view;
   texture->sampler = sampler;
-  texture->layout = layout;
   texture->descriptor_set = descriptor_set;
   ri.texture_count++;
 
