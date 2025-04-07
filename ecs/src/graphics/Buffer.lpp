@@ -27,6 +27,8 @@ b8 Buffer::init(
   RendererInternal& ri = *(RendererInternal*)renderer.internal;
   TRACE("initializing a buffer with ",requested_size," bytes\n");
 
+  mapped_data = nullptr;
+
   if (index != 0)
     return ERROR("failed to initialize a buffer because the buffer"
       " is already initialized\n");
@@ -243,9 +245,10 @@ b8 Buffer::init(
     RendererHeapBlock& block = heap.blocks[allocation->block_index];
 
     if (VK_SUCCESS != vkMapMemory(ri.device, block.memory,
-      allocation->aligned_offset, memory_requirements.size, 0, &mapped_data))
+      allocation->aligned_offset, memory_requirements.size, 0, &block.mapped_data))
       return ERROR("failed to map memory when trying to upload initial"
         " vulkan buffer data\n");
+    mapped_data = block.mapped_data;
 
     if (initial_data != nullptr)
     {

@@ -75,6 +75,7 @@ RendererHeapAllocation* allocate(
     block->size = max(heap.preferred_block_size, aligned_size);
     block->cursor = 0;
     block->mapped_count = 0;
+    block->mapped_data = nullptr;
 
     VkMemoryAllocateInfo alloc_info =
     {
