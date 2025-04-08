@@ -137,7 +137,7 @@ b8 UI::init(Engine& engine)
   fragment_shader = compiled_fragment_shader->gfx_shader;
 
   if (!pipeline.init(renderer, vertex_shader, fragment_shader,
-      ui::PUSH_CONSTANT_SIZE, "ui"_str))
+      ui::PUSH_CONSTANT_SIZE, true, "ui"_str))
     return ERROR("failed to init ui pipeline\n");
 
   if (!vertex_buffer.init(renderer, nullptr,
@@ -221,8 +221,8 @@ b8 UI::update(Engine& engine)
     mat3x2::createTransform({0.f, 0.f}, 0.f));
 
   TRACE("  mapping buffers\n");
-  vertex_buffer.map(renderer, 0, gfx::Buffer::MAP_WHOLE_BUFFER);
-  index_buffer.map(renderer, 0, gfx::Buffer::MAP_WHOLE_BUFFER);
+  vertex_buffer.map(renderer);
+  index_buffer.map(renderer);
 
   temp_alloc.init();
 
@@ -258,8 +258,10 @@ b8 UI::update(Engine& engine)
   temp_alloc.deinit();
 
   TRACE("  unmapping buffers\n");
-  vertex_buffer.unmap(renderer, true);
-  index_buffer.unmap(renderer, true);
+  vertex_buffer.flush(renderer, 0, gfx::Buffer::FLUSH_WHOLE_BUFFER);
+  index_buffer.flush(renderer, 0, gfx::Buffer::FLUSH_WHOLE_BUFFER);
+  vertex_buffer.unmap(renderer);
+  index_buffer.unmap(renderer);
 
   if (scrolling_item)
   {

@@ -34,6 +34,12 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL vkDebugCallback(
   const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
   void* user_data)
 {
+  // NOTE(delle) ignore info message spam before the command pool is created
+  Renderer* renderer = (Renderer*)user_data;
+  if (   renderer == nullptr
+      || ((RendererInternal*)renderer->internal)->command_pool == nullptr)
+    return VK_FALSE;
+
   switch(severity){
     case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
       TRACE(callback_data->pMessage, "\n");
@@ -127,7 +133,7 @@ $ end
   //TODO(delle) user settings for present mode selection
   if (mailbox)
   {
-    ri.swapchain_min_image_count = 2;
+    ri.swapchain_min_image_count = 3;
     ri.surface_present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
     @log.info("selected mailbox\n");
   }
@@ -145,7 +151,7 @@ $ end
   }
   else
   {
-    ri.swapchain_min_image_count = 2;
+    ri.swapchain_min_image_count = 3;
     ri.surface_present_mode = VK_PRESENT_MODE_FIFO_KHR;
     @log.info("selected fifo\n");
   }
@@ -215,11 +221,9 @@ $ end
 
 /* ----------------------------------------------------------------------------
  */
-static b8 updateFramebuffers(Renderer& renderer)
+static b8 updateFramebuffers(Renderer& renderer, u32 old_image_count)
 {
   RendererInternal& ri = *(RendererInternal*)renderer.internal;
-
-  u32 old_image_count = ri.swapchain_image_count;
 
   vkGetSwapchainImagesKHR(ri.device, ri.swapchain,
     &ri.swapchain_image_count, nullptr);
@@ -236,8 +240,7 @@ static b8 updateFramebuffers(Renderer& renderer)
       ri.default_framebuffer_image_views[i], &ri.allocator);
     vkDestroyImage(ri.device,
       ri.default_framebuffer_images[i], &ri.allocator);
-    vkFreeMemory(ri.device,
-      ri.default_framebuffer_image_memories[i], &ri.allocator);
+    gfx::deallocate(renderer, ri.default_framebuffer_image_allocations[i]);
   }
 
   for (u32 i = 0; i < ri.swapchain_image_count; i++)
@@ -266,6 +269,11 @@ static b8 updateFramebuffers(Renderer& renderer)
     if (VK_SUCCESS != vkCreateImage(ri.device, &image_info, &ri.allocator,
       &ri.default_framebuffer_images[i]))
       return FATAL("failed to create default framebuffer image ", i, "\n");
+    auto destroy_image_if_failure = deferWithCancel
+    {
+      vkDestroyImage(ri.device, ri.default_framebuffer_images[i],
+        &ri.allocator);
+    };
 
     debugSetObjectName(renderer, VK_OBJECT_TYPE_IMAGE,
       ri.default_framebuffer_images[i],
@@ -275,43 +283,22 @@ static b8 updateFramebuffers(Renderer& renderer)
     vkGetImageMemoryRequirements(ri.device, ri.default_framebuffer_images[i],
       &image_memory_requirements);
 
-    VkPhysicalDeviceMemoryProperties image_memory_properties;
-    vkGetPhysicalDeviceMemoryProperties(ri.physical_device,
-      &image_memory_properties);
+    u32 image_memory_type = determineMemoryType(renderer,
+      image_memory_requirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-    VkMemoryPropertyFlags desired_memory_properties =
-      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-    u32 image_memory_type = 0;
-    for (u32 j = 0; j < image_memory_properties.memoryTypeCount; j++)
-    {
-      if (   (image_memory_requirements.memoryTypeBits & (1 << j))
-          && (  (  image_memory_properties.memoryTypes[j].propertyFlags
-                 & desired_memory_properties)
-               == desired_memory_properties))
-      {
-        image_memory_type = j;
-        break;
-      }
-    }
-
-    VkMemoryAllocateInfo alloc_info =
-    {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .allocationSize = image_memory_requirements.size,
-      .memoryTypeIndex = image_memory_type,
-    };
-
-    if (VK_SUCCESS != vkAllocateMemory(ri.device, &alloc_info, &ri.allocator,
-      &ri.default_framebuffer_image_memories[i]))
+    ri.default_framebuffer_image_allocations[i] = gfx::allocate(renderer,
+      image_memory_type, image_memory_requirements);
+    if (ri.default_framebuffer_image_allocations[i] == nullptr)
       return FATAL("failed to allocate memory for default framebuffer"
         " image ", i, "\n");
-
-    debugSetObjectName(renderer, VK_OBJECT_TYPE_DEVICE_MEMORY,
-      ri.default_framebuffer_image_memories[i],
-      "<default framebuffer ", i, " image memory>");
+    auto destroy_allocation_if_failure = deferWithCancel
+    {
+      gfx::deallocate(renderer, ri.default_framebuffer_image_allocations[i]);
+    };
 
     vkBindImageMemory(ri.device, ri.default_framebuffer_images[i],
-      ri.default_framebuffer_image_memories[i], 0);
+      allocationMemory(renderer, ri.default_framebuffer_image_allocations[i]),
+      ri.default_framebuffer_image_allocations[i]->aligned_offset);
 
     VkImageViewCreateInfo view_create_info =
     {
@@ -333,6 +320,11 @@ static b8 updateFramebuffers(Renderer& renderer)
       &ri.allocator, &ri.default_framebuffer_image_views[i]))
       return FATAL("failed to create view for default framebuffer"
         " image ", i, "\n");
+    auto destroy_view_if_failure = deferWithCancel
+    {
+      vkDestroyImageView(ri.device, ri.default_framebuffer_image_views[i],
+        &ri.allocator);
+    };
 
     debugSetObjectName(renderer, VK_OBJECT_TYPE_IMAGE_VIEW,
       ri.default_framebuffer_image_views[i],
@@ -354,10 +346,20 @@ static b8 updateFramebuffers(Renderer& renderer)
       &ri.default_framebuffers[i]))
       return FATAL("failed to create the default vulkan"
         " framebuffer ", i, "\n");
+    auto destroy_framebuffer_if_failure = deferWithCancel
+    {
+      vkDestroyFramebuffer(ri.device, ri.default_framebuffers[i],
+        &ri.allocator);
+    };
 
     debugSetObjectName(renderer, VK_OBJECT_TYPE_FRAMEBUFFER,
       ri.default_framebuffers[i],
       "<default framebuffer ", i, ">");
+
+    destroy_image_if_failure.cancel();
+    destroy_allocation_if_failure.cancel();
+    destroy_view_if_failure.cancel();
+    destroy_framebuffer_if_failure.cancel();
   }
 
   return true;
@@ -545,6 +547,7 @@ $ if ECS_DEBUG then
       .messageSeverity = callback_severities,
       .messageType = callback_types,
       .pfnUserCallback = vkDebugCallback,
+      .pUserData = this,
     };
 $ end -- if ECS_DEBUG
 
@@ -615,6 +618,7 @@ $ if ECS_DEBUG then
       .messageSeverity = callback_severities,
       .messageType = callback_types,
       .pfnUserCallback = vkDebugCallback,
+      .pUserData = this,
     };
 
     auto vkCreateDebugUtilsMessengerEXT = (PFN_vkCreateDebugUtilsMessengerEXT)
@@ -778,16 +782,43 @@ $ end -- if IRO_LINUX
         continue; //next physical device
 
       ri.physical_device = devices[i];
-      vkGetPhysicalDeviceProperties(devices[i],
-        &ri.physical_device_properties);
-      vkGetPhysicalDeviceFeatures(devices[i],
-        &ri.physical_device_features);
-
       break; //found suitable physical device
     }
 
     if (ri.physical_device == VK_NULL_HANDLE)
       return FATAL("failed to find a suitable vulkan physical device\n");
+
+    vkGetPhysicalDeviceProperties(ri.physical_device,
+        &ri.physical_device_properties);
+    vkGetPhysicalDeviceMemoryProperties(ri.physical_device,
+      &ri.physical_device_memory_properties);
+    vkGetPhysicalDeviceFeatures(ri.physical_device,
+      &ri.physical_device_features);
+
+    auto& mem_props = ri.physical_device_memory_properties;
+    ri.heaps.len = mem_props.memoryTypeCount;
+    for (u32 i = 0; i < mem_props.memoryTypeCount; i++)
+    {
+      ri.heaps[i].heap =
+        mem_props.memoryHeaps[mem_props.memoryTypes[i].heapIndex];
+
+      ri.heaps[i].alignment =
+        max(ri.physical_device_properties.limits.nonCoherentAtomSize,
+            (VkDeviceSize)32);
+
+      if (ri.heaps[i].heap.size <= (VkDeviceSize)unit::megabytes(1024))
+      {
+        ri.heaps[i].preferred_block_size =
+          alignUp(ri.heaps[i].heap.size / 8, ri.heaps[i].alignment);
+      }
+      else
+      {
+        ri.heaps[i].preferred_block_size = unit::megabytes(256);
+      }
+      ri.heaps[i].blocks.init(8, &allocator);
+      ri.heaps[i].allocations.init(512, &allocator);
+      ri.heaps[i].free_chunks.init(8, &allocator);
+    }
   }
 
   TRACE("creating the vulkan logical device\n");
@@ -1049,7 +1080,7 @@ $ end -- if IRO_LINUX
     if (ri.swapchain_image_count > ri.MAX_DEFAULT_FRAMEBUFFERS)
       return FATAL("vulkan swapchain image count is >",
         ri.MAX_DEFAULT_FRAMEBUFFERS, "; bump the code limit\n");
-    
+
     for (u32 i = 0; i < ri.swapchain_image_count; i++)
     {
       VkImageCreateInfo image_info =
@@ -1076,7 +1107,11 @@ $ end -- if IRO_LINUX
       if (VK_SUCCESS != vkCreateImage(ri.device, &image_info, &ri.allocator,
         &ri.default_framebuffer_images[i]))
         return FATAL("failed to create default framebuffer image ", i, "\n");
-
+      auto destroy_image_if_failure = deferWithCancel
+      {
+        vkDestroyImage(ri.device, ri.default_framebuffer_images[i],
+          &ri.allocator);
+      };
       debugSetObjectName(*this, VK_OBJECT_TYPE_IMAGE,
         ri.default_framebuffer_images[i],
         "<default framebuffer ", i, " image>");
@@ -1085,43 +1120,22 @@ $ end -- if IRO_LINUX
       vkGetImageMemoryRequirements(ri.device, ri.default_framebuffer_images[i],
         &image_memory_requirements);
 
-      VkPhysicalDeviceMemoryProperties image_memory_properties;
-      vkGetPhysicalDeviceMemoryProperties(ri.physical_device,
-        &image_memory_properties);
+      u32 image_memory_type = determineMemoryType(*this,
+      image_memory_requirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-      VkMemoryPropertyFlags desired_memory_properties =
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-      u32 image_memory_type = 0;
-      for (u32 j = 0; j < image_memory_properties.memoryTypeCount; j++)
-      {
-        if (   (image_memory_requirements.memoryTypeBits & (1 << j))
-            && (  (  image_memory_properties.memoryTypes[j].propertyFlags
-                   & desired_memory_properties)
-                == desired_memory_properties))
-        {
-          image_memory_type = j;
-          break;
-        }
-      }
-
-      VkMemoryAllocateInfo alloc_info =
-      {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize = image_memory_requirements.size,
-        .memoryTypeIndex = image_memory_type,
-      };
-
-      if (VK_SUCCESS != vkAllocateMemory(ri.device, &alloc_info, &ri.allocator,
-        &ri.default_framebuffer_image_memories[i]))
+      ri.default_framebuffer_image_allocations[i] = gfx::allocate(*this,
+        image_memory_type, image_memory_requirements);
+      if (ri.default_framebuffer_image_allocations[i] == nullptr)
         return FATAL("failed to allocate memory for default framebuffer"
           " image ", i, "\n");
-
-      debugSetObjectName(*this, VK_OBJECT_TYPE_DEVICE_MEMORY,
-        ri.default_framebuffer_image_memories[i],
-        "<default framebuffer ", i, " image memory>");
+      auto destroy_allocation_if_failure = deferWithCancel
+      {
+        gfx::deallocate(*this, ri.default_framebuffer_image_allocations[i]);
+      };
 
       vkBindImageMemory(ri.device, ri.default_framebuffer_images[i],
-        ri.default_framebuffer_image_memories[i], 0);
+        allocationMemory(*this, ri.default_framebuffer_image_allocations[i]),
+        ri.default_framebuffer_image_allocations[i]->aligned_offset);
 
       VkImageViewCreateInfo view_create_info =
       {
@@ -1143,7 +1157,11 @@ $ end -- if IRO_LINUX
         &ri.allocator, &ri.default_framebuffer_image_views[i]))
         return FATAL("failed to create view for default framebuffer"
           " image ", i, "\n");
-
+      auto destroy_view_if_failure = deferWithCancel
+      {
+        vkDestroyImageView(ri.device, ri.default_framebuffer_image_views[i],
+          &ri.allocator);
+      };
       debugSetObjectName(*this, VK_OBJECT_TYPE_IMAGE_VIEW,
         ri.default_framebuffer_image_views[i],
         "<default framebuffer ", i, " image view>");
@@ -1164,10 +1182,19 @@ $ end -- if IRO_LINUX
         &ri.default_framebuffers[i]))
         return FATAL("failed to create the default vulkan"
           " framebuffer ", i, "\n");
-
+      auto destroy_framebuffer_if_failure = deferWithCancel
+      {
+        vkDestroyFramebuffer(ri.device, ri.default_framebuffers[i],
+          &ri.allocator);
+      };
       debugSetObjectName(*this, VK_OBJECT_TYPE_FRAMEBUFFER,
         ri.default_framebuffers[i],
         "<default framebuffer ", i, ">");
+
+      destroy_image_if_failure.cancel();
+      destroy_allocation_if_failure.cancel();
+      destroy_view_if_failure.cancel();
+      destroy_framebuffer_if_failure.cancel();
     }
   }
 
@@ -1240,17 +1267,8 @@ b8 Renderer::deinit()
     RendererTexture* texture = ri.texture_pool.at_index(i);
     if (texture != nullptr && texture->image != VK_NULL_HANDLE)
     {
-      vkDestroySampler(ri.device, texture->sampler, &ri.allocator);
-      texture->sampler = VK_NULL_HANDLE;
-
-      vkDestroyImageView(ri.device, texture->view, &ri.allocator);
-      texture->view = VK_NULL_HANDLE;
-
-      vkDestroyImage(ri.device, texture->image, &ri.allocator);
-      texture->image = VK_NULL_HANDLE;
-
-      vkFreeMemory(ri.device, texture->memory, &ri.allocator);
-      texture->memory = VK_NULL_HANDLE;
+      gfx::Texture api_texture = {i};
+      api_texture.deinit(*this);
     }
   }
   ri.texture_pool.deinit();
@@ -1260,11 +1278,8 @@ b8 Renderer::deinit()
     RendererFramebuffer* framebuffer = ri.framebuffer_pool.at_index(i);
     if (framebuffer != nullptr && framebuffer->framebuffer != VK_NULL_HANDLE)
     {
-      vkDestroyRenderPass(ri.device, framebuffer->renderpass, &ri.allocator);
-      framebuffer->renderpass = VK_NULL_HANDLE;
-
-      vkDestroyFramebuffer(ri.device, framebuffer->framebuffer, &ri.allocator);
-      framebuffer->framebuffer = VK_NULL_HANDLE;
+      gfx::Framebuffer api_framebuffer = {i};
+      api_framebuffer.deinit(*this);
     }
   }
   ri.framebuffer_pool.deinit();
@@ -1274,22 +1289,30 @@ b8 Renderer::deinit()
     RendererShader* shader = ri.shader_pool.at_index(i);
     if (shader != nullptr && shader->module != VK_NULL_HANDLE)
     {
-      vkDestroyShaderModule(ri.device, shader->module, &ri.allocator);
-      shader->module = VK_NULL_HANDLE;
+      gfx::Shader api_shader = {i};
+      api_shader.deinit(*this);
     }
   }
   ri.shader_pool.deinit();
+
+  for (u32 i = 0; i < ri.buffer_pool.MAX_COUNT; i++)
+  {
+    RendererBuffer* buffer = ri.buffer_pool.at_index(i);
+    if (buffer != nullptr && buffer->buffer != VK_NULL_HANDLE)
+    {
+      gfx::Buffer api_buffer = {i};
+      api_buffer.deinit(*this);
+    }
+  }
+  ri.buffer_pool.deinit();
 
   for (u32 i = 0; i < ri.pipeline_pool.MAX_COUNT; i++)
   {
     RendererPipeline* pipeline = ri.pipeline_pool.at_index(i);
     if (pipeline != nullptr && pipeline->pipeline != VK_NULL_HANDLE)
     {
-      vkDestroyPipeline(ri.device, pipeline->pipeline, &ri.allocator);
-      pipeline->pipeline = VK_NULL_HANDLE;
-
-      vkDestroyPipelineLayout(ri.device, pipeline->layout, &ri.allocator);
-      pipeline->layout = VK_NULL_HANDLE;
+      gfx::Pipeline api_pipeline = {i};
+      api_pipeline.deinit(*this);
     }
   }
   ri.pipeline_pool.deinit();
@@ -1331,10 +1354,9 @@ b8 Renderer::deinit()
       ri.default_framebuffers[i], &ri.allocator);
     vkDestroyImageView(ri.device,
       ri.default_framebuffer_image_views[i], &ri.allocator);
-    vkFreeMemory(ri.device,
-      ri.default_framebuffer_image_memories[i], &ri.allocator);
     vkDestroyImage(ri.device,
       ri.default_framebuffer_images[i], &ri.allocator);
+    gfx::deallocate(*this, ri.default_framebuffer_image_allocations[i]);
   }
 
   vkDestroyRenderPass(ri.device, ri.default_renderpass, &ri.allocator);
@@ -1351,6 +1373,19 @@ b8 Renderer::deinit()
     ri.default_storage_buffer_descriptor_set_layout, &ri.allocator);
 
   vkDestroyCommandPool(ri.device, ri.command_pool, &ri.allocator);
+
+  for (RendererHeap& heap : ri.heaps)
+  {
+    for (RendererHeapBlock& block : heap.blocks)
+    {
+      vkFreeMemory(ri.device, block.memory, &ri.allocator);
+    }
+    heap.blocks.destroy();
+    heap.allocations.destroy();
+    heap.free_chunks.destroy();
+  }
+
+  vkDestroyDevice(ri.device, &ri.allocator);
 
 $ if ECS_DEBUG then
   auto vkDestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)
@@ -1529,7 +1564,7 @@ b8 Renderer::update()
           .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
           .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
           .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-          .image = framebuffer->image,
+          .image = framebuffer->texture->image,
           .subresourceRange =
           {
             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -1599,7 +1634,7 @@ b8 Renderer::update()
           .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
           .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
           .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-          .image = framebuffer->image,
+          .image = framebuffer->texture->image,
           .subresourceRange =
           {
             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -1964,7 +1999,7 @@ $ end -- if ECS_DEBUG
         .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image = framebuffer->image,
+        .image = framebuffer->texture->image,
         .subresourceRange =
         {
           .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
@@ -2041,7 +2076,7 @@ $ end -- if ECS_DEBUG
       },
       .dstSubresource =
       {
-        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, 
+        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
         .mipLevel = 0,
         .baseArrayLayer = 0,
         .layerCount = 1
@@ -2406,11 +2441,13 @@ void Renderer::onWindowResized(WindowResized& event)
 
   vkDeviceWaitIdle(ri.device);
 
+  u32 old_image_count = ri.swapchain_image_count;
+
   TRACE("recreating the vulkan swapchain\n");
   updateSwapchain(*this);
 
   TRACE("recreating the default vulkan framebuffers\n");
-  updateFramebuffers(*this);
+  updateFramebuffers(*this, old_image_count);
 
   TRACE("clearing drawcmds\n");
   drawcmds.clear();

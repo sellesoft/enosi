@@ -115,7 +115,7 @@ b8 Framebuffer::init(
   RendererFramebuffer* framebuffer = ri.framebuffer_pool.add();
   framebuffer->framebuffer = framebuffer_handle;
   framebuffer->renderpass = renderpass_handle;
-  framebuffer->image = ri.texture_pool.at_index(texture.index)->image;
+  framebuffer->texture = ri.texture_pool.at_index(texture.index);
   framebuffer->width = width;
   framebuffer->height = height;
   framebuffer->clear_color = clear_color;

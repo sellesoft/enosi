@@ -55,6 +55,16 @@ struct StackArray
     return {arr, len};
   }
 
+  /* --------------------------------------------------------------------------
+   */
+  T& operator[](u64 i) { assert(i < len); return arr[i]; }
+  const T& operator[](u64 i) const { assert(i < len); return arr[i]; }
+
+  T* begin() { return arr; }
+  T* end() { return arr + len; }
+
+  const T* begin() const { return arr; }
+  const T* end() const { return arr + len; }
 };
 
 }
