@@ -335,6 +335,8 @@ LPPCFUNC b8 isAnonymous(Decl* decl);
 // Checks if 'decl' is a FieldDecl, eg. a member of a struct or union.
 LPPCFUNC b8 isField(Decl* decl);
 
+LPPCFUNC b8 isFunction(Decl* decl);
+
 // When 'decl' is a FieldDecl, check if its anonymous, eg. a nested anonymous 
 // struct or union with no field name. 
 // 'decl' must be a FieldDecl.

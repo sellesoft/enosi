@@ -136,6 +136,7 @@ typedef struct
  b8 isNamespace(Decl* decl);
  b8 isAnonymous(Decl* decl);
  b8 isField(Decl* decl);
+ b8 isFunction(Decl* decl);
  b8 isAnonymousField(Decl* decl);
  u64 getFieldOffset(Context* ctx, Decl* field);
  b8 isComplete(Decl* decl);
@@ -181,7 +182,7 @@ typedef struct
  Decl* getNextField(FieldIter* iter);
  EnumIter* createEnumIter(Context* ctx, Decl* decl);
  Decl* getNextEnum(EnumIter* iter);
-s64 getEnumValue(Decl* decl);
+ s64 getEnumValue(Decl* decl);
  void dumpAST(Context* ctx);
  String getClangDeclSpelling(Decl* decl);
 
@@ -564,6 +565,10 @@ end
 
 Decl.isNamespace = function(self)
   return 0 ~= lppclang.isNamespace(self.handle)
+end
+
+Decl.isFunction = function(self)
+  return 0 ~= lppclang.isFunction(self.handle)
 end
 
 --- Test if this Decl is a struct or class.

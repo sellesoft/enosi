@@ -1659,6 +1659,7 @@ b8 isNamespace(Decl* decl)
  */
 b8 isAnonymous(Decl* decl)
 {
+  assert(decl);
   auto* tag = getTagDecl(decl);
   return tag->getIdentifier() == nullptr &&
          tag->getTypedefNameForAnonDecl() == nullptr;
@@ -1668,7 +1669,16 @@ b8 isAnonymous(Decl* decl)
  */
 b8 isField(Decl* decl)
 {
+  assert(decl);
   return clang::FieldDecl::classof(getClangDecl(decl));
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 isFunction(Decl* decl)
+{
+  assert(decl);
+  return clang::FunctionDecl::classof(getClangDecl(decl));
 }
 
 /* ----------------------------------------------------------------------------
