@@ -1,13 +1,12 @@
 $ require "common"
-$ local comp = require "game.component.Component"
 
 @@lpp.import "game/component/Component.lh"
 
 #include "math/vec.h"
 
-@comp.def(Movement,
+struct Movement : Component
 {
   f32 speed = 0.1f;
 
   vec2f input = {0,0};
-})
+};

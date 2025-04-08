@@ -1,0 +1,46 @@
+/*
+ *  Components for entities acting as structures.
+ */
+
+$ require "common"
+
+@@lpp.import "game/component/Component.lh"
+
+/* ============================================================================
+ */
+enum class ExtendableConnection
+{
+  // A state in which a structure is standing alone, this is also the default
+  // state used when other states cannot be found.
+  Island,
+
+  // Corners.
+  BottomLeft,         
+  BottomRight,        
+  TopLeft,            
+  TopRight,           
+
+  // Straight formations. If a cap is not specified, the basic 
+  // vertical/horizontal state will be used instead.
+  Horizontal,         
+  HorizontalLeftCap,  
+  HorizontalRightCap, 
+  Vertical,           
+  VerticalBottomCap,  
+  VerticalTopCap,     
+};
+
+/* ============================================================================
+ *  Used on Entities whose appearance changes when Entities of the same kind
+ *  are bordering them.
+ *
+ *  It is expected that the sprite states used by the entity include the 
+ *  enumerated values above.
+ * 
+ *  These are processed after the Entity has been created and then removed.
+ *
+ *  NOTE(sushi) this is mostly an experimental way to handle things like 
+ *              tables being properly connected automatically and will 
+ *              likely change or be removed.
+ */
+struct ExtendableStructure : Component { };

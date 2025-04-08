@@ -71,7 +71,6 @@ b8 Font::compileBDF(CompileParams& params)
           args..., '\n');
     return false;
   };
-
     
   if ("STARTFONT"_str != scanner.scanIdentifier())
     return err("font does not start with STARTFONT");

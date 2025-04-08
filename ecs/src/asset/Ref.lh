@@ -30,6 +30,9 @@ struct Ref
     // Optional, if we want to compile the asset this is referencing.
     // TODO(sushi) separate compiling and loading.
     SourceDataFileReg* sfile_reg;
+
+    // Whether to try and load nested references.
+    b8 recursive = true;
   };
 
   b8 load(String type, LoadParams&);

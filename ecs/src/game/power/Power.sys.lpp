@@ -1,0 +1,42 @@
+$ require "common"
+
+#include "iro/Logger.h"
+
+@@lpp.import "game/power/Power.sys.lh"
+@@lpp.import "game/Transform.comp.lh"
+
+using namespace iro;
+
+@log.ger(powersys, Debug)
+
+/* ----------------------------------------------------------------------------
+ */
+void PowerSys::onCableAdd(EntComp<Cable> id, ComponentAdd& event)
+{
+  DEBUG("onCableAdd\n");
+
+  if (auto* transform = tryComp<Transform>(id))
+  {
+    DEBUG("at ", transform->pos, "\n");
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void PowerSys::onRenderCable(EntComp<Cable> id, RenderEntity& event)
+{
+  DEBUG("onRenderCable\n");
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void PowerSys::update()
+{
+  for (auto& cable : iterateComp<Cable>())
+  {
+    if (auto* transform = tryComp<Transform>(cable.owner))
+    {
+      DEBUG("cable at ", transform->pos, "\n");
+    }
+  }
+}

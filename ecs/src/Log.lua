@@ -76,6 +76,7 @@ log.fatal  = function(...) return putLog("FATAL", ...) end
 
 log.ger = function(name, verb)
   return [[
+    #include "iro/Logger.h"
     static iro::Logger logger 
       = iro::Logger::create("]]..name..[["_str, iro::Logger::Verbosity::]]..
       verb..[[);]]

@@ -31,6 +31,9 @@ struct Component
   static u64 getKind(const Component* cmp) { return cmp->kind; }
 
   b8 is(u64 kind) const { return this->kind == kind; }
+  
+  template<typename T>
+  static void onCreate(Component* comp);
 
   b8 init(u64 kind)
   {

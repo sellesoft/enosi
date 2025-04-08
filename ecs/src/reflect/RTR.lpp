@@ -1,25 +1,21 @@
 $ local cmn = require "common"
 $ local ast = require "reflect.AST"
-$ local Defs = require "asset.GatherDefs"
 
 $$$
-local defs = Defs.gather
+local importer = require "reflect.Importer"
 {
-  extra_patterns = cmn.List
-  {
-    "src/**/*.lh"
-  }
+  patterns = { "src/**/*.lh", },
 }
-  
 $$$
 
-@defs.imported:get
+@importer:get
 
 @@lpp.import "reflect/RTR.lh"
 
 $ local function eachDecl(f)
-$   defs:eachDecl(function(name, decl)
+$   importer:eachDecl(function(name, decl)
 $     if decl.is_anonymous then return end
+$     if decl.has_unhandled_arg_kind then return end
 $     f(name, decl)
 $   end)
 $ end

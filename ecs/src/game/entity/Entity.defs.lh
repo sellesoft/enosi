@@ -1,10 +1,15 @@
 $ require "common"
+$ local metadata = require "reflect.Metadata"
 
 @@lpp.import "asset/ArrayDef.lh"
 @@lpp.import "game/component/Component.lh"
 
+@metadata.def
+@metadata.source_types(entity)
 struct EntityDef
 {
   String name;
   ArrayDef<ComponentPtr> components;
 };
+
+typedef TypedSourceAssetRef<EntityDef> EntityDefRef;

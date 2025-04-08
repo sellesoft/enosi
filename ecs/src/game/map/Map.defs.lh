@@ -13,10 +13,9 @@ $ local metadata = require "reflect.Metadata"
 @@lpp.import "asset/AssetRef.lh"
 @@lpp.import "asset/ArrayDef.lh"
 @@lpp.import "graphics/Ref.defs.lh"
+@@lpp.import "game/entity/Entity.defs.lh"
 
 using namespace iro;
-
-struct EntityDef;
 
 namespace gfx
 {
@@ -53,8 +52,7 @@ enum class TileKindConfig
   ThreeWayIntersection,
 
   Default,
-  
-  @metadata.hidden
+
   COUNT,
 };
 
@@ -74,7 +72,7 @@ typedef TypedSourceAssetRef<TileKindDef> TileKindRef;
 struct MapTileDef
 {
   TileKindRef kind;
-  ArrayDef<EntityDef> entities;
+  ArrayDef<EntityDefRef> entities;
 };
 
 /* ============================================================================
@@ -89,6 +87,7 @@ struct MapLayerDef
 /* ============================================================================
  */
 @metadata.source_types(map)
+@metadata.def
 struct MapDef
 {
   String name;

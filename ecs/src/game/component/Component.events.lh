@@ -2,5 +2,12 @@
  *  Events relevant to all Components.
  */
 
-$ require "common"
-$ local Event = require "event.Event"
+$ local metadata = require "reflect.Metadata"
+
+// Raised when this Component is added to an Entity.
+@metadata.event(entity)
+struct ComponentAdd { };
+
+// Raised when this Component is removed from an Entity.
+@metadata.event(entity)
+struct ComponentRemove { };

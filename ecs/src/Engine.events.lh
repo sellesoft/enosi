@@ -1,12 +1,9 @@
-$ local event = require "event.Event"
-$ local reflect = require "reflect.Reflector"
+$ local metadata = require "reflect.Metadata"
 
-#include "iro/Common.h"
-#include "event/BroadcastEventBus.h"
-@reflect.include "input/Keys.h"
-@reflect.include "math/vec.h"
+@metadata.event(broadcast)
+struct PreReload { };
 
-@event.broad(PreReload, {})
-@event.broad(PostReload, {});
+@metadata.event(broadcast)
+struct PostReload { };
 
 

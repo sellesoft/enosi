@@ -12,7 +12,7 @@ return MapDef
         // --------------------------------------------------------------------
         // y = 0
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/walls/olive/Wall",
         },
         {
           kind = "assets/walls/olive/Wall"
@@ -172,20 +172,7 @@ return MapDef
         },
         {
           kind = "assets/floors/tiles/Floor",
-          entities =
-          {
-            Entity
-            {
-              name = "Table",
-              components =
-              {
-                Sprite
-                {
-                  texture = "assets/textures/WorkTableVerticalBotCapGlass",
-                },
-              },
-            },
-          },
+          entities = { "assets/entities/tables/glass/Table" },
         },
         {
           kind = "assets/floors/tiles/Floor",
@@ -218,20 +205,7 @@ return MapDef
         },
         {
           kind = "assets/floors/tiles/Floor",
-          entities =
-          {
-            Entity
-            {
-              name = "Table",
-              components =
-              {
-                Sprite
-                {
-                  texture = "assets/textures/WorkTableVerticalGlass",
-                },
-              },
-            },
-          },
+          entities = { "assets/entities/tables/glass/Table" },
         },
         {
           kind = "assets/floors/tiles/Floor",
@@ -241,37 +215,11 @@ return MapDef
         },
         {
           kind = "assets/floors/tiles/Floor",
-          entities =
-          {
-            Entity
-            {
-              name = "Table",
-              components =
-              {
-                Sprite
-                {
-                  texture = "assets/textures/WorkTableBotLeftCornerSteel",
-                },
-              },
-            },
-          },
+          entities = { "assets/entities/tables/steel/Table" },
         },
         {
           kind = "assets/floors/tiles/Floor",
-          entities =
-          {
-            Entity
-            {
-              name = "Table",
-              components =
-              {
-                Sprite
-                {
-                  texture = "assets/textures/WorkTableBotRightCornerSteel",
-                },
-              },
-            },
-          },
+          entities = { "assets/entities/tables/steel/Table" },
         },
         {
           kind = "assets/floors/tiles/Floor",
@@ -292,20 +240,7 @@ return MapDef
         },
         {
           kind = "assets/floors/tiles/Floor",
-          entities =
-          {
-            Entity
-            {
-              name = "Table",
-              components =
-              {
-                Sprite
-                {
-                  texture = "assets/textures/WorkTableVerticalGlass",
-                },
-              },
-            },
-          },
+          entities = { "assets/entities/tables/glass/Table" },
         },
         {
           kind = "assets/floors/tiles/Floor",
@@ -315,37 +250,11 @@ return MapDef
         },
         {
           kind = "assets/floors/tiles/Floor",
-          entities =
-          {
-            Entity
-            {
-              name = "Table",
-              components =
-              {
-                Sprite
-                {
-                  texture = "assets/textures/WorkTableTopLeftCornerSteel",
-                },
-              },
-            },
-          },
+          entities = { "assets/entities/tables/steel/Table" },
         },
         {
           kind = "assets/floors/tiles/Floor",
-          entities =
-          {
-            Entity
-            {
-              name = "Table",
-              components =
-              {
-                Sprite
-                {
-                  texture = "assets/textures/WorkTableTopRightCornerSteel",
-                },
-              },
-            },
-          },
+          entities = { "assets/entities/tables/steel/Table" },
         },
         {
           kind = "assets/floors/tiles/Floor",
@@ -366,20 +275,7 @@ return MapDef
         },
         {
           kind = "assets/floors/tiles/Floor",
-          entities =
-          {
-            Entity
-            {
-              name = "Table",
-              components =
-              {
-                Sprite
-                {
-                  texture = "assets/textures/WorkTableVerticalGlass",
-                },
-              },
-            },
-          },
+          entities = { "assets/entities/tables/glass/Table" },
         },
         {
           kind = "assets/floors/tiles/Floor",
@@ -395,21 +291,21 @@ return MapDef
         },
         {
           kind = "assets/floors/tiles/Floor",
-          entities =
-          {
-            Entity
-            {
-              name = "Spawner",
-              components =
-              {
-                PlayerSpawner {},
-                Sprite
-                {
-                  texture = "assets/textures/DevSpawner",
-                },
-              },
-            },
-          },
+          // entities =
+          // {
+          //   Entity
+          //   {
+          //     name = "Spawner",
+          //     components =
+          //     {
+          //       PlayerSpawner {},
+          //       Sprite
+          //       {
+          //         texture = "assets/textures/DevSpawner",
+          //       },
+          //     },
+          //   },
+          // },
         },
         {
           kind = "assets/floors/tiles/Floor",
@@ -427,20 +323,7 @@ return MapDef
         },
         {
           kind = "assets/floors/tiles/Floor",
-          entities =
-          {
-            Entity
-            {
-              name = "Table",
-              components =
-              {
-                Sprite
-                {
-                  texture = "assets/textures/WorkTableVerticalGlass",
-                },
-              },
-            },
-          },
+          entities = { "assets/entities/tables/glass/Table" },
         },
         {
           kind = "assets/floors/tiles/Floor",
@@ -473,20 +356,7 @@ return MapDef
         },
         {
           kind = "assets/floors/tiles/Floor",
-          entities =
-          {
-            Entity
-            {
-              name = "Table",
-              components =
-              {
-                Sprite
-                {
-                  texture = "assets/textures/WorkTableVerticalTopCapGlass",
-                },
-              },
-            },
-          },
+          entities = { "assets/entities/tables/glass/Table" },
         },
         {
           kind = "assets/floors/tiles/Floor",
@@ -508,20 +378,7 @@ return MapDef
         },
         {
           kind = "assets/floors/tiles/Floor",
-          entities =
-          {
-            Entity
-            {
-              name = "Table",
-              components =
-              {
-                Sprite
-                {
-                  texture = "assets/textures/WorkTableVerticalBotCapSteel",
-                },
-              },
-            },
-          },
+          entities = { "assets/entities/tables/steel/Table" },
         },
         {
           kind = "assets/walls/olive/Wall"
@@ -533,20 +390,20 @@ return MapDef
         },
         {
           kind = "assets/floors/tiles/Floor",
-          entities =
-          {
-            Entity
-            {
-              name = "Locker",
-              components =
-              {
-                Sprite
-                {
-                  texture = "assets/textures/LockerLightGray",
-                },
-              },
-            },
-          },
+          // entities =
+          // {
+          //   Entity
+          //   {
+          //     name = "Locker",
+          //     components =
+          //     {
+          //       Sprite
+          //       {
+          //         texture = "assets/textures/LockerLightGray",
+          //       },
+          //     },
+          //   },
+          // },
         },
         {
           kind = "assets/floors/tiles/Floor",
@@ -565,37 +422,11 @@ return MapDef
         },
         {
           kind = "assets/floors/tiles/Floor",
-          entities =
-          {
-            Entity
-            {
-              name = "Table",
-              components =
-              {
-                Sprite
-                {
-                  texture = "assets/textures/WorkTableHorizontalLeftCapSteel",
-                },
-              },
-            },
-          },
+          entities = { "assets/entities/tables/steel/Table" },
         },
         {
           kind = "assets/floors/tiles/Floor",
-          entities =
-          {
-            Entity
-            {
-              name = "Table",
-              components =
-              {
-                Sprite
-                {
-                  texture = "assets/textures/WorkTableTopRightCornerSteel",
-                },
-              },
-            },
-          },
+          entities = { "assets/entities/tables/steel/Table" },
         },
         {
           kind = "assets/walls/olive/Wall"

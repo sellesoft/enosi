@@ -1,4 +1,9 @@
 $ local cmn = require "common"
+$ local ast = require "reflect.AST"
+
+$ local comp = require "game.component.Component"
+$ local comps = comp.importComponents()
+@comps:get
 
 @@lpp.import "game/entity/EntityMgr.lh"
 
@@ -6,11 +11,21 @@ $ local cmn = require "common"
 @@lpp.import "asset/SourceDataParser.lh"
 
 @@lpp.import "game/entity/EntityLoader.lh"
+@@lpp.import "game/component/Component.events.lh"
 
 #include "iro/fs/File.h"
 
+$ local TComponent = comps.p.decls.map["struct Component"]
+$ local function eachComp(f)
+$   comps:eachDecl(function(name, decl)
+$     if decl:is(ast.Record) and decl:isDerivedFrom(TComponent) then
+$       f(name, decl)
+$     end
+$   end)
+$ end
+
 static Logger logger = 
-  Logger::create("entmgr"_str, Logger::Verbosity::Info);
+  Logger::create("entmgr"_str, Logger::Verbosity::Debug);
 
 /* ----------------------------------------------------------------------------
  */
@@ -24,6 +39,9 @@ b8 EntityMgr::init()
 
   if (!cmpmgr.init())
     return ERROR("failed to init component mgr\n");
+
+  if (!eventbus.init(this))
+    return ERROR("failed to init entity event bus\n");
 
   INFO("done!\n");
   return true;
@@ -145,9 +163,12 @@ Entity* EntityMgr::getEntity(EntityId id) const
   return ent_pool.getFromId(id.value, id.salt);
 }
 
+$ eachComp(function(name, decl)
+
 /* ----------------------------------------------------------------------------
  */
-b8 EntityMgr::addComp(Entity* ent, EntityId id, Component* cmp) const
+template<>
+b8 EntityMgr::addComp(Entity* ent, EntityId id, $(name)* cmp) const
 {
   assert(isnil(cmp->owner));
 
@@ -157,12 +178,17 @@ b8 EntityMgr::addComp(Entity* ent, EntityId id, Component* cmp) const
   cmp->owner = id;
   ent->components.insert(cmp);
 
+  DEBUG("added component $(name) to entity ", id.value, "\n");
+
+  eventbus.raise(id, ComponentAdd{});
+
   return true;
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 EntityMgr::addComp(Entity* ent, Component* cmp) const
+template<>
+b8 EntityMgr::addComp(Entity* ent, $(name)* cmp) const
 {
   EntityId id;
   ent_pool.formId(ent, &id.value, &id.salt);
@@ -172,10 +198,11 @@ b8 EntityMgr::addComp(Entity* ent, Component* cmp) const
 
 /* ----------------------------------------------------------------------------
  */
-b8 EntityMgr::addComp(EntityId id, Component* cmp) const
+template<>
+b8 EntityMgr::addComp(EntityId id, $(name)* cmp) const
 {
   return addComp(getEntity(id), id, cmp);
 }
 
-/* ----------------------------------------------------------------------------
- */
+$ end)
+

@@ -2,6 +2,32 @@ $ local cmn = require "common"
 $ local Comp = require "game.component.Component"
 $ local glob = require "Glob"
 $ local List = require "List"
+$ local ast = require "reflect.AST"
+
+$$$
+local importer = require "reflect.Importer"
+{
+  patterns = 
+  {
+    "src/**/*.events.lh",
+    "src/**/*.comp.lh",
+  },
+
+  filter = function(p, decl)
+    if decl:is(ast.Record) then
+      if decl.metadata.event then
+        return true
+      end
+      
+      local TComponent = p.processed_clang_objs["struct Component"]
+      if TComponent and decl:isDerivedFrom(TComponent) then
+        return true
+      end
+    end
+  end,
+}
+$$$
+@importer:get
 
 @@lpp.import "game/entity/EntityLoader.lh"
 
@@ -22,16 +48,14 @@ $ local List = require "List"
 
 @cmn.defFileLogger(ent.loader, Info);
 
-$ local buf = cmn.buffer.new()
-$ glob "src/game/**/*.comp.lh" :each(function(path)
-$   local result = lpp.import(path:sub(#"src/"+1))
-$   if result then
-$     buf:put(result)
-$   end
-$ end)
-@buf:get
-
-$ Comp.sort()
+$ local TComponent = importer.p.decls.map["struct Component"]
+$ local function eachComp(f)
+$   importer:eachDecl(function(name, decl)
+$     if decl:is(ast.Record) and decl:isDerivedFrom(TComponent) then
+$       f(name, decl)
+$     end
+$   end)
+$ end
 
 /* ----------------------------------------------------------------------------
  */
@@ -44,11 +68,11 @@ b8 loadComponentType(
     AssetMgr&      assetmgr,
     gfx::Renderer& renderer);
 
-$ for comp in Comp.components.list:each() do
+$ eachComp(function(name, decl)
 /* ----------------------------------------------------------------------------
  */
 template<>
-b8 loadComponentType<$(comp.name)>(
+b8 loadComponentType<$(name)>(
     const SourceData& data, 
     EntityId       ent,
     EntityMgr&     entmgr,
@@ -56,12 +80,12 @@ b8 loadComponentType<$(comp.name)>(
     AssetMgr&      assetmgr,
     gfx::Renderer& renderer)
 {
-  using TComp = $(comp.name);
+  using TComp = $(name);
 
   TComp* comp = cmpmgr.allocateComponent<TComp>();
 
   if (comp == nullptr)
-    return ERROR("failed to allocate $(comp.name) component\n");
+    return ERROR("failed to allocate $(name) component\n");
 
   PackContext pack_context = 
   {
@@ -76,7 +100,7 @@ b8 loadComponentType<$(comp.name)>(
 
   return true;
 }
-$ end
+$ end)
 
 /* ----------------------------------------------------------------------------
  */
@@ -90,17 +114,17 @@ b8 loadComponent(
 {
   switch (data.type.hash())
   {
-$ for comp in Comp.components.list:each() do
-  case "$(comp.name)"_hashed:
+$ eachComp(function(name, decl)
+  case "$(name)"_hashed:
     return 
-      loadComponentType<$(comp.name)>(
+      loadComponentType<$(name)>(
         data, 
         ent, 
         entmgr, 
         cmpmgr, 
         assetmgr,
         renderer);
-$ end
+$ end)
   default: 
     return ERROR("no component named ", data.type, "\n");
   }
@@ -138,17 +162,16 @@ EntityId loadEntity(
 
     switch (defcomp.ptr->kind)
     {
-$ for comp, i in Comp.components.list:eachWithIndex() do
-$  print(comp.name)
-    case $(i):
+$ eachComp(function(name, decl)
+    case "$(name)"_hashed:
       {
         auto* comp = 
           cmpmgr.allocateComponentFromInitialData(
-            *($(comp.name)*)defcomp.ptr);
+            *($(name)*)defcomp.ptr);
         entmgr.addComp(ent, comp);
       }
       break;
-$ end
+$ end)
     }
   }
 

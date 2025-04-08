@@ -4,31 +4,25 @@ $ local cmn = require "common"
 @@lpp.import "input/InputMgr.lh"
 @@lpp.import "game/Mind.sys.lh"
 @@lpp.import "game/Movement.comp.lh"
+@@lpp.import "game/Input.sys.lh"
 
-b8 MindSys::update(GameMgr& gamemgr)
+/* ----------------------------------------------------------------------------
+ */
+b8 MindSys::update()
 {
-  if (isnil(attached))
-    return true;
+  if (auto* movement = tryComp<Movement>(attached))
+  {
+    if (input.mgr->wasKeyPressed(Key::W))
+      movement->input.y += 1.f;
+    if (input.mgr->wasKeyPressed(Key::S))
+      movement->input.y -= 1.f;
+    if (input.mgr->wasKeyPressed(Key::D))
+      movement->input.x += 1.f;
+    if (input.mgr->wasKeyPressed(Key::A))
+      movement->input.x -= 1.f;
 
-  Engine& engine = *gamemgr.engine;
-  InputMgr& input = engine.input;
-  EntityMgr& entmgr = gamemgr.entmgr;
-  
-  Entity* attached_ent = entmgr.getEntity(attached);
-  auto* movement = attached_ent->tryComp<Movement>();
-  if (movement == nullptr)
-    return true;
-
-  if (input.wasKeyPressed(Key::W))
-    movement->input.y += 1.f;
-  if (input.wasKeyPressed(Key::S))
-    movement->input.y -= 1.f;
-  if (input.wasKeyPressed(Key::D))
-    movement->input.x += 1.f;
-  if (input.wasKeyPressed(Key::A))
-    movement->input.x -= 1.f;
-
-  movement->input.normalize();
+    movement->input.normalize();
+  }
 
   return true;
 }

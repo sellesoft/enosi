@@ -7,8 +7,30 @@ $ local List = require "List"
 $ local util = require "Util"
 $ local component = require "game.component.Component"
 $ local metadata = require "reflect.Metadata"
-$ local Defs = require "asset.GatherDefs"
 
+$$$
+local importer = require "reflect.Importer"
+{
+  patterns = 
+  {
+    "src/**/*.defs.lh",
+    "src/**/*.comp.lh",
+  },
+
+  filter = function(p, decl)
+    if decl.metadata.def then
+      return true
+    end
+
+    local TComponent = p.processed_clang_objs["struct Component"]
+    if TComponent and decl:is(ast.Record) and decl:isDerivedFrom(TComponent)
+    then
+      return true
+    end
+  end,
+}
+$$$
+@importer:get
 
 #include "iro/Logger.h"
 #include "iro/containers/BitArray.h"
@@ -20,9 +42,6 @@ using namespace iro;
 @cmn.defFileLogger(packing, Info)
 
 struct Renderer;
-
-$ local defs = Defs.gather()
-@defs.imported:get
 
 @@lpp.import "asset/Packing.lh"
 @@lpp.import "asset/AssetMgr.lh"
@@ -179,24 +198,23 @@ b8 packArray<Component*>(
 /* ----------------------------------------------------------------------------
  */
 template<typename T>
-b8 destroyArray(Array<T>* data)
+b8 packArray(
+    const SourceData& data,
+    ArrayDef<TypedSourceAssetRef<T>>* out,
+    PackContext& ctx)
 {
-  if (isnil(*data))
-    return true;
+  out->init(data.children.len(), &ctx.packed->buffer);
 
-  for (T& v : *data)
-    destroyPackedData(&v);
+  for (u32 i = 0; i < data.children.len(); ++i)
+  {
+    const SourceData* child = data.children[i];
+    if (notnil(child->name))
+      return ERROR("arrays cannot contain named elements\n");
 
-  data->destroy();
-  return true;
-}
+    if (!packAssetRef(*child, &(*out)[i], nil, ctx))
+      return false;
+  }
 
-/* ----------------------------------------------------------------------------
- */
-template<>
-b8 destroyArray<const SourceData*>(Array<const SourceData*>* data)
-{
-  data->destroy();
   return true;
 }
 
@@ -347,7 +365,7 @@ b8 packAssetRef(
 $ -- * ------------------------------------------------------------------------
 
 $ local putEnumPacker = function(name, decl)
-$   local typename = Defs.removeTag(decl.name)
+$   local typename = importer.removeTag(decl.name)
 /* ----------------------------------------------------------------------------
  */
 template<>
@@ -437,6 +455,13 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
+$ local putStringMapPackCase = function(declname, addrname, type)
+    if (!packSourceDataIntoStringMap(*child, &$(addrname), ctx))
+      return ERROR("failed to pack string map data for field $(addrname)\n");
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
 $ local putEnumPackCase = function(declname, addrname, type, prereqs)
 $   prereqs:push(type:getDecl())
     if (!packSourceDataIntoEnum(*child, &$(addrname)))
@@ -456,7 +481,7 @@ $ -- * ------------------------------------------------------------------------
 
 $ local putAssetRefPackCase = function(declname, addrname, decl)
 $   local asset_type = decl.template_args[1]:getDesugared()
-$   local asset_typename = Defs.removeTag(asset_type.name)
+$   local asset_typename = importer.removeTag(asset_type.name)
   if (!packAssetRef(*child, &$(addrname), "$(asset_typename)"_str, ctx))
     return ERROR(
       "failed to pack asset ref to $(declname) for field $(addrname)\n");
@@ -475,7 +500,7 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local putPackCase = function(declname, addrname, type, prereqs)
-$   local TRef = defs.p.decls.map["struct Ref"]
+$   local TRef = importer.p.decls.map["struct Ref"]
 $   if type.name == "String" then
 $     return (putStringPackCase(declname, addrname, type, prereqs))
 $   end
@@ -489,7 +514,7 @@ $   if type:is(ast.TagType) then
 $     local decl = type:getDecl()
 $     if decl:is(ast.Record) then 
 $       if decl:isDerivedFrom(TRef) then
-  ctx.packed->recordRef("$(Defs.removeTag(decl.name))"_str, &$(addrname));
+  ctx.packed->recordRef("$(importer.removeTag(decl.name))"_str, &$(addrname));
 $       end
 $     end
 $     if decl:is(ast.TemplateSpecialization) then
@@ -511,13 +536,15 @@ $              decl.specialized_name == "TypedSourceAssetRef" then
 $         return (putAssetRefPackCase(declname, addrname, decl, prereqs))
 $       elseif decl.specialized_name == "EnumArray" then
 $         return (putEnumArrayPackCase(declname, addrname, type, prereqs))
+$       elseif decl.specialized_name == "StringMap" then
+$         return (putStringMapPackCase(declname, addrname, type))
 $       else
 $         error("unhandled specialized template "..decl.specialized_name)
 $       end
 $     elseif decl:is(ast.Struct) then
-$       if Defs.removeTag(decl.name) == "Color" then
+$       if importer.removeTag(decl.name) == "Color" then
 $         return (putColorPackCase(declname, addrname, type, prereqs))
-$       elseif Defs.removeTag(decl.name) == "gfx::TextureRef" then
+$       elseif importer.removeTag(decl.name) == "gfx::TextureRef" then
 $         return (putTextureRefPackCase(declname, addrname))
 $       else
 $         return (putStructPackCase(declname, addrname, type, prereqs))
@@ -536,13 +563,13 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local putEnumFlagsPacker = function(name, decl)
-$   local typename = Defs.removeTag(decl.name)
+$   local typename = importer.removeTag(decl.name)
 $   local TEnum = decl.template_args[1]:getDesugared()
 $   local DEnum = TEnum:getDecl()
 $   if not DEnum then
 $     error("enum flags type "..name.." has no decl!")
 $   end
-$   local enumname = Defs.removeTag(DEnum.name)
+$   local enumname = importer.removeTag(DEnum.name)
 /* ----------------------------------------------------------------------------
  */
 b8 packSourceDataIntoEnumFlags(
@@ -590,9 +617,9 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local putEnumArrayPacker = function(name, decl, prereqs)
-$   local typename = Defs.removeTag(decl.name)
+$   local typename = importer.removeTag(decl.name)
 $   local enum_type = decl.template_args[1].decl
-$   local enum_typename = Defs.removeTag(enum_type.name)
+$   local enum_typename = importer.removeTag(enum_type.name)
 $   local elem_decl = decl.template_args[2].decl
 $   if not elem_decl then 
 $     io.write(name, " has element with no decl\n")
@@ -636,6 +663,44 @@ $ end
       return ERROR(
         "no element named ", child->name, " in $(enum_type.name)\n");
     }
+  }
+
+  return true;
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putStringMapPacker(name, decl)
+$   local elem_type = decl.template_args[1]
+$   print(elem_type:tostring())
+/* ----------------------------------------------------------------------------
+ */
+b8 packSourceDataIntoStringMap( 
+    const SourceData& data, 
+    $(name)* out,
+    PackContext& ctx)
+{
+  if (!data.hasObjectData())
+    return ERROR("expected object data to pack $(name)\n");
+
+  if (data.children.isEmpty())
+  {
+    mem::zero(out, sizeof($(name)));
+    return true;
+  }
+
+  if (!out->init(data.children.len(), &ctx.packed->buffer))
+    return ERROR("failed to initialize StringMap\n");
+
+  for (const SourceData* child : data.children)
+  {
+    if (isnil(child->name))
+      return ERROR("StringMap data must be named\n");
+
+    auto* elem = out->add(child->name);
+
+$   putPackCase(decl.name, "*elem", elem_type)
   }
 
   return true;
@@ -743,6 +808,11 @@ $       if not elem_type:is(ast.PointerType) then
 $         local elem_decl = decl.template_args[1]:getDecl()
 $         putPacker(elem_decl.name, elem_decl, prereqs)
 $       end
+$     elseif decl.specialized_name == "StringMap" then
+$       local elem_type = decl.template_args[1]
+$       local elem_decl = decl.template_args[1]:getDecl()
+$       putPacker(elem_decl.name, elem_decl)
+$       putStringMapPacker(name, decl)
 $     elseif decl.specialized_name == "EnumArray" then
 $       putEnumArrayPacker(name, decl, prereqs)
 $     end
@@ -751,7 +821,7 @@ $     putEnumPacker(name, decl)
 $   end
 $ end
 
-$ defs:eachDecl(function(name, decl)
+$ importer:eachDecl(function(name, decl)
 $   local prereqs = List{}
 $   if decl:is(ast.Record) then
 $     putPacker(name, decl, prereqs)
@@ -769,7 +839,7 @@ b8 packSourceDataFromType(
 
   switch (data.type.hash())
   {
-$ defs:eachDecl(function(name, decl)
+$ importer:eachDecl(function(name, decl)
 $   if decl:is(ast.Struct) and decl.is_complete then
   case "$(name)"_hashed:
     return packSourceDataIntoType<$(name)>(data, ctx);
@@ -795,28 +865,23 @@ b8 packComponent(const SourceData& data, Component** out, PackContext& ctx)
 
   switch (data.type.hash())
   {
-$ for comp in component.components.list:each() do
-  case "$(comp.name)"_hashed:
+$ local TComponent = importer.p.decls.map["struct Component"]
+$ importer:eachDecl(function(name, decl)
+$   if not decl:is(ast.Record) or not decl:isDerivedFrom(TComponent) then
+$     return
+$   end
+  case "$(name)"_hashed:
     {
-      auto* comp = ctx.packed->buffer.allocateType<$(comp.name)>();
+      auto* comp = ctx.packed->buffer.allocateType<$(name)>();
       if (!packSourceDataIntoType(data, comp, ctx))
-      {
-        // TODO(sushi) it might be more appropriate to call 'destroy' here
-        //             as a Component type may contain data that needed to 
-        //             be allocated, but atm we aren't set up to be able 
-        //             to nicely 'destroy' or 'deinit' things even when they
-        //             aren't already init. We need to handle this better 
-        //             throughout the code base.
-        // mem::stl_allocator.free(comp);
         return false;
-      }
 
-      comp->kind = getComponentKind<$(comp.name)>();
+      comp->kind = getComponentKind<$(name)>();
 
       *out = comp;
     }
     break;
-$ end
+$ end)
   }
 
   return true;

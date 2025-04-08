@@ -9,6 +9,7 @@ using namespace iro;
 @cmn.defFileLogger(srcdata.reg, Info);
 
 #include "iro/fs/File.h"
+#include "iro/Platform.h"
 
 /* ----------------------------------------------------------------------------
  */
@@ -61,6 +62,7 @@ SourceDataFileHandle SourceDataFileReg::loadFromDisk(String path)
   if (isnil(file))
   {
     ERROR("failed to open source data file at ", path, "\n");
+    platform::debugBreak();
     return SourceDataFileHandle::invalid();
   }
   defer { file.close(); };

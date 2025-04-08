@@ -1,0 +1,20 @@
+/*
+ *  A manager of Entity systems. 
+ */
+
+$ require "common"
+
+/* ============================================================================
+ */
+struct EntitySysMgr
+{
+  struct EntitySystems* systems;
+
+  b8 init(EntityMgr* entmgr);
+  void deinit();
+
+  b8 update();
+
+  template<typename T>
+  T& get();
+};

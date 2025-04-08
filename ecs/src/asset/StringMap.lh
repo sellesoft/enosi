@@ -1,0 +1,88 @@
+/*
+ *  A map associating strings with some data for use in Defs and SourceData
+ *  in general. 
+ */
+
+$ require "common"
+
+#include "iro/Common.h"
+#include "iro/BinarySearch.h"
+#include "iro/memory/Allocator.h"
+#include "iro/containers/ArrayFuncs.h"
+
+using namespace iro;
+
+/* ============================================================================
+ */
+template<typename TElem>
+struct StringMap
+{
+
+  struct Slot
+  {
+    u64 hash;
+    String key;
+    TElem elem = {};
+  };
+  
+  // NOTE(sushi) implementing as a simple linear searched flat array
+  //             as access of this map should be sparse and one map
+  //             will probably never contain too many elements.
+  //             This may change later, though.
+  Slot* slots = nullptr;
+  s32   len = 0;
+  s32   space = 0;
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 init(u32 num_slots, mem::Allocator* allocator)
+  {
+    slots = allocator->constructArray<Slot>(num_slots);
+    len = 0;
+    space = num_slots;
+
+    return true;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  TElem* find(u64 hash) const
+  {
+    for (s32 i = 0; i < len; ++i)
+    {
+      if (slots[i].hash == hash)
+        return &slots[i].elem;
+    }
+
+    return nullptr;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  TElem* find(String key) const
+  {
+    return find(key.hash());
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  TElem* add(u64 hash, String key)
+  {
+    assert(len <= space);
+
+    if (TElem* existing = find(hash))
+      return existing;
+    
+    Slot* new_slot = array::push(slots, &len);
+    new_slot->hash = hash;
+    new_slot->key = key.allocateCopy();
+    return &new_slot->elem;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  TElem* add(String key)
+  {
+    return add(key.hash(), key);
+  }
+};

@@ -11,7 +11,6 @@ $ local cmn = require "common"
 @@lpp.import "asset/SourceDataFileReg.lh"
 
 @@lpp.import "input/InputMgr.lh"
-@@lpp.import "input/Input.events.lh"
 
 @@lpp.import "game/GameMgr.lh"
 

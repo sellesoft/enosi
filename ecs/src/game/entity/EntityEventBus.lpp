@@ -1,0 +1,194 @@
+
+$ local cmn = require "common"
+$ local Comp = require "game.component.Component"
+$ local ast = require "reflect.AST"
+$ local importer = require "reflect.Importer"
+
+$$$
+local importer = require "reflect.Importer"
+{
+  patterns = 
+  {
+    "src/**/*.events.lh",
+    "src/**/*.comp.lh",
+  },
+
+  filter = function(p, decl)
+    if decl:is(ast.Record) then
+      if decl.metadata.event then
+        return true
+      end
+      
+      local TComponent = p.processed_clang_objs["struct Component"]
+      if TComponent and decl:isDerivedFrom(TComponent) then
+        return true
+      end
+    end
+  end,
+}
+$$$
+@importer:get
+
+@@lpp.import "game/entity/EntityMgr.lh"
+
+$ local TComponent = importer.p.decls.map["struct Component"]
+
+#include "iro/containers/LinkedPool.h"
+
+@@lpp.import "game/entity/EntityEventBus.lh"
+
+$ local comps = cmn.List {} 
+$ local events = cmn.List {}
+$ importer:eachDecl(function(name, decl)
+$   if decl.metadata.event == "entity" then
+$     events:push(decl)
+$   elseif decl:is(ast.Record) and decl:isDerivedFrom(TComponent) then
+$     comps:push(decl)
+$   end
+$ end)
+
+$ local function eachComponent(f)
+$   for comp in comps:each() do
+$     f({name=importer.removeTag(comp.name),decl=comp})
+$   end
+$ end
+
+$ local function eachEvent(f)
+$   for event in events:each() do
+$     f({name=importer.removeTag(event.name),decl=event})
+$   end
+$ end
+
+$ local function eachCombination(f)
+$   -- haha
+$   eachComponent(function(comp)
+$     eachEvent(function(event)
+$       f(comp, event)
+$     end)
+$   end)
+$ end
+
+$ local function getSubTypename(comp, event)
+$   return comp.name..event.name.."Subscriber"
+$ end
+
+$ local function getSubList(comp, event)
+$   return getSubTypename(comp, event).."_list"
+$ end
+
+/* ============================================================================
+ */
+struct EntitySubLists
+{
+
+$ eachCombination(function(comp, event)
+$   local subname = getSubTypename(comp, event)
+$   local listname = getSubList(comp,event)
+  struct $(subname)
+  {
+    void* subscriber;
+    void (*callback)(void*, EntComp<$(comp.name)>, $(event.name)&);
+  };
+  SLinkedPool<$(subname)> $(listname);
+$ end)
+
+$ eachEvent(function(event)
+  struct $(event.name)Subscriber
+  {
+    void* subscriber;
+    void (*callback)(void*, $(event.name)&);
+  };
+  SLinkedPool<$(event.name)Subscriber> $(event.name)_list;
+$ end)
+
+  b8 init()
+  {
+$ eachCombination(function(comp,event)
+    $(getSubList(comp,event)).init();
+$ end)
+$ eachEvent(function(event)
+    $(event.name)_list.init();
+$ end)
+    return true;
+  }
+};
+
+$ eachCombination(function(comp, event)
+/* ----------------------------------------------------------------------------
+ */
+template<>
+void EntityEventBus::subscribeTo<$(comp.name), $(event.name)>(
+    void* subscriber,
+    void (*cb)(void*, EntComp<$(comp.name)>, $(event.name)&))
+{
+  auto* sub = sub_lists->$(getSubList(comp,event)).push()->data;
+  sub->subscriber = subscriber;
+  sub->callback = cb;
+}
+
+$ end)
+
+$ eachEvent(function(event)
+/* ----------------------------------------------------------------------------
+ */
+template<>
+void EntityEventBus::subscribeTo<$(event.name)>(
+    void* subscriber,
+    void (*cb)(void*, $(event.name)&))
+{
+  auto* sub = sub_lists->$(event.name)_list.push()->data;
+  sub->subscriber = subscriber;
+  sub->callback = cb;
+}
+$ end)
+
+$ eachEvent(function(event)
+/* ----------------------------------------------------------------------------
+ */
+template<>
+void EntityEventBus::raise<$(event.name)>(
+    EntityId id, 
+    $(event.name)& event) const
+{
+  Entity* ent = entmgr->getEntity(id);
+
+  for (auto& comp : ent->components)
+  {
+    switch (comp.kind)
+    {
+$ eachComponent(function(comp)
+    case "$(comp.name)"_hashed:
+      for (auto& sub : sub_lists->$(getSubList(comp,event)))
+        sub.callback(sub.subscriber, {id, ($(comp.name)&)comp}, event);
+      break;
+$ end)
+    }
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+void EntityEventBus::raise<$(event.name)>($(event.name)& event) const
+{
+  for (auto& sub : sub_lists->$(event.name)_list)
+    sub.callback(sub.subscriber, event);
+}
+$ end)
+
+/* ----------------------------------------------------------------------------
+ */
+b8 EntityEventBus::init(EntityMgr* entmgr)
+{
+  this->entmgr = entmgr;
+  sub_lists = mem::stl_allocator.construct<EntitySubLists>();
+$ eachCombination(function(comp, event)
+  if (!sub_lists->$(getSubList(comp, event)).init()) return false;
+$ end)
+$ eachEvent(function(event)
+  if (!sub_lists->$(event.name)_list.init()) return false;
+$ end)
+  return true;
+}
+
+

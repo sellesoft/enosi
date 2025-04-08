@@ -14,6 +14,8 @@ $ local ui = require "ui.UI"
 @@lpp.import "game/Movement.comp.lh"
 @@lpp.import "game/Transform.comp.lh"
 
+@@lpp.import "game/Input.sys.lh"
+
 @@lpp.import "game/map/Map.defs.lh"
 
 #include "iro/Logger.h"
@@ -34,11 +36,16 @@ b8 GameMgr::init(Engine* eng)
   engine = eng;
 
   if (!entmgr.init())
-    return FATAL("failed to initialize entity mgr\n");
+    return @log.error("failed to initialize entmgr\n");
 
-  if (!rendersys.init(engine->renderer, engine->assetmgr))
-    return FATAL("failed to initialize render sys\n");
+  if (!entsysmgr.init(&entmgr))
+    return @log.error("failed to initialize entsysmgr\n");
 
+  if (!rendersys.init(eng->renderer, eng->assetmgr))
+    return @log.error("failed to initialize rendersys\n");
+
+  entsysmgr.get<InputSys>().mgr = &eng->input;
+  
   using namespace fs;
 
   CompiledData::CompileParams params = 
@@ -71,19 +78,17 @@ b8 GameMgr::init(Engine* eng)
     ref.ptr->load(ref.type, load_params);
   }
 
-$ if true then
-  Map::InitParams map_params =
+  MapSys::LoadParams map_params =
   {
     .assetmgr = engine->assetmgr,
     .entmgr   = entmgr,
     .renderer = engine->renderer,
-    .eye      = &eye,
-    .mind     = &mindsys,
   };
 
-  if(!map.init(*mapdef, map_params))
-    return ERROR("failed to initialize map '", mapdef->name, "'\n");
+  if(!entsysmgr.get<MapSys>().load(*mapdef, map_params))
+    return ERROR("failed to load map '", mapdef->name, "'\n");
 
+$ if false then
   SourceDataFileHandle h_test_map = 
     eng->source_data_file_reg.loadFromDisk("assets/maps/Test.map"_str);
 
@@ -109,22 +114,16 @@ $ end
  */
 void GameMgr::deinit()
 {
-  entmgr.deinit();
 }
 
 /* ----------------------------------------------------------------------------
  */
 b8 GameMgr::update()
 {
-  if (!mindsys.update(*this))
-    return false;
+  if (!entsysmgr.update())
+    return ERROR("failed to update entity systems\n");
 
-  if (!movesys.update(*this))
-    return false;
-
-  if (!eye.update(*this))
-    return false;
-
+$ if false then
   $ local map_editor = ui.createItemContext("MapEditor", "map_editor")
 
   map_editor->renderMap(engine->ui);
@@ -137,6 +136,7 @@ b8 GameMgr::update()
     else
       @map_editor.style.set.display(hidden);
   }
+$ end
 
   return true;
 }
@@ -145,23 +145,21 @@ b8 GameMgr::update()
  */
 b8 GameMgr::render()
 {
-  $ local map_editor = ui.createItemContext("MapEditor", "map_editor")
-  @@map_editor.style:lookup(display)
-
-  if (@map_editor.style.display.test(hidden))
-  {
+  // $ local map_editor = ui.createItemContext("MapEditor", "map_editor")
+  // @@map_editor.style:lookup(display)
+  //
+  // if (@map_editor.style.display.test(hidden))
+  // {
     RenderSys::UpdateParams render_params =
     {
       .viewport = { .size = engine->window.size },
       .renderer = engine->renderer,
-      .entmgr = &entmgr,
-      .map = &map,
     };
 
-    eye.getViewMat(&render_params.view);
+    entsysmgr.get<EyeSys>().getViewMat(&render_params.view);
     if (!rendersys.update(render_params))
       return false;
-  }
+  // }
 
   return true;
 }

@@ -24,6 +24,7 @@ using namespace iro;
 
 @@lpp.import "game/Transform.comp.lh"
 @@lpp.import "game/entity/Entity.lh"
+@@lpp.import "game/entity/EntitySysMgr.lh"
 @@lpp.import "game/component/Component.lh"
 
 @@lpp.import "asset/Packing.lh"
@@ -31,6 +32,8 @@ using namespace iro;
 @@lpp.import "asset/SourceDataFile.lh"
 @@lpp.import "asset/SourceDataParser.lh"
 @@lpp.import "asset/SourceDataEditor.lh"
+
+@@lpp.import "game/Sprite.comp.lh"
 
 static Logger logger =
   Logger::create("ecs.eng"_str, Logger::Verbosity::Info);

@@ -1,7 +1,0 @@
-return gfx::TextureDef
-{
-  name = "assets/textures/WorkTableVerticalBotCapGlass.png",
-  filter = "Nearest",
-  format = "RGBA",
-  address_mode = "ClampToWhite",
-}

@@ -1,7 +1,8 @@
 return gfx::TextureDef
 {
   name = "assets/textures/WallBotRightCornerOlive.png",
-  filter = "Nearest",
   format = "RGBA",
+  filter = "Nearest",
   address_mode = "ClampToWhite",
 }
+  

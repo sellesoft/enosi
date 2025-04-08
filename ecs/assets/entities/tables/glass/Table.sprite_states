@@ -1,0 +1,17 @@
+return SpriteStatesDef
+{
+  map =
+  {
+    Island             = "assets/entities/tables/steel/Island",
+    BottomLeft         = "assets/entities/tables/steel/BottomLeft",
+    BottomRight        = "assets/entities/tables/steel/BottomRight",
+    TopLeft            = "assets/entities/tables/steel/TopLeft",
+    TopRight           = "assets/entities/tables/steel/TopRight",
+    Horizontal         = "assets/entities/tables/steel/Horizontal",
+    HorizontalLeftCap  = "assets/entities/tables/steel/HorizontalLeftCap",
+    HorizontalRightCap = "assets/entities/tables/steel/HorizontalRightCap",
+    Vertical           = "assets/entities/tables/steel/Vertical",
+    VerticalBottomCap  = "assets/entities/tables/steel/VerticalBottomCap",
+    VerticalTopCap     = "assets/entities/tables/steel/VerticalTopCap",
+  }
+}

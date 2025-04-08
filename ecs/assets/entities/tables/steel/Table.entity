@@ -1,0 +1,9 @@
+return EntityDef
+{
+  name = "WorkTableGlass",
+  components = 
+  {
+    ExtendableStructure {},
+    Sprite { states = "assets/entities/tables/steel/Table" }
+  }
+}

@@ -371,7 +371,14 @@ Record.isDerivedFrom = function(self, decl)
   end
 end
 
-local Field = LuaType.make()
+Record.hasMethod = function(self, name)
+  local member = self.members.map[name]
+  if member and member:is(ast.Function) then
+    return true
+  end
+end 
+
+local Field = Decl:derive()
 ast.Field = Field
 
 Field.new = function(name, type, offset)
@@ -421,6 +428,19 @@ TemplateSpecialization.tostring = function(self)
   end
   buf:put ")"
   return buf:get()
+end
+
+local Function = Decl:derive()
+ast.Function = Function
+
+Function.new = function(name)
+  local o = {}
+  o.name = name
+  return setmetatable(o, Function)
+end
+
+Function.tostring = function(self)
+  return "Function("..self.name..")"
 end
 
 return ast

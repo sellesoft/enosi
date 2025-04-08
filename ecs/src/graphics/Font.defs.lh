@@ -1,5 +1,5 @@
 $ local cmn = require "common"
-$ local Schema = require "asset.Schema"
+$ local metadata = require "reflect.Metadata"
 
 #include "iro/Common.h"
 #include "iro/Unicode.h"
@@ -22,10 +22,11 @@ typedef Slice<CodepointRange> CodepointRanges;
 
 /* ============================================================================
  */
-@Schema.def(FontSchema,
+@metadata.def
+struct FontSchema
 {
   String name;
   String asset_path;
   ArrayDef<CodepointRange> ranges;
-})
+};
 

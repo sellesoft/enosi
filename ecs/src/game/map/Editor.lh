@@ -22,11 +22,11 @@ $ local ui = require "ui.UI"
 @@lpp.import "graphics/Texture.lh"
 @@lpp.import "graphics/Framebuffer.lh"
 
-@@lpp.import "game/Render.sys.lh"
+@@lpp.import "game/RenderSys.lh"
 @@lpp.import "game/Render.events.lh"
 @@lpp.import "game/Eye.sys.lh"
 
-@@lpp.import "game/map/Map.lh"
+@@lpp.import "game/map/Map.sys.lh"
 @@lpp.import "game/map/Map.defs.lh"
 
 @@lpp.import "game/entity/EntityMgr.lh"
@@ -81,7 +81,7 @@ struct
   EyeSys    eye;
   RenderSys rendersys;
   EntityMgr entmgr;
-  Map       map;
+  MapSys    map;
 
   Text* world_pos;
 

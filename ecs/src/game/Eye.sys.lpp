@@ -10,9 +10,9 @@ $ require "common"
 
 /* ----------------------------------------------------------------------------
  */
-b8 EyeSys::update(GameMgr& gamemgr)
+b8 EyeSys::update()
 {
-  if (auto* transform = gamemgr.entmgr.tryComp<Transform>(attached))
+  if (auto* transform = tryComp<Transform>(attached))
   {
     pos = transform->pos;
     rotation = transform->rotation;

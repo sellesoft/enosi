@@ -10,6 +10,7 @@ $ local buffer = require "string.buffer"
 @@lpp.import "game/IndexedPool.lh"
 
 @@lpp.import "game/entity/Entity.lh"
+@@lpp.import "game/entity/EntityEventBus.lh"
 
 @@lpp.import "game/component/Component.lh"
 @@lpp.import "game/component/ComponentMgr.lh"
@@ -32,6 +33,8 @@ struct EntityMgr
 
   typedef IndexedPool<Entity, c_max_entities> EntityPool;
 
+  EntityEventBus eventbus;
+
   EntityPool ent_pool;
 
   ComponentMgr cmpmgr;
@@ -50,10 +53,15 @@ struct EntityMgr
   void destroyAllEntities();
 
   Entity* getEntity(EntityId id) const;
+  
+  template<typename TComp>
+  b8 addComp(Entity* ent, EntityId id, TComp* cmp) const;
 
-  b8 addComp(Entity* ent, EntityId id, Component* cmp) const;
-  b8 addComp(Entity* ent, Component* cmp) const;
-  b8 addComp(EntityId id, Component* cmp) const;
+  template<typename TComp>
+  b8 addComp(Entity* ent, TComp* cmp) const;
+
+  template<typename TComp>
+  b8 addComp(EntityId id, TComp* cmp) const;
 
   template<typename T>
   T* tryComp(EntityId id)
@@ -61,5 +69,11 @@ struct EntityMgr
     if (isnil(id))
       return nullptr;
     return getEntity(id)->tryComp<T>();
+  }
+
+  template<typename T, typename X>
+  T* tryComp(EntComp<X> id)
+  {
+    return tryComp<T>(id.ent);
   }
 };

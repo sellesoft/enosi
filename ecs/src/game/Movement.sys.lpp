@@ -12,14 +12,11 @@ using namespace iro;
 @@lpp.import "game/Movement.comp.lh"
 @@lpp.import "game/Transform.comp.lh"
 
-b8 MovementSys::update(GameMgr& gamemgr)
+b8 MovementSys::update()
 {
-  EntityMgr& entmgr = gamemgr.entmgr;
-  ComponentMgr& cmpmgr = entmgr.cmpmgr;
-
-  for (Movement& movement : cmpmgr.iterate<Movement>())
+  for (Movement& movement : iterateComp<Movement>())
   {
-    if (auto* transform = entmgr.tryComp<Transform>(movement.owner))
+    if (auto* transform = tryComp<Transform>(movement.owner))
     {
       transform->pos += movement.input;
       transform->pos.x = floor(transform->pos.x);

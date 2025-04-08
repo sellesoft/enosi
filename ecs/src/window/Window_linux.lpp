@@ -4,7 +4,6 @@ $ local List = require "List"
 
 $ if IRO_LINUX then
 
-@@lpp.import "input/Input.events.lh"
 @@lpp.import "window/Window.events.lh"
 @@lpp.import "Engine.lh"
 

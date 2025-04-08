@@ -2,10 +2,11 @@ $ local cmn = require "common"
 
 @@lpp.import "game/Eye.sys.lh"
 @@lpp.import "game/Mind.sys.lh"
-@@lpp.import "game/Render.sys.lh"
+@@lpp.import "game/RenderSys.lh"
 @@lpp.import "game/Movement.sys.lh"
+@@lpp.import "game/power/Power.sys.lh"
 
-@@lpp.import "game/map/Map.lh"
+@@lpp.import "game/map/Map.sys.lh"
 
 @@lpp.import "game/entity/EntityMgr.lh"
 @@lpp.import "game/component/Component.lh"
@@ -13,6 +14,8 @@ $ local cmn = require "common"
 // TODO(sushi) once we have an actual editor setup, this should be registered
 //             as a doc of it.
 @@lpp.import "game/map/Editor.lh"
+
+@@lpp.import "game/entity/EntitySysMgr.lh"
 
 struct Engine;
 
@@ -22,12 +25,9 @@ struct GameMgr
 {
   Engine* engine;
 
-  EntityMgr   entmgr;
-  RenderSys   rendersys;
-  MindSys     mindsys;
-  MovementSys movesys;
-  EyeSys      eye;
-  Map         map;
+  EntityMgr    entmgr;
+  EntitySysMgr entsysmgr;
+  RenderSys    rendersys;
 
   ui::MapEditor* map_editor;
 

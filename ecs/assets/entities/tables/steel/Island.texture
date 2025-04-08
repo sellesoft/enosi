@@ -1,0 +1,8 @@
+return gfx::TextureDef
+{
+  name = "assets/entities/tables/steel/Island.png",
+  format = "RGBA",
+  filter = "Nearest",
+  address_mode = "ClampToWhite",
+}
+  

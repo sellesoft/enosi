@@ -1,9 +1,4 @@
 $ local cmn = require "common"
-$ local ast = require "reflect.AST"
-$ local Defs = require "asset.GatherDefs"
-
-$ local defs = Defs.gather()
-@defs.imported:get
 
 @@lpp.import "asset/Asset.lh"
 @@lpp.import "asset/AssetMgr.lh"
@@ -50,8 +45,6 @@ b8 TypedSourceAssetRef<int>::load(String type, LoadParams& params)
 
   @log.debug("loading asset '", src_path, "'\n");
 
-  // platform::debugBreak();
-
   if (params.sfile_reg != nullptr)
   {
     CompiledData::CompileParams compile_params = 
@@ -71,12 +64,15 @@ b8 TypedSourceAssetRef<int>::load(String type, LoadParams& params)
   if (compiled_data == nullptr)
     return ERROR("failed to load data from '", src_path, "'\n");
 
-  CompiledData::Refs refs;
-  compiled_data->getRefs(&refs);
-
-  for (auto& ref : refs)
+  if (params.recursive)
   {
-    ref.ptr->load(ref.type, params);
+    CompiledData::Refs refs;
+    compiled_data->getRefs(&refs);
+
+    for (auto& ref : refs)
+    {
+      ref.ptr->load(ref.type, params);
+    }
   }
 
   return true;

@@ -2,7 +2,6 @@ $ local cmn = require "common"
 $ local glob = require "Glob"
 $ local Processor = require "reflect.Processor"
 $ local ast = require "reflect.AST"
-$ local Defs = require "asset.GatherDefs"
 
 #include "iro/Logger.h"
 #include "iro/fs/File.h"
@@ -13,8 +12,29 @@ using namespace iro;
 
 @log.ger(compiledata, Debug);
 
-$ local defs = Defs.gather()
-@defs.imported:get
+$$$
+local importer = require "reflect.Importer"
+{
+  patterns = 
+  {
+    "src/**/*.defs.lh",
+    "src/**/*.comp.lh",
+  },
+
+  filter = function(p, decl)
+    if decl.metadata.def then
+      return true
+    end
+
+    local TComponent = p.processed_clang_objs["struct Component"]
+    if TComponent and decl:is(ast.Record) and decl:isDerivedFrom(TComponent)
+    then
+      return true
+    end
+  end,
+}
+$$$
+@importer:get
 
 @@lpp.import "asset/CompiledData.lh"
 
@@ -30,7 +50,7 @@ String getSourceAssetType(String type)
 {
   switch (type.hash())
   {
-$ defs:eachDecl(function(name, decl)
+$ importer:eachDecl(function(name, decl)
 $   if decl:is(ast.Struct) then
 $     if decl.metadata.source_types then
   case "$(name)"_hashed:
@@ -137,6 +157,20 @@ struct DataCompiler
   }
 
   template<typename T>
+  b8 compileStringMap(String type, const StringMap<T>& map)
+  {
+    auto* p = pointers->push();
+    p->pointer_offset = data_buffer->len;
+    p->pointee_count = map.len;
+    p->pointee_size = sizeof(typename StringMap<T>::Slot);
+    p->pointee_type = type;
+
+    writeData(map);
+
+    return true;
+  }
+
+  template<typename T>
   b8 compileTypedPtr(const TypedPtr<T>& ptr)
   {
     if (!compileString(ptr.type))
@@ -155,7 +189,7 @@ struct DataCompiler
 
   b8 compileAssetRef(const AssetRef& ref)
   {
-    // INFO("compiled asset ref ", ref.name, "\n");
+    INFO("compiled asset ref ", ref.name, "\n");
     if (!compileString(ref.name))
       return false;
 
@@ -233,7 +267,7 @@ static String getSourceAssetPath(
 $ -- * ------------------------------------------------------------------------
 
 $ local function putCompileStructData(name, decl)
-$   local TAssetRef = defs.p.decls.map["struct AssetRef"]
+$   local TAssetRef = importer.p.processed_clang_objs["struct AssetRef"]
 /* ----------------------------------------------------------------------------
  */
 template<>
@@ -243,7 +277,7 @@ b8 DataCompiler::compile<$(name)>(const $(name)& x)
 
 $ if decl.bases then
 $   for base in decl.bases:each() do
-$     local basename = Defs.removeTag(base.name)
+$     local basename = importer.removeTag(base.name)
   compile<$(basename)>(*($(basename)*)&x);
 $   end
 $ end
@@ -290,7 +324,7 @@ $           elseif decl.specialized_name == "ArrayDef" then
   // Mark where this ArrayDef is in data so we can repoint it to its section
   // later.
   compileArray(
-    "$(Defs.removeTag(decl.template_args[1].name))"_str, x.$(field.name));
+    "$(importer.removeTag(decl.template_args[1].name))"_str, x.$(field.name));
 $           elseif decl.specialized_name == "TypedPtr" then
   // Mark where this TypedPtr is so we can report it to its section later.
   compileTypedPtr(x.$(field.name));
@@ -301,10 +335,15 @@ $           elseif decl.specialized_name == "EnumArray" then
 $           elseif decl.specialized_name == "Flags" then
   // Write raw flags data.
   writeData(x.$(field.name));
+$           elseif decl.specialized_name == "StringMap" then
+  // Write out map pointers and such.
+$             local subtype = importer.removeTag(decl.template_args[1].name)
+  compileStringMap(
+    "StringMap<$(subtype)>::Slot"_str, x.$(field.name));
 $           end
 $         elseif decl:is(ast.Struct) then
   // Compile the nested structure.
-  compile<$(Defs.removeTag(decl.name))>(x.$(field.name));
+  compile<$(importer.removeTag(decl.name))>(x.$(field.name));
 $         end
 $       end
 $     else
@@ -337,11 +376,11 @@ $ end
 template<> 
 void getRefs<$(name)>(CompiledData::Refs* refs, $(name)* x)
 {
-$ local TRef = defs.p.decls.map["struct Ref"]
+$ local TRef = importer.p.decls.map["struct Ref"]
 $ local function pushRef(decl, field)
   refs->push(
     {
-      "$(Defs.removeTag(decl.name))"_str,
+      "$(importer.removeTag(decl.name))"_str,
       &x->$(field.name),
     });
 $ end
@@ -350,7 +389,7 @@ $ if decl:is(ast.Record) and decl:isDerivedFrom(TRef) then
   refs->push({"$(name)"_str, x});
 $ end
 
-$ local ref = defs.p.decls.map["struct Ref"]
+$ local ref = importer.p.processed_clang_objs["struct Ref"]
 $ for field in decl:eachFieldWithIndex() do
 $   local type = field.type:getDesugared()
   // $(field.name): $(field.type:tostring())
@@ -371,6 +410,9 @@ $         elseif decl.specialized_name == "TypedPtr" then
 $         elseif decl.specialized_name == "EnumArray" then
   for (auto& elem : x->$(field.name))
     getRefs(refs, &elem);
+$         elseif decl.specialized_name == "StringMap" then
+  for (s32 i = 0; i < x->$(field.name).len; ++i)
+    getRefs(refs, &x->$(field.name).slots[i].elem);
 $         end
 $       else
 $       end
@@ -398,22 +440,18 @@ void getRefs<TypedSourceAssetRef<$(name)>>(
   CompiledData::Refs* refs,
   TypedSourceAssetRef<$(name)>* x)
 {
-  if (x->isValid())
-    getRefs(refs, &**x);
+  refs->push({"TypedSourceAssetRef<$(name)>"_str, x});
 }
 
 $ end
 
 $ -- * ------------------------------------------------------------------------
 
-$ defs:eachDecl(function(name, decl)
+$ importer:eachDecl(function(name, decl)
 $   if decl:is(ast.TemplateSpecialization) then
 $     if decl.specialized_name == "TypedPtr" then
-$       putCompileTypedPtrData(name, decl)
 $     end
-$   elseif decl:is(ast.Struct) and name ~= "gfx::CompiledTexture" and
-$         name ~= "CompiledData" and
-$         name ~= "RefLoader" then
+$   elseif decl:is(ast.Struct) then
 $     putCompileStructData(name, decl)
 $   end
 $ end)
@@ -554,8 +592,8 @@ b8 CompiledData::compile(const CompileParams& params)
 
   for (auto& str : strings)
   {
-    auto* strptr = (String*)(void**)(data_buffer.ptr + str.string_offset);
-    
+    auto* strptr = (String*)(data_buffer.ptr + str.string_offset);
+
     OffsetString::setStringAsOffsetString(strptr, String::from(
       data_buffer.ptr + strings_start + str.data_offset,
       str.data_len));
@@ -596,30 +634,30 @@ b8 CompiledData::compile(const CompileParams& params)
  */
 b8 DataCompiler::compile(String type, void* ptr)
 {
+  INFO("compile ", type, "(", ptr, ")\n");
   switch (type.hash())
   {
-$ defs:eachDecl(function(name, decl)
-$   if decl:is(ast.Struct) and name ~= "gfx::CompiledTexture" and
-$      name ~= "CompiledData" and 
-$      name ~= "RefLoader" then
+$ importer:eachDecl(function(name, decl)
+$   if decl:is(ast.Struct) then
   case "$(name)"_hashed:
     return compile<$(name)>(*($(name)*)ptr);
-$   end
-$ end)
-
-$ defs:eachDecl(function(name, decl)
-$   if decl:is(ast.Struct) and name ~= "gfx::CompiledTexture" and
-$      name ~= "CompiledData" and
-$      name ~= "RefLoader" then
   case "TypedPtr<$(name)>"_hashed:
     return compileTypedPtr<$(name)>(*(TypedPtr<$(name)>*)ptr);
+  case "TypedSourceAssetRef<$(name)>"_hashed:
+    return compileAssetRef(*(TypedSourceAssetRef<$(name)>*)ptr);
+  case "StringMap<$(name)>::Slot"_hashed:
+    {
+       auto* slot = (StringMap<$(name)>::Slot*)ptr;
+       writeData(slot->hash);
+       compileString(slot->key);
+       return compile<$(name)>(slot->elem);
+    }
+    break;
 $   end
 $ end)
-  default:
-    assert(!"unhandled typed pointer");
   }
 
-  return false;
+  return ERROR("unknown type '", type, "' passed to DataCompiler::compile\n'");
 }
 
 /* ----------------------------------------------------------------------------
@@ -668,7 +706,7 @@ void getRefs(CompiledData::Refs* refs, String type, void* ptr)
 {
   switch (type.hash())
   {
-$ defs:eachDecl(function(name, decl)
+$ importer:eachDecl(function(name, decl)
 $   if decl:is(ast.Struct) and name ~= "gfx::CompiledTexture" and
 $     name ~= "CompiledData" and
 $     name ~= "RefLoader" then
@@ -679,7 +717,7 @@ $   end
 $ end)
   }
 
-  assert(!"unhandled type in getRefs");
+  ERROR("unhandled type '", type, "' passed to getRefs\n");
 }
 
 /* ----------------------------------------------------------------------------
@@ -706,8 +744,16 @@ void makeDataPointersAbsolute(TypedPtr<T>* data)
   makeDataPointersAbsolute(data->type, data->ptr);
 }
 
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
+void makeDataPointersAbsolute(TypedSourceAssetRef<T>* data)
+{ 
+  data->name = OffsetString::getStringAsOffsetString(&data->name);
+}
+
 $ local function putMakeStructPointersAbsolute(name, decl)
-$   local TAssetRef = defs.p.decls.map["struct AssetRef"]
+$   local TAssetRef = importer.p.processed_clang_objs["struct AssetRef"]
 /* ----------------------------------------------------------------------------
  */
 template<>
@@ -738,10 +784,19 @@ $           elseif decl.specialized_name == "EnumArray" then
 $           elseif decl.specialized_name == "TypedPtr" then
     f.type = OffsetString::getStringAsOffsetString(&f.type);
     f.ptr = ((OffsetPtr<decltype(data->$(field.name))::TPtr>*)&f.ptr)->get();
-  makeDataPointersAbsolute(f.type, f.ptr);
+    makeDataPointersAbsolute(f.type, f.ptr);
+$           elseif decl.specialized_name == "StringMap" then
+$             local elemdecl = decl.template_args[1]:getDecl()
+    f.slots = ((OffsetPtr<StringMap<$(elemdecl.name)>::Slot>*)&f.slots)->get();
+    for (s32 i = 0; i < f.len; ++i)
+    {
+      auto& slot = f.slots[i];
+      slot.key = OffsetString::getStringAsOffsetString(&slot.key);
+      makeDataPointersAbsolute(&slot.elem);
+    }
 $           end
 $         elseif decl:is(ast.Struct) and decl.is_complete then
-  makeDataPointersAbsolute<$(Defs.removeTag(decl.name))>(&f);
+    makeDataPointersAbsolute<$(importer.removeTag(decl.name))>(&f);
 $         end
 $       end
 $     end
@@ -754,7 +809,7 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
-$ defs:eachDecl(function(name, decl)
+$ importer:eachDecl(function(name, decl)
 $   if decl:is(ast.Struct) and decl.is_complete and 
 $      name ~= "CompiledData" then
 $     putMakeStructPointersAbsolute(name, decl)
@@ -767,9 +822,8 @@ void CompiledData::makeDataPointersAbsolute()
 {
   switch (type.getString().hash())
   {
-$ defs:eachDecl(function(name, decl)
-$   if decl:is(ast.Struct) and decl.is_complete and
-$      name ~= "CompiledData" then
+$ importer:eachDecl(function(name, decl)
+$   if decl:is(ast.Struct) and decl.is_complete then
   case "$(name)"_hashed:
     ::makeDataPointersAbsolute(($(name)*)data.getSlice().ptr);
     return;
@@ -786,9 +840,8 @@ void makeDataPointersAbsolute(String type, void* data)
 {
   switch (type.hash())
   {
-$ defs:eachDecl(function(name, decl)
-$   if decl:is(ast.Struct) and decl.is_complete and
-$      name ~= "CompiledData" then
+$ importer:eachDecl(function(name, decl)
+$   if decl:is(ast.Struct) and decl.is_complete then
   case "$(name)"_hashed:
     makeDataPointersAbsolute(($(name)*)data);
     break;

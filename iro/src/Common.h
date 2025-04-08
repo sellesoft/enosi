@@ -185,6 +185,13 @@ inline u64 megabytes(u64 x) { return x << 20; }
 inline u64 gigabytes(u64 x) { return x << 30; }
 inline u64 terabytes(u64 x) { return x << 40; }
 
+/* ----------------------------------------------------------------------------
+ */
+inline f32 toKilobytes(u64 x) { return f32(x) / f32(kilobytes(x)); }
+inline f32 toMegabytes(u64 x) { return f32(x) / f32(kilobytes(x)); }
+inline f32 toGigabytes(u64 x) { return f32(x) / f32(kilobytes(x)); }
+inline f32 toTerabytes(u64 x) { return f32(x) / f32(kilobytes(x)); }
+
 }
 
 #define assertpointer(x, ...) assert((x) != nullptr)

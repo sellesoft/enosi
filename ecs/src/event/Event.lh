@@ -1,0 +1,17 @@
+/*
+ *  Event classifications, primarily for easy identification of different kinds
+ *  of Event types in reflected code.
+ */
+
+$ require "common"
+
+/* ============================================================================
+ *  Base of all Events.
+ */
+struct Event {};
+
+/* ============================================================================
+ *  Events usable by the Engine's broadcast event bus.
+ */
+struct BroadcastEvent : Event { };
+

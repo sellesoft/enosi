@@ -5,6 +5,8 @@
 #include "iro/containers/List.h"
 #include "iro/containers/Pool.h"
 
+using namespace iro;
+
 struct BroadcastEventBus
 {
   struct BroadcastEventBusData* data;

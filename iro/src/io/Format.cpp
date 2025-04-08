@@ -1,3 +1,4 @@
+#include "Common.h"
 #include "IO.h"
 #include "Format.h"
 
@@ -234,6 +235,22 @@ s64 format(IO* io, Hex<s64> x)
   u8  buffer[32];
   u64 len = snprintf((char*)buffer, 32, "%llx", x.x);
   return io->write({buffer, len});
+}
+
+s64 format(IO* io, ByteUnits x)
+{
+  u64 bytes = x.x;
+
+#define u(x, y) \
+  if (bytes > unit::x(1)) \
+    return io::formatv(io, bytes / unit::x(1), y);
+
+  u(terabytes, "tb");
+  u(gigabytes, "gb");
+  u(megabytes, "mb");
+  u(kilobytes, "kb");
+
+  return io::formatv(io, bytes, "b");
 }
 
 }

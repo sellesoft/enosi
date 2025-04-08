@@ -5,6 +5,10 @@
 
 $ require "common"
 
+#include "iro/Unicode.h"
+
+using namespace iro;
+
 namespace rtr
 {
 

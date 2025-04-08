@@ -13,6 +13,7 @@ namespace gfx
 /* ============================================================================
  */
 @metadata.source_types(texture)
+@metadata.def
 struct TextureDef
 {
   @metadata.source_types(png)

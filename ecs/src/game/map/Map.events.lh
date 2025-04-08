@@ -1,0 +1,14 @@
+/*
+ *  Events emitted by the Map.
+ */
+
+$ require "common"
+$ local metadata = require "reflect.Metadata"
+
+/* ============================================================================
+ */
+@metadata.event(entity)
+struct MapPreLoad { };
+
+@metadata.event(entity)
+struct MapPostLoad { };

@@ -5,10 +5,11 @@ $ require "common"
 #include "math/mat.h"
 
 @@lpp.import "game/entity/EntityId.lh"
+@@lpp.import "game/entity/EntitySystem.lh"
 
 struct GameMgr;
 
-struct EyeSys
+struct EyeSys : EntitySystem
 {
   static const u32 pixels_per_meter = 64;
 
@@ -20,7 +21,9 @@ struct EyeSys
 
   void attach(EntityId id) { attached = id; }
 
-  b8 update(GameMgr& gamemgr);
+  b8 init() { return true; }
+
+  b8 update();
 
   void getViewMat(mat3x2* view) const;
 

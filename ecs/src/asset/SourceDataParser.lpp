@@ -433,6 +433,5 @@ $ end
 template<typename... Args>
 b8 SourceDataParser::errorAt(Token tok, Args... args)
 {
-  platform::debugBreak();
   return ERROR(in_name,":",tok.line,":",tok.column,": ", args...);
 }

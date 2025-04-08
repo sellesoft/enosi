@@ -1,12 +1,27 @@
 local cmn = require "common"
 local List = require "List"
 local buffer = require "string.buffer"
+local Type = require "Type"
+local metadata = require "reflect.Metadata"
 
 local log = require "Logger" ("event", Verbosity.Info)
 
 local Event = {}
 Event.list = List{}
 Event.map = {}
+
+local EventTrait = Type.make()
+
+EventTrait.new = function(name)
+  local o = {}
+  o.name = name
+  return setmetatable(o, EventTrait)
+end
+
+EventTrait.attach = function(self)
+  return metadata._has_event_trait(self.name)
+end
+
 
 Event.events =
 {

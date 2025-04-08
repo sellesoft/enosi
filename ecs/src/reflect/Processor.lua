@@ -25,8 +25,9 @@ Processor.__index = Processor
 
 -- * --------------------------------------------------------------------------
 
-Processor.new = function(input)
+Processor.new = function(input, filter)
   local o = {}
+  o.filter = filter
   o.clang = require "reflect.ClangContext" ()
   o.clang:parseString(input)
   -- Map from the original clang object to our internal
@@ -117,7 +118,7 @@ Processor.processTopLevelDecls = function(self, iter)
 
     local decl = self:processTopLevelDecl(cdecl)
     
-    if decl then
+    if decl and (not self.filter or self:filter(decl)) then
 
       -- We defer recording tag decls until we finish a top level decl to
       -- ensure that cyclic dependencies, eg.
@@ -318,6 +319,10 @@ Processor.collectBaseAndDerived = function(self, cdecl, record)
         if decl then
           decl.derived:push(record)
           record.bases:push(decl)
+          if record.prereqs and not record.prereqs.map[decl] then
+            record.prereqs.map[decl] = true
+            record.prereqs.list:push(decl)
+          end
         end
       end
       base = bases:next()
@@ -373,6 +378,8 @@ Processor.processTemplateSpecialization = function(self, cdecl, ctype)
 
   self:recordProcessed(spec.name, spec)
 
+  local unhandled_arg_kind = false
+
   local iter = cdecl:getTemplateArgIter()
   while true do
     local arg = iter:next()
@@ -383,6 +390,7 @@ Processor.processTemplateSpecialization = function(self, cdecl, ctype)
     elseif arg:isIntegral() then
       spec.template_args:push(arg:getAsIntegral())
     else
+      spec.has_unhandled_arg_kind = true
       log:warn("unhandled template arg kind in ", spec.name, "\n")
     end
   end
@@ -392,6 +400,21 @@ Processor.processTemplateSpecialization = function(self, cdecl, ctype)
   end
 
   self:processRecordMembers(cdecl, ctype, spec)
+
+  for arg in spec.template_args:each() do
+    if type(arg) == "table" then
+      local argdecl = arg:getDecl()
+      if argdecl then
+        if argdecl.has_unhandled_arg_kind then
+          spec.has_unhandled_arg_kind = argdecl.has_unhandled_arg_kind
+        end
+        if not spec.prereqs.map[argdecl] then
+          spec.prereqs.map[argdecl] = true
+          spec.prereqs.list:push(argdecl)
+        end 
+      end
+    end
+  end
 
   return spec
 end
@@ -466,7 +489,11 @@ Processor.processRecordMembers = function(self, cdecl, ctype, record)
     elseif member_cdecl:isTagDecl() then
       local member_decl = self:resolveDecl(member_cdecl)
       member_decl.parent = record
+      member_decl.has_unhandled_arg_kind = record.has_unhandled_arg_kind
       record:addMember(member_cdecl:name(), member_decl)
+    elseif member_cdecl:isFunction() then
+      local name = member_cdecl:name()
+      record:addMember(name, ast.Function.new(name))
     end
   end
 end

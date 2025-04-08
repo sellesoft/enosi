@@ -3,11 +3,11 @@
  */
 
 $ require "common"
-$ local Comp = require "game.component.Component"
 $ local metadata = require "reflect.Metadata"
 
 @@lpp.import "game/component/Component.lh"
 @@lpp.import "graphics/Ref.defs.lh"
+@@lpp.import "asset/StringMap.lh"
 
 #include "Color.h"
 #include "math/vec.h"
@@ -17,13 +17,28 @@ namespace gfx
 struct CompiledTexture;
 }
 
+/* ============================================================================
+ */
+@metadata.source_types(sprite_states)
+struct SpriteStatesDef
+{
+  StringMap<gfx::TextureRef> map;
+};
+
+typedef TypedSourceAssetRef<SpriteStatesDef> SpriteStatesRef;
+
+/* ============================================================================
+ */
 struct Sprite : Component
 {
   vec2f size;
+
   @metadata.default "{r=255,g=255,b=255,a=255}"
   Color color;
-  gfx::TextureRef texture;
 
-  @Comp.mark "Sprite"
+  u32 state;
+
+  // The states this sprite may use.
+  SpriteStatesRef states;
 };
 

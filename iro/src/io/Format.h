@@ -99,6 +99,16 @@ s64 format(IO* io, Hex<s16> x);
 s64 format(IO* io, Hex<s32> x);
 s64 format(IO* io, Hex<s64> x);
 
+/* ============================================================================
+ */ 
+struct ByteUnits
+{
+  u64 x;
+  ByteUnits(u64 x) : x(x) {}
+};
+
+s64 format(IO* io, ByteUnits x);
+
 }
 
 #endif // _ilo_io_format_h

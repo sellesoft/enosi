@@ -3,10 +3,30 @@ $ local ui = require "ui.UI"
 $ local glob = require "Glob"
 $ local Processor = require "reflect.Processor"
 $ local ast = require "reflect.AST"
-$ local Defs = require "asset.GatherDefs"
 
-$ local defs = Defs.gather()
-@defs.imported:get
+$$$
+local importer = require "reflect.Importer"
+{
+  patterns = 
+  {
+    "src/**/*.defs.lh",
+    "src/**/*.comp.lh",
+  },
+
+  filter = function(p, decl)
+    if decl.metadata.def then
+      return true
+    end
+
+    local TComponent = p.processed_clang_objs["struct Component"]
+    if TComponent and decl:is(ast.Record) and decl:isDerivedFrom(TComponent)
+    then
+      return true
+    end
+  end,
+}
+$$$
+@importer:get
 
 @@lpp.import "asset/SourceDataEditor.lh"
 
@@ -1516,27 +1536,27 @@ $       return "Vec2State"
 $     elseif decl.specialized_name == "TypedPtr" then
 $       local TPtr = decl.template_args[1]
 $       local DPtr = TPtr:getDecl()
-$       return "TypedPointerState<"..Defs.removeTag(DPtr.name)..">"
+$       return "TypedPointerState<"..importer.removeTag(DPtr.name)..">"
 $     elseif decl.specialized_name == "ArrayDef" then
 $       local subtype = decl.template_args[1]
 $       local subdecl = subtype:getDecl()
 $       if subdecl then
-$         return "ArrayState<"..Defs.removeTag(subdecl.name)..">"
+$         return "ArrayState<"..importer.removeTag(subdecl.name)..">"
 $       elseif subtype:is(ast.PointerType) then
 $         return "ArrayState<"..getTypeDatumType(subtype)..">"
 $       end
 $     end
 $   elseif decl:is(ast.Struct) then
 $     if not decl.metadata.inline_value then
-$       local name = Defs.removeTag(decl.name)
+$       local name = importer.removeTag(decl.name)
 $       if name == "Color" then
 $         return "ColorState"
 $       else
-$         return "StructState<"..Defs.removeTag(decl.name)..">"
+$         return "StructState<"..importer.removeTag(decl.name)..">"
 $       end
 $     end
 $   elseif decl:is(ast.Enum) then
-$     return "EnumState<"..Defs.removeTag(decl.name)..">"
+$     return "EnumState<"..importer.removeTag(decl.name)..">"
 $   end
 $   return "ValueState"
 $ end
@@ -1555,7 +1575,7 @@ $  elseif type:is(ast.PointerType) then
 $    local decl = type.subtype:getDecl()
 $    if decl then
 $      if decl.derived then
-$        return "TypedPointerState<"..Defs.removeTag(decl.name)..">"
+$        return "TypedPointerState<"..importer.removeTag(decl.name)..">"
 $      end
 $    end
 $  end
@@ -1618,7 +1638,7 @@ struct TypedPointerState<$(name)> : ObjectState
     {
 $ for derived in decl.derived:each() do
 $   local datum_type  = getDeclDatumType(derived)
-    case "$(Defs.removeTag(derived.name))"_hashed:
+    case "$(importer.removeTag(derived.name))"_hashed:
       subdatum = 
         (DatumState*)mem::stl_allocator.construct<$(datum_type)>();
       if (!subdatum->init(ui, 
@@ -1675,7 +1695,7 @@ $ end
   void getTypeOptions(Options* options) const
   {
 $ for derived in decl.derived:each() do
-    options->push("$(Defs.removeTag(derived.name))"_str);
+    options->push("$(importer.removeTag(derived.name))"_str);
 $ end
   }
 
@@ -1907,19 +1927,19 @@ $   local subtype = decl.template_args[1]
 $   local subdecl = subtype:getDecl()
 $   local subname
 $   if subdecl then 
-$     subname = Defs.removeTag(subdecl.name)
+$     subname = importer.removeTag(subdecl.name)
 $     if subdecl:is(ast.TemplateSpecialization) then
 $       if subdecl.specialized_name == "TypedPtr" then
 $         local TPtr = subdecl.template_args[1]:getDesugared()
 $         local DPtr = TPtr:getDecl()
-$         putTypedPointerState(Defs.removeTag(DPtr.name), DPtr)
+$         putTypedPointerState(importer.removeTag(DPtr.name), DPtr)
 $       end
 $     end
 $   else
 $     if subtype:is(ast.PointerType) then
 $       subdecl = subtype:tryUnwrapToRecordDecl()
 $       subname = getTypeDatumType(subtype)
-$       putTypedPointerState(Defs.removeTag(subdecl.name), subdecl)
+$       putTypedPointerState(importer.removeTag(subdecl.name), subdecl)
 $     else
 $       error("decl passed to ArrayState has no decl and is not a pointer")
 $     end
@@ -2302,7 +2322,7 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
-$ defs:eachDecl(function(name, decl)
+$ importer:eachDecl(function(name, decl)
 $   if decl:is(ast.TemplateSpecialization) then
 $     if decl.specialized_name == "ArrayDef" then
 $       putArrayState(name, decl)
@@ -2441,7 +2461,7 @@ void SourceDataEditor::setSourceData(
          type_id, ")\n");
     break;
 
-$ defs:eachDecl(function(name, decl)
+$ importer:eachDecl(function(name, decl)
 $   local datum_type = getDeclDatumType(decl)
   case "$(name)"_hashed:
     {

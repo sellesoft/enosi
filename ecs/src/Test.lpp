@@ -1,0 +1,18 @@
+$$$
+local importer = require "reflect.Importer"
+{
+  patterns = 
+  {
+    "src/**/*.sys.lh"
+  },
+  filter = function(p, decl)
+    if decl.metadata.def then
+      return true
+    end
+  end,
+}
+$$$
+
+$ importer:eachDecl(function(name, decl)
+$   print(name)
+$ end)

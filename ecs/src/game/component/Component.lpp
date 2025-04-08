@@ -1,9 +1,10 @@
 $ local cmn = require "common"
 $ local ui = require "ui.UI"
-$ local Comp = require "game.component.Component"
-$ local glob = require "Glob"
-$ local buffer = require "string.buffer"
-$ local List = require "List"
+$ local ast = require "reflect.AST"
+$ local comp = require "game.component.Component"
+
+$ local comps = comp.importComponents()
+@@comps:get
 
 #include "iro/Logger.h"
 #include "iro/containers/LinkedPool.h"
@@ -15,32 +16,24 @@ static Logger logger =
 
 @@lpp.import "game/component/Component.lh"
 
-$ local buf = buffer.new()
-$ glob "src/game/**/*.comp.lh" :each(function(path)
-$   local result = lpp.import(path:sub(#"src/"+1))
-$   if result then
-$     buf:put(result)
+$ local TComponent = comps.p.decls.map["struct Component"]
+$ comps:eachDecl(function(name, decl)
+$   if not decl:is(ast.Record) or not decl:isDerivedFrom(TComponent) then
+$     return
 $   end
-$ end)
-$(buf:get())
-
-$ Comp.sort()
-
-$ for comp,i in Comp.components.list:eachWithIndex() do
+/* ----------------------------------------------------------------------------
+ */
+template<>
+u64 getComponentKind<$(name)>()
+{
+  return "$(name)"_hashed;
+}
 
 /* ----------------------------------------------------------------------------
  */
 template<>
-u64 getComponentKind<$(comp.name)>()
+void Component::onCreate<$(name)>(Component* comp)
 {
-  return $(i);
+  comp->kind = getComponentKind<$(name)>();
 }
-
-/* ----------------------------------------------------------------------------
- */
-b8 $(comp.name)::init()
-{
-  return Component::init($(i)); 
-}
-
-$ end
+$ end)

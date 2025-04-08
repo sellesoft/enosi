@@ -1,11 +1,19 @@
 $ require "common"
 $ local ast = require "reflect.AST"
-$ local Defs = require "asset.GatherDefs"
 
 #include "iro/Logger.h"
 
-$ local defs = Defs.gather()
-@defs.imported:get
+$$$
+local importer = require "reflect.Importer"
+{
+  patterns = 
+  {
+    "src/**/*.defs.lh",
+    "src/**/*.comp.lh",
+  },
+}
+$$$
+@importer:get
 
 using namespace iro;
 
@@ -15,7 +23,7 @@ using namespace iro;
  */
 b8 Ref::load(String type, LoadParams& params)
 {
-$ local TRef = defs.p.decls.map["struct Ref"]
+$ local TRef = importer.p.decls.map["struct Ref"]
 
   switch (type.hash())
   {
@@ -23,7 +31,7 @@ $ local TRef = defs.p.decls.map["struct Ref"]
     return ERROR("Ref::load called with type Ref\n");
 
 $ local function placeDer(der)
-$   local name = Defs.removeTag(der.name)
+$   local name = importer.removeTag(der.name)
   case "$(name)"_hashed:
     return (($(name)*)this)->load(params);
 $   for der in der.derived:each() do

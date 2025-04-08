@@ -19,3 +19,12 @@ struct EntityId
 };
 
 DefineNilValue(EntityId, {0}, { return x.value == 0; });
+
+/* ============================================================================
+ */
+template<typename TComp>
+struct EntComp
+{
+  EntityId ent;
+  TComp& comp;
+};

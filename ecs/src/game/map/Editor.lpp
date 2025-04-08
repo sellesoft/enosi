@@ -1,3 +1,4 @@
+$ do return end
 $ local cmn = require "common"
 $ local ui = require "ui.UI"
 $ local Processor = require "reflect.Processor"
@@ -25,7 +26,7 @@ $   tile_kind = p.decls.map["enum TileKind"],
 $ }
 
 @@lpp.import "Engine.lh"
-@@lpp.import "game/map/Map.lh"
+@@lpp.import "game/map/Map.sys.lh"
 @@lpp.import "asset/Packing.lh"
 @@lpp.import "ui/widgets/Separator.lh"
 
@@ -948,7 +949,7 @@ void MapEditor::renderMap(UI& ui)
     ref->ref->load(ref->type, load_params);
   }
 
-  Map::InitParams map_params =
+  MapSys::InitParams map_params =
   {
     .assetmgr = assetmgr,
     .entmgr   = entmgr,

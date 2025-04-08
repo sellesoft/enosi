@@ -1,7 +1,0 @@
-return gfx::TextureDef
-{
-  name = "assets/textures/WorkTableTopRightCornerSteel.png",
-  filter = "Nearest",
-  format = "RGBA",
-  address_mode = "ClampToWhite",
-}

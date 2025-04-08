@@ -1,0 +1,30 @@
+$ require "common"
+
+@@lpp.import "game/structure/Structure.sys.lh"
+@@lpp.import "game/structure/Structure.comp.lh"
+
+@@lpp.import "game/Sprite.comp.lh"
+
+@log.ger(structure.sys, Debug)
+
+/* ----------------------------------------------------------------------------
+ */
+void StructureSys::onMapLoad(MapPostLoad&)
+{
+  INFO("map load\n");
+
+  for (auto& s : iterateComp<ExtendableStructure>())
+  {
+    if (auto* sprite = tryComp<Sprite>(s.owner))
+    {
+      INFO(sprite, "\n");
+      auto& states = *sprite->states;
+
+      for (s32 i = 0; i < states.map.len; ++i)
+      {
+        auto& slot = states.map.slots[i];
+        INFO(slot.elem.name, "\n");
+      }
+    }
+  }
+}
