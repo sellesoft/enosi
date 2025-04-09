@@ -1,0 +1,10 @@
+/*
+ *  A type used in Defs that expect a string that will be hashed during 
+ *  packing.
+ */
+
+$ require "common"
+
+#include "iro/Common.h"
+
+typedef u64 StringHash;

@@ -291,6 +291,7 @@ return MapDef
         },
         {
           kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/spawners/Player" }
           // entities =
           // {
           //   Entity
@@ -390,6 +391,7 @@ return MapDef
         },
         {
           kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/locker/Locker" }
           // entities =
           // {
           //   Entity

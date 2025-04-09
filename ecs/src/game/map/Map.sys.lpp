@@ -30,6 +30,7 @@ u32 debug_tile_layer_idx = 0;
  */
 b8 Tile::init(
     const MapTileDef& def, 
+    Layer&            layer,
     u32               layer_idx, 
     vec2f             pos,
     AssetMgr&         assetmgr,
@@ -42,7 +43,7 @@ b8 Tile::init(
 
   for (const EntityDefRef& entref : def.entities)
   {
-    auto entid = loadEntity(*entref, entmgr, assetmgr, renderer);
+    auto entid = loadEntity(*entref, entmgr);
     if (auto* ent = entmgr.getEntity(entid))
     {
       auto* transform = ent->tryComp<Transform>();
@@ -51,10 +52,6 @@ b8 Tile::init(
     }
   }
   
-  // for (const EntityDef& entdef : def.entities)
-  // {
-  // }
-
   return true;
 }
 
@@ -96,6 +93,7 @@ b8 Layer::init(
 
     if (!tile->init(
           *tile_def,
+          *this,
           layer_idx,
           getTilePos(*tile),
           assetmgr,

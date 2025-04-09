@@ -1,0 +1,12 @@
+return EntityDef
+{
+  name = "PlayerSpawner",
+  components = 
+  {
+    Spawner 
+    { 
+      attach = true,
+      kind = "assets/entities/Player",
+    }
+  }
+}

@@ -113,6 +113,13 @@ EntityId EntityMgr::createEntityFromSourceData(
 
 /* ----------------------------------------------------------------------------
  */
+EntityId EntityMgr::spawnEntity(const EntityDef& def)
+{
+  return loadEntity(def, *this);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 void EntityMgr::destroyEntity(EntityId id)
 {
   if (isnil(id))
@@ -172,7 +179,7 @@ b8 EntityMgr::addComp(Entity* ent, EntityId id, $(name)* cmp) const
 {
   assert(isnil(cmp->owner));
 
-  if (ent->components.find(cmp->kind))
+  if (ent->components.find(cmp->Component::kind))
     return false;
 
   cmp->owner = id;

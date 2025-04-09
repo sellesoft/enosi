@@ -5,7 +5,6 @@ $ local Processor = require "reflect.Processor"
 $ local ast = require "reflect.AST"
 $ local List = require "List"
 $ local util = require "Util"
-$ local component = require "game.component.Component"
 $ local metadata = require "reflect.Metadata"
 
 $$$
@@ -362,6 +361,35 @@ b8 packAssetRef(
   return true;
 }
 
+/* ----------------------------------------------------------------------------
+ */
+b8 packStringHash(
+    const SourceData& data,
+    StringHash* out,
+    PackContext& ctx)
+{
+  if (!data.hasStringValue())
+    return @log.error("expected a string value to pack string hash\n");
+
+  *out = stringHash(&data.val.str);
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 packBoolean(
+    const SourceData& data,
+    b8* out,
+    PackContext& ctx)
+{
+  if (!data.hasBooleanValue())
+    return @log.error("expected a boolean value\n");
+
+  *out = data.testBooleanValue();
+
+  return true;
+}
+
 $ -- * ------------------------------------------------------------------------
 
 $ local putEnumPacker = function(name, decl)
@@ -499,10 +527,34 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
+$ local putStringHashPackCase = function(declname, addrname)
+  if (!packStringHash(*child, &$(addrname), ctx))
+    return ERROR(
+      "failed to pack string hash into $(declname)'s field $(addrname)\n");
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local putBooleanPackCase = function(declname, addrname)
+  if (!packBoolean(*child, &$(addrname), ctx))
+    return ERROR(
+      "failed to pack boolean into $(declname)'s field $(addrname)\n");
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
 $ local putPackCase = function(declname, addrname, type, prereqs)
 $   local TRef = importer.p.decls.map["struct Ref"]
 $   if type.name == "String" then
 $     return (putStringPackCase(declname, addrname, type, prereqs))
+$   end
+$  
+$   if type.name == "StringHash" then
+$     return (putStringHashPackCase(declname, addrname))
+$   end
+$ 
+$   if type.name == "b8" then
+$     return (putBooleanPackCase(declname, addrname))
 $   end
 $  
 $   type = type:getDesugared()
@@ -876,7 +928,7 @@ $   end
       if (!packSourceDataIntoType(data, comp, ctx))
         return false;
 
-      comp->kind = getComponentKind<$(name)>();
+      comp->Component::kind = getComponentKind<$(name)>();
 
       *out = comp;
     }

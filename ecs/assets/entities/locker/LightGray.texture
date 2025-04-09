@@ -1,6 +1,6 @@
 return gfx::TextureDef
 {
-  name = "assets/textures/WallTopLeftCornerLeftCapOlive.png",
+  name = "assets/entities/locker/LightGray.png",
   format = "RGBA",
   filter = "Nearest",
   address_mode = "ClampToWhite",

@@ -1,0 +1,8 @@
+return EntityDef
+{
+  name = "Player",
+  components = 
+  {
+    Movement { speed = 0.2, }
+  }
+}

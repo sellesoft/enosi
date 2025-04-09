@@ -2,16 +2,16 @@ return SpriteStatesDef
 {
   map =
   {
-    Island             = "assets/entities/tables/steel/Island",
-    BottomLeft         = "assets/entities/tables/steel/BottomLeft",
-    BottomRight        = "assets/entities/tables/steel/BottomRight",
-    TopLeft            = "assets/entities/tables/steel/TopLeft",
-    TopRight           = "assets/entities/tables/steel/TopRight",
-    Horizontal         = "assets/entities/tables/steel/Horizontal",
-    HorizontalLeftCap  = "assets/entities/tables/steel/HorizontalLeftCap",
-    HorizontalRightCap = "assets/entities/tables/steel/HorizontalRightCap",
-    Vertical           = "assets/entities/tables/steel/Vertical",
-    VerticalBottomCap  = "assets/entities/tables/steel/VerticalBottomCap",
-    VerticalTopCap     = "assets/entities/tables/steel/VerticalTopCap",
+    Island             = "assets/entities/tables/glass/Island",
+    BottomLeft         = "assets/entities/tables/glass/BottomLeft",
+    BottomRight        = "assets/entities/tables/glass/BottomRight",
+    TopLeft            = "assets/entities/tables/glass/TopLeft",
+    TopRight           = "assets/entities/tables/glass/TopRight",
+    Horizontal         = "assets/entities/tables/glass/Horizontal",
+    HorizontalLeftCap  = "assets/entities/tables/glass/HorizontalLeftCap",
+    HorizontalRightCap = "assets/entities/tables/glass/HorizontalRightCap",
+    Vertical           = "assets/entities/tables/glass/Vertical",
+    VerticalBottomCap  = "assets/entities/tables/glass/VerticalBottomCap",
+    VerticalTopCap     = "assets/entities/tables/glass/VerticalTopCap",
   }
 }

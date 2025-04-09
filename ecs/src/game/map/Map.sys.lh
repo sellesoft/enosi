@@ -21,6 +21,7 @@ struct AssetMgr;
 struct EntityMgr;
 struct EyeSys;
 struct MindSys;
+struct Layer;
 
 /* ============================================================================
  */
@@ -32,6 +33,7 @@ struct Tile
 
   b8 init(
     const MapTileDef& def, 
+    Layer& layer,
     u32 layer_idx, 
     vec2f pos,
     AssetMgr& assetmgr,

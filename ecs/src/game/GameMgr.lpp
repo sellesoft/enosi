@@ -154,6 +154,8 @@ b8 GameMgr::render()
     {
       .viewport = { .size = engine->window.size },
       .renderer = engine->renderer,
+      .entmgr = &entmgr,
+      .map = &entsysmgr.get<MapSys>(),
     };
 
     entsysmgr.get<EyeSys>().getViewMat(&render_params.view);

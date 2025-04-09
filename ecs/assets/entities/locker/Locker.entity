@@ -1,0 +1,12 @@
+return EntityDef
+{
+  name = "Locker",
+  components = 
+  {
+    Sprite 
+    { 
+      state = 0,
+      states = "assets/entities/locker/Locker" 
+    },
+  }
+}

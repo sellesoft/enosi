@@ -48,13 +48,23 @@ struct StringMap
    */
   TElem* find(u64 hash) const
   {
+    u64 idx = findIndex(hash);
+    if (idx != len)
+        return &slots[idx].elem;
+    return nullptr;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  u64 findIndex(u64 hash) const
+  {
     for (s32 i = 0; i < len; ++i)
     {
       if (slots[i].hash == hash)
-        return &slots[i].elem;
+        return i;
     }
 
-    return nullptr;
+    return len;
   }
 
   /* --------------------------------------------------------------------------
@@ -62,6 +72,15 @@ struct StringMap
   TElem* find(String key) const
   {
     return find(key.hash());
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  TElem* getAtIndex(u64 idx) const
+  {
+    if (idx > len)
+      return nullptr;
+    return &slots[idx].elem;
   }
 
   /* --------------------------------------------------------------------------

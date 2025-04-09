@@ -1,8 +1,0 @@
-return EntityDef
-{
-  name = "WorkTableGlass",
-  components = 
-  {
-    Sprite { states = "assets/entities/tables/glass/Table" }
-  }
-}

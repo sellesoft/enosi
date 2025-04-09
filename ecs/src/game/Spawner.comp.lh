@@ -6,6 +6,17 @@ $ local cmn = require "common"
 
 @@lpp.import "game/component/Component.lh"
 
-struct PlayerSpawner : Component
+@@lpp.import "game/entity/Entity.defs.lh"
+
+struct Spawner : Component
 {
+  // Whether want to attach the Mind and Eye to the spawned entity.
+  // NOTE(sushi) this will likely be changed when proper spawning is 
+  //             working, eg. when players spawn as different roles and
+  //             such but for now we just need to get a controllable 
+  //             entity spawned in the world w/o assuming we just 
+  //             attach to each spawned entity.
+  b8 attach;
+
+  EntityDefRef kind;
 };

@@ -132,11 +132,7 @@ $ end)
 
 /* ----------------------------------------------------------------------------
  */
-EntityId loadEntity(
-    const EntityDef& def, 
-    EntityMgr& entmgr,
-    AssetMgr& assetmgr,
-    gfx::Renderer& renderer)
+EntityId loadEntity(const EntityDef& def, EntityMgr& entmgr)
 {
   ComponentMgr& cmpmgr = entmgr.cmpmgr;
 
@@ -204,9 +200,5 @@ EntityId loadEntity(
 
   packSourceDataIntoType<EntityDef>(*sfile.returned_data, pack_context);
 
-  return loadEntity(
-    *packed.getRootAs<EntityDef>(), 
-    entmgr, 
-    assetmgr, 
-    renderer);
+  return loadEntity(*packed.getRootAs<EntityDef>(), entmgr);
 }

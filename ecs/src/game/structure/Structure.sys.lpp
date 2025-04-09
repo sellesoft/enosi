@@ -3,7 +3,10 @@ $ require "common"
 @@lpp.import "game/structure/Structure.sys.lh"
 @@lpp.import "game/structure/Structure.comp.lh"
 
+@@lpp.import "game/map/Map.sys.lh"
+
 @@lpp.import "game/Sprite.comp.lh"
+@@lpp.import "game/Transform.comp.lh"
 
 @log.ger(structure.sys, Debug)
 
@@ -11,20 +14,121 @@ $ require "common"
  */
 void StructureSys::onMapLoad(MapPostLoad&)
 {
-  INFO("map load\n");
-
-  for (auto& s : iterateComp<ExtendableStructure>())
+  for (auto& s0 : iterateComp<ExtendableStructure>())
   {
-    if (auto* sprite = tryComp<Sprite>(s.owner))
-    {
-      INFO(sprite, "\n");
-      auto& states = *sprite->states;
+    auto* transform0 = tryComp<Transform>(s0.owner);
+    auto* sprite0    = tryComp<Sprite>(s0.owner);
 
-      for (s32 i = 0; i < states.map.len; ++i)
+    if (sprite0 == nullptr || transform0 == nullptr)
+      continue;
+
+    auto& sprite_states = *sprite0->states;
+
+    Layer* layer0;
+    Tile*  tile0;
+    if (!map.getTileAndLayerAtPos(&layer0, &tile0, transform0->pos))
+      continue;
+
+    enum 
+    {
+      R = 1 << 0,
+      T = 1 << 1,
+      L = 1 << 2,
+      B = 1 << 3,
+    };
+
+    u8 mask = 0;
+    
+    for (auto& s1 : iterateComp<ExtendableStructure>())
+    {
+      // Don't connect an entity to itself.
+      if (s1.owner == s0.owner)
+        continue;
+
+      // Only connect structures of the same kind.
+      if (s0.kind != s1.kind)
+        continue;
+
+      auto* transform1 = tryComp<Transform>(s1.owner);
+      auto* sprite1    = tryComp<Transform>(s1.owner);
+
+      if (sprite1 == nullptr || transform1 == nullptr)
+        continue;
+
+      Layer* layer1;
+      Tile*  tile1;
+      if (!map.getTileAndLayerAtPos(&layer1, &tile1, transform1->pos))
+        continue;
+
+      if (layer0 != layer1)
+        continue;
+
+      vec2f pos0 = layer0->getTilePos(*tile0);
+      vec2f pos1 = layer1->getTilePos(*tile1);
+      vec2f diff = pos1 - pos0;
+
+      if (diff.mag() == 1)
       {
-        auto& slot = states.map.slots[i];
-        INFO(slot.elem.name, "\n");
+        if (diff.x == 1)
+          mask |= R;
+        else if (diff.y == 1)
+          mask |= T;
+        else if (diff.x == -1)
+          mask |= L;
+        else
+          mask |= B;
       }
+    }
+
+    static const u64 state_map[] = 
+    {
+      [0]       = "Island"_hashed,
+      [R]       = "HorizontalLeftCap"_hashed,
+      [T]       = "VerticalBottomCap"_hashed,
+      [L]       = "HorizontalRightCap"_hashed,
+      [B]       = "VerticalTopCap"_hashed,
+      [R|T]     = "BottomLeft"_hashed,
+      [R|L]     = "Horizontal"_hashed,
+      [R|B]     = "TopLeft"_hashed,
+      [T|L]     = "BottomRight"_hashed,
+      [T|B]     = "Vertical"_hashed,
+      [L|B]     = "TopRight"_hashed,
+      [R|T|L]   = "FullBottomCap"_hashed,
+      [R|T|B]   = "FullLeftCap"_hashed,
+      [R|L|B]   = "FullTopCap"_hashed,
+      [T|L|B]   = "FullRightCap"_hashed,
+      [R|T|L|B] = "Full"_hashed,
+    };
+
+    static const String state_string_map[] = 
+    {
+      [0]       = "Island"_str,
+      [R]       = "HorizontalLeftCap"_str,
+      [T]       = "VerticalBottomCap"_str,
+      [L]       = "HorizontalRightCap"_str,
+      [B]       = "VerticalTopCap"_str,
+      [R|T]     = "BottomLeft"_str,
+      [R|L]     = "Horizontal"_str,
+      [R|B]     = "TopLeft"_str,
+      [T|L]     = "BottomRight"_str,
+      [T|B]     = "Vertical"_str,
+      [L|B]     = "TopRight"_str,
+      [R|T|L]   = "FullBottomCap"_str,
+      [R|T|B]   = "FullRightCap"_str,
+      [R|L|B]   = "FullTopCap"_str,
+      [T|L|B]   = "FullLeftCap"_str,
+      [R|T|L|B] = "Full"_str,
+    };
+
+    u64 state_idx = sprite_states.map.findIndex(state_map[mask]);
+    if (state_idx == sprite_states.map.len)
+    {
+      WARN("missing sprite for state ", state_string_map[mask], "\n");
+      sprite0->state = 0;
+    }
+    else
+    {
+      sprite0->state = state_idx;
     }
   }
 }

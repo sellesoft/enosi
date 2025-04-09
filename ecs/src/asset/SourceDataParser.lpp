@@ -74,6 +74,8 @@ $$$
     "Identifier",
     "String",
     "Number",
+    "True",
+    "False",
 
     "LBrace",
     "RBrace",
@@ -318,6 +320,14 @@ b8 SourceDataParser::parseValueOrUntypedObject(Token tok, SourceData* data)
     data->val.str = tok.raw;
     break;
 
+  case TK::True:
+    data->val.kind = SourceData::Value::Kind::True;
+    break;
+
+  case TK::False:
+    data->val.kind = SourceData::Value::Kind::False;
+    break;
+
   default:
     return errorAt(tok, "expected a value or object\n");
   }
@@ -353,6 +363,15 @@ Token SourceDataParser::nextToken()
     if (id == "return"_str)
     {
       out.kind = TK::Return;
+    }
+    else if (id == "true"_str)
+    {
+      // platform::debugBreak();
+      out.kind = TK::True;
+    }
+    else if (id == "false"_str)
+    {
+      out.kind = TK::False;
     }
     else if (scanner.at(':'))
     {

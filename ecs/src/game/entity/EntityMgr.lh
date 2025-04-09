@@ -22,6 +22,8 @@ namespace gfx
 struct Renderer;
 }
 
+struct EntityDef;
+
 /* ============================================================================
  */
 struct EntityMgr
@@ -43,11 +45,14 @@ struct EntityMgr
   void deinit();
 
   EntityId createEntity(String name);
-
+  
+  [[deprecated("Things typically have no access to assetmgr/renderer")]]
   EntityId createEntityFromSourceData(
     String path, 
     AssetMgr& assetmgr,
     gfx::Renderer& renderer);
+
+  EntityId spawnEntity(const EntityDef& def);
 
   void destroyEntity(EntityId id);
   void destroyAllEntities();

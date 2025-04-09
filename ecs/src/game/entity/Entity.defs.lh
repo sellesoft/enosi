@@ -3,6 +3,7 @@ $ local metadata = require "reflect.Metadata"
 
 @@lpp.import "asset/ArrayDef.lh"
 @@lpp.import "game/component/Component.lh"
+@@lpp.import "asset/Asset.lh"
 
 @metadata.def
 @metadata.source_types(entity)

@@ -1,0 +1,7 @@
+return SpriteStatesDef
+{
+  map = 
+  {
+    Closed = "assets/entities/locker/LightGray"
+  }
+}

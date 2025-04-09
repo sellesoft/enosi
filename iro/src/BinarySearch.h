@@ -26,9 +26,10 @@ Pair<s32, b8> binarySearch(
   {
     m = l + (r - l) / 2;
     auto c = comp(slice[m], val);
-    if (!c) 
+    if (c == 0) 
       return {m, true};
-    else if (c < 0) 
+
+    if (c < 0) 
       l = m + 1;
     else 
       r = m - 1;

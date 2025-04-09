@@ -25,6 +25,9 @@ $ if IRO_LINUX then
 #undef KeyCode
 #undef None
 #undef X
+#undef Bool
+#undef True
+#undef False
 
 struct X11Stuff
 {

@@ -31,6 +31,8 @@ struct SourceData
     {
       String,
       Number,
+      True,
+      False,
     };
 
     String str = nil;
@@ -55,6 +57,23 @@ struct SourceData
   b8 hasNumberValue() const
   {
     return notnil(val.str) && val.kind == Value::Kind::Number;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 hasBooleanValue() const
+  {
+    return  
+      val.kind == Value::Kind::True ||
+      val.kind == Value::Kind::False;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 testBooleanValue() const
+  {
+    assert(hasBooleanValue());
+    return val.kind == Value::Kind::True;
   }
 
   /* --------------------------------------------------------------------------

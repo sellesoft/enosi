@@ -29,10 +29,6 @@ EntityId loadEntity(
   gfx::Renderer& renderer);
 
 /* ----------------------------------------------------------------------------
- *  Load an Entity from some SourceData.
+ *  Load an Entity from some an ALREADY LOADED EntityDef.
  */
-EntityId loadEntity(
-  const EntityDef& def,
-  EntityMgr& entmgr, 
-  AssetMgr& assetmgr,
-  gfx::Renderer& renderer);
+EntityId loadEntity(const EntityDef& def, EntityMgr& entmgr);

@@ -1,0 +1,27 @@
+/*
+ *  System for spawning mobs using Spawner components.
+ */
+
+$ require "common"
+
+@@lpp.import "game/entity/EntitySystem.lh"
+
+struct EyeSys;
+struct MindSys;
+struct MapPostLoad;
+
+/* ============================================================================
+ */
+struct SpawnerSys : EntitySystem
+{
+  EyeSys& eye;
+  MindSys& mind;
+
+  b8 init()
+  {
+    subscribeTo<MapPostLoad>(&SpawnerSys::onMapLoad);
+    return true;
+  }
+
+  void onMapLoad(MapPostLoad&);
+};

@@ -6,6 +6,8 @@ $ require "common"
 
 @@lpp.import "game/component/Component.lh"
 
+@@lpp.import "asset/StringHash.lh"
+
 /* ============================================================================
  */
 enum class ExtendableConnection
@@ -39,8 +41,14 @@ enum class ExtendableConnection
  * 
  *  These are processed after the Entity has been created and then removed.
  *
+ *  The StringHash identifies what kind of extendable structure this is, 
+ *  such that only ExtendableStructures of the same kind will connect.
+ *
  *  NOTE(sushi) this is mostly an experimental way to handle things like 
  *              tables being properly connected automatically and will 
  *              likely change or be removed.
  */
-struct ExtendableStructure : Component { };
+struct ExtendableStructure : Component 
+{ 
+  StringHash kind;
+};
