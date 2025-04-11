@@ -7,12 +7,12 @@
 #include "link.h"
 #include "stdlib.h"
 
-#include "iro/common.h"
-#include "iro/fs/file.h"
-#include "iro/logger.h"
-#include "iro/process.h"
-#include "iro/platform.h"
-#include "iro/luastate.h"
+#include "iro/Common.h"
+#include "iro/fs/File.h"
+#include "iro/Logger.h"
+#include "iro/Process.h"
+#include "iro/Platform.h"
+#include "iro/LuaState.h"
 
 #include "Reloader.h"
 
@@ -30,16 +30,35 @@ using namespace iro;
 
 inline Logger logger = Logger::create("hreload"_str, Logger::Verbosity::Info);
 
-void apple(int a, int b, int c, int d)
+int g_x = 100;
+
+void orange(int x)
 {
-  INFO("a+b=", a+b+c+d, "\n");
+  INFO(g_x += 10, "\n");
 }
 
-void someLua(LuaState& lua, int a, int b, int c)
+void banana(int x)
 {
-  lua.dostring("count = count + 400 print(count)");
-  apple(1,2,a,c);
+  orange(x);
 }
+
+void apple(int a, int b, int c)
+{
+  INFO("a+b", a + b, "\n");
+  banana(a+b);
+}
+
+struct Thing
+{
+  int x = 0;
+
+  void update()
+  {
+    INFO(x, "\n");
+
+    x += 100;
+  }
+};
 
 b8 doReload(hr::Reloader* r)
 {
@@ -58,28 +77,28 @@ b8 doReload(hr::Reloader* r)
     patchnumbuf.asStr(),
   };
 
-  Process::Stream streams[3] =
-  {
-    { false, nullptr },
-    { false, nullptr },
-    { false, nullptr },
-  };
-
   auto lake = 
     Process::spawn(
       "/home/sushi/src/enosi/bin/lake"_str,
       Slice<String>::from(args, 2),
-      streams,
       "/home/sushi/src/enosi"_str);
 
-  while (lake.status == Process::Status::Running)
-    lake.checkStatus();
+  while (lake.status == Process::Status::Running || lake.hasOutput())
+  {
+    if (lake.hasOutput())
+    {
+      io::StaticBuffer<255> outbuf;
+      outbuf.len = lake.read(Bytes::from(outbuf.buffer, outbuf.capacity()));
+      INFO(outbuf);
+    }
+    lake.check();
+  }
 
   void* dlhandle = dlopen(nullptr, RTLD_LAZY);
 
   hr::ReloadContext context;
-  context.hrfpath = "build/debug/test.hrf"_str;
-  context.exepath = "build/debug/test"_str;
+  context.hrfpath = "build/debug/hreload-test.hrf"_str;
+  context.exepath = "build/debug/hreload-test"_str;
   context.reloadee_handle = dlhandle;
 
   hr::ReloadResult result;
@@ -88,6 +107,11 @@ b8 doReload(hr::Reloader* r)
     return ERROR("failed to reload symbols\n");
 
   return true;
+}
+
+void Thing_update(Thing* thing)
+{
+  thing->update();
 }
 
 int main()
@@ -117,19 +141,19 @@ int main()
     iro::log.newDestination("stdout"_str, &fs::stdout, flags);
   }
 
-  auto* reloader = hr::createReloader();
+  void* funcs[] = 
+  {
+    (void*)&Thing_update,
+  };
 
-  LuaState lua;
+  auto* reloader = hr::createReloader(Slice<void*>::from(funcs, 1));
 
-  lua.init();
-
-  lua.dostring(R"lua(
-    count = 0
-  )lua");
+  Thing thing;
 
   for (;;)
   {
     doReload(reloader);
-    someLua(lua, 5, 6, 7);
+    apple(1,2,300);
+    Thing_update(&thing);
   }
 }

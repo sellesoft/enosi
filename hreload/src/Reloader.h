@@ -88,17 +88,7 @@ struct ReloadResult
   void* prev_patch;
 };
 
-// The type of the function that creates and initializes the reloader.
-// Passed to the ReloadFunc.
-typedef Reloader* (*CreateReloaderFunc)();
-
-// The type of the symbol reloading function to be dynamically loaded.
-typedef b8 (*ReloadFunc)(Reloader*,const ReloadContext&, ReloadResult*);
-
-// The type of the reloader's patch number reporter function.
-typedef u64 (*ReloaderPatchNumberFunc)(Reloader*);
-
-Reloader* createReloader();
+Reloader* createReloader(Slice<void*> explicit_funcs);
 
 b8 doReload(
     Reloader* r, 

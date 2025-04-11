@@ -401,6 +401,8 @@ struct Reloader
 
   u64 reload_idx;
 
+  Array<void*> reloaded_funcs;
+
   // Cleared at the end of a reload.
   mem::LenientBump talloc;
 
@@ -495,7 +497,8 @@ struct Reloader
      */
     b8 redirectFunctionsTo(
         const Patch& to, 
-        const StringSet& patchable_symbols)
+        const StringSet& patchable_symbols,
+        Array<void*>& explicit_funcs)
     {
       assert(isValid() && to.isValid());
 
@@ -511,6 +514,21 @@ struct Reloader
         {
           auto from_ent = sec.getEntry(i);
           if (!from_ent.isFunc() || !from_ent.isDefined())
+            continue;
+
+          void* from_addr = (u8*)start_addr + from_ent->st_value;
+
+          b8 found = false;
+          for (void*& explicit_func : explicit_funcs)
+          {
+            if (from_addr == explicit_func)
+            {
+              found = true;
+              break;
+            }
+          }
+
+          if (!found)
             continue;
 
           String from_name = from_ent.getName();
@@ -535,7 +553,6 @@ struct Reloader
             // The new patch no longer has this symbol (probably).
             continue;
 
-          void* from_addr = (u8*)start_addr + from_ent->st_value;
           void* to_addr = (u8*)to.start_addr + to_ent->st_value;
 
           DEBUG("patching ", from_name, ": \n",
@@ -700,11 +717,15 @@ struct Reloader
 
   /* --------------------------------------------------------------------------
    */
-  b8 init()
+  b8 init(Slice<void*> explicit_funcs)
   {
     this_patch = nullptr;
     prev_patch = nullptr;
     reload_idx = 0;
+
+    reloaded_funcs.init();
+    for (void* x : explicit_funcs)
+      reloaded_funcs.push(x);
 
     return true;
   }
@@ -908,6 +929,8 @@ struct Reloader
     String hrfpath = context.hrfpath;
     String exepath = context.exepath;
 
+    INFO("reloading ", exepath, " using ", hrfpath, "\n");
+
     if (!talloc.init())
       return ERROR("failed to init temp allocator\n");
 
@@ -929,11 +952,22 @@ struct Reloader
     patch.curr.moveTo(&patch.prev);
 
     // Form the name of the expected patched executable and load it.
+    //
+    // Due to the jumbled mess of enosi's build system atm the patched
+    // exe will be prefixed with 'lib' (as we ask it to output a SharedLib
+    // and that's just what it does), so for now I'm going to make it so
+    // that hreload expects that.
 
+    String basename = fs::Path::basename(exepath);
+    String dir = fs::Path::removeBasename(exepath);
+  
     io::StaticBuffer<512> patch_path_buf;
-    io::formatv(&patch_path_buf, exepath, ".patch", reload_idx, ".so");
+    io::formatv(&patch_path_buf, 
+        dir, "lib", basename, ".patch", reload_idx, ".so");
 
     reload_idx += 1;
+
+    INFO("loading current patch from ", patch_path_buf.asStr(), "\n");
 
     if (!patch.curr.init(
           &mem::stl_allocator,
@@ -956,6 +990,8 @@ struct Reloader
       return ERROR("failed to init patchable symbols string set\n");
     defer { patchable_symbols.deinit(); };
 
+    INFO("collecting patchable symbols\n");
+
     if (!collectPatchableSymbols(
           &talloc, 
           &patchable_symbols, 
@@ -971,13 +1007,22 @@ struct Reloader
     else
       prev_patch = &patch.base;
 
+    INFO("copying global state\n");
+
     if (!prev_patch->copyGlobalState(patch.curr, patchable_symbols))
         return ERROR("failed to copy global state from prev to curr patch\n");
 
-    if (!patch.base.redirectFunctionsTo(patch.curr, patchable_symbols))
+    INFO("redirecting functions\n");
+
+    if (!patch.base.redirectFunctionsTo(
+          patch.curr, 
+          patchable_symbols,
+          reloaded_funcs))
       return ERROR("failed to redirect function from base to curr patch\n");
 
     result->remappings_written = remappings_written;
+
+    INFO("done!\n");
 
     return true;
   }
@@ -1040,15 +1085,40 @@ struct Reloader
 
 /* ----------------------------------------------------------------------------
  */
-Reloader* createReloader()
+EXPORT_DYNAMIC
+Reloader* createReloader(Slice<void*> explicit_funcs)
 {
   auto* r = mem::stl_allocator.construct<Reloader>();
-  r->init();
+  r->init(explicit_funcs);
+  iro::log.init();
+
+  {
+    using enum Log::Dest::Flag;
+    Log::Dest::Flags flags;
+
+    if (fs::stdout.isatty())
+    {
+      flags = 
+          AllowColor
+        | ShowVerbosity
+        | PrefixNewlines;
+    }
+    else
+    {
+      flags = 
+          ShowCategoryName
+        | ShowVerbosity
+        | PrefixNewlines;
+    }
+
+    iro::log.newDestination("stdout"_str, &fs::stdout, flags);
+  }
   return r;
 }
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 b8 doReload(
     Reloader*  r,
     const ReloadContext& context,
@@ -1059,6 +1129,7 @@ b8 doReload(
 
 /* ----------------------------------------------------------------------------
  */
+EXPORT_DYNAMIC
 u64 getPatchNumber(Reloader* r)
 {
   return r->reload_idx;
