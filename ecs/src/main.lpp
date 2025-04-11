@@ -5,6 +5,7 @@ $ local event = require "event.Event"
 #include "iro/fs/FileSystem.h"
 #include "iro/Platform.h"
 #include "iro/time/Time.h"
+#include "iro/Process.h"
 
 @lpp.import "Engine.lh"
 
@@ -12,8 +13,68 @@ $ if IRO_LINUX then
 #include "iro/GDBScriptDef.h"
 $ end
 
+#if ECS_HOT_RELOAD
+#include "hreload/Reloader.h"
+#include "dlfcn.h"
+#endif
+
 static Logger logger =
   Logger::create("ecs"_str, Logger::Verbosity::Trace);
+
+b8 updateEngine(Engine* engine)
+{
+  return engine->update(); 
+}
+
+void doReload(hr::Reloader* r)
+{
+#if ECS_HOT_RELOAD
+  NOTICE("starting hot reload...\n");
+
+  io::StaticBuffer<32> patchnumbuf;
+  patchnumbuf.open(); 
+  io::format(&patchnumbuf, hr::getPatchNumber(r)); 
+
+  String args[2] =
+  {
+    "patch"_str,
+    patchnumbuf.asStr(),
+  };
+
+  auto lake = 
+    Process::spawn(
+      "/home/sushi/src/enosi/bin/lake"_str,
+      Slice<String>::from(args, 2),
+      "/home/sushi/src/enosi"_str);
+
+  while (lake.status == Process::Status::Running || lake.hasOutput())
+  {
+    if (lake.hasOutput())
+    {
+      io::StaticBuffer<255> outbuf;
+      outbuf.len = lake.read(Bytes::from(outbuf.buffer, outbuf.capacity()));
+      INFO(outbuf);
+    }
+    lake.check();
+  }
+
+  if (lake.exit_code != 0)
+  {
+    ERROR("build failed, aborting hot reload\n");
+    return;
+  }
+
+  void* dlhandle = dlopen(nullptr, RTLD_LAZY);
+
+  hr::ReloadContext context;
+  context.hrfpath = "build/debug/ecs.hrf"_str;
+  context.exepath = "build/debug/ecs"_str;
+  context.reloadee_handle = dlhandle;
+
+  hr::ReloadResult result;
+  hr::doReload(r, context, &result);
+#endif
+}
 
 int main(int argc, const char** args)
 {
@@ -25,25 +86,11 @@ int main(int argc, const char** args)
 
   {
     using enum Log::Dest::Flag;
-    Log::Dest::Flags flags;
-
-    if (fs::stdout.isatty())
-    {
-      flags =
-          AllowColor
-        | TrackLongestName
-        | PadVerbosity
-        | ShowCategoryName
-        | ShowVerbosity
-        | PrefixNewlines;
-    }
-    else
-    {
-      flags =
-          ShowCategoryName
-        | ShowVerbosity
-        | PrefixNewlines;
-    }
+    Log::Dest::Flags flags =
+        AllowColor
+      | PadVerbosity
+      | ShowVerbosity
+      | PrefixNewlines;
 
     iro::log.newDestination("stdout"_str, &fs::stdout, flags);
   }
@@ -61,6 +108,16 @@ int main(int argc, const char** args)
     }
   }
 
+#if ECS_HOT_RELOAD
+  void* reload_funcs[] = 
+  {
+    (void*)&updateEngine,
+  };
+
+  hr::Reloader* reloader = 
+    hr::createReloader(Slice<void*>::from(reload_funcs, 1));
+#endif
+
   Engine engine = {};
   if (!engine.init())
     return ERROR("failed to initialize engine\n");
@@ -69,7 +126,11 @@ int main(int argc, const char** args)
 
   for (;;)
   {
-    if (!engine.update())
+#if ECS_HOT_RELOAD
+    if (engine.wantHotReload())
+      doReload(reloader);
+#endif
+    if (!updateEngine(&engine))
       break;
   }
 }

@@ -2,6 +2,7 @@ return SpriteStatesDef
 {
   map = 
   {
+    Open = "assets/entities/locker/LightGrayOpen",
     Closed = "assets/entities/locker/LightGray"
   }
 }

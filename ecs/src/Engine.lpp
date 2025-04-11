@@ -206,16 +206,8 @@ $ end
   @initSystem(ui.init(*this),              ui);
   @initSystem(gamemgr.init(this),          gamemgr);
 
-#if ECS_HOT_RELOAD
-  reloader = hr::createReloader();
-  if (reloader == nullptr)
-    return ERROR("failed to create hot reloader\n");
-#endif
-
   INFO("done initializing in ",
     WithUnits(TimePoint::monotonic() - start_time), "\n");
-
-
 
 $ if true then
 
@@ -264,6 +256,7 @@ $ else
 
 $ end
 
+  init_time = TimePoint::now();
 
   INFO("done!\n");
 
@@ -272,56 +265,13 @@ $ end
 
 /* ----------------------------------------------------------------------------
  */
-b8 Engine::checkReload()
+b8 Engine::wantHotReload()
 {
 #if ECS_HOT_RELOAD
-  if (!input.wasKeyPressed(Key::R))
+  if (input.wasKeyPressed(Key::R))
     return true;
-
-  eventbus.broadcast.raise<PreReload>({});
-
-  io::StaticBuffer<32> patchnumbuf;
-  patchnumbuf.open();
-  io::format(&patchnumbuf, getPatchNumber(reloader));
-
-  String args[2] =
-  {
-    "patch"_str,
-    patchnumbuf.asStr(),
-  };
-
-  Process::Stream streams[3] =
-  {
-    { false, nullptr },
-    { false, nullptr },
-    { false, nullptr },
-  };
-
-  auto lake =
-    Process::spawn(
-      "/home/sushi/src/enosi/bin/lake"_str,
-      Slice<String>::from(args, 2),
-      streams,
-      "/home/sushi/src/enosi"_str);
-
-  while (lake.status == Process::Status::Running)
-    lake.checkStatus();
-
-  void* dlhandle = dlopen(nullptr, RTLD_LAZY);
-
-  hr::ReloadContext context;
-  context.hrfpath = "build/debug/ecs.hrf"_str;
-  context.exepath = "build/debug/ecs"_str;
-  context.reloadee_handle = dlhandle;
-
-  hr::ReloadResult result;
-
-  if (!hr::doReload(reloader, context, &result))
-    return ERROR("failed to reload symbols\n");
-
-  eventbus.broadcast.raise<PostReload>({});
 #endif
-  return true;
+  return false;
 }
 
 /* ----------------------------------------------------------------------------
@@ -331,9 +281,6 @@ b8 Engine::update()
   iro::TimePoint time_point = iro::TimePoint::monotonic();
   frame_start_time = TimeSpan::fromSeconds(time_point.s).toSeconds()
     + TimeSpan::fromNanoseconds(time_point.ns).toSeconds();
-
-  if (!checkReload())
-    return ERROR("error occured while reloading\n");
 
   if (!window.update(*this))
     return ERROR("failed to update window\n");

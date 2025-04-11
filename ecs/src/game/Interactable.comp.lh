@@ -1,0 +1,12 @@
+/*
+ *  Component for use on things that can be clicked.
+ */
+
+$ require "common"
+
+@@lpp.import "game/component/Component.lh"
+
+struct Interactable : Component
+{
+
+};

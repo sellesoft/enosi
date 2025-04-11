@@ -49,10 +49,16 @@ struct EntitySystem
     entmgr->eventbus.subscribeTo<TEvent>(this, x.y);
   }
 
-  template<typename TComp, typename TEvent>
+  template<typename TEvent>
   void raise(EntityId id, TEvent& event)
   {
     entmgr->eventbus.raise(id, event);
+  }
+
+  template<typename TEvent>
+  void raise(EntityId id, TEvent&& event)
+  {
+    raise(id, event);
   }
 
   template<typename TEvent>

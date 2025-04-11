@@ -72,5 +72,30 @@ for cfile in lake.find "src/**/*.cpp" :each() do
   ecs.report.CppObj(cfile)
 end
 
-ecs.report.Exe("ecs",
-  ecs:gatherBuildObjects{bobj.LppObj, bobj.LuaObj, bobj.CppObj})
+
+local ecs_bobjs = 
+  ecs:gatherBuildObjects{bobj.LppObj, bobj.LuaObj, bobj.CppObj}
+
+if sys.isProjectEnabled "hreload" then
+  ecs:dependsOn "hreload"
+  ecs.report.defines { ECS_HOT_RELOAD=1 }
+
+  if sys.patch then
+    ecs.report.SharedLib("ecs.patch"..sys.patch, ecs_bobjs,
+    {
+      luajit = true
+    })
+
+    local hrf = io.open(ecs:getBuildDir().."/ecs.hrf", "w")
+    for bo in ecs_bobjs:each() do
+      if bo:is(bobj.CppObj) or bo:is(bobj.LppObj) then
+        hrf:write("+o", bo.proj:getBuildDir(), "/", bo:getTargetName(), "\n")
+      end
+    end
+    hrf:close()
+  else
+    ecs.report.Exe("ecs", ecs_bobjs)
+  end
+else
+  ecs.report.Exe("ecs", ecs_bobjs)
+end

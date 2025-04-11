@@ -18,6 +18,7 @@ $ local cmn = require "common"
 @@lpp.import "game/entity/EntitySysMgr.lh"
 
 struct Engine;
+struct WindowResized;
 
 /* ============================================================================
  */
@@ -36,4 +37,6 @@ struct GameMgr
 
   b8 update();
   b8 render();
+
+  void onWindowResized(WindowResized&);
 };

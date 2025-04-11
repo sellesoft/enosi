@@ -18,6 +18,8 @@ $ local ui = require "ui.UI"
 
 @@lpp.import "game/map/Map.defs.lh"
 
+@@lpp.import "window/Window.events.lh"
+
 #include "iro/Logger.h"
 #include "iro/Platform.h"
 
@@ -45,7 +47,10 @@ b8 GameMgr::init(Engine* eng)
     return @log.error("failed to initialize rendersys\n");
 
   entsysmgr.get<InputSys>().mgr = &eng->input;
+  entsysmgr.get<EyeSys>().viewport_size = eng->window.size;
   
+  eng->subscribeToBroadcast<WindowResized>(this, &GameMgr::onWindowResized);
+
   using namespace fs;
 
   CompiledData::CompileParams params = 
@@ -164,4 +169,11 @@ b8 GameMgr::render()
   // }
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void GameMgr::onWindowResized(WindowResized& event)
+{
+  entsysmgr.get<EyeSys>().viewport_size = event.size;
 }

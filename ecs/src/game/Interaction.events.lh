@@ -1,0 +1,5 @@
+$ require "common"
+$ local metadata = require "reflect.Metadata"
+
+@metadata.event(entity)
+struct Interact {};

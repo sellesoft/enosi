@@ -58,10 +58,12 @@ struct Engine
 
   ui::Inspector* inspector;
 
+  TimePoint init_time;
+
   b8 init();
   void deinit();
 
-  b8 checkReload();
+  b8 wantHotReload();
   b8 update();
 
   template<typename E, typename S>

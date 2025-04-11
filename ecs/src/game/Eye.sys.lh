@@ -17,6 +17,8 @@ struct EyeSys : EntitySystem
   f32   rotation = 0.f;
   f32   zoom = 1.f;
 
+  vec2f viewport_size = {};
+
   EntityId attached = nil;
 
   void attach(EntityId id) { attached = id; }
@@ -27,7 +29,7 @@ struct EyeSys : EntitySystem
 
   void getViewMat(mat3x2* view) const;
 
-  vec2f screenToWorld(vec2f screen_pos, vec2f screen_size) const;
-  vec2f worldToScreen(vec2f world_pos, vec2f screen_size) const;
+  vec2f screenToWorld(vec2f screen_pos) const;
+  vec2f worldToScreen(vec2f world_pos) const;
 };
 

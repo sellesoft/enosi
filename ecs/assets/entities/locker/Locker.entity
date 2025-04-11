@@ -8,5 +8,7 @@ return EntityDef
       state = 0,
       states = "assets/entities/locker/Locker" 
     },
+    Openable { open = false },
+    Interactable {},
   }
 }
