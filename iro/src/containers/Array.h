@@ -16,6 +16,8 @@
 #include "../traits/Container.h"
 #include "../traits/Iterable.h"
 
+#include "Slice.h"
+
 #include "new"
 #include "assert.h"
 
@@ -90,6 +92,13 @@ struct Array
     mem::Allocator* a = allocator();
     a->free(getHeader());
     *this = nil;
+  }
+
+  /* --------------------------------------------------------------------------
+   */ 
+  Slice<T> asSlice() const
+  {
+    return Slice<T>::from(arr, len());
   }
 
   /* --------------------------------------------------------------------------
