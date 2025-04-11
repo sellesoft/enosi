@@ -102,7 +102,7 @@ driver.run = function()
   else
     local subcmd = driver.subcmds[args[1]]
     if not subcmd then
-      sys.log:fatal("unknown subcommand '",subcmd,"'")
+      sys.log:fatal("unknown subcommand '",args[1],"'")
       os.exit(1)
     end
 
@@ -428,6 +428,28 @@ driver.subcmds.publish = function(args, no_write_ver)
       end
     end)
   end
+end
+
+-- * --------------------------------------------------------------------------
+
+--- Performs a build in patching mode, eg. an executable will be built instead
+--- as a shared library and its name adjusted to include .patch<N> so that
+--- hreload may patch over new symbols from it to the running executable.
+---
+--- Currently a project that wants to be patched is expected to detect this
+--- state (by reading sys.patch) and then output the proper shared lib 
+--- itself, but I would eventually like this to be automated. Problem is that
+--- the build system isn't flexible enough for that yet, so it will have to 
+--- wait until I find it in myself to work on the build system again. That's 
+--- a hole I'm not ready to find myself in again yet, though.
+driver.subcmds.patch = function(args)
+  if not args[1] then
+    error("expected a patch number after subcmd 'patch'")
+  end
+
+  sys.patch = tonumber(args[1])
+
+  driver.subcmds.build()
 end
 
 return driver

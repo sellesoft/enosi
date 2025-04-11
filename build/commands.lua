@@ -120,7 +120,7 @@ cmd.CppObj.getIOIndependentFlags = function(params)
       params.debug_info and "-g",
       params.address_sanitizer and "-fsanitize=address",
       not params.export_all and "-fvisibility=hidden",
-      --"-fpatchable-function-entry=16",
+      "-fpatchable-function-entry=16",
       "-Wno-#warnings",
       "-Wno-switch",
       "-Wno-return-type-c-linkage",

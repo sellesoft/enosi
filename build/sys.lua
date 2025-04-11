@@ -166,6 +166,15 @@ sys.getOrLoadProject = function(name)
   return proj
 end
 
+sys.isProjectEnabled = function(name)
+  for proj in List(sys.cfg.enabled_projects):each() do
+    if proj == name then
+      return true
+    end
+  end
+  return false
+end
+
 sys.run = function()
   Project = require "build.project"
 
