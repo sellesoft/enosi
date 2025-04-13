@@ -1,0 +1,37 @@
+$ require "common"
+
+#include "iro/Common.h"
+#include "math/vec.h"
+#include "math/mat.h"
+
+@@lpp.import "game/shared/entity/EntityId.lh"
+@@lpp.import "game/shared/entity/EntitySys.lh"
+
+struct GameMgr;
+
+/* ============================================================================
+ */
+struct EyeSys : EntitySys
+{
+  static const u32 pixels_per_meter = 64;
+
+  vec2f pos = {};
+  f32   rotation = 0.f;
+  f32   zoom = 1.f;
+
+  vec2f viewport_size = {};
+
+  EntityId attached = nil;
+
+  void attach(EntityId id) { attached = id; }
+
+  b8 init() { return true; }
+
+  b8 update();
+
+  void getViewMat(mat3x2* view) const;
+
+  vec2f screenToWorld(vec2f screen_pos) const;
+  vec2f worldToScreen(vec2f world_pos) const;
+};
+

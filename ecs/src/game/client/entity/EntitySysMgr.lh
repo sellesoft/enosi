@@ -1,0 +1,32 @@
+/*
+ *  The client side entity system manager. See shared/EntitySysMgr.lh for 
+ *  information on what this does.
+ */
+
+$ require "common"
+
+@@lpp.import "game/shared/entity/EntitySysMgr.lh"
+
+namespace cl
+{
+
+/* ============================================================================
+ */
+struct EntitySysMgr : SharedEntitySysMgr
+{
+  struct EntitySystems* systems;
+
+  struct InitParams : SharedEntitySysMgr::InitParams
+  {
+  };
+
+  b8 init(const InitParams& params);
+  void deinit();
+
+  b8 update();
+
+  template<typename TEntSys>
+  TEntSys& get();
+};
+
+}

@@ -1,0 +1,124 @@
+$ require "common"
+$ local ast = require "reflect.AST"
+
+$ local comp = require "game.shared.component.Component"
+$ local comps = comp.importComponents()
+@@comps:get
+
+#include "iro/Logger.h"
+#include "iro/containers/LinkedPool.h"
+
+using namespace iro;
+
+@log.ger(cmpmgr, Info)
+
+@@lpp.import "game/shared/component/ComponentMgr.lh"
+
+$ local TComponent = comps.p.decls.map["struct Component"]
+$ local function eachComp(f)
+$   comps:eachDecl(function(name, decl)
+$     if decl:is(ast.Record) and decl:isDerivedFrom(TComponent) then
+$       f
+$       {
+$         name = decl:getIdSafeName(),
+$         typename = name,
+$         decl = decl
+$       }
+$     end
+$   end)
+$ end
+
+/* ============================================================================
+ */
+struct CompPools
+{
+
+$ eachComp(function(comp)
+  DLinkedPool<$(comp.typename)> $(comp.name)_pool;
+$ end)
+
+  b8 init()
+  {
+$ eachComp(function(comp)
+    if (!$(comp.name)_pool.init())
+      return ERROR("failed to init $(comp.typename) component pool\n");
+$ end)
+    return true;
+  }
+
+  void deinit()
+  {
+$ eachComp(function(comp)
+    for (Component& comp : $(comp.name)_pool)
+    {
+      comp.kind = 0;
+      comp.owner = nil;
+    }
+    $(comp.name)_pool.deinit();
+$ end)
+  }
+
+  template<typename T>
+  T* allocateComponent();
+};
+
+$ eachComp(function(comp)
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+$(comp.typename)* ComponentMgr::allocateComponent<$(comp.typename)>()
+{
+  auto* node = pools->$(comp.name)_pool.pushHead();
+  auto* cmp = node->data;
+  cmp->node = node;
+  Component::onCreate<$(comp.typename)>(cmp);
+  return cmp;
+}
+
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+ComponentIter<$(comp.typename)> ComponentMgr::iterate<$(comp.typename)>()
+{
+  return ComponentIter<$(comp.typename)>{pools->$(comp.name)_pool.headNode()};
+}
+
+$ end)
+
+/* ----------------------------------------------------------------------------
+ */
+void ComponentMgr::deallocateComponent(Component* cmp)
+{
+  switch (cmp->kind)
+  {
+$ eachComp(function(comp)
+  case "$(comp.typename)"_hashed:
+    pools->$(comp.name)_pool.remove(
+      (DLinkedPool<$(comp.typename)>::Node*)cmp->node);
+    break;
+$ end)
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 ComponentMgr::init()
+{
+  pools = mem::stl_allocator.construct<CompPools>();
+
+  if (!pools->init())
+    return false;
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void ComponentMgr::deinit()
+{
+  pools->deinit();
+  mem::stl_allocator.deconstruct(pools);
+}
+

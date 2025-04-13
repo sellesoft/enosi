@@ -1,0 +1,63 @@
+/*
+ *  The highest level interface to running and controlling the game, as well
+ *  as containing all memory allocated in it.
+ *
+ *  This is implemented on both server and client side, this Shared variant 
+ *  is not useful by itself!
+ */
+
+$ require "common"
+
+#include "iro/Common.h"
+
+@@lpp.import "game/shared/entity/EntityMgr.lh"
+
+struct Engine;
+
+/* ============================================================================
+ */
+struct SharedGameSim
+{
+  Engine* engine;
+
+  EntityMgr entmgr;
+
+  /* --------------------------------------------------------------------------
+   */
+  struct InitParams
+  {
+    Engine* engine;
+  };
+
+  b8 init(const InitParams& params) 
+  { 
+    engine = params.engine;
+    
+    if (!entmgr.init())
+      return false;
+
+    return true; 
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void deinit() 
+  {  
+    engine = nullptr;
+  }
+
+  /* --------------------------------------------------------------------------
+   *  Adds some input that will be applied in the next frame update.
+   */
+  void addFrameInput();
+
+  /* --------------------------------------------------------------------------
+   *  Performs a single step of the simulation.
+   */
+  b8 update() { return true; }
+
+  /* --------------------------------------------------------------------------
+   *  Renders the current state of the simulation.
+   */
+  b8 render() { return true; }
+};

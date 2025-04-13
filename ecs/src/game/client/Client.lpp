@@ -1,0 +1,54 @@
+/*
+ *  Definition of the Client, as well as its interface.
+ */
+
+$ require "common"
+
+@@lpp.import "game/client/GameSim.lh"
+
+@log.ger(client, Debug)
+
+/* ============================================================================
+ */
+struct Client
+{
+  cl::GameSim sim;
+
+  b8 init(Engine* engine)
+  {
+    return sim.init({engine});
+  }
+
+  b8 update()
+  {
+    if (!sim.update())
+      return false;
+
+    return sim.render();
+  }
+};
+
+/* ----------------------------------------------------------------------------
+ */
+Client* clientCreate(Engine* engine)
+{
+  INFO("creating client...\n");
+  
+  // TODO(sushi) also create the thread and stuff yeah.
+  auto* client = mem::stl_allocator.construct<Client>();
+
+  if (!client->init(engine))
+  {
+    mem::stl_allocator.free(client);
+    return nullptr;
+  }
+
+  return client;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 clientUpdate(Client* client)
+{
+  return client->update();
+}

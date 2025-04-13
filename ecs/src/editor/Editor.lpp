@@ -1,0 +1,16 @@
+$ require "common"
+
+$ if false then
+
+@@lpp.import "editor/Editor.lh"
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Editor::init(GameMgr* gmgr)
+{
+  gamemgr = gmgr;
+
+  documents.init();
+}
+
+$ end

@@ -63,6 +63,26 @@ setmetatable(ast,
 
 ast.Type = Type
 
+--- Generates a name for this declaration that can safely be used as the 
+--- identifier of a variable or function in C.
+Decl.getIdSafeName = function(self)
+  local name = self.name
+    :gsub("struct ", "")
+    :gsub("union ", "")
+    :gsub("enum ", "")
+  if self.namespace then
+    name = name:match(".*::([%w_]+)")
+    local function joinns(ns)
+      if ns then
+        name = ns.name..'_'..name
+        joinns(ns.prev)
+      end
+    end
+    joinns(self.namespace)
+  end
+  return name
+end
+
 Type.dump = function(self, depth)
   error("unimplemented dump on Type "..self.ast_kind)
 end
@@ -441,6 +461,20 @@ end
 
 Function.tostring = function(self)
   return "Function("..self.name..")"
+end
+
+local Namespace = Decl:derive()
+ast.Namespace = Namespace
+
+Namespace.new = function(name, prev)
+  local o = {}
+  o.name = name
+  o.prev = prev
+  return setmetatable(o, Namespace)
+end
+
+Namespace.__tostring = function(self)
+  return "Namespace("..self.name..")"
 end
 
 return ast

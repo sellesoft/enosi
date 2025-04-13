@@ -1,0 +1,42 @@
+$ require "common"
+
+$ if false then
+
+@@lpp.import "editor/MenuBar.lh"
+
+/* ----------------------------------------------------------------------------
+ */
+EditorMenuBar* EditorMenuBar::create(UI& ui, Editor* editor)
+{
+  auto* menubar = ui.allocateAndInitItem<EditorMenuBar>("editor.menubar"_str);
+  if (menubar == nullptr)
+    return nullptr;
+
+  menubar->editor = editor;
+
+  return menubar;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void EditorMenuBar::destroy()
+{
+
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void EditorMenuBar::evaluate(UI* ui)
+{
+  
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void EditorMenuBar::generate(UI* ui)
+{
+  
+}
+
+$ end
+

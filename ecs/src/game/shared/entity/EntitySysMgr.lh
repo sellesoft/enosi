@@ -1,0 +1,52 @@
+/*
+ *  The system which manages all entity systems which exist in the game.
+ *  This is the shared variant, which declares the basic interface required
+ *  on server and client side.
+ *
+ *  In contrast to the project this one heavily inspired by, Space Station 14, 
+ *  we must have a separation between client and server for this system. 
+ *  I believe because SS14 is designed to only be played connected to a 
+ *  separately hosted server, but we intend to support solo play in the style 
+ *  of Minecraft, where playing singleplayer is still playing as a client 
+ *  connected to a server that's just locally hosted in a separate thread.
+ *
+ *  This system creates and updates types that inherit from EntitySys as well
+ *  as resolves references to other EntitySys' in those systems, eg. if 
+ *  InteractionSys contains a member `EyeSys& eye`, when it is created in 
+ *  the initialization of this systems, that reference will be resolved to 
+ *  the created EyeSys automatically, which is really cool :).
+ *
+ *  NOTE(sushi) due to how awesome C++ is the fact that this exists as a 
+ *              Shared* variant isn't actually helpful. I would like to 
+ *              define the shared part of this (eg. the part that only
+ *              managed pure shared systems, those not derived by a 
+ *              client/server version), but we don't know what systems 
+ *              have a client/server version unless we include all of it.
+ *              Which I guess isn't an issue now, because we have to namespace
+ *              those versions and so this could be changed to a single type
+ *              that does just include everything in game/ and generates two
+ *              different managers based on what's running... I'll get that 
+ *              working later on if it still seems possible after the setup
+ *              as a whole is working.
+ */
+
+$ require "common"
+
+#include "iro/Common.h"
+
+struct EntityMgr;
+
+/* ============================================================================
+ */
+struct SharedEntitySysMgr
+{
+  struct InitParams
+  {
+    EntityMgr& entmgr;
+  };
+
+  b8 init(const InitParams& params) { return true; }
+  void deinit() { }
+
+  b8 update() { return true; }
+};

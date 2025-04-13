@@ -1,0 +1,38 @@
+/*
+ *  A named bag of components.
+ */
+
+$ local cmn = require "common"
+$ local ui = require "ui.UI"
+
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+
+#include "iro/containers/AVL.h"
+
+using namespace iro;
+
+@@lpp.import "game/shared/component/Component.lh"
+
+/* ============================================================================
+ */
+struct Entity
+{
+  typedef AVL<Component, Component::getKind> ComponentMap;
+
+  String name; // owned
+  ComponentMap components;
+
+  b8 init(String name);
+  void deinit();
+
+  b8 addComp(Component* cmp);
+
+  template<typename T>
+  T* tryComp()
+  {
+    return (T*)components.find(getComponentKind<T>());
+  }
+};
+
+

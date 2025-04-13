@@ -1,0 +1,30 @@
+$ local cmn = require "common"
+
+struct EntityId;
+struct SourceDataFile;
+struct SourceData;
+struct EntityMgr;
+struct ComponentMgr;
+struct AssetMgr;
+struct EntityDef;
+
+namespace gfx
+{
+struct Renderer;
+}
+
+/* ----------------------------------------------------------------------------
+ *  Load an Entity or Entities from a given SourceData file.
+ *
+ *  TODO(sushi) remove as I do not think this should be used anymore.
+ */
+EntityId loadEntity(
+  const SourceDataFile& sfile, 
+  EntityMgr& entmgr, 
+  AssetMgr& assetmgr,
+  gfx::Renderer& renderer);
+
+/* ----------------------------------------------------------------------------
+ *  Load an Entity from some an ALREADY LOADED EntityDef.
+ */
+EntityId loadEntity(const EntityDef& def, EntityMgr& entmgr);

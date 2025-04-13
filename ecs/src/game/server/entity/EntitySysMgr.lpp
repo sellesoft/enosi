@@ -1,0 +1,44 @@
+$ local cmn = require "common"
+$ local ast = require "reflect.AST"
+
+@@lpp.import "game/server/entity/EntitySysMgr.lh"
+
+#include "iro/time/Time.h"
+
+@log.ger(cl.entsysmgr, Debug)
+
+using namespace iro;
+
+$ -- * ------------------------------------------------------------------------
+$$$
+-- Import all shared and server entity systems.
+local TEntSys
+local importer = require "reflect.Importer"
+{
+  patterns = 
+  { 
+    "src/game/server/**/*.sys.lh",
+    "src/game/shared/**/*.sys.lh",
+  },
+
+  filter = function(p, decl)
+    TEntSys = p.processed_clang_objs["struct EntitySys"]
+    if TEntSys then
+      if decl:is(ast.Record) and decl:isDerivedFrom(TEntSys) then
+        return true
+      end
+    end
+  end,
+}
+$$$
+@@importer:get
+
+namespace sv
+{
+
+b8 EntitySysMgr::init(const InitParams& params)
+{
+  
+}
+
+}

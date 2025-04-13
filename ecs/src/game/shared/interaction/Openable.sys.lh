@@ -1,0 +1,24 @@
+/*
+ *  System managing Openable component state.
+ */
+
+$ require "common"
+
+@@lpp.import "game/shared/entity/EntitySys.lh"
+@@lpp.import "game/shared/interaction/Interactable.comp.lh"
+@@lpp.import "game/shared/interaction/Interaction.events.lh"
+@@lpp.import "game/shared/interaction/Openable.comp.lh"
+
+/* ============================================================================
+ */
+struct SharedOpenableSys : EntitySys
+{
+  b8 init()
+  {
+    subscribeTo<Openable, Interact>(&SharedOpenableSys::onInteract);
+
+    return true;
+  }
+
+  void onInteract(EntComp<Openable> ent, Interact&);
+};

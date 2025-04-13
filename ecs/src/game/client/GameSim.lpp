@@ -1,0 +1,52 @@
+$ require "common"
+
+@@lpp.import "game/client/GameSim.lh"
+
+@@lpp.import "Engine.lh"
+
+@log.ger(cl.gamesim, Debug)
+
+namespace cl
+{
+
+/* ----------------------------------------------------------------------------
+ */
+b8 GameSim::init(const InitParams& params)
+{
+  if (!SharedGameSim::init(params))
+    return false;
+
+  if (!gamemgr.init({this}))
+    return false;
+
+  viewport.set({0,0}, params.engine->window.size);
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void GameSim::deinit()
+{
+  SharedGameSim::deinit();
+  gamemgr.deinit();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 GameSim::update()
+{
+  if (!SharedGameSim::update())
+    return false;
+
+  return gamemgr.update();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 GameSim::render()
+{
+  return gamemgr.render();
+}
+
+}

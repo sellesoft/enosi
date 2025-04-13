@@ -1,0 +1,15 @@
+$ require "common"
+
+@@lpp.import "game/shared/interaction/Openable.sys.lh"
+
+namespace cl
+{
+
+/* ============================================================================
+ */
+struct OpenableSys : SharedOpenableSys
+{
+  b8 init() { return SharedOpenableSys::init(); }
+};
+
+}

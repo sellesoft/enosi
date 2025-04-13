@@ -1,0 +1,28 @@
+$ local cmn = require "common"
+
+#include "iro/Logger.h"
+
+using namespace iro;
+
+@cmn.defFileLogger(movement, Info)
+
+@@lpp.import "game/shared/Movement.sys.lh"
+@@lpp.import "game/shared/Movement.comp.lh"
+@@lpp.import "game/shared/Transform.comp.lh"
+
+b8 MovementSys::update()
+{
+  for (Movement& movement : iterateComp<Movement>())
+  {
+    if (auto* transform = tryComp<Transform>(movement.owner))
+    {
+      transform->pos += movement.input;
+      transform->pos.x = floor(transform->pos.x);
+      transform->pos.y = floor(transform->pos.y);
+      // INFO(transform->pos, "\n");
+    }
+    movement.input = {};
+  }
+
+  return true;
+}

@@ -1,0 +1,25 @@
+/*
+ *  System for managing structures.
+ */
+
+$ require "common"
+
+@@lpp.import "game/shared/entity/EntitySys.lh"
+@@lpp.import "game/shared/map/Map.events.lh"
+
+struct MapSys;
+
+/* ============================================================================
+ */
+struct StructureSys : EntitySys
+{
+  MapSys& map;
+
+  b8 init() 
+  { 
+    subscribeTo<MapPostLoad>(&StructureSys::onMapLoad);
+    return true; 
+  }
+
+  void onMapLoad(MapPostLoad&);
+};

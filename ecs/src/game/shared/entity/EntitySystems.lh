@@ -1,0 +1,34 @@
+/*
+ *  Header that defines the shared EntitySystems structure such that 
+ *  the client and server don't need to duplicate the code that gathers 
+ *  them.
+ *
+ *  DO NOT import this into anything other than either of those files. 
+ */
+
+$ do return end
+
+$ require "common"
+
+$ local ast = "reflect.AST"
+
+$ local TEntSys
+$$$
+-- Import all shared entity systems.
+local importer = require "reflect.Importer"
+{
+  patterns = { "src/game/shared/**/*.sys.lh" },
+
+  filter = function(p, decl)
+    TEntSys = p.processed_clang_objs["struct EntitySystem"]
+    if TEntSys then
+      if decl:is(ast.Record) and decl:isDerivedFrom(TEntSys) then
+        return true
+      end
+    end
+  end,
+}
+$$$
+
+/* ============================================================================
+ */

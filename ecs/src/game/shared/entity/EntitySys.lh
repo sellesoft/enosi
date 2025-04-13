@@ -1,0 +1,87 @@
+/*
+ *  Base of all Entity systems, inheriting this type will cause the 
+ *  EntitySysMgr to create a singleton instance of the derived type. See
+ *  game/shared/EntitySysMgr.lh for more info.
+ *
+ *  TODO(sushi) more documentation on what exactly an entity system is.
+ */
+
+$ require "common"
+
+@@lpp.import "game/shared/entity/EntityMgr.lh"
+@@lpp.import "game/shared/entity/EntityEventBus.lh"
+
+/* ============================================================================
+ */
+struct EntitySys
+{
+  EntityMgr& entmgr;
+
+  // Subscribes to events of type TEvent raised on entities that contain a 
+  // Component of type TComp.
+  template<typename TComp, typename TEvent, typename TSys>
+  void subscribeTo(void (TSys::* cb)(EntComp<TComp>,TEvent&))
+  {
+    // Evil magic necessary to convince clang that passing this
+    // as the sub of the callback is ok.
+    static union
+    {
+      void (TSys::* x)(EntComp<TComp>, TEvent&);
+      void (*y)(void*, EntComp<TComp>, TEvent&);
+    } x { cb };
+
+    entmgr.eventbus.subscribeTo<TComp,TEvent>(this, x.y);
+  }
+
+  // Subscribes to events raised of type TEvent, when that event is raised
+  // without a reference entity.
+  template<typename TEvent, typename TSys>
+  void subscribeTo(void (TSys::* cb)(TEvent&))
+  {
+    // Evil magic necessary to convince clang that passing this
+    // as the sub of the callback is ok.
+    static union
+    {
+      void (TSys::* x)(TEvent&);
+      void (*y)(void*, TEvent&);
+    } x { cb };
+
+    entmgr.eventbus.subscribeTo<TEvent>(this, x.y);
+  }
+
+  // Raises the event TEvent on the given entity.
+  template<typename TEvent>
+  void raise(EntityId id, TEvent& event)
+  {
+    entmgr.eventbus.raise(id, event);
+  }
+
+  template<typename TEvent>
+  void raise(EntityId id, TEvent&& event) { raise(id, event); }
+
+  // Raises the event TEvent without a reference entity.
+  template<typename TEvent>
+  void raise(TEvent& event)
+  {
+    entmgr.eventbus.raise(event);
+  }
+
+  template<typename TEvent>
+  void raise(TEvent&& event) { raise<TEvent>(event); }
+
+  // Attempts to retrieve a Component of type TComp from the given entity.
+  template<typename TComp>
+  TComp* tryComp(EntityId id) { return entmgr.tryComp<TComp>(id); }
+
+  template<typename TComp, typename X>
+  TComp* tryComp(EntComp<X> id) { return entmgr.tryComp<TComp>(id); }
+
+  // Iterates all Components of type TComp, for use in entity systems 
+  // that manage certain types of components in their update function.
+  template<typename TComp>
+  ComponentIter<TComp> iterateComp()
+  {
+    return entmgr.cmpmgr.iterate<TComp>();
+  }
+};
+

@@ -21,16 +21,26 @@ $ end
 static Logger logger =
   Logger::create("ecs"_str, Logger::Verbosity::Trace);
 
+/* ----------------------------------------------------------------------------
+ *  The reason we have this wrapper is to more easily support hot-reloading 
+ *  a single function with hreload w/o having to do the union function 
+ *  pointer hack that is often seen elsewhere in the codebase. This function,
+ *  when hotreloading is enabled, is passed to hreload since its the primary
+ *  function we call into in main, and thus is the only one we have to reload.
+ */
 b8 updateEngine(Engine* engine)
 {
   return engine->update(); 
 }
 
+/* ----------------------------------------------------------------------------
+ */
 void doReload(hr::Reloader* r)
 {
 #if ECS_HOT_RELOAD
   NOTICE("starting hot reload...\n");
 
+  // Generate patch subcommand to pass to lake.
   io::StaticBuffer<32> patchnumbuf;
   patchnumbuf.open(); 
   io::format(&patchnumbuf, hr::getPatchNumber(r)); 
@@ -41,6 +51,7 @@ void doReload(hr::Reloader* r)
     patchnumbuf.asStr(),
   };
 
+  // Run lake and emit its output.
   auto lake = 
     Process::spawn(
       "/home/sushi/src/enosi/bin/lake"_str,
@@ -64,6 +75,7 @@ void doReload(hr::Reloader* r)
     return;
   }
 
+  // Perform the hot relaod if the build succeeded.
   void* dlhandle = dlopen(nullptr, RTLD_LAZY);
 
   hr::ReloadContext context;
@@ -76,6 +88,8 @@ void doReload(hr::Reloader* r)
 #endif
 }
 
+/* ----------------------------------------------------------------------------
+ */
 int main(int argc, const char** args)
 {
   iro::log.init();
@@ -109,10 +123,7 @@ int main(int argc, const char** args)
   }
 
 #if ECS_HOT_RELOAD
-  void* reload_funcs[] = 
-  {
-    (void*)&updateEngine,
-  };
+  void* reload_funcs[] = { (void*)&updateEngine, };
 
   hr::Reloader* reloader = 
     hr::createReloader(Slice<void*>::from(reload_funcs, 1));
@@ -127,6 +138,8 @@ int main(int argc, const char** args)
   for (;;)
   {
 #if ECS_HOT_RELOAD
+    // TODO(sushi) call back into the Engine telling it if the reload was 
+    //             successful or not.
     if (engine.wantHotReload())
       doReload(reloader);
 #endif

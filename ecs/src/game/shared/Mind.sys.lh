@@ -1,0 +1,23 @@
+$ local cmn = require "common"
+
+#include "iro/Common.h"
+
+@@lpp.import "game/shared/entity/EntityId.lh"
+@@lpp.import "game/shared/entity/EntitySys.lh"
+
+struct InputSys;
+
+/* ============================================================================
+ */
+struct MindSys : EntitySys
+{
+  InputSys& input;
+  
+  EntityId attached = nil;
+
+  void attach(EntityId id) { attached = id; }
+
+  b8 init() { return true; }
+
+  b8 update();
+};

@@ -12,8 +12,9 @@ $ local cmn = require "common"
 
 @@lpp.import "input/InputMgr.lh"
 
-@@lpp.import "game/GameMgr.lh"
-
+// TODO(sushi) move this stuff elsewhere and remove this pure C++ header,
+//             I have absolutely no idea why I implemented it like this 
+//             way back then.
 #include "event/BroadcastEventBus.h"
 
 namespace ui
@@ -25,6 +26,9 @@ namespace hr
 {
 struct Reloader;
 }
+
+struct Client;
+struct Server;
 
 /* ============================================================================
  */
@@ -52,13 +56,17 @@ struct Engine
 
   ui::UI ui;
 
-  GameMgr gamemgr;
-
   hr::Reloader* reloader;
 
   ui::Inspector* inspector;
 
+  // Time point at which the Engine finished initialization.
   TimePoint init_time;
+
+  // The client/server threads, allocated depending on the situation ECS 
+  // is running under.
+  Client* client;
+  Server* server;
 
   b8 init();
   void deinit();

@@ -1,0 +1,23 @@
+/*
+ *  System that translates mouse clicks to interaction events on Entities
+ *  containing an Interactable component.
+ */
+
+$ require "common"
+
+@@lpp.import "game/shared/entity/EntitySys.lh"
+
+struct InputSys;
+struct EyeSys;
+struct MapSys;
+
+struct InteractionSys : EntitySys
+{
+  InputSys& input;
+  EyeSys&   eye;
+  MapSys&   map;
+  
+  b8 init() { return true; }
+
+  b8 update();
+};

@@ -10,15 +10,16 @@
  */
 struct Rect
 {
-  union{
-    struct{ s32 x; s32 y; };
-    vec2i pos;
-  };
-  union{
-    struct{ s32 w; s32 h; };
-    struct{ s32 width; s32 height; };
-    vec2i size;
-  };
+  s32 x, y, w, h;
+
+  void set(vec2i pos, vec2i size)
+  {
+    x = pos.x; y = pos.y;
+    w = size.x; h = size.y;
+  }
+
+  vec2i pos() const { return {x,y}; }
+  vec2i size() const { return {w,h}; }
 };
 
 #endif

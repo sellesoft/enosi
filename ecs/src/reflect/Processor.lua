@@ -41,6 +41,7 @@ Processor.new = function(input, filter)
     map = {},
   }
   o.prereqs = {}
+  o.namespace_stack = List{}
   return setmetatable(o, Processor)
 end
 
@@ -118,8 +119,11 @@ Processor.processTopLevelDecls = function(self, iter)
 
     local decl = self:processTopLevelDecl(cdecl)
     
-    if decl and (not self.filter or self:filter(decl)) then
+    if decl then
+      decl.namespace = self.namespace_stack:last()
+    end
 
+    if decl and (not self.filter or self:filter(decl)) then
       -- We defer recording tag decls until we finish a top level decl to
       -- ensure that cyclic dependencies, eg.
       --
@@ -166,10 +170,13 @@ Processor.processTopLevelDecl = function(self, cdecl)
   if cdecl:isNamespace() then
     local name = cdecl:name()
     if name ~= "std" then
+      local ns = ast.Namespace.new(name, self.namespace_stack:last())
+      self.namespace_stack:push(ns)
       local iter = cdecl:getDeclIter()
       if iter then
         self:processTopLevelDecls(iter)
       end
+      self.namespace_stack:pop()
     end
   else
     return (self:resolveDecl(cdecl))

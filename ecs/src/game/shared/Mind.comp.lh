@@ -1,0 +1,8 @@
+$ require "common"
+
+@@lpp.import "game/shared/component/Component.lh"
+
+struct Mind : Component
+{
+
+};

@@ -1,0 +1,215 @@
+$ local cmn = require "common"
+$ local ast = require "reflect.AST"
+
+$ local comp = require "game.shared.component.Component"
+$ local comps = comp.importComponents()
+@comps:get
+
+@@lpp.import "game/shared/entity/EntityMgr.lh"
+
+@@lpp.import "asset/SourceDataFile.lh"
+@@lpp.import "asset/SourceDataParser.lh"
+
+@@lpp.import "game/shared/entity/EntityLoader.lh"
+@@lpp.import "game/shared/component/Component.events.lh"
+
+#include "iro/fs/File.h"
+
+$ local TComponent = comps.p.decls.map["struct Component"]
+$ local function eachComp(f)
+$   comps:eachDecl(function(name, decl)
+$     if decl:is(ast.Record) and decl:isDerivedFrom(TComponent) then
+$       f(name, decl)
+$     end
+$   end)
+$ end
+
+static Logger logger = 
+  Logger::create("entmgr"_str, Logger::Verbosity::Debug);
+
+/* ----------------------------------------------------------------------------
+ */
+b8 EntityMgr::init()
+{
+  INFO("initializing\n");
+  SCOPED_INDENT;
+
+  if (!ent_pool.init())
+    return ERROR("failed to init entity pool\n");
+
+  if (!cmpmgr.init())
+    return ERROR("failed to init component mgr\n");
+
+  if (!eventbus.init(this))
+    return ERROR("failed to init entity event bus\n");
+
+  INFO("done!\n");
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void EntityMgr::deinit()
+{
+  destroyAllEntities();
+  ent_pool.deinit();
+  cmpmgr.deinit();
+  // TODO(sushi) actual clean up 
+}
+
+/* ----------------------------------------------------------------------------
+ */
+EntityId EntityMgr::createEntity(String name)
+{
+  Entity* ent = ent_pool.add();
+  ent->init(name);
+
+  EntityId id = {};
+  ent_pool.formId(ent, &id.value, &id.salt);
+
+  DEBUG("created entity ", name, " (", id.value, ":", id.salt, ")\n");
+
+  return id;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+EntityId EntityMgr::createEntityFromSourceData(
+    String path, 
+    AssetMgr& assetmgr,
+    gfx::Renderer& renderer)
+{
+  using namespace fs;
+
+  auto file = File::from(path, OpenFlag::Read);
+
+  if (isnil(file))
+  {
+    ERROR("failed to open entity asset file at ", path, "\n");
+    return nil;
+  }
+
+  defer { file.close(); };
+
+  SourceDataFile sfile;
+  if (!sfile.init())
+  {
+    ERROR("failed to init source data file\n");
+    return nil;
+  }
+
+  SourceDataParser parser;
+  if (!parser.init(&sfile, &file, path))
+  {
+    ERROR("failed to init source data parser\n");
+    return nil;
+  }
+
+  if (!parser.parse())
+    return nil;
+
+  return loadEntity(sfile, *this, assetmgr, renderer);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+EntityId EntityMgr::spawnEntity(const EntityDef& def)
+{
+  return loadEntity(def, *this);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void EntityMgr::destroyEntity(EntityId id)
+{
+  if (isnil(id))
+    return;
+
+  Entity* ent = ent_pool.getFromId(id.value, id.salt);
+  if (ent == nullptr)
+    return;
+
+  DEBUG(
+    "destroying entity ", ent->name,
+    " (", id.value, ":", id.salt, ")\n");
+
+  for (Component& cmp : ent->components)
+  {
+    cmpmgr.deallocateComponent(&cmp);
+  }
+  
+  ent->deinit();
+
+  ent_pool.remove(ent);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void EntityMgr::destroyAllEntities()
+{
+  for (u32 i = 0; i < c_max_entities; ++i)
+  {
+    EntityPool::Slot* slot = &ent_pool.pool[i];
+    if (slot->isUsed())
+    {
+      Entity* ent = &slot->elem;
+      EntityId id;
+      ent_pool.formId(ent, &id.value, &id.salt);
+      destroyEntity(id);
+    }
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Entity* EntityMgr::getEntity(EntityId id) const
+{
+  if (isnil(id))
+    return nullptr;
+
+  return ent_pool.getFromId(id.value, id.salt);
+}
+
+$ eachComp(function(name, decl)
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 EntityMgr::addComp(Entity* ent, EntityId id, $(name)* cmp) const
+{
+  assert(isnil(cmp->owner));
+
+  if (ent->components.find(cmp->Component::kind))
+    return false;
+
+  cmp->owner = id;
+  ent->components.insert(cmp);
+
+  DEBUG("added component $(name) to entity ", id.value, "\n");
+
+  eventbus.raise(id, ComponentAdd{});
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 EntityMgr::addComp(Entity* ent, $(name)* cmp) const
+{
+  EntityId id;
+  ent_pool.formId(ent, &id.value, &id.salt);
+
+  return addComp(ent, id, cmp);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 EntityMgr::addComp(EntityId id, $(name)* cmp) const
+{
+  return addComp(getEntity(id), id, cmp);
+}
+
+$ end)
+

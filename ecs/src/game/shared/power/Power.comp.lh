@@ -1,0 +1,14 @@
+/*
+ *  Components related to the PowerSystem
+ */
+
+$ local metadata = require "reflect.Metadata"
+
+@@lpp.import "game/shared/component/Component.lh"
+
+/* ============================================================================
+ */
+struct Cable : Component
+{
+  
+};

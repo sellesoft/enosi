@@ -1,0 +1,28 @@
+$ local cmn = require "common"
+
+@@lpp.import "Engine.lh"
+@@lpp.import "input/InputMgr.lh"
+@@lpp.import "game/shared/Mind.sys.lh"
+@@lpp.import "game/shared/Movement.comp.lh"
+@@lpp.import "game/shared/Input.sys.lh"
+
+/* ----------------------------------------------------------------------------
+ */
+b8 MindSys::update()
+{
+  if (auto* movement = tryComp<Movement>(attached))
+  {
+    if (input.mgr->wasKeyPressed(Key::W))
+      movement->input.y += 1.f;
+    if (input.mgr->wasKeyPressed(Key::S))
+      movement->input.y -= 1.f;
+    if (input.mgr->wasKeyPressed(Key::D))
+      movement->input.x += 1.f;
+    if (input.mgr->wasKeyPressed(Key::A))
+      movement->input.x -= 1.f;
+
+    movement->input.normalize();
+  }
+
+  return true;
+}

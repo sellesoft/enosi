@@ -1,0 +1,12 @@
+/*
+ *  Components for Entities that may be in an open or closed state.
+ */
+
+$ require "common"
+
+@@lpp.import "game/shared/component/Component.lh"
+
+struct Openable : Component
+{
+  b8 open = false;
+};

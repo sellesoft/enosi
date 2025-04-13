@@ -1,0 +1,12 @@
+$ require "common"
+
+@@lpp.import "game/shared/component/Component.lh"
+
+#include "math/vec.h"
+
+struct Movement : Component
+{
+  f32 speed = 0.1f;
+
+  vec2f input = {0,0};
+};

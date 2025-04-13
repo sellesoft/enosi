@@ -1,0 +1,30 @@
+/*
+ *  System for UI that's used to edit assets and control game state.
+ *
+ *  The Editor organizes various widgets used for editing and provides 
+ *  helpers for interacting with assets and game state.
+ */
+
+$ require "common"
+
+$ local ui = require "ui.UI"
+
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+#include "iro/Flags.h"
+
+@@lpp.import "ui/UI.lh"
+
+struct Editor
+{
+  ui::Item* menubar;
+
+  Array<ui::Item*> documents;
+
+  GameMgr* gamemgr;
+
+  b8   init(GameMgr* gamemgr);
+  void deinit();
+
+  b8 update();
+};

@@ -1,0 +1,38 @@
+$ require "common"
+$ local ast = require "reflect.AST"
+$ local comp = require "game.shared.component.Component"
+
+$ local comps = comp.importComponents()
+@@comps:get
+
+#include "iro/Logger.h"
+#include "iro/containers/LinkedPool.h"
+
+using namespace iro;
+
+static Logger logger =
+  Logger::create("cmp"_str, Logger::Verbosity::Info);
+
+@@lpp.import "game/shared/component/Component.lh"
+
+$ local TComponent = comps.p.decls.map["struct Component"]
+$ comps:eachDecl(function(name, decl)
+$   if not decl:is(ast.Record) or not decl:isDerivedFrom(TComponent) then
+$     return
+$   end
+/* ----------------------------------------------------------------------------
+ */
+template<>
+u64 getComponentKind<$(name)>()
+{
+  return "$(name)"_hashed;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+void Component::onCreate<$(name)>(Component* comp)
+{
+  comp->kind = getComponentKind<$(name)>();
+}
+$ end)

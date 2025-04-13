@@ -1,0 +1,43 @@
+/*
+ *  The bar displayed at the top of the editor.
+ */
+
+$ require "common"
+
+$ local ui = require "ui.UI"
+
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+#include "iro/Flags.h"
+
+@@lpp.import "ui/UI.lh"
+@@lpp.import "ui/widgets/Text.lh"
+@@lpp.import "ui/widgets/Button.lh"
+@@lpp.import "ui/widgets/ComboBox.lh"
+
+struct Editor;
+
+namespace ui
+{
+
+@ui.widget(EditorMenuBar,
+struct
+{
+  Editor* editor;
+
+  static EditorMenuBar* create(Editor* editor);
+
+  void destroy();
+
+  struct Button
+  {
+    String name;
+  };
+
+  void evaluate(UI* ui) override;
+  void generate(UI* ui) override;
+  void update(UI* ui, UpdateReason reason) override;
+  void reportDrawCmds(UI* ui, DrawCmdLists& lists) override;
+})
+
+}

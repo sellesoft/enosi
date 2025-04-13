@@ -1,0 +1,37 @@
+/*
+ *  Manages lists of subscribers to events either when they occur on a 
+ *  reference Entity, or when they are raised without one. This is not 
+ *  typically used directly, rather through the interface provided by 
+ *  the base EntitySys.
+ */
+
+$ require "common"
+
+@@lpp.import "game/shared/entity/EntityId.lh"
+@@lpp.import "game/shared/entity/Entity.lh"
+
+/* ============================================================================
+ */
+struct EntityEventBus
+{
+  struct EntitySubLists* sub_lists;
+  struct EntityMgr* entmgr;
+
+  template<typename TComp, typename TEvent>
+  void subscribeTo(
+    void* subscriber, void (*cb)(void*, EntComp<TComp>, TEvent&));
+
+  template<typename TEvent>
+  void subscribeTo(void* subscriber, void (*cb)(void*, TEvent&));
+
+  template<typename TEvent>
+  void raise(EntityId id, TEvent&& event) const { raise<TEvent>(id, event); }
+
+  template<typename TEvent>
+  void raise(EntityId id, TEvent& event) const;
+
+  template<typename TEvent>
+  void raise(TEvent& event) const;
+
+  b8 init(EntityMgr* entmgr);
+};

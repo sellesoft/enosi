@@ -1,0 +1,45 @@
+/*
+ *  The client side of the GameSim. This provides the highest level interface
+ *  for running the game as viewed by a client. 
+ *
+ *  In contrast to the server's GameSim, the client may be in different states,
+ *  which are managed by the GameMgr.
+ */
+
+$ require "common"
+
+@@lpp.import "game/shared/GameSim.lh"
+@@lpp.import "game/client/GameMgr.lh"
+
+#include "math/Rect.h"
+
+namespace cl
+{
+
+/* ============================================================================
+ */
+struct GameSim : SharedGameSim
+{
+  GameMgr gamemgr;
+
+  struct InitParams : SharedGameSim::InitParams
+  {
+    Rect initial_viewport;
+  };
+
+  // Where on the screen the game is expected to render.
+  Rect viewport;
+
+  b8 init(const InitParams& params);
+  void deinit();
+
+  b8 update();
+  b8 render();
+
+  void setViewport(vec2i pos, vec2i size) 
+  {
+    viewport = {  };
+  }
+};
+
+}

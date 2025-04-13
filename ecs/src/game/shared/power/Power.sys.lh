@@ -1,0 +1,31 @@
+/*
+ *  System for power related stuff.
+ */
+
+$ require "common"
+
+@@lpp.import "game/shared/entity/EntitySys.lh"
+
+@@lpp.import "game/shared/power/Power.comp.lh"
+@@lpp.import "game/shared/component/Component.events.lh"
+
+struct RenderSys;
+
+/* ============================================================================
+ */
+struct PowerSys : EntitySys
+{
+  b8 init() { return true; }
+
+$ if false then
+  b8 init()
+  {
+    subscribeTo<Cable, ComponentAdd>(&PowerSys::onCableAdd);
+    return true;
+  }
+
+  void onCableAdd(EntComp<Cable> id, ComponentAdd& event);
+
+  void update();
+$ end
+};

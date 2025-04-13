@@ -1,0 +1,43 @@
+/*
+ *  Manager of the highest level *client* game state, handling states such as 
+ *  the main menu, options, being in a game session, the transitions 
+ *  between each state, and the UI that is displayed in them.
+ */
+
+$ local cmn = require "common"
+
+@@lpp.import "game/shared/entity/EntityMgr.lh"
+@@lpp.import "game/shared/component/Component.lh"
+
+@@lpp.import "game/client/entity/EntitySysMgr.lh"
+@@lpp.import "game/client/graphics/RenderSys.lh"
+
+namespace cl
+{
+
+struct GameSim;
+
+/* ============================================================================
+ */
+struct GameMgr
+{
+  GameSim* sim;
+
+  EntitySysMgr entsysmgr;
+  RenderSys    rendersys;
+
+  struct InitParams
+  {
+    GameSim* gamesim;
+  };
+
+  b8 init(const InitParams& params);
+  void deinit();
+
+  b8 update();
+  b8 render();
+
+  b8 setMap(String name);
+};
+
+}
