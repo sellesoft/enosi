@@ -518,6 +518,20 @@ local defineLinkerTask = function(self, is_shared, lib_filter)
     params.disabled_warnings = disabled_warnings:get(#disabled_warnings - 1)
   end
 
+  -- some commands don't exist on windows/linux
+  if sys.os == "windows" then
+    params.start_group = ""
+    params.end_group = ""
+    params.export_dynamic = ""
+    -- TODO: support launching without a console
+    params.subsystem = "-Wl,-SUBSYSTEM:CONSOLE"
+  else
+    params.start_group = "-Wl,--start-group"
+    params.end_group = "-Wl,--end-group"
+    params.export_dynamic = "-Wl,-E"
+    params.subsystem = ""
+  end
+
   local cmd = build.cmd.Exe.new(params)
 
   local objs = List{}

@@ -350,8 +350,8 @@ cmd.Exe = Type:make()
 ---@field libdirs List
 --- If true, a shared library will be built.
 ---@field is_shared boolean
---- Whether to output debug information. This is probably only useful on Windows where
---- it intends to output a pdb.
+--- Whether to output debug information. This is probably only useful on
+--- Windows where it intends to output a pdb.
 ---@field debug_info boolean
 --- Link with address sanitizer enabled.
 --- NOTE that if this is enabled, it must be enabled when compiling linked
@@ -385,25 +385,26 @@ cmd.Exe.new = function(params)
     o.partial = helpers.listBuilder(
       "clang++",
       "-fuse-ld="..params.linker,
+      params.subsystem,
       params.is_shared and "-shared",
       params.address_sanitizer and "-fsanitize=address",
-      params.debug_info and "-g")
+      params.debug_info and "-g",
+      params.static_msvcrt and "-fms-runtime-lib=static",
+      params.disabled_warnings or "")
 
     o.links = helpers.listBuilder(
       params.libdirs and params.libdirs:flatten():map(function(dir)
         return "-L"..dir
       end),
-      "-Wl,--start-group",
+      params.start_group,
       params.shared_libs and params.shared_libs:flatten():map(function(lib)
         return "-l"..lib
       end),
       params.static_libs and params.static_libs:flatten():map(function(lib)
         return "-l"..lib
       end),
-      "-Wl,--end-group",
-      "-Wl,-E",
-      params.static_msvcrt and "-fms-runtime-lib=static",
-      params.disabled_warnings or "")
+      params.end_group,
+      params.export_dynamic)
       -- Tell the exe's dynamic linker to check the directory its in
       -- for shared libraries.
       -- NOTE(sushi) this is disabled for now as I'm not actually using it
