@@ -9,24 +9,21 @@ $ local Style = require "ui.Style"
 #include "iro/time/Time.h"
 using namespace iro;
 
-// Introduce events and the event bus definitions.
-@@lpp.import "event/BroadcastEventBus.lh"
-
-@@lpp.import "graphics/Font.lh"
-@@lpp.import "graphics/CompiledShader.lh"
-@@lpp.import "ui/widgets/Text.lh"
-@@lpp.import "ui/widgets/Button.lh"
-@@lpp.import "ui/widgets/Separator.lh"
-@@lpp.import "ui/widgets/InputText.lh"
-@@lpp.import "ui/widgets/CollapsingHeader.lh"
-
-@@lpp.import "ui/Inspector.lh"
-
 @@lpp.import "asset/Packing.lh"
 @@lpp.import "asset/CompiledData.lh"
 @@lpp.import "asset/SourceDataFile.lh"
 @@lpp.import "asset/SourceDataParser.lh"
 @@lpp.import "asset/SourceDataEditor.lh"
+@@lpp.import "event/BroadcastEventBus.lh"
+@@lpp.import "graphics/Font.lh"
+@@lpp.import "graphics/CompiledShader.lh"
+@@lpp.import "ui/Inspector.lh"
+@@lpp.import "ui/widgets/Text.lh"
+@@lpp.import "ui/widgets/Button.lh"
+@@lpp.import "ui/widgets/Separator.lh"
+@@lpp.import "ui/widgets/InputText.lh"
+@@lpp.import "ui/widgets/CollapsingHeader.lh"
+@@lpp.import "net/Channel.lh"
 
 @@lpp.import "game/client/Client.lh"
 
@@ -58,6 +55,7 @@ $ end
 
   @initSystem(source_data_file_reg.init(),              source data file reg);
   @initSystem(eventbus.broadcast.init(),                broadcast event bus);
+  @initSystem(net::init(),                              net);
   @initSystem(input.init(*this),                        input);
   @initSystem(Window::initializeBackend(),              window backend);
   @initSystem(window.init("ecs"_str,input),             window);

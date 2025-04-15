@@ -1,0 +1,278 @@
+/*
+ * ref: https://github.com/id-Software/Quake-III-Arena/blob/master/code/qcommon/qcommon.h
+ *
+ * TODO: The reference uses a huffman coding algorithm to compress the data,
+ *   but it's a bit complicated so I'm putting it off until we need to
+ *   optimize bandwidth. The main complication is less-so with the algorithm
+ *   but instead building the skewed dataset so there's actually benefits. It
+ *   also seems that if we need to build a skewed dataset to fit to the
+ *   average data we send in a packet, maybe we could instead do more a
+ *   specific mathematical analysis of the contents of a packet to have a
+ *   better compression. Something to look into.     -delle (April 14, 2025)
+ */
+$ require "common"
+
+@@lpp.import "net/Packet.lh"
+
+#include "iro/Common.h"
+#include "iro/Logger.h"
+#include "iro/memory/Memory.h"
+
+#include <bit>
+#include <cassert>
+
+using namespace iro;
+
+@log.ger(net.packet, Info)
+
+namespace net
+{
+
+void Packet::init()
+{
+  TRACE("initializing packet");
+  this->size = 0;
+  this->byte_cursor = 0;
+  this->bit_cursor = 0;
+  this->overflowed = false;
+}
+
+b8 Packet::init(u8* data, u16 size)
+{
+  TRACE("initializing packet with ", size, " bytes");
+  if (size > MAX_SIZE)
+    return ERROR("attempted to initialize a packet with more bytes than"
+      " the max size (", Packet::MAX_SIZE, ")");
+
+  mem::copy(this->data, data, size);
+  this->size = size;
+  this->byte_cursor = 0;
+  this->bit_cursor = 0;
+  this->overflowed = false;
+  return true;
+}
+
+template<u64 BITS>
+void Packet::writeBits(u64 value)
+{
+  static_assert(BITS > 0 && BITS <= 64);
+  if constexpr (BITS != 64)
+    assert(value < ((1ULL << BITS) - 1ULL));
+  TRACE("writing bits to packet\n");
+  DEBUG("offset: ", this->size, ", value: ", value, ", bits: ", BITS, "\n");
+
+  if ((Packet::MAX_SIZE - this->size) / 8 < BITS)
+  {
+    WARN("packet overflow\n");
+    this->overflowed = true;
+    return;
+  }
+
+  if constexpr (BITS == 8)
+  {
+    this->data[this->size] = (u8)value;
+    this->size += 1;
+    //this->bit_cursor += 8;
+  }
+  else if constexpr (BITS == 16)
+  {
+    u16* p = (u16*)&this->data[this->size];
+    *p = (u16)value;
+    this->size += 2;
+    //this->bit_cursor += 16;
+  }
+  else if constexpr (BITS == 32)
+  {
+    u32* p = (u32*)&this->data[this->size];
+    *p = (u32)value;
+    this->size += 4;
+    //this->bit_cursor += 32;
+  }
+  else if constexpr (BITS == 64)
+  {
+    u64* p = (u64*)&this->data[this->size];
+    *p = value;
+    this->size += 8;
+    //this->bit_cursor += 64;
+  }
+  else
+  {
+    static_assert(!"arbitrary bit size writing not setup yet");
+  }
+}
+
+void Packet::writeU8(u8 value)
+{
+  this->writeBits<8>((u64)value);
+}
+
+void Packet::writeS8(s8 value)
+{
+  this->writeBits<8>((u64)std::bit_cast<u8,s8>(value));
+}
+
+void Packet::writeU16(u16 value)
+{
+  this->writeBits<16>((u64)value);
+}
+
+void Packet::writeS16(s16 value)
+{
+  this->writeBits<16>((u64)std::bit_cast<u16,s16>(value));
+}
+
+void Packet::writeU32(u32 value)
+{
+  this->writeBits<32>((u64)value);
+}
+
+void Packet::writeS32(s32 value)
+{
+  this->writeBits<32>((u64)std::bit_cast<u32,s32>(value));
+}
+
+void Packet::writeU64(u64 value)
+{
+  this->writeBits<64>(value);
+}
+
+void Packet::writeS64(s64 value)
+{
+  this->writeBits<64>(std::bit_cast<u64,s64>(value));
+}
+
+void Packet::writeF32(f32 value)
+{
+  this->writeBits<32>((u64)std::bit_cast<u32,f32>(value));
+}
+
+void Packet::writeAngle8(f32 angle)
+{
+  this->writeBits<8>((u64)(angle * (255.0f * 360.0f)) & 255);
+}
+
+void Packet::writeAngle16(f32 angle)
+{
+  this->writeBits<16>((u64)(angle / 65535.0f * 360.0f) & 65535);
+}
+
+void Packet::writeData(const u8* data, u16 bytes)
+{
+  for (u16 i = 0; i < bytes && !this->overflowed; i++)
+    this->writeBits<8>(data[i]);
+}
+
+template<u64 BITS>
+u64 Packet::readBits()
+{
+  static_assert(BITS > 0 && BITS <= 64);
+  TRACE("reading bits to packet\n");
+
+  if ((Packet::MAX_SIZE - this->byte_cursor) / 8 < BITS)
+  {
+    WARN("packet overflow");
+    this->byte_cursor = Packet::MAX_SIZE;
+    this->overflowed = true;
+    return 0;
+  }
+
+  u64 value = 0;
+  if constexpr (BITS == 8)
+  {
+    value = (u64)this->data[this->byte_cursor];
+    this->byte_cursor += 1;
+    //this->bit_cursor += 8;
+  }
+  else if constexpr (BITS == 16)
+  {
+    u16* p = (u16*)&this->data[this->byte_cursor];
+    value = (u64)*p;
+    this->byte_cursor += 2;
+    //this->bit_cursor += 16;
+  }
+  else if constexpr (BITS == 32)
+  {
+    u32* p = (u32*)&this->data[this->byte_cursor];
+    value = (u64)*p;
+    this->byte_cursor += 4;
+    //this->bit_cursor += 32;
+  }
+  else if constexpr (BITS == 64)
+  {
+    u64* p = (u64*)&this->data[this->byte_cursor];
+    value = *p;
+    this->byte_cursor += 8;
+    //this->bit_cursor += 64;
+  }
+  else
+  {
+    static_assert(!"arbitrary bit size reading not setup yet");
+  }
+  DEBUG("offset: ", this->byte_cursor, ", value: ", value,
+    ", bits: ", BITS, "\n");
+
+  return value;
+}
+
+u8 Packet::readU8()
+{
+  return (u8)this->readBits<8>();
+}
+
+s8 Packet::readS8()
+{
+  return std::bit_cast<s8,u8>((u8)this->readBits<8>());
+}
+
+u16 Packet::readU16()
+{
+  return (u16)this->readBits<16>();
+}
+
+s16 Packet::readS16()
+{
+  return std::bit_cast<s16,u16>((u16)this->readBits<16>());
+}
+
+u32 Packet::readU32()
+{
+  return (u32)this->readBits<32>();
+}
+
+s32 Packet::readS32()
+{
+  return std::bit_cast<s32,u32>((u32)this->readBits<32>());
+}
+
+u64 Packet::readU64()
+{
+  return (u64)this->readBits<64>();
+}
+
+s64 Packet::readS64()
+{
+  return std::bit_cast<s64,u64>(this->readBits<8>());
+}
+
+f32 Packet::readF32()
+{
+  return std::bit_cast<f32,u32>((u32)this->readBits<32>());
+}
+
+f32 Packet::readAngle8()
+{
+  return ((f32)this->readBits<8>() * (360.0f / 255.0f));
+}
+
+f32 Packet::readAngle16()
+{
+  return ((f32)this->readBits<16>() * (65535.0f / 255.0f));
+}
+
+void Packet::readData(u8* data, u16 bytes)
+{
+  for (u16 i = 0; i < bytes && !this->overflowed; i++)
+    data[i] = this->readBits<8>();
+}
+
+}

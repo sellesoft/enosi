@@ -1,0 +1,47 @@
+/*
+ * A channel for writing/reading packets to/from an address in sequence.
+ */
+$ require "common"
+
+@@lpp.import "net/Address.lh"
+
+#include "iro/Common.h"
+
+namespace net
+{
+
+struct Packet;
+
+b8 init();
+void deinit();
+
+/* ============================================================================
+ */
+enum struct Source
+{
+  Client,
+  Server,
+};
+
+Packet* getOfflinePacket(Source source);
+
+/* ============================================================================
+ */
+struct Channel
+{
+  int socket_handle = 0;
+  Address address;
+
+  u32 incoming_sequence;
+  u32 outgoing_sequence;
+  u32 dropped_count;
+
+  b8 init(Address address);
+  void deinit();
+
+  b8 send(Source source, const Packet& packet);
+  b8 sendPriorityMessage(Source source, const u8* data, u32 size);
+  b8 read(Source source, Packet& packet);
+};
+
+}

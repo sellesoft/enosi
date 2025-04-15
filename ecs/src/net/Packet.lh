@@ -1,0 +1,54 @@
+/*
+ * A blob of data meant to be transmitted over the network.
+ */
+
+#include "iro/Common.h"
+
+namespace net
+{
+
+/* ============================================================================
+ */
+struct Packet
+{
+  constexpr static u16 MAX_SIZE = 16384;
+
+  u8 data[MAX_SIZE];
+  u16 size;
+  u16 byte_cursor; // not used when writing
+  b8 bit_cursor;
+  b8 overflowed;
+
+  void init();
+  b8 init(u8* data, u16 size);
+
+  template<u64 BITS> void writeBits(u64 value);
+  void writeU8(u8 value);
+  void writeS8(s8 value);
+  void writeU16(u16 value);
+  void writeS16(s16 value);
+  void writeU32(u32 value);
+  void writeS32(s32 value);
+  void writeU64(u64 value);
+  void writeS64(s64 value);
+  void writeF32(f32 value);
+  void writeAngle8(f32 angle);
+  void writeAngle16(f32 angle);
+  void writeData(const u8* data, u16 bytes);
+
+  template<u64 BITS> u64 readBits();
+  u8 readU8();
+  s8 readS8();
+  u16 readU16();
+  s16 readS16();
+  u32 readU32();
+  s32 readS32();
+  u64 readU64();
+  s64 readS64();
+  f32 readF32();
+  f32 readAngle8();
+  f32 readAngle16();
+  void readData(u8* data, u16 bytes);
+};
+
+}
