@@ -1,0 +1,33 @@
+$ require "common"
+
+@@lpp.import "game/client/Appearance.sys.lh"
+@@lpp.import "game/client/graphics/Sprite.comp.lh"
+
+namespace cl
+{
+
+/* ----------------------------------------------------------------------------
+ */
+b8 AppearanceSys::update()
+{
+  // TODO(sushi) implement as a queue and have systems change appearance data
+  //             by calling into this system instead so that we can avoid
+  //             iterating every appearance component every update.
+  for (auto& appearance : iterateComp<Appearance>())
+  {
+    if (appearance.is_dirty)
+    {
+      appearance.is_dirty = false;
+
+      raise(appearance.owner, AppearanceChange
+      {
+        .data = appearance,
+        .sprite = tryComp<Sprite>(appearance.owner),
+      });
+    }
+  }
+
+  return true;
+}
+
+}

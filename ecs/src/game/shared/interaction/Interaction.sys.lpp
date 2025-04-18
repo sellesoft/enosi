@@ -17,6 +17,8 @@ $ require "common"
 
 @log.ger(sh.sys.interact, Info)
 
+#include "iro/Platform.h"
+
 /* ----------------------------------------------------------------------------
  */
 b8 InteractionSys::update()
@@ -31,6 +33,8 @@ b8 InteractionSys::update()
   if (!map.getTileAndLayerAtPos(&mouse_layer, &mouse_tile, mouse_world))
     return true;
 
+  DEBUG(map.getTilePos(*mouse_layer, *mouse_tile), "\n");
+
   for (auto& interactable : iterateComp<Interactable>())
   {
     auto* transform = tryComp<Transform>(interactable.owner);
@@ -44,8 +48,9 @@ b8 InteractionSys::update()
     Tile* tile;
     if (map.getTileAndLayerAtPos(&layer, &tile, interactable_pos))
     {
-      INFO(mouse_world, " ", mouse_tile, " ", tile, " ", transform->pos, "\n");
-      if (layer == mouse_layer && tile == mouse_tile)
+      DEBUG(mouse_tile, " ", tile, " ", transform->pos, " ", 
+           interactable_pos, "\n");
+      if (tile == mouse_tile)
       {
         raise(interactable.owner, Interact{});
       }

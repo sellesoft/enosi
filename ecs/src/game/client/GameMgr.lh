@@ -37,7 +37,10 @@ struct GameMgr
   b8 update();
   b8 render();
 
-  b8 setMap(String name);
+  /* --------------------------------------------------------------------------
+   *  Loads the client into some map.
+   */
+  b8 loadMap(String name);
 };
 
 }

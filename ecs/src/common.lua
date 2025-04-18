@@ -8,6 +8,10 @@ lpp = require "Lpp"
 -- Introduces the log global
 require "Log"
 
+function dbgBreak()
+  return "__builtin_debugtrap()"
+end
+
 local common = {}
 
 common.reflect = require "reflect.Reflector"

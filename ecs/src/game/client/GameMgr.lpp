@@ -18,6 +18,7 @@ $ local ui = require "ui.UI"
 @@lpp.import "game/shared/Movement.comp.lh"
 @@lpp.import "game/shared/Transform.comp.lh"
 
+@@lpp.import "game/shared/map/Map.sys.lh"
 @@lpp.import "game/shared/map/Map.defs.lh"
 
 @@lpp.import "window/Window.events.lh"
@@ -50,7 +51,6 @@ b8 GameMgr::init(const InitParams& params)
 $ if false then
 
   entsysmgr.get<InputSys>().mgr = &eng->input;
-  entsysmgr.get<EyeSys>().viewport_size = eng->window.size;
   
   using namespace fs;
 
@@ -109,6 +109,8 @@ void GameMgr::deinit()
  */
 b8 GameMgr::update()
 {
+  entsysmgr.get<EyeSys>().viewport_size = sim->viewport.size();
+
   if (!entsysmgr.update())
     return ERROR("failed to update entity systems\n");
 
@@ -123,11 +125,70 @@ b8 GameMgr::render()
   {
     .viewport = sim->viewport,
     .renderer = sim->engine->renderer,
+    .map = &entsysmgr.get<MapSys>(),
+    .entmgr = &sim->entmgr,
   };
 
   entsysmgr.get<EyeSys>().getViewMat(&render_params.view);
   if (!rendersys.update(render_params))
     return false;
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 GameMgr::loadMap(String name)
+{
+  INFO("setting map to ", name, "\n");
+
+  Engine* eng = sim->engine;
+
+  CompiledData::CompileParams params = 
+  {
+    .name = "assets/maps/Test"_str,
+    .type = "MapDef"_str,
+    .assetmgr = eng->assetmgr,
+    .sfile_reg = eng->source_data_file_reg,
+  };
+
+  CompiledData::compile(params);
+
+  auto* data = CompiledData::load(
+    "assets/maps/Test.map"_str, "MapDef"_str, eng->assetmgr);
+
+  auto* mapdef = data->getRootAs<MapDef>();
+
+  CompiledData::Refs refs;
+
+  @dbgBreak;
+  data->getRefs(&refs);
+
+  Ref::LoadParams load_params = 
+  {
+    .renderer = eng->renderer,
+    .assetmgr = eng->assetmgr,
+    .sfile_reg = &eng->source_data_file_reg,
+  };
+
+  for (auto& ref : refs)
+  {
+    if (!ref.ptr->load(ref.type, load_params))
+    {
+      ERROR("failed to load ref of type ", ref.type, "\n");
+      break;
+    }
+  }
+
+  MapSys::LoadParams map_params =
+  {
+    .assetmgr = eng->assetmgr,
+    .entmgr   = sim->entmgr,
+    .renderer = eng->renderer,
+  };
+
+  if(!entsysmgr.get<MapSys>().load(*mapdef, map_params))
+    return ERROR("failed to load map '", mapdef->name, "'\n");
 
   return true;
 }

@@ -7,6 +7,8 @@ $ local List = require "List"
 $ local util = require "Util"
 $ local metadata = require "reflect.Metadata"
 
+$ do return end
+
 $$$
 local importer = require "reflect.Importer"
 {
@@ -54,6 +56,16 @@ struct Renderer;
 template<typename T>
 b8 packSourceDataIntoEnum(const SourceData& data, T* out);
 
+$ importer:eachDecl(function(name, decl)
+$   if decl:is(ast.Struct) and decl.is_complete then
+template<>
+b8 packSourceDataIntoType<$(name)>(
+  const SourceData& data,
+  $(name)* out,
+  PackContext& ctx);
+$   end
+$ end)
+
 b8 packComponent(const SourceData& data, Component** out, PackContext& ctx);
 
 /* ----------------------------------------------------------------------------
@@ -82,7 +94,107 @@ b8 destroyCompiledTexture(gfx::CompiledTexture** data)
 /* ----------------------------------------------------------------------------
  */
 template<typename T>
-b8 packTypedPtr(const SourceData& data, TypedPtr<T>* out, PackContext& ctx);
+b8 packTypedPtr(const SourceData& data, TypedPtr<T>* out, PackContext& ctx)
+{
+  if (isnil(data.type))
+    return ERROR("packTypedPtr given untyped data\n");
+
+  out->type = data.type.allocateCopy(&ctx.packed->buffer);
+  out->ptr = ctx.packed->buffer.allocateType<T>();
+
+  return packSourceDataIntoType<T>(data, out->ptr, ctx);
+}
+
+$ local function packNumberTypedPtr(name)
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 packTypedPtr<$(name)>(
+    const SourceData& data,
+    TypedPtr<$(name)>* out,
+    PackContext& ctx)
+{
+  if (!data.hasNumberValue())
+    return ERROR("expected number for TypedPtr<$(name)>\n");
+
+  // NOTE(sushi) it would be nice if we could just store the number in the 
+  //             pointer here, but then we couldn't use zero, unless if we 
+  //             maybe used the last bit to indicate that state but idk.
+  out->type = "$(name)"_str;
+  out->ptr = ctx.packed->buffer.allocateType<$(name)>();
+
+  *out->ptr = strtof((char*)data.val.str.ptr, nullptr);
+
+  return true;
+}
+$ end
+
+@packNumberTypedPtr "u8"
+@packNumberTypedPtr "u16"
+@packNumberTypedPtr "u32"
+@packNumberTypedPtr "u64"
+@packNumberTypedPtr "s8"
+@packNumberTypedPtr "s16"
+@packNumberTypedPtr "s32"
+@packNumberTypedPtr "s64"
+@packNumberTypedPtr "f32"
+@packNumberTypedPtr "f64"
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 packTypedPtr<String>(
+    const SourceData& data, 
+    TypedPtr<String>* out, 
+    PackContext& ctx)
+{
+  if (!data.hasStringValue())
+    return ERROR("expected string for TypedPtr<String>\n");
+
+  out->type = "String"_str;
+  out->ptr = ctx.packed->buffer.allocateType<String>();
+
+  *out->ptr = data.val.str.allocateCopy(&ctx.packed->buffer);
+
+  return true;
+}  
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 packTypedPtr<StringHash>(
+    const SourceData& data, 
+    TypedPtr<StringHash>* out, 
+    PackContext& ctx)
+{
+  if (!data.hasStringValue())
+    return ERROR("expected string for TypedPtr<StringHash>\n");
+
+  out->type = "StringHash"_str;
+  out->ptr = ctx.packed->buffer.allocateType<StringHash>();
+
+  *out->ptr = data.val.str.hash();
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 packTypedBoolPtr(
+    const SourceData& data,
+    TypedPtr<b8>* out,
+    PackContext& ctx)
+{
+  if (!data.hasBooleanValue())
+    return ERROR("expected a boolean value for TypePtr<b8>\n");
+
+  out->type = "b8"_str;
+  out->ptr = ctx.packed->buffer.allocateType<b8>();
+
+  *out->ptr = data.testBooleanValue();
+
+  return true;
+}
 
 /* ----------------------------------------------------------------------------
  */
@@ -100,6 +212,35 @@ b8 packTypedPtr<Component>(
     return false;
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 packTypedPtr<void>(
+    const SourceData& data,
+    TypedPtr<void>* out,
+    PackContext& ctx)
+{
+  if (isnil(data.type))
+    return ERROR("packTypedPtr passed untyped data\n");
+
+  out->type = data.type.allocateCopy(&ctx.packed->buffer);
+  switch (out->type.hash())
+  {
+$ importer:eachDecl(function(name, decl)
+$   if decl:is(ast.Struct) and decl.is_complete then
+  case "$(name)"_hashed:
+    {
+      out->ptr = ctx.packed->buffer.allocateType<$(name)>();
+      return packSourceDataIntoType<$(name)>(data, ($(name)*)out->ptr, ctx);
+    }
+    break;
+$   end
+$ end)
+  }
+
+  return ERROR("unhandled type used in TypedPtr<void>: ", data.type, "\n");
 }
 
 /* ----------------------------------------------------------------------------
@@ -211,6 +352,29 @@ b8 packArray(
       return ERROR("arrays cannot contain named elements\n");
 
     if (!packAssetRef(*child, &(*out)[i], nil, ctx))
+      return false;
+  }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
+b8 packArray(
+    const SourceData& data,
+    ArrayDef<TypedStringMap<T>>* out,
+    PackContext& ctx)
+{
+  out->init(data.children.len(), &ctx.packed->buffer);
+
+  for (u32 i = 0; i < data.children.len(); ++i)
+  {
+    const SourceData* child = data.children[i];
+    if (notnil(child->name))
+      return ERROR("arrays cannot contain named elements\n");
+
+    if (!packSourceDataIntoType(*child, &(*out)[i], ctx))
       return false;
   }
 
@@ -340,14 +504,6 @@ b8 packColor(const SourceData& data, Color* out)
 
 /* ----------------------------------------------------------------------------
  */
-b8 packSourceDataPointer(const SourceData& data, const SourceData** out)
-{
-  *out = &data;
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
 b8 packAssetRef(
     const SourceData& data, 
     AssetRef* out, 
@@ -371,7 +527,7 @@ b8 packStringHash(
   if (!data.hasStringValue())
     return @log.error("expected a string value to pack string hash\n");
 
-  *out = stringHash(&data.val.str);
+  out->val = stringHash(&data.val.str);
   return true;
 }
 
@@ -452,7 +608,6 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local putStructPackCase = function(declname, addrname, type, prereqs)
-$   prereqs:push(type:getDecl())
     if (!packSourceDataIntoType(
           *child, 
           &$(addrname), 
@@ -543,16 +698,29 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
+$ local putTypedPtrPackCase = function(declname, addrname)
+  if (!packTypedPtr(*child, &$(addrname), ctx))
+    return ERROR(
+      "failed to pack typed pointer in to $(declname)'s field $(addrname)'\n");
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local putTypedStringMapCase = function(declname, addrname)
+  if (!packSourceDataIntoType(*child, &$(addrname), ctx))
+    return ERROR(
+      "failed to pack typed string map into $(declname)'s "
+      "field '$(addrname)'\n");
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
 $ local putPackCase = function(declname, addrname, type, prereqs)
 $   local TRef = importer.p.decls.map["struct Ref"]
 $   if type.name == "String" then
 $     return (putStringPackCase(declname, addrname, type, prereqs))
 $   end
 $  
-$   if type.name == "StringHash" then
-$     return (putStringHashPackCase(declname, addrname))
-$   end
-$ 
 $   if type.name == "b8" then
 $     return (putBooleanPackCase(declname, addrname))
 $   end
@@ -573,6 +741,8 @@ $     if decl:is(ast.TemplateSpecialization) then
 $       if decl.specialized_name == "Array" then
 $         print(declname)
 $         error "Arrays are not allowed in defs! use ArrayDef instead"
+$       elseif decl.specialized_name == "TypedPtr" then
+$         return (putTypedPtrPackCase(declname, addrname))
 $       elseif decl.specialized_name == "ArrayDef" then
 $         return (putArrayPackCase(declname, addrname, type, decl, prereqs))
 $       elseif decl.specialized_name == "vec2" then
@@ -586,6 +756,8 @@ $         --             using these don't show up here
 $       elseif decl.specialized_name == "TypedAssetRef" or 
 $              decl.specialized_name == "TypedSourceAssetRef" then
 $         return (putAssetRefPackCase(declname, addrname, decl, prereqs))
+$       elseif decl.specialized_name == "TypedStringMap" then
+$         return (putTypedStringMapCase(declname, addrname, decl))
 $       elseif decl.specialized_name == "EnumArray" then
 $         return (putEnumArrayPackCase(declname, addrname, type, prereqs))
 $       elseif decl.specialized_name == "StringMap" then
@@ -594,10 +766,13 @@ $       else
 $         error("unhandled specialized template "..decl.specialized_name)
 $       end
 $     elseif decl:is(ast.Struct) then
-$       if importer.removeTag(decl.name) == "Color" then
+$       local name = importer.removeTag(decl.name)
+$       if name == "Color" then
 $         return (putColorPackCase(declname, addrname, type, prereqs))
-$       elseif importer.removeTag(decl.name) == "gfx::TextureRef" then
+$       elseif name == "gfx::TextureRef" then
 $         return (putTextureRefPackCase(declname, addrname))
+$       elseif name == "StringHash" then
+$         return (putStringHashPackCase(declname, addrname))
 $       else
 $         return (putStructPackCase(declname, addrname, type, prereqs))
 $       end
@@ -725,7 +900,6 @@ $ -- * ------------------------------------------------------------------------
 
 $ local function putStringMapPacker(name, decl)
 $   local elem_type = decl.template_args[1]
-$   print(elem_type:tostring())
 /* ----------------------------------------------------------------------------
  */
 b8 packSourceDataIntoStringMap( 
@@ -758,6 +932,198 @@ $   putPackCase(decl.name, "*elem", elem_type)
   return true;
 }
 $ end
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 packSourceDataIntoType<String>(
+    const SourceData& data,
+    String* out,
+    PackContext& ctx)
+{
+  if (!data.hasStringValue())
+    return ERROR("expected a string value to pack String\n");
+
+  *out = data.val.str.allocateCopy(&ctx.packed->buffer);
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
+b8 packSourceDataIntoType(
+   const SourceData& data,
+   TypedPtr<T>* out,
+   PackContext& ctx)
+{
+  out->type = 
+}
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putArrayDefPacker(name, decl)
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 packSourceDataIntoType(
+  const SourceData& data,
+  ArrayDef<$(name)>* out,
+  PackContext& ctx)
+{
+  if (!data.hasObjectData())
+    return ERROR("expected object data to pack ArrayDef<$(name)>\n");
+
+  out->init(data.children.len(), &ctx.packed->buffer);
+
+  for (u32 i = 0; i < data.children.len(); ++i)
+  {
+    const SourceData* child = data.children[i];
+    if (notnil(child->name))
+      return ERROR("arrays cannot contain named elements\n");
+
+    if (!packSourceDataIntoType<$(name)>(*child, &(*out)[i], ctx))
+      return false;
+  }
+
+  return true;
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+$ -- Note that this generates a packer as if 'decl' were the subtype of a 
+$ -- TypedStringMap<T>, eg. 'decl' is T, not the entire type, because we need 
+$ -- to generate one of these for each possible T.
+
+$ local function putTypedStringMapPacker(name, decl)
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 packSourceDataIntoType(
+    const SourceData& data,
+    TypedStringMap<$(name)>* out,
+    PackContext& ctx)
+{
+  if (!data.hasObjectData())
+    return ERROR("expected object data to pack $(name)\n");
+
+$ -- Separated from below code cause it was getting ugly.
+$ local function packIntoDecl(decl)
+  // No children so just zero and return.
+  if (data.children.isEmpty())
+  {
+    mem::zero(out, sizeof($(name)));
+    return true;
+  }
+
+  if (!out->map.init(data.children.len(), &ctx.packed->buffer))
+    return ERROR("failed to init string map for $(name)\n");
+
+  for (const SourceData* child : data.children)
+  {
+    if (isnil(child->name))
+      return ERROR("children of $(name) data must be named\n");
+
+    TypedPtr<void>* tptr = nullptr;
+    switch (child->name.hash())
+    {
+$   for field in decl:eachFieldWithIndex() do
+$     local type = field.type
+    case "$(field.name)"_hashed:
+$     if field.metadata.hidden then
+      return ERROR("field $(field.name) of $(decl.name) is marked hidden\n");
+$     else
+      tptr = out->map.add("$(field.name)"_str);
+$       if type.name == "String" then
+      if (!packTypedPtr(*child, ((TypedPtr<String>*)tptr), ctx))
+        return false;
+$       elseif type.name == "b8" then
+      if (!packTypedBoolPtr(*child, ((TypedPtr<b8>*)tptr), ctx))
+        return false;
+$       else
+$         local realtype = type:getDesugared()
+$         if realtype:is(ast.BuiltinType) then
+      if (!packTypedPtr(*child, ((TypedPtr<$(type.name)>*)tptr), ctx))
+        return false;
+$         else
+$           local fdecl = realtype:getDecl()
+$           if fdecl then
+$             local TRef = importer.p.processed_clang_objs["struct Ref"]
+$             if fdecl:is(ast.Record) and fdecl:isDerivedFrom(TRef) then
+      if (!packTypedPtr(*child, ((TypedPtr<$(fdecl.name)>*)tptr), ctx))
+        return false;
+$             elseif fdecl:is(ast.Struct) then
+$               local fdeclname = importer.removeTag(fdecl.name)
+$               if fdeclname == "StringHash" then
+      if (!packTypedPtr(*child, ((TypedPtr<StringHash>*)tptr), ctx))
+        return false;
+$               else
+      {
+        if (isnil(child->type))
+          return ERROR(
+            "child object data of a TypedStringMap must be typed\n");
+
+        auto* tsm = 
+          ctx.packed->buffer.allocateType<TypedStringMap<$(fdecl.name)>>();
+
+        if (!packSourceDataIntoType(*child, tsm, ctx))
+          return ERROR("failed to pack nested TypedStringMap<$(fdecl.name)> "
+                       "for field $(field.name)\n");
+
+        tptr->type = "$(importer.removeTag(fdecl.name))"_str;
+        tptr->ptr = tsm;
+      }
+$               end
+$             end
+$           end
+$         end
+$       end
+$     end
+      break;
+$   end
+    default:
+      return ERROR("type $(decl.name) has no field ", child->name, "\n");
+    }
+  }
+$ end
+
+$ -- Switch on the type of the given data and then validate each specified 
+$ -- field.
+
+  switch (data.type.hash())
+  {
+$ local function eachDerived(decl)
+$   local dername = importer.removeTag(decl.name)
+  case "$(dername)"_hashed:
+$   -- If this is a hidden type, error on its usage.
+$   if decl.metadata.hidden then
+    return ERROR("attempt to use type $(dername) for TypedStringMap, but it "
+                 "is marked hidden\n");
+$   else -- Otherwise, match children to members of the thing.
+$     packIntoDecl(decl)
+$   end
+    break;
+$   for der in decl.derived:each() do
+$     eachDerived(der)
+$   end
+$ end
+$ eachDerived(decl)
+  }
+  
+  return true;
+}
+$ end
+
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
+b8 packSourceDataIntoType(
+    const SourceData& data, 
+    StringMap<T>* out, 
+    PackContext& ctx)
+{
+  return packSourceDataIntoStringMap(data, out, ctx);
+}
 
 $ -- * ------------------------------------------------------------------------
 
@@ -843,15 +1209,34 @@ $ local function putPacker(name, decl, prereqs)
 $   if not decl or placed_packers[decl.name] then return end
 $   if name == "gfx::Renderer" then return end
 $   placed_packers[decl.name] = true
+$   if decl:is(ast.Record) then
+$     -- Because we support stuff like TypedStringMap<T>, which can take on 
+$     -- the form of T or any type derived from it, we have to ensure that 
+$     -- the derived types are placed before each type, such that if something
+$     -- like this uses a derived type, it wont try to call into other packing
+$     -- functions that would normally come after it.
+$     for der in decl.derived:each() do
+$       putPacker(importer.removeTag(der.name), der)
+$     end
+$   end
 $   if decl:is(ast.Struct) then
 $     if decl.is_complete then
 $       for field in decl:eachFieldWithIndex() do
 $         putPacker(field.type.name, field.type:getDecl(), prereqs)
 $       end
 $       putStructPacker(name, decl, prereqs)
+$       if name ~= "String" then
+$         putTypedStringMapPacker(name, decl)
+$       end
 $     end
 $   elseif decl:is(ast.TemplateSpecialization) then
 $     if decl.specialized_name == "Array" then
+$     elseif decl.specialized_name == "TypedPtr" then
+$       local subtype = decl.template_args[1]
+$       local subdecl = subtype:getDecl()
+$       if subdecl then
+$         putPacker(subdecl.name, subdecl)
+$       end
 $     elseif decl.specialized_name == "Flags" then
 $       putEnumFlagsPacker(name, decl)
 $     elseif decl.specialized_name == "ArrayDef" then
@@ -861,9 +1246,10 @@ $         local elem_decl = decl.template_args[1]:getDecl()
 $         putPacker(elem_decl.name, elem_decl, prereqs)
 $       end
 $     elseif decl.specialized_name == "StringMap" then
-$       local elem_type = decl.template_args[1]
 $       local elem_decl = decl.template_args[1]:getDecl()
-$       putPacker(elem_decl.name, elem_decl)
+$       if elem_decl then
+$         putPacker(elem_decl.name, elem_decl)
+$       end
 $       putStringMapPacker(name, decl)
 $     elseif decl.specialized_name == "EnumArray" then
 $       putEnumArrayPacker(name, decl, prereqs)

@@ -1,0 +1,30 @@
+/*
+ *  Component for entities whose appearance is dynamic. This contains a 
+ *  mapping from strings to some state data that is used by systems to 
+ *  decide how to 'visualize' an entity.
+ */
+
+$ require "common"
+$ local m = require "reflect.Metadata"
+
+@@lpp.import "game/shared/component/Component.lh"
+
+@@lpp.import "asset/StringMap.lh"
+@@lpp.import "asset/StringHash.lh"
+
+/* ============================================================================
+ */
+struct Appearance : Component
+{ 
+  @m.hidden
+  b8 is_dirty = false;
+
+  @m.hidden
+  StringMap<StringHash> data;
+
+  void set(String key, StringHash value)
+  {
+    data.set(key, value);
+    is_dirty = true;
+  }
+};

@@ -1,0 +1,23 @@
+/*
+ *  Events related to entity appaerance.
+ */
+
+$ require "common"
+$ local metadata = require "reflect.Metadata"
+
+@@lpp.import "game/shared/Appearance.comp.lh"
+@@lpp.import "game/client/graphics/Sprite.comp.lh"
+
+namespace cl
+{
+
+/* ============================================================================
+ */
+@metadata.event(entity)
+struct AppearanceChange
+{
+  Appearance& data;
+  Sprite* sprite;
+};
+
+}

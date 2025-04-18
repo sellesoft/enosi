@@ -1,0 +1,20 @@
+/*
+ *  Component used on Entities that are generically visualized.
+ */
+
+$ require "common"
+
+@@lpp.import "game/shared/component/Component.lh"
+
+@@lpp.import "asset/StringMap.lh"
+@@lpp.import "asset/StringHash.lh"
+
+namespace cl
+{
+
+struct Visualizer : Component
+{
+  StringMap<StringMap<StringHash>> visuals;
+};
+
+}

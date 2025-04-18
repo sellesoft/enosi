@@ -1,5 +1,8 @@
 /*
  *  Definition of the Client, as well as its interface.
+ *  
+ *  TODO(sushi) move the client-specific stuff from Engine into here, such 
+ *              as the Renderer, since the server should never use it.
  */
 
 $ require "common"

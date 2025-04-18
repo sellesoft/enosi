@@ -22,6 +22,8 @@ struct SharedGameSim
 
   EntityMgr entmgr;
 
+  String current_map;
+
   /* --------------------------------------------------------------------------
    */
   struct InitParams
@@ -60,4 +62,18 @@ struct SharedGameSim
    *  Renders the current state of the simulation.
    */
   b8 render() { return true; }
+
+  /* --------------------------------------------------------------------------
+   *  Instructs the simulation to load a map. How this is done depends on if
+   *  the sim is running on server or client side.
+   *
+   *  Eventually this will likely be changed to loading a scene, which is a 
+   *  collection of maps that clients may move between.
+   *
+   *  TODO(sushi) we probably want to change this to take in the actual map
+   *              (eventually scene) asset, as in the case of running a 
+   *              server locally for solo play we can load the map once then
+   *              have the clent/server load into them in parallel (probably).
+   */
+  b8 loadMap(String name);
 };

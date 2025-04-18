@@ -33,9 +33,15 @@ Processor.new = function(input, filter)
   -- Map from the original clang object to our internal
   -- representation of it.
   o.processed_clang_objs = {}
+  o.processed_types = {}
   o.record_stack = List{}
   o.top_level = List{}
   o.decls =
+  {
+    list = List{},
+    map = {},
+  }
+  o.types = 
   {
     list = List{},
     map = {},
@@ -108,6 +114,16 @@ Processor.run = function(self)
   local tu = self.clang:getTranslationUnitDecl()
   local iter = tu:getDeclIter()
   self:processTopLevelDecls(iter)
+
+  for type in self.types.list:each() do
+    local decl = type:getDesugared():getDecl()
+    if decl then
+      decl.types = decl.types or {}
+      if type:is(ast.ElaboratedType) or type:is(ast.TagType) then
+        decl.types[type.name] = type
+      end
+    end
+  end
 end
 
 -- * --------------------------------------------------------------------------
@@ -193,6 +209,10 @@ Processor.resolveDecl = function(self, cdecl)
   if not ctype then
     return
   end
+  io.write("----------------\n",
+    cdecl:name(), "\n",
+    ctype:getTypeName(), "\n" ,
+    ctype:getCanonicalTypeName(), "\n")
   local canonical_name = ctype:getCanonicalTypeName()
 
   local processed = self:findProcessed(canonical_name)
@@ -216,6 +236,8 @@ Processor.resolveDecl = function(self, cdecl)
     decl = self:processUnion(cdecl, ctype)
   elseif cdecl:isEnum() then
     decl = self:processEnum(cdecl, ctype)
+  elseif cdecl:isTypedef() then
+    decl = self:processTypedef(cdecl, ctype)
   end
 
   if decl then
@@ -235,6 +257,10 @@ end
 --- If it doesn't exist then process it and return the result.
 Processor.resolveType = function(self, ctype)
   local type
+
+  if self.processed_types[ctype.handle] then
+    return self.processed_types[ctype.handle]
+  end
 
   if ctype:isPointer() then
     if ctype:isFunctionPointer() then
@@ -261,13 +287,17 @@ Processor.resolveType = function(self, ctype)
     type =
       ast.ElaboratedType.new(
         ctype:getTypeName(),
-        self:resolveType(ctype:getDesugaredType()))
+        self:resolveType(ctype:getSingleStepDesugaredType()))
     type.size = type.desugared.size
   elseif ctype:isBuiltin() then
     type =
       ast.BuiltinType.new(
         ctype:getCanonicalTypeName(),
         ctype:size() / 8)
+  elseif ctype:isTypedef() then
+    local decl = self:resolveDecl(ctype:getTypedefDecl())
+    type = ast.TypedefType.new(decl)
+    type.size = ctype:size() / 8
   else
     local builtin = ast.BuiltinType[ctype:getTypeName()]
     if builtin then
@@ -292,9 +322,24 @@ Processor.resolveType = function(self, ctype)
       if cdecl:isComplete() then
         type.size = ctype:size() / 8
       end
+    elseif decl:is(ast.TypedefDecl) then
+      type = ast.TypedefType.new(decl)
+      if cdecl:isComplete() then
+        type.size = ctype:size() / 8
+      end
     else
+      require "Util" .dumpValue(getmetatable(decl), 2)
       error("unhandled decl kind of type '"..ctype:getCanonicalTypeName()..
             "'")
+    end
+  end
+
+  if type then
+    -- io.write(tostring(ctype.handle), " ", type:tostring(), "\n")
+    self.processed_types[ctype.handle] = type
+    if not self.types.map[ctype:getTypeName()] then
+      self.types.map[ctype:getTypeName()] = type
+      self.types.list:push(type)
     end
   end
 
@@ -384,8 +429,6 @@ Processor.processTemplateSpecialization = function(self, cdecl, ctype)
       specdecl:name())
 
   self:recordProcessed(spec.name, spec)
-
-  local unhandled_arg_kind = false
 
   local iter = cdecl:getTemplateArgIter()
   while true do
@@ -533,6 +576,17 @@ Processor.processEnum = function(self, cdecl, ctype)
   end
 
   return enum
+end
+
+-- * --------------------------------------------------------------------------
+
+Processor.processTypedef = function(self, cdecl, ctype)
+  local typedef = ast.TypedefDecl.new(ctype:getTypeName())
+  typedef.subtype = self:resolveType(cdecl:getTypedefSubType())
+    or error("failed to get subtype of "..ctype:getTypeName())
+  self:recordProcessed(ctype:getCanonicalTypeName(), typedef)
+
+  return typedef
 end
 
 return Processor

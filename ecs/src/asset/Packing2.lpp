@@ -1,0 +1,742 @@
+$ local cmn = require "common"
+$ local ast = require "reflect.AST"
+$ local clog = require "Logger" ("packing", Verbosity.Debug)
+$ local List = require "List"
+
+$$$
+local importer = require "reflect.Importer"
+{
+  patterns = 
+  {
+    "src/**/*.defs.lh",
+    "src/**/*.comp.lh",
+  },
+
+  filter = function(p, decl)
+    if decl.metadata.def then
+      return true
+    end
+
+    local TComponent = p.processed_clang_objs["struct Component"]
+    if TComponent and decl:is(ast.Record) and decl:isDerivedFrom(TComponent)
+    then
+      return true
+    end
+  end,
+}
+$$$
+@importer:get
+
+@log.ger(packing, Debug)
+
+@@lpp.import "asset/Packing.lh"
+@@lpp.import "asset/AssetMgr.lh"
+@@lpp.import "asset/ArrayDef.lh"
+@@lpp.import "asset/SourceData.lh"
+@@lpp.import "asset/SourceDataFile.lh"
+@@lpp.import "asset/SourceDataParser.lh"
+
+#include "iro/containers/BitArray.h"
+
+/* ============================================================================
+ */
+struct Packer
+{
+  PackedData* packed;
+
+  template<typename T>
+  b8 pack(const SourceData& data, T* out);
+};
+
+$ -- * ------------------------------------------------------------------------
+
+$ local placed = {}
+$ local place_queue = List{}
+$ local putPacker
+$ local putTypePacker
+$ local TAssetRef = importer.p.processed_clang_objs["struct AssetRef"]
+
+$ local function putNumberPacker(name)
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 Packer::pack(const SourceData& data, $(name)* out)
+{
+  if (!data.hasNumberValue())
+    return ERROR("expected a number value to pack $(name)\n");
+  
+  // TODO(sushi) use the proper conversion func. We should write our own.
+  *out = strtof((char*)data.val.str.ptr, nullptr);
+
+  return true;
+};
+$ end
+
+$ -- NOTE(sushi) u8 is special because it could either be a boolean or a 
+$ --             number. This kind of sucks and should be fixed.
+@putNumberPacker "u16"
+@putNumberPacker "u32"
+@putNumberPacker "u64"
+@putNumberPacker "s8"
+@putNumberPacker "s16"
+@putNumberPacker "s32"
+@putNumberPacker "s64"
+@putNumberPacker "f32"
+@putNumberPacker "f64"
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 Packer::pack(const SourceData& data, u8* out)
+{
+  if (data.hasBooleanValue())
+  {
+    *out = data.testBooleanValue();
+    return true;
+  }
+  else if (data.hasNumberValue())
+  {
+    *out = strtof((char*)data.val.str.ptr, nullptr);
+    return true;
+  }
+
+  return ERROR("expected a boolean or number value to pack u8\n");
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 Packer::pack(const SourceData& data, String* out)
+{
+  if (!data.hasStringValue())
+    return ERROR("expected a string value to pack String\n");
+
+  *out = data.val.str.allocateCopy(&packed->buffer);
+
+  return true;
+}
+$ placed["struct iro::utf8::String"] = true
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 Packer::pack(const SourceData& data, StringHash* out)
+{
+  if (!data.hasStringValue())
+    return ERROR("expected a string value to pack StringHash\n");
+
+  *out = data.val.str.hash();
+
+  return true;
+}
+$ placed["struct StringHash"] = true
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putStructPacker(name, decl)
+$   for field in decl:eachFieldWithIndex() do
+$     putTypePacker(field.type)
+$   end
+$   clog:debug("> putting struct packer ", name, "\n")
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 Packer::pack(const SourceData& data, $(name)* out)
+{
+  if (!data.hasObjectData())
+    return ERROR("expected object data to pack $(name)\n");
+
+  if (data.children.isEmpty())
+    return true;
+
+  BitArray<$(decl:getFieldCount())> found_fields = {};
+
+  for (const SourceData* child : data.children)
+  {
+    if (isnil(child->name))
+      return ERROR("struct field data must be named\n");
+
+    switch (child->name.hash())
+    {
+$ for field, i in decl:eachFieldWithIndex() do
+    case "$(field.name)"_hashed:
+$   if field.metadata.hidden then
+      return ERROR("field '$(field.name)' of $(name) is marked hidden\n");
+$   else
+      found_fields.set($(i));
+      if (!pack(*child, &out->$(field.name)))
+        return ERROR("failed to pack field $(field.name) of $(name)\n");
+$   end
+      break;
+$ end
+    }
+  }
+
+$ for field,i in decl:eachFieldWithIndex() do
+$   if field.metadata.default and not field.metadata.hidden then
+  if (!found_fields.test($(i)))
+  {
+    // TODO(sushi) this can absolutely be done better, given that we know this 
+    //             information at compile time, but I'm just wanting to get 
+    //             this working for now. In the future, we should be able to 
+    //             determine a constant value for the default data given to 
+    //             us and be able to just mem copy it into the member here.
+    SourceDataFile file;
+    file.init();
+    defer { file.deinit(); };
+
+    auto view = io::StringView::from("$(field.metadata.default)"_str);
+    SourceDataParser parser;
+
+    parser.init(&file, &view, "$(field.name) default"_str);
+    defer { parser.deinit(); };
+
+    SourceData* default_data = file.allocateSourceData();
+
+    if (!parser.parsePossiblyTypedData(default_data))
+      return ERROR("failed to parse default value of $(field.name)\n");
+    
+    if (!pack(*default_data, &out->$(field.name)))
+      return ERROR("failed to pack default data for field $(field.name) of "
+                   "$(name)\n");
+  }
+$   end
+$ end
+  
+  return true;
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+$ -- NOTE(sushi) that this is a special case in which a type is marked with 
+$ --             the metadata 'pack_from' where the type given is String.
+$ --             I would like this to be more general later on, but I want to
+$ --             get packing working again quickly, and atm this is the only
+$ --             type from which this should occur.
+$ -- All this does is handle metdata.pack_from, where the from type is a 
+$ -- String. Instead of expecting object data, we expect a string value, and 
+$ -- pack it into the given field. This is used on Ref types that store their 
+$ -- reference by name, eg. gfx::TextureRef.
+
+$ local function putPackFromString(name, decl, to)
+$   local field = decl.members.map[to]
+$   if not field or not field:is(ast.Field) then
+$     error("'"..to.."' does not name a field of "..decl.name)
+$   end
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 Packer::pack(const SourceData& data, $(name)* out)
+{
+  if (!data.hasStringValue())
+    return ERROR("expected a string value to pack into $(name)\n");
+
+  out->$(to) = data.val.str.allocateCopy(&packed->buffer);
+
+  return true;
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putArrayDefPacker(name, decl)
+$   clog:debug("> putting array def packer ", name, "\n")
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 Packer::pack(const SourceData& data, $(name)* out)
+{
+  if (!data.hasObjectData())
+    return ERROR("expected object data to pack $(name)\n");
+  
+  if (!out->init(data.children.len(), &packed->buffer))
+    return ERROR("failed to initialize $(name)\n");
+
+  for (u32 i = 0; i < data.children.len(); ++i)
+  {
+    const SourceData* child = data.children[i];
+    if (notnil(child->name))
+      return ERROR('[', i, "]: array elements cannot have names\n");
+
+    if (!pack(*child, &(*out)[i]))
+      return ERROR("failed to pack [",i,"]\n");
+  }
+  
+  return true;
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putStringMapPacker(name, decl)
+$   clog:debug("> putting string map packer ", name, "\n")
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 Packer::pack(const SourceData& data, $(name)* out)
+{
+  if (!data.hasObjectData())
+    return ERROR("expected object data to pack into $(name)\n");
+
+  if (data.children.isEmpty())
+    return true;
+
+  if (!out->init(data.children.len(), &packed->buffer))
+    return ERROR("failed to initialize $(name)\n");
+
+  for (const SourceData* child : data.children)
+  {
+    if (isnil(child->name))
+      return ERROR("StringMap data must be named\n");
+
+    auto* elem = out->add(child->name);
+
+    if (!pack(*child, elem))
+      return ERROR("failed to pack key ", child->name, "\n");
+  }
+
+  return true;
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putTypedStringMapPacker(name, decl)
+$   local subtype = decl.template_args[1]
+$   local subdecl = subtype:getDecl()
+$   if not subdecl then
+$     error(name..": failed to get declaration of sub type")
+$   end
+$   putPacker(subdecl)
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 Packer::pack(const SourceData& data, $(name)* out)
+{
+  if (!data.hasObjectData())
+    return ERROR("expected object data to pack into $(name)\n");
+
+  if (data.children.isEmpty())
+    return true;
+
+  if (!out->map.init(data.children.len(), &packed->buffer))
+    return ERROR("failed to initialize $(name)\n");
+
+$ local function packIntoDecl(decl)
+  for (const SourceData* child : data.children)
+  {
+    if (isnil(child->name))
+      return ERROR("children of $(name) data must be named\n");
+
+    TypedPtr<void>* tptr = nullptr;
+    switch (child->name.hash())
+    {
+$   for field in decl:eachFieldWithIndex() do
+    case "$(field.name)"_hashed:
+      tptr = out->map.add("$(field.name)"_str);
+$     local ftype = field.type
+      {
+        auto* p = 
+          packed->buffer.allocateType<$(ftype.name)>();
+
+        if (!pack(*child, p))
+          return ERROR("failed to pack $(ftype.name) into TypedStringMap "
+                       "field $(field.name)\n");
+
+        tptr->type = "$(importer.removeTag(ftype.name))"_str;
+        tptr->ptr = p;
+      }
+      break;
+$   end
+    }
+  }
+$ end
+
+  switch (data.type.hash())
+  {
+$ local function eachDerived(d)
+$   local dname = importer.removeTag(d.name)
+  case "$(dname)"_hashed:
+$   if d.metadata.hidden then
+    return ERROR("attempt to use type $(dname) for TypedStringMap, but it "
+                 "is marked hidden\n");
+$   else
+    out->type = data.type.allocateCopy(&packed->buffer);
+$     packIntoDecl(d)
+$   end
+    break;
+$   for der in d.derived:each() do
+$     eachDerived(der)
+$   end
+$ end
+$ eachDerived(subdecl)
+  }
+
+  return true;
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putAssetRefPacker(name, decl)
+$   clog:debug("putting asset ref packer ", name, "\n")
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 Packer::pack(const SourceData& data, $(name)* out)
+{
+  if (!data.hasStringValue())
+    return ERROR("expected string value to pack into $(name)\n");
+
+  out->name = data.val.str.allocateCopy(&packed->buffer);
+
+  return true;
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putVec2Packer(name, decl)
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 Packer::pack(const SourceData& data, $(name)* out)
+{
+ if (!data.hasChildren())
+    return ERROR("expected an object to pack vec2\n");
+  
+  if (data.children.len() != 2)
+    return ERROR("too many children in vec2 source data\n");
+
+  if (isnil(data.children[0]->name))
+  {
+    SourceData* x = data.children[0];
+    SourceData* y = data.children[1];
+
+    // Must be nameless initialization.
+    if (!x->hasNumberValue())
+      return ERROR("vec2 members must be numbers\n");
+
+    out->x = strtof((char*)x->val.str.ptr, nullptr);
+
+    if (!y->hasNumberValue())
+      return ERROR("vec2 members must be numbers\n");
+
+    out->y = strtof((char*)y->val.str.ptr, nullptr);
+  }
+  else
+  {
+    for (const SourceData* child : data.children)
+    {
+      if (!child->hasNumberValue())
+        return ERROR("vec2 members can only be numbers\n");
+
+      switch (child->name.hash())
+      {
+      case "x"_hashed:
+        out->x = strtof((char*)child->val.str.ptr, nullptr);
+        break;
+      case "y"_hashed:
+        out->y = strtof((char*)child->val.str.ptr, nullptr);
+        break;
+      default:
+        return ERROR("no member named ", child->name, " in vec2\n");
+      }
+    }
+  }
+
+  return true;
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putEnumArrayPacker(name, decl)
+$   local enum_type = decl.template_args[1]
+$   local enum_decl = enum_type:getDecl()
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 Packer::pack(const SourceData& data, $(name)* out)
+{
+  using TEnum = $(enum_type.name);
+
+  if (!data.hasObjectData())
+    return ERROR("expected object data for enum array $(name)\n");
+
+  mem::zero(out, sizeof($(name)));
+
+  if (data.children.isEmpty())
+    return true;
+
+  for (const SourceData* child : data.children)
+  {
+    if (isnil(child->name))
+      return ERROR("elements of enum array data must be named\n");
+
+    switch (child->name.hash())
+    {
+$ for elem in enum_decl.elems:each() do
+    case "$(elem.name)"_hashed:
+      if (!pack(*child, &(*out)[TEnum::$(elem.name)]))
+        return ERROR("failed to pack element $(elem.name)\n");
+      break;
+$ end
+    default:
+      return ERROR("no element named ", child->name, " in $(name)\n");
+    }
+  }
+
+  return true;
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putTypedPtrPacker(name, decl)
+$   local subtype = decl.template_args[1]
+$   local subdecl = subtype:getDecl()
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 Packer::pack(const SourceData& data, $(name)* out)
+{
+  @dbgBreak;
+
+  return true;
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putFlagsPacker(name, decl)
+$   local subtype = decl.template_args[1]
+$   local subdecl = subtype:getDecl()
+$   if not subdecl then
+$   end
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 Packer::pack(const SourceData& data, $(name)* out)
+{
+  using TEnum = $(subdecl.name);
+
+  if (!data.hasObjectData())
+    return ERROR("expected a list of $(subdecl.name) elements to pack "
+                 "$(name)\n");
+
+  for (const SourceData* child : data.children)
+  {
+    if (notnil(child->name))
+      return ERROR("elements of $(name) data cannot be named\n");
+
+    if (!child->hasStringValue())
+      return ERROR("expected an element string (of $(subdecl.name)) to pack "
+                   "$(name)\n");
+
+    switch (child->val.str.hash())
+    {
+$   for elem in subdecl.elems:each() do
+    case "$(elem.name)"_hashed:
+$     if elem.metadata.hidden then
+      return ERROR("element $(elem.name) of $(subdecl.name) is marked hidden "
+                   "\n");
+$     else
+      out->set(TEnum::$(elem.name));
+$     end
+      break;
+$   end
+    }
+  }
+  
+  return true;
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putTemplateSpecializationPacker(name, decl)
+$   for arg in decl.template_args:each() do
+$     if arg:is(ast.Type) then
+$       putTypePacker(arg)
+$     end
+$   end
+$   clog:debug("> putting template spec packer ", name, "\n")
+$ 
+$   local spec = decl.specialized_name
+$   if     "Array" == spec then
+$     error("Arrays are not allowed in source data! use ArrayDef")
+$   elseif "TypedPtr" == spec then
+$     print(name)
+$     return (putTypedPtrPacker(name, decl))
+$   elseif "ArrayDef" == spec then
+$     return (putArrayDefPacker(name, decl))
+$   elseif "StringMap" == spec then
+$     return (putStringMapPacker(name, decl))
+$   elseif "TypedStringMap" == spec then
+$     return (putTypedStringMapPacker(name, decl))
+$   elseif "EnumArray" == spec then
+$     return (putEnumArrayPacker(name, decl))
+$   elseif "vec2" == spec then
+$     return (putVec2Packer(name, decl))
+$   elseif "Flags" == spec then
+$     return (putFlagsPacker(name, decl))
+$   elseif decl:isDerivedFrom(TAssetRef) then
+$     return (putAssetRefPacker(name, decl))
+$   end
+$   clog:warn("unhandled template spec used in data: ", name, "\n")
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putRecordPacker(name, decl)
+$   clog:debug("> putting record packer\n")
+$   for derv in decl.derived:each() do
+$     putPacker(derv)
+$   end
+$
+$   if decl.metadata.pack_from then
+$     local from,to = decl.metadata.pack_from:match("([%w_]+)/([%w_]+)")
+$     if from == "String" then
+$       return (putPackFromString(name, decl, to))
+$     else
+$       error("unhandled 'from' type in metadata.pack_from!")
+$     end
+$   end
+$
+$   if decl:is(ast.TemplateSpecialization) then
+$     return (putTemplateSpecializationPacker(name, decl))
+$   elseif decl:is(ast.Struct) and decl.is_complete then
+$     return (putStructPacker(name, decl))
+$   end
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putEnumPacker(name, decl)
+$   clog:debug("> putting enum packer\n")
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 Packer::pack(const SourceData& data, $(name)* out)
+{
+  if (!data.hasStringValue())
+    return ERROR("expected a string to pack into $(name)\n");
+
+  switch (data.val.str.hash())
+  {
+$ for elem in decl.elems:each() do
+  case "$(elem.name)"_hashed:
+$   if elem.metadata.hidden then
+    return ERROR(
+      "enum value $(name)::$(elem.name) is marked as hidden\n");
+$   else
+    *out = $(name)::$(elem.name);
+    break;
+$   end
+$ end
+  default:
+    return ERROR("no element ", data.val.str, " in enum $(name)\n");
+  }
+
+  return true;
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putInterface(name, decl)
+/* --------------------------------------------------------------------------
+ */
+template<>
+b8 packSourceDataIntoType(
+    const SourceData& data, 
+    $(name)* out, 
+    PackContext& ctx)
+{
+  Packer packer;
+  packer.packed = ctx.packed;
+
+  return packer.pack(data, out);
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ putPacker = function(decl)
+$   if placed[decl.name] then return end
+$   
+$   clog:debug("putting packer for ", decl.name, "\n")
+$   
+$   for to_place in place_queue:each() do
+$     if to_place == decl then
+$       clog:debug("loop: ", tostring(decl), "\n")
+template<>
+b8 Packer::pack(const SourceData& data, $(to_place.name)*);
+$       return
+$     end
+$   end
+$
+$   place_queue:push(decl)
+$ 
+$   if decl:is(ast.TagDecl) then
+$     if decl:is(ast.Record) then
+$       putRecordPacker(importer.removeTag(decl.name), decl)
+$     elseif decl:is(ast.Enum) then
+$       putEnumPacker(importer.removeTag(decl.name), decl)
+$     end
+$     putInterface(importer.removeTag(decl.name), decl)
+$   elseif decl:is(ast.TypedefDecl) then
+$     putTypePacker(decl.subtype)
+$   end
+$ 
+$   place_queue:pop()
+$   placed[decl.name] = decl
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ putTypePacker = function(type)
+$   if type == "String" or type == "StringHash" or type:is(ast.BuiltinType) 
+$   then
+$     return -- Explicitly implemented.
+$   end
+$   type = type:getDesugared()
+$   if type:is(ast.TagType) then
+$     return (putPacker(type:getDecl()))
+$   elseif type:is(ast.TypedefType) then
+$     return (putPacker(type.decl))
+$   end
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ importer:eachDecl(function(name, decl)
+$   putPacker(decl)
+$ end)
+
+/* ----------------------------------------------------------------------------
+ */
+b8 packSourceDataFromType(const SourceData& data, PackContext& ctx)
+{
+  if (isnil(data.type))
+    return ERROR("packSourceDataFromType passed untyped data\n");
+
+  Packer packer;
+  packer.packed = ctx.packed;
+  packer.packed->buffer.init();
+
+  switch (data.type.hash())
+  {
+$ for name,decl in pairs(placed) do
+  case "$(importer.removeTag(name))"_hashed:
+    packer.packed->data.ptr = 
+      (u8*)packer.packed->buffer.allocateType<$(name)>();
+    packer.packed->data.len = sizeof($(name));
+    return packer.pack<$(name)>(data, ($(name)*)packer.packed->data.ptr);
+$ end
+  }
+
+  return ERROR("unhandled type passed to packSourceDataFromType: ", data.type,
+               "\n");
+}

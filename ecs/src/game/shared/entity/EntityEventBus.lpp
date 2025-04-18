@@ -52,7 +52,7 @@ $   for comp in comps:each() do
 $     f
 $     {
 $       name = comp:getIdSafeName(),
-$       typename = comp.name,
+$       typename = importer.removeTag(comp.name),
 $       decl = comp,
 $     }
 $   end
@@ -63,7 +63,7 @@ $   for event in events:each() do
 $     f
 $     {
 $       name = event:getIdSafeName(),
-$       typename = event.name,
+$       typename = importer.removeTag(event.name),
 $       decl = event,
 $     }
 $   end

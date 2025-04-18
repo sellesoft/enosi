@@ -4,13 +4,20 @@ $ require "common"
 
 // \@\@lpp.import "game/shared/Sprite.comp.lh"
 
+@@lpp.import "game/shared/Appearance.comp.lh"
+
 @log.ger(sys.openable, Info)
+
+#include "iro/Platform.h"
 
 /* ----------------------------------------------------------------------------
  */
 void SharedOpenableSys::onInteract(EntComp<Openable> ent, Interact&)
 {
   ent.comp.open = !ent.comp.open;
+
+  if (auto* appearance = tryComp<Appearance>(ent.ent))
+    appearance->set("IsOpen"_str, "True"_hashed);
 
 $ if false then
   if (auto* sprite = tryComp<Sprite>(ent.ent))

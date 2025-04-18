@@ -4,6 +4,6 @@ return EntityDef
   components = 
   {
     ExtendableStructure { kind = "GlassTable" },
-    Sprite { states = "assets/entities/tables/glass/Table" }
+    cl::Sprite { states = "assets/entities/tables/glass/Table" }
   }
 }

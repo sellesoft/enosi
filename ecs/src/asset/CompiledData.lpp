@@ -8,6 +8,8 @@ $ local ast = require "reflect.AST"
 #include "iro/fs/Path.h"
 #include "iro/containers/SmallArray.h"
 
+$ do return end
+
 using namespace iro;
 
 @log.ger(compiledata, Debug);
@@ -264,6 +266,23 @@ static String getSourceAssetPath(
   return out->asStr();
 }
 
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
+void getRefs(CompiledData::Refs* refs, StringMap<T>* data)
+{
+  for (auto& slot : *data)
+    getRefs(refs, &slot.elem);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
+void getRefs(CompiledData::Refs* refs, TypedStringMap<T>* data)
+{
+  getRefs(refs, &data->map);
+}
+
 $ -- * ------------------------------------------------------------------------
 
 $ local function putCompileStructData(name, decl)
@@ -458,6 +477,25 @@ $ end)
 
 /* ----------------------------------------------------------------------------
  */
+template<>
+void getRefs<TypedPtr<void>>(
+    CompiledData::Refs* refs,
+    TypedPtr<void>* x)
+{
+  switch (x->type.hash())
+  {
+$ importer:eachDecl(function(name, decl)
+$   if decl:is(ast.Struct) then
+  case "$(name)"_hashed:
+    getRefs(refs, ((TypedPtr<$(name)>*)x));
+    break;
+$   end
+$ end)
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 CompiledData::compile(const CompileParams& params)
 {
   using namespace fs;
@@ -513,7 +551,6 @@ b8 CompiledData::compile(const CompileParams& params)
 
   if (!packSourceDataFromType(*root_data, pack_context))
     return ERROR("failed to pack data of ", source_path, "\n");
-
  
   if (!platform::makeDir(Path::removeBasename(data_path), true))
     return @log.error("failed to make directories\n");
@@ -630,6 +667,16 @@ b8 CompiledData::compile(const CompileParams& params)
   return true;
 }
 
+$ -- * ------------------------------------------------------------------------
+
+$ local function putRTCompileCase(name, decl)
+$   if decl:is(ast.TemplateSpecialization) then
+$     if decl.specialized_name == "StringMap" then
+$       
+$     end
+$   end
+$ end
+
 /* ----------------------------------------------------------------------------
  */
 b8 DataCompiler::compile(String type, void* ptr)
@@ -638,6 +685,33 @@ b8 DataCompiler::compile(String type, void* ptr)
   switch (type.hash())
   {
 $ importer:eachDecl(function(name, decl)
+$   if decl:is(ast.TemplateSpecialization) then
+$     if decl.specialized_name == "StringMap" then
+$       local subtype = decl.template_args[1]
+$       local subdecl = subtype:getDecl()
+$       -- Remove the dumb space that clang puts between closing angle brackets
+$       -- when we have a tested template type.
+$       name = name:gsub("> >", ">>")
+$       if subdecl then
+  case "$(name)"_hashed:
+    {
+      auto* map = ($(name)*)ptr;
+      compileStringMap("$(name)::Slot"_str, *map);
+
+      return compile("$(name)::Slot"_str, map->slots);
+    }
+    break;
+  case "$(name)::Slot"_hashed:
+    {
+       auto* slot = ($(name)::Slot*)ptr;
+       writeData(slot->hash);
+       compileString(slot->key);
+       return compile("$(importer.removeTag(subdecl.name))"_str, &slot->elem);
+    }
+    break;
+$       end
+$     end
+$   end
 $   if decl:is(ast.Struct) then
   case "$(name)"_hashed:
     return compile<$(name)>(*($(name)*)ptr);
@@ -645,18 +719,19 @@ $   if decl:is(ast.Struct) then
     return compileTypedPtr<$(name)>(*(TypedPtr<$(name)>*)ptr);
   case "TypedSourceAssetRef<$(name)>"_hashed:
     return compileAssetRef(*(TypedSourceAssetRef<$(name)>*)ptr);
-  case "StringMap<$(name)>::Slot"_hashed:
-    {
-       auto* slot = (StringMap<$(name)>::Slot*)ptr;
-       writeData(slot->hash);
-       compileString(slot->key);
-       return compile<$(name)>(slot->elem);
-    }
-    break;
+  //case "StringMap<$(name)>::Slot"_hashed:
+  //  {
+  //     auto* slot = (StringMap<$(name)>::Slot*)ptr;
+  //     writeData(slot->hash);
+  //     compileString(slot->key);
+  //     return compile<$(name)>(slot->elem);
+  //  }
+  //  break;
 $   end
 $ end)
   }
 
+  platform::debugBreak();
   return ERROR("unknown type '", type, "' passed to DataCompiler::compile\n'");
 }
 
@@ -752,6 +827,31 @@ void makeDataPointersAbsolute(TypedSourceAssetRef<T>* data)
   data->name = OffsetString::getStringAsOffsetString(&data->name);
 }
 
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
+void makeDataPointersAbsolute(StringMap<T>* data)
+{
+  @dbgBreak;
+  data->slots = ((OffsetPtr<typename StringMap<T>::Slot>*)&data->slots)->get();
+  for (s32 i = 0; i < data->len; ++i)
+  {
+    auto& slot = data->slots[i];
+    slot.key = OffsetString::getStringAsOffsetString(&slot.key);
+    makeDataPointersAbsolute(&slot.elem);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
+void makeDataPointersAbsolute(TypedStringMap<T>* data)
+{
+  makeDataPointersAbsolute(&data->map);
+}
+
+$ -- * ------------------------------------------------------------------------
+
 $ local function putMakeStructPointersAbsolute(name, decl)
 $   local TAssetRef = importer.p.processed_clang_objs["struct AssetRef"]
 /* ----------------------------------------------------------------------------
@@ -787,6 +887,7 @@ $           elseif decl.specialized_name == "TypedPtr" then
     makeDataPointersAbsolute(f.type, f.ptr);
 $           elseif decl.specialized_name == "StringMap" then
 $             local elemdecl = decl.template_args[1]:getDecl()
+$             if elemdecl then
     f.slots = ((OffsetPtr<StringMap<$(elemdecl.name)>::Slot>*)&f.slots)->get();
     for (s32 i = 0; i < f.len; ++i)
     {
@@ -794,6 +895,7 @@ $             local elemdecl = decl.template_args[1]:getDecl()
       slot.key = OffsetString::getStringAsOffsetString(&slot.key);
       makeDataPointersAbsolute(&slot.elem);
     }
+$             end
 $           end
 $         elseif decl:is(ast.Struct) and decl.is_complete then
     makeDataPointersAbsolute<$(importer.removeTag(decl.name))>(&f);

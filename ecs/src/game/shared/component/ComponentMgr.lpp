@@ -76,7 +76,6 @@ $(comp.typename)* ComponentMgr::allocateComponent<$(comp.typename)>()
   return cmp;
 }
 
-
 /* ----------------------------------------------------------------------------
  */
 template<>

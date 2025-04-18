@@ -1,10 +1,30 @@
 /*
  *  A type used in Defs that expect a string that will be hashed during 
  *  packing.
+ *
+ *  This is a structure because if this were just a typedef, clang would 
+ *  discard the ElaboratedType it typically applies to like, anything else,
+ *  (or maybe there's something I'm doing wrong idk), when the type appears
+ *  as a template argument, which caused issues and this is the fastest way 
+ *  to fix it, so.
  */
 
 $ require "common"
 
 #include "iro/Common.h"
 
-typedef u64 StringHash;
+/* ============================================================================
+ */
+struct StringHash
+{
+  u64 val;
+
+  StringHash() { val = 0; }
+  StringHash(u64 val) : val(val) {}
+
+  b8 isValid() const
+  {
+    return val != 0;
+  }
+};
+

@@ -151,6 +151,7 @@ EntityId loadEntity(const EntityDef& def, EntityMgr& entmgr)
 
   Entity* ent = entmgr.getEntity(entid);
 
+$ if false then
   for (ComponentPtr defcomp : def.components)
   {
     if (defcomp.ptr == nullptr)
@@ -170,6 +171,7 @@ $ eachComp(function(name, decl)
 $ end)
     }
   }
+$ end
 
   if (nullptr == ent->tryComp<Transform>())
   {

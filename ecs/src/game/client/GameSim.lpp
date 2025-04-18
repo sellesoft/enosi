@@ -21,6 +21,8 @@ b8 GameSim::init(const InitParams& params)
 
   viewport.set({0,0}, params.engine->window.size);
 
+  loadMap("assets/maps/Test.map"_str);
+
   return true;
 }
 
