@@ -2,6 +2,13 @@
  *  A pointer to T who's value is relative to its own address.
  */
 
+#include "iro/Common.h"
+#include "iro/containers/Slice.h"
+#include "iro/traits/Nil.h"
+#include "iro/Unicode.h"
+
+using namespace iro;
+
 /* ============================================================================
  */
 template<typename T>
@@ -68,20 +75,20 @@ DefineNilValueT(OffsetSlice, { nil }, { return isnil(x.ptr); });
  */
 struct OffsetString : OffsetSlice<u8>
 {
-  String getString() const { return String::from(getSlice()); }
-  void setString(String s) { setSlice(s); }
+  utf8::String getString() const { return utf8::String::from(getSlice()); }
+  void setString(utf8::String s) { setSlice(s); }
 
   // Coerces a String into an OffsetString and sets it as though it
   // were pointing at 'realstr'. Ideally String never gets smaller so
   // this never breaks :).
-  static void setStringAsOffsetString(String* s, String realstr)
+  static void setStringAsOffsetString(utf8::String* s, utf8::String realstr)
   {
     auto* ostr = (OffsetString*)s;
     ostr->setString(realstr);
   }
 
   // Does the opposite of the above function.
-  static String getStringAsOffsetString(String* s)
+  static utf8::String getStringAsOffsetString(utf8::String* s)
   {
     auto* ostr = (OffsetString*)s;
     return ostr->getString();

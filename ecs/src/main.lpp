@@ -22,15 +22,15 @@ static Logger logger =
   Logger::create("ecs"_str, Logger::Verbosity::Trace);
 
 /* ----------------------------------------------------------------------------
- *  The reason we have this wrapper is to more easily support hot-reloading 
- *  a single function with hreload w/o having to do the union function 
+ *  The reason we have this wrapper is to more easily support hot-reloading
+ *  a single function with hreload w/o having to do the union function
  *  pointer hack that is often seen elsewhere in the codebase. This function,
  *  when hotreloading is enabled, is passed to hreload since its the primary
  *  function we call into in main, and thus is the only one we have to reload.
  */
 b8 updateEngine(Engine* engine)
 {
-  return engine->update(); 
+  return engine->update();
 }
 
 /* ----------------------------------------------------------------------------
@@ -42,8 +42,8 @@ void doReload(hr::Reloader* r)
 
   // Generate patch subcommand to pass to lake.
   io::StaticBuffer<32> patchnumbuf;
-  patchnumbuf.open(); 
-  io::format(&patchnumbuf, hr::getPatchNumber(r)); 
+  patchnumbuf.open();
+  io::format(&patchnumbuf, hr::getPatchNumber(r));
 
   String args[2] =
   {
@@ -52,7 +52,7 @@ void doReload(hr::Reloader* r)
   };
 
   // Run lake and emit its output.
-  auto lake = 
+  auto lake =
     Process::spawn(
       "/home/sushi/src/enosi/bin/lake"_str,
       Slice<String>::from(args, 2),
@@ -109,15 +109,25 @@ int main(int argc, const char** args)
     iro::log.newDestination("stdout"_str, &fs::stdout, flags);
   }
 
+  LaunchArgs launch_args = {};
   if (argc > 1)
   {
+    launch_args.init();
     for (int i = 1; i < argc; i++)
     {
-      switch (iro::String::fromCStr(args[i]).hash())
+      String key = iro::String::fromCStr(args[i]);
+      if (!key.startsWith('-'))
+        continue;
+
+      LaunchArg arg = { .key = key.hash() };
+      if (i + 1 < argc && args[i+1][0] != '-')
       {
-      case "-wipe"_hashed:
-        //iro::platform::removeDir("data"_str, recursive = true);
-        break;
+        arg.value = iro::String::fromCStr(args[i+1]);
+        i++;
+      }
+      else
+      {
+        launch_args.insert(&arg);
       }
     }
   }
@@ -125,11 +135,11 @@ int main(int argc, const char** args)
 #if ECS_HOT_RELOAD
   void* reload_funcs[] = { (void*)&updateEngine, };
 
-  hr::Reloader* reloader = 
+  hr::Reloader* reloader =
     hr::createReloader(Slice<void*>::from(reload_funcs, 1));
 #endif
 
-  Engine engine = {};
+  Engine engine = { .launch_args = launch_args };
   if (!engine.init())
     return ERROR("failed to initialize engine\n");
 
@@ -138,7 +148,7 @@ int main(int argc, const char** args)
   for (;;)
   {
 #if ECS_HOT_RELOAD
-    // TODO(sushi) call back into the Engine telling it if the reload was 
+    // TODO(sushi) call back into the Engine telling it if the reload was
     //             successful or not.
     if (engine.wantHotReload())
       doReload(reloader);

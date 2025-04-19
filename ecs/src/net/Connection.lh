@@ -1,5 +1,5 @@
 /*
- * A channel for writing/reading packets to/from an address in sequence.
+ * A connection for writing/reading packets to/from an address in sequence.
  */
 $ require "common"
 
@@ -27,7 +27,7 @@ Packet* getOfflinePacket(Source source);
 
 /* ============================================================================
  */
-struct Channel
+struct Connection
 {
   int socket_handle = 0;
   Address address;

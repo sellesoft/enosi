@@ -31,7 +31,7 @@
 namespace iro::platform
 {
 
-static iro::Logger logger = 
+static iro::Logger logger =
   iro::Logger::create("platform.linux"_str, iro::Logger::Verbosity::Notice);
 
 /* ----------------------------------------------------------------------------
@@ -61,9 +61,9 @@ b8 open(fs::File::Handle* out_handle, String path, fs::OpenFlags flags)
   assert(out_handle);
 
   int oflags = 0;
-  
+
 #define flagmap(x, y) if (flags.test(fs::OpenFlag::x)) oflags |= y;
-  
+
   flagmap(Append,    O_APPEND);
   flagmap(Create,    O_CREAT);
   flagmap(Truncate,  O_TRUNC);
@@ -81,7 +81,7 @@ b8 open(fs::File::Handle* out_handle, String path, fs::OpenFlags flags)
     oflags |= O_RDONLY;
   else
   {
-    ERROR("failed to open file at path '", path, 
+    ERROR("failed to open file at path '", path,
         "': one of OpenFlag::Read/Write was not given\n");
     return false;
   }
@@ -119,7 +119,7 @@ s64 read(fs::File::Handle handle, Bytes buffer, b8 non_blocking, b8 is_pty)
     if ((errno != EAGAIN || !non_blocking) &&
         (errno != EIO || !is_pty))
       return reportErrno( "failed to read from file with handle ", handle);
-    else 
+    else
       r = errno = 0;
   }
   return r;
@@ -136,7 +136,7 @@ s64 write(fs::File::Handle handle, Bytes buffer, b8 non_blocking, b8 is_pty)
     if ((errno != EAGAIN || !non_blocking) &&
         (errno != EIO || !is_pty))
       return reportErrno( "failed to write to file with handle ", handle);
-    else 
+    else
       r = errno = 0;
   }
   return r;
@@ -189,8 +189,8 @@ b8 setNonBlocking(fs::File::Handle handle)
 {
   int oldflags = fcntl( (s64)handle, F_GETFL, 0);
   if (-1 == fcntl(
-        (s64)handle, 
-        F_SETFL, 
+        (s64)handle,
+        F_SETFL,
         oldflags | O_NONBLOCK))
     return reportErrno(
         "failed to set file with handle ", handle, " as non-blocking");
@@ -240,7 +240,7 @@ b8 opendir(fs::Dir::Handle* out_handle, fs::File::Handle file_handle)
 
   if (!dir)
     return reportErrno( "failed to open dir from file handle ", file_handle);
-        
+
   *out_handle = dir;
   return false;
 }
@@ -274,17 +274,17 @@ s64 readdir(fs::Dir::Handle handle, Bytes buffer)
       "failed to read directory stream with handle ", handle);
     return -1;
   }
-  
+
   s64 len = strlen(de->d_name);
   if (len > buffer.len)
   {
-    ERROR("buffer given to readdir() is too small. File name '", de->d_name, 
-        "' is ", len, " bytes long, but given buffer is ", buffer.len, 
+    ERROR("buffer given to readdir() is too small. File name '", de->d_name,
+        "' is ", len, " bytes long, but given buffer is ", buffer.len,
         " bytes long\n");
     return -1;
   }
 
-  mem::copy(buffer.ptr, de->d_name, len); 
+  mem::copy(buffer.ptr, de->d_name, len);
   return len;
 }
 
@@ -310,7 +310,7 @@ b8 stat(fs::FileInfo* out_info, String path)
 
   struct statx s;
 
-  int mode = 
+  int mode =
     STATX_MODE |
     STATX_SIZE |
     STATX_ATIME |
@@ -345,11 +345,11 @@ b8 stat(fs::FileInfo* out_info, String path)
     default: out_info->kind = fs::FileKind::Unknown;
 #undef map
   }
-  
+
   out_info->byte_size = s.stx_size;
-  
-  auto timespecToTimePoint = 
-    [](statx_timestamp ts) 
+
+  auto timespecToTimePoint =
+    [](statx_timestamp ts)
       { return TimePoint{u64(ts.tv_sec), u64(ts.tv_nsec)}; };
 
   out_info->birth_time = timespecToTimePoint(s.stx_btime);
@@ -368,13 +368,13 @@ b8 fileExists(String path)
 }
 
 /* ----------------------------------------------------------------------------
- *  This implementation will not work on Linux versions < 2.6.33 but I'm not 
- *  sure if that'll ever be a problem. sendfile is more efficient than simply 
+ *  This implementation will not work on Linux versions < 2.6.33 but I'm not
+ *  sure if that'll ever be a problem. sendfile is more efficient than simply
  *  read/writing because it doesnt require moving mem around in userspace.
- */ 
+ */
 b8 copyFile(String dst, String src)
 {
-  assert(notnil(dst) and notnil(src) and 
+  assert(notnil(dst) and notnil(src) and
          not dst.isEmpty() and not src.isEmpty());
 
   using namespace fs;
@@ -387,9 +387,9 @@ b8 copyFile(String dst, String src)
   }
   defer { srcf.close(); };
 
-  auto dstf = File::from(dst, 
-        OpenFlag::Write 
-      | OpenFlag::Truncate 
+  auto dstf = File::from(dst,
+        OpenFlag::Write
+      | OpenFlag::Truncate
       | OpenFlag::Create);
   if (isnil(dstf))
   {
@@ -403,7 +403,7 @@ b8 copyFile(String dst, String src)
 
   while (bytes_copied > 0)
   {
-    bytes_copied = 
+    bytes_copied =
       sendfile((s64)dstf.handle, (s64)srcf.handle, nullptr, srcinfo.byte_size);
     if (bytes_copied < 0)
       return reportErrno( "failed to copy '", src, "' to '", dst, "'");
@@ -455,7 +455,7 @@ b8 makeDir(String path, b8 make_parents)
     return true;
   }
 
-  // TODO(sushi) if this is ever hit make it use dynamic alloc to handle it 
+  // TODO(sushi) if this is ever hit make it use dynamic alloc to handle it
   if (path.len >= 4096)
   {
     ERROR("path given to makeDir is too long! "
@@ -468,7 +468,7 @@ b8 makeDir(String path, b8 make_parents)
   for (s32 i = 0; i < path.len; i++)
   {
     u8 c = path_buffer[i] = path.ptr[i];
-    
+
     if (c == '/' || i == path.len - 1)
     {
       if (-1 == mkdir((char*)path_buffer, 0777))
@@ -488,7 +488,7 @@ b8 makeDir(String path, b8 make_parents)
 struct ProcessLinux
 {
   // TODO(sushi) considering this is all we store here and all we need to store
-  //             on win32 is a HANDLE we should probably just store it on 
+  //             on win32 is a HANDLE we should probably just store it on
   //             the Process and avoid this static pool stuff.
   pid_t pid;
   int stdin;
@@ -502,9 +502,9 @@ static ProcessPool g_process_pool;
 /* ----------------------------------------------------------------------------
  */
 b8 processSpawn(
-    Process::Handle* out_handle, 
-    String file, 
-    Slice<String> args, 
+    Process::Handle* out_handle,
+    String file,
+    Slice<String> args,
     String cwd,
     b8 non_blocking,
     b8 redirect_err_to_out)
@@ -515,7 +515,7 @@ b8 processSpawn(
   if (p_proc == nullptr)
     return ERROR("failed to allocate a ProcessLinux\n");
 
-  // TODO(sushi) replace this with some container thats a stack buffer 
+  // TODO(sushi) replace this with some container thats a stack buffer
   //             up to a point then dynamically allocates
   Array<char*> argsc = Array<char*>::create(args.len);
   argsc.push((char*)file.ptr);
@@ -559,8 +559,8 @@ b8 processSpawn(
     {
       int oldflags = fcntl(stdout_pipes[0], F_GETFL, 0);
       if (-1 == fcntl(
-            stdout_pipes[0], 
-            F_SETFL, 
+            stdout_pipes[0],
+            F_SETFL,
             oldflags | O_NONBLOCK))
         return reportErrno("failed to set child pipe as non-blocking");
 
@@ -587,7 +587,7 @@ b8 processSpawn(
     if (notnil(cwd))
     {
       // this miiight cause problems if the string were given is destroyed
-      // before we reach this point somehow but hopefully that is very 
+      // before we reach this point somehow but hopefully that is very
       // unlikely
       chdir(cwd);
     }
@@ -696,7 +696,7 @@ u64 processReadStdErr(Process::Handle h_process, Bytes buffer)
   {
     if (errno == EAGAIN)
       r = errno = 0;
-    else 
+    else
       return reportErrno("failed to read stderr from process\n");
   }
 
@@ -717,7 +717,7 @@ u64 processWrite(Process::Handle h_process, Bytes buffer)
   {
     if (errno == EAGAIN)
       r = errno = 0;
-    else 
+    else
       return reportErrno("failed to write to process\n");
   }
 
@@ -767,7 +767,7 @@ b8 processClose(Process::Handle h_process)
   auto* p_proc = (ProcessLinux*)h_process;
   if (p_proc == nullptr)
     return ERROR("processClose passed a null process handle\n");
-  
+
   if (!processHasExited(h_process, nullptr))
   {
     if (-1 == kill(p_proc->pid, SIGKILL))
@@ -803,7 +803,7 @@ b8 realpath(fs::Path* path)
 fs::Path cwd(mem::Allocator* allocator)
 {
   fs::Path path;
-  
+
   if (!path.init(allocator))
     return nil;
 
@@ -819,7 +819,7 @@ fs::Path cwd(mem::Allocator* allocator)
       if (errno != ERANGE)
       {
         path.destroy();
-        reportErrno("failed to get cwd"); 
+        reportErrno("failed to get cwd");
         return nil;
       }
 
@@ -859,7 +859,7 @@ b8 chdir(fs::Dir::Handle dir)
 {
   if (-1 == fchdir((int)dirfd((DIR*)dir)))
     return reportErrno(
-        "failed to chdir into directory with handle ", 
+        "failed to chdir into directory with handle ",
         (void*)dir);
   return true;
 
@@ -869,7 +869,7 @@ b8 chdir(fs::Dir::Handle dir)
  */
 TermSettings termSetNonCanonical(mem::Allocator* allocator)
 {
-  struct termios* mode = 
+  struct termios* mode =
     (struct termios*)allocator->allocate(sizeof(struct termios));
 
   tcgetattr(STDIN_FILENO, mode);
@@ -903,7 +903,7 @@ b8 touchFile(String path)
   newtimes.actime = info.st_atime;
 
   if (-1 == utime((char*)path.ptr, &newtimes))
-    return reportErrno("failed to set modtime of path '", path, "'"); 
+    return reportErrno("failed to set modtime of path '", path, "'");
 
   return true;
 }
@@ -987,6 +987,70 @@ u32 byteSwap(u32 x)
 u64 byteSwap(u64 x)
 {
   return __builtin_bswap64(x);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void* reserve_memory(u64 size)
+{
+  void* result = mmap(nullptr, size, PROT_NONE,
+    MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+  if (result == MAP_FAILED)
+  {
+    reportErrno("failed to reserve memory");
+    result = nullptr;
+  }
+  return result;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 commit_memory(void* ptr, u64 size)
+{
+  if (-1 == mprotect(ptr, size, PROT_READ | PROT_WRITE))
+    return reportErrno("failed to commit memory");
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void* reserve_large_memory(u64 size)
+{
+  void* result = mmap(nullptr, size, PROT_NONE,
+    MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
+  if (result == MAP_FAILED)
+  {
+    reportErrno("failed to reserve large memory");
+    result = nullptr;
+  }
+  return result;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 commit_large_memory(void* ptr, u64 size)
+{
+  if (-1 == mprotect(ptr, size, PROT_READ | PROT_WRITE))
+    return reportErrno("failed to commit memory");
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void decommit_memory(void* ptr, u64 size)
+{
+  if (-1 == madvise(ptr, size, MADV_DONTNEED))
+    return reportErrno("failed to decommit memory");
+  if (-1 == mprotect(ptr, size, PROT_NONE))
+    return reportErrno("failed to decommit memory");
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void release_memory(void* ptr, u64 size)
+{
+  if (-1 == munmap(ptr, size))
+    return reportErrno("failed to release memory");
 }
 
 }

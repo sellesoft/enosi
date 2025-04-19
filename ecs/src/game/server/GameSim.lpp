@@ -1,0 +1,59 @@
+$ require "common"
+
+@@lpp.import "Engine.lh"
+@@lpp.import "game/server/GameSim.lh"
+@@lpp.import "game/shared/entity/EntitySysMgr.lh"
+@@lpp.import "game/shared/map/Map.defs.lh"
+@@lpp.import "game/shared/map/Map.sys.lh"
+
+#include "iro/Common.h"
+#include "iro/Logger.h"
+
+@log.ger(sv.gamesim, Info)
+
+namespace sv
+{
+
+/* ----------------------------------------------------------------------------
+ */
+b8 GameSim::init(const InitParams& params)
+{
+  if (!SharedGameSim::init(params))
+    return false;
+
+  if (!this->entsysmgr.init({this->entmgr}))
+    return @log.error("failed to initialize the entity system manager\n");
+
+  MapSys::LoadParams map_params =
+  {
+    .assetmgr = this->engine->assetmgr,
+    .entmgr   = this->entmgr,
+  };
+  if(!entsysmgr.get<MapSys>().load(params.map_def, map_params))
+    return @log.error("failed to load map '", params.map_def.name, "'\n");
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void GameSim::deinit()
+{
+  this->entsysmgr.deinit();
+  SharedGameSim::deinit();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 GameSim::update()
+{
+  if (!SharedGameSim::update())
+    return false;
+
+  if (!this->entsysmgr.update())
+    return @log.error("failed to update the entity system manager\n");
+
+  return true;
+}
+
+}

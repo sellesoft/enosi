@@ -5,7 +5,7 @@ $ local ast = require "reflect.AST"
 
 #include "iro/time/Time.h"
 
-@log.ger(cl.entsysmgr, Debug)
+@log.ger(sv.entsysmgr, Debug)
 
 using namespace iro;
 
@@ -15,8 +15,8 @@ $$$
 local TEntSys
 local importer = require "reflect.Importer"
 {
-  patterns = 
-  { 
+  patterns =
+  {
     "src/game/server/**/*.sys.lh",
     "src/game/shared/**/*.sys.lh",
   },
@@ -36,9 +36,176 @@ $$$
 namespace sv
 {
 
+$ -- * ------------------------------------------------------------------------
+
+$ local function isSys(decl)
+$   if decl:is(ast.Record) and decl:isDerivedFrom(TEntSys) then
+$     return true
+$   end
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ -- Gather info about each system into a map and list for easy iteration
+$ -- and lookup by canonical name.
+$ local systems_by_canonical_name = {}
+$ local systems = cmn.List{}
+$ importer:eachDecl(function(name, decl)
+$   if isSys(decl) then
+$     -- Only take classes that aren't derived from to avoid creating both
+$     -- the shared version of a system that is derived from on client side.
+$     if decl.derived:isEmpty() then
+$       local system =
+$       {
+$         name = decl:getIdSafeName():match("([%w_]-)Sys"):lower(),
+$         typename = name,
+$         decl = decl,
+$       }
+$       systems_by_canonical_name[decl.name] = system
+$       systems:push(system)
+$     end
+$   end
+$ end)
+
+/* ============================================================================
+ */
+struct EntitySystems
+{
+$ systems:each(function(sys)
+  $(sys.typename) $(sys.name);
+$ end)
+};
+
+/* ----------------------------------------------------------------------------
+ */
 b8 EntitySysMgr::init(const InitParams& params)
 {
-  
+  INFO("initializing entity systems...\n");
+  auto init_start = TimePoint::now();
+
+  if (!SharedEntitySysMgr::init(params))
+    return false;
+
+  // Bulk allocate all entity systems.
+  systems = mem::stl_allocator.allocateType<EntitySystems>();
+  mem::zero(systems, sizeof(EntitySystems));
+
+  INFO("allocated ", color::green(io::ByteUnits(sizeof(EntitySystems))),
+       " for servert entity systems\n");
+
+  auto on_fail_deallocate_systems = deferWithCancel
+  {
+    mem::stl_allocator.free(systems);
+  };
+
+  // Trick to properly resolve references to other systems by first
+  // initializing the system on the stack with the reference then mem
+  // copying that over to the actual system on heap to allow them to
+  // use C++ style references w/o needing each system to make a constructor
+  // that takes in the reference.
+  //
+  // This is somewhat hacky and prob inefficient but since it's only done
+  // once, I don't really have a problem with it. Another reason why we
+  // do it this way is because it also supports systems defining default
+  // values, as those will be properly initialized when we create it on
+  // the stack.
+$ systems:each(function(sys)
+$   if not sys.decl:hasMethod "init" then
+$     error("system "..sys.typename.." is missing an 'init' function")
+$   end
+  $(sys.typename) $(sys.name) =
+  {
+$ local function initializer(decl)
+$   for base in decl.bases:each() do
+    {
+$     initializer(base)
+    },
+$   end
+$   if decl == TEntSys then
+    .entmgr = params.entmgr,
+$     return
+$   end
+$   for field in decl:eachFieldWithIndex() do
+$     local is_ptr = field.type:is(ast.PointerType)
+$     local is_ref = field.type:is(ast.ReferenceType)
+$     if is_ptr or is_ref then
+$       local decl = field.type.subtype:getDecl()
+$       if decl and isSys(decl) then
+$         local sysname =
+$           "systems->"..systems_by_canonical_name[decl.name].name
+$         if is_ptr then
+    .$(field.name) = &$(sysname),
+$         else
+    .$(field.name) = $(sysname),
+$         end
+$       end
+$     else
+$       -- Prevent systems from trying to store another system.
+$       local decl = field.type:getDecl()
+$       if decl and isSys(decl) then
+$         error("systems are not allowed to store another system! "..
+$               "use a reference or pointer.")
+$       end
+$     end
+$   end
+$ end
+$ initializer(sys.decl)
+  };
+  // Copy the stack initialized system over to the heap.
+  mem::copy(&systems->$(sys.name), &$(sys.name), sizeof($(sys.typename)));
+$ end)
+
+  TimePoint sys_init_start;
+
+$ systems:each(function(sys)
+  sys_init_start = TimePoint::now();
+  if (!systems->$(sys.name).init())
+    return false;
+  INFO("initialized ", color::cyan("$(sys.typename)"_str), " in ",
+       WithUnits(TimePoint::now() - sys_init_start), "\n");
+$ end)
+
+  INFO("initialized all server entity systems in ",
+       WithUnits(TimePoint::now() - init_start), "!\n");
+
+  on_fail_deallocate_systems.cancel();
+  return true;
 }
+
+/* ----------------------------------------------------------------------------
+ */
+void EntitySysMgr::deinit()
+{
+$ systems:each(function(sys)
+$   if sys.decl:hasMethod "deinit" then
+  systems->$(sys.name).deinit();
+$   end
+$ end)
+
+  SharedEntitySysMgr::deinit();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 EntitySysMgr::update()
+{
+$ systems:each(function(sys)
+$   if sys.decl:hasMethod "update" then
+  systems->$(sys.name).update();
+$   end
+$ end)
+  return true;
+}
+
+$ systems:each(function(sys)
+/* ----------------------------------------------------------------------------
+ */
+template<>
+$(sys.typename)& EntitySysMgr::get<$(sys.typename)>()
+{
+  return systems->$(sys.name);
+}
+
+$ end)
 
 }

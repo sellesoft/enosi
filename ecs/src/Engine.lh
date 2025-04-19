@@ -1,6 +1,8 @@
 $ local cmn = require "common"
 
 #include "iro/time/Time.h"
+#include "iro/containers/AVL.h"
+#include "iro/Unicode.h"
 
 @@lpp.import "window/Window.lh"
 @@lpp.import "graphics/Renderer.lh"
@@ -13,7 +15,7 @@ $ local cmn = require "common"
 @@lpp.import "input/InputMgr.lh"
 
 // TODO(sushi) move this stuff elsewhere and remove this pure C++ header,
-//             I have absolutely no idea why I implemented it like this 
+//             I have absolutely no idea why I implemented it like this
 //             way back then.
 #include "event/BroadcastEventBus.h"
 
@@ -32,10 +34,18 @@ struct Server;
 
 /* ============================================================================
  */
-//NOTE(delle) fields are in order of initialization
+struct LaunchArg { u64 key; String value; };
+static u64 getLaunchArgKey(const LaunchArg* a) { return a->key; }
+typedef iro::AVL<LaunchArg, getLaunchArgKey> LaunchArgs;
+
+/* ============================================================================
+ * NOTE(delle) fields are in order of initialization
+ */
 struct Engine
 {
   f64 frame_start_time;
+
+  LaunchArgs launch_args;
 
   SourceDataFileReg source_data_file_reg;
 
@@ -60,13 +70,13 @@ struct Engine
 
   ui::Inspector* inspector;
 
-  // Time point at which the Engine finished initialization.
-  TimePoint init_time;
-
-  // The client/server threads, allocated depending on the situation ECS 
+  // The client/server threads, allocated depending on the situation ECS
   // is running under.
   Client* client;
   Server* server;
+
+  // Time point at which the Engine finished initialization.
+  TimePoint init_time;
 
   b8 init();
   void deinit();

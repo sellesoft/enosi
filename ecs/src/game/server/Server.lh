@@ -1,0 +1,59 @@
+/*
+ *  Functions for creating a Server, which contains the server-side systems
+ *  and memory needed when the game is running as a server.
+ */
+$ require "common"
+
+#include "iro/Common.h"
+#include "iro/containers/StackArray.h"
+
+struct Engine;
+struct Server;
+
+namespace sv
+{
+
+/* ============================================================================
+ */
+enum struct ServerPublicity : u8
+{
+  Offline,
+  Friend,
+  Password,
+  Public,
+};
+
+/* ============================================================================
+ */
+struct CreateParams
+{
+  Engine& engine;
+  u64 global_allocation_size;
+  u64 match_allocation_size;
+  u64 tick_allocation_size;
+  b8 dedicated;
+  ServerPublicity publicity;
+  StackArray<u8, 64> password;
+};
+
+/* ----------------------------------------------------------------------------
+ */
+Server* create(const CreateParams& params);
+
+/* ----------------------------------------------------------------------------
+ */
+void destroy(Server* server);
+
+/* ----------------------------------------------------------------------------
+ */
+b8 startMatch(Server* server, u64 map_name, b8 existing);
+
+/* ----------------------------------------------------------------------------
+ */
+void stopMatch(Server* server);
+
+/* ----------------------------------------------------------------------------
+ */
+b8 update(Server* server);
+
+} // namespace sv

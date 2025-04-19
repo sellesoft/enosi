@@ -4,13 +4,15 @@
 
 $ require "common"
 
-@@lpp.import "asset/Asset.lh"
 @@lpp.import "asset/OffsetPtr.lh"
 
+#include "iro/Common.h"
 #include "iro/containers/SmallArray.h"
+#include "iro/Unicode.h"
 
 struct Asset;
 struct AssetMgr;
+struct Ref;
 struct SourceDataFileReg;
 
 /* ============================================================================
@@ -40,8 +42,8 @@ struct CompiledData
   static b8 compile(const CompileParams& params);
 
   static CompiledData* load(
-    String name, 
-    String type, 
+    String name,
+    String type,
     AssetMgr& assetmgr,
     Asset** out_asset = nullptr);
 
@@ -50,15 +52,15 @@ struct CompiledData
   {
     return (T*)root.getSlice().ptr;
   }
-  
-  void makeDataPointersAbsolute(); 
+
+  void makeDataPointersAbsolute();
 
   struct DataRef
   {
     String type;
     Ref* ptr;
-  };  
-  
+  };
+
   typedef SmallArray<DataRef, 16> Refs;
 
   void getRefs(Refs* refs);

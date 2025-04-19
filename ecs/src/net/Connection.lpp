@@ -18,14 +18,14 @@ $ else -- if IRO_WIN32
 #include <fcntl.h>
 $ end -- if not IRO_WIN32
 
-@@lpp.import "net/Channel.lh"
+@@lpp.import "net/Connection.lh"
 @@lpp.import "net/Packet.lh"
 
 #include "iro/Logger.h"
 
 using namespace iro;
 
-@log.ger(net.channel, Info)
+@log.ger(net.connection, Info)
 
 $ if IRO_WIN32 then
 #define NET_ERROR(msg) \
@@ -67,9 +67,9 @@ Packet* getOfflinePacket(Source source)
     return &offline_packet[1];
 }
 
-b8 Channel::init(Address address)
+b8 Connection::init(Address address)
 {
-  TRACE("initializing a channel\n");
+  TRACE("initializing a connection\n");
 
   this->socket_handle = 0;
   this->address = address;
@@ -147,9 +147,9 @@ $ end -- if not IRO_WIN32
   return true;
 }
 
-void Channel::deinit()
+void Connection::deinit()
 {
-  TRACE("deinitializing a channel\n");
+  TRACE("deinitializing a connection\n");
   if (this->socket_handle == 0)
     return;
 
@@ -161,18 +161,21 @@ $ end -- if not IRO_WIN32
   this->socket_handle = 0;
 }
 
-b8 Channel::send(Source source, const Packet& packet)
+b8 Connection::send(Source source, const Packet& packet)
 {
+  // TODO(delle) implement this
   return false;
 }
 
-b8 Channel::sendPriorityMessage(Source source, const u8* data, u32 size)
+b8 Connection::sendPriorityMessage(Source source, const u8* data, u32 size)
 {
+  // TODO(delle) implement this
   return false;
 }
 
-b8 Channel::read(Source source, Packet& packet)
+b8 Connection::read(Source source, Packet& packet)
 {
+  // TODO(delle) implement this
   return false;
 }
 
