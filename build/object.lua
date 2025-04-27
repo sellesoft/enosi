@@ -505,7 +505,19 @@ local defineLinkerTask = function(self, is_shared, lib_filter)
     local disabled_warnings = buffer.new()
 
     if sys.os == "windows" then
-      disabled_warnings:put("-Wl,-IGNORE:")
+      if "ld" == params.linker
+        or "lld" == params.linker
+        or "mold" == params.linker
+      then
+        disabled_warnings:put("-Wl,-IGNORE:")
+      elseif "link" == params.linker
+        or "lld-link" == params.linker
+        or "radlink" == params.linker
+      then
+        disabled_warnings:put("-IGNORE:")
+      else
+        error("unhandled linker "..params.linker)
+      end
     else
       disabled_warnings:put("-Wl,--warn-suppress=")
     end
@@ -524,7 +536,19 @@ local defineLinkerTask = function(self, is_shared, lib_filter)
     params.end_group = ""
     params.export_dynamic = ""
     -- TODO: support launching without a console
-    params.subsystem = "-Wl,-SUBSYSTEM:CONSOLE"
+    if "ld" == params.linker
+      or "lld" == params.linker
+      or "mold" == params.linker
+    then
+      params.subsystem = "-Wl,-SUBSYSTEM:CONSOLE"
+    elseif "link" == params.linker
+      or "lld-link" == params.linker
+      or "radlink" == params.linker
+    then
+      params.subsystem = "-SUBSYSTEM:CONSOLE"
+    else
+      error("unhandled linker "..params.linker)
+    end
   else
     params.start_group = "-Wl,--start-group"
     params.end_group = "-Wl,--end-group"

@@ -417,6 +417,28 @@ cmd.Exe.new = function(params)
       --             load into the init script as its probably safer and
       --             more portable.
       --"-Wl,-rpath,$ORIGIN")
+  elseif "link" == params.linker
+    or "lld-link" == params.linker
+    or "radlink" == params.linker
+  then
+    o.partial = helpers.listBuilder(
+      params.linker,
+      "-nologo",
+      params.subsystem,
+      params.is_shared and "-dll",
+      params.debug_info and "-debug:full",
+      params.disabled_warnings or "")
+
+    o.links = helpers.listBuilder(
+      params.libdirs and params.libdirs:flatten():map(function(dir)
+        return "-libpath:"..dir
+      end),
+      params.shared_libs and params.shared_libs:flatten():map(function(lib)
+        return lib..".lib"
+      end),
+      params.static_libs and params.static_libs:flatten():map(function(lib)
+        return lib..".lib"
+      end))
   else
     error("unhandled linker "..params.linker)
   end
@@ -425,12 +447,28 @@ cmd.Exe.new = function(params)
 end
 
 cmd.Exe.complete = function(self, objs, out)
-  return helpers.listBuilder(
-    self.partial,
-    objs,
-    "-o",
-    out,
-    self.links)
+  if "ld" == self.linker
+    or "lld" == self.linker
+    or "mold" == self.linker
+  then
+    return helpers.listBuilder(
+      self.partial,
+      objs,
+      "-o",
+      out,
+      self.links)
+  elseif "link" == self.linker
+    or "lld-link" == self.linker
+    or "radlink" == self.linker
+  then
+    return helpers.listBuilder(
+      self.partial,
+      objs,
+      "-out:"..out,
+      self.links)
+  else
+    error("unhandled linker "..self.linker)
+  end
 end
 
 ---@class cmd.StaticLib.Params
