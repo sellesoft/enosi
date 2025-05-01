@@ -1,0 +1,31 @@
+/*
+ *  The server allocator is a simple bump allocator since global and match
+ *  allocations should only be created on startup and freed on shutdown
+ *  (systems can setup their own more complex allocators as needed). Tick
+ *  allocations are cleared every update so we don't need anything more
+ *  complex there either.
+ */
+$ require "common"
+
+#include "iro/Common.h"
+#include "iro/memory/Allocator.h"
+
+namespace sv
+{
+
+struct ServerAllocator : public iro::mem::Allocator
+{
+  u8* backing;
+  u64 size;
+  u64 used;
+
+  b8 init(u64 size);
+  void deinit();
+  void clear();
+
+  void* allocate(u64 size) override;
+  void* reallocate(void* ptr, u64 size) override;
+  void  free(void* ptr) override;
+};
+
+} // namespace sv

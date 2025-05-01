@@ -4,31 +4,30 @@ $ local Style = require "ui.Style"
 
 @@lpp.import "Engine.lh"
 
+#include "iro/containers/StackArray.h"
 #include "iro/fs/Glob.h"
 #include "iro/Logger.h"
 #include "iro/time/Time.h"
 using namespace iro;
-
-// Introduce events and the event bus definitions.
-@@lpp.import "event/BroadcastEventBus.lh"
-
-@@lpp.import "graphics/Font.lh"
-@@lpp.import "graphics/CompiledShader.lh"
-@@lpp.import "ui/widgets/Text.lh"
-@@lpp.import "ui/widgets/Button.lh"
-@@lpp.import "ui/widgets/Separator.lh"
-@@lpp.import "ui/widgets/InputText.lh"
-@@lpp.import "ui/widgets/CollapsingHeader.lh"
-
-@@lpp.import "ui/Inspector.lh"
 
 @@lpp.import "asset/Packing.lh"
 @@lpp.import "asset/CompiledData.lh"
 @@lpp.import "asset/SourceDataFile.lh"
 @@lpp.import "asset/SourceDataParser.lh"
 @@lpp.import "asset/SourceDataEditor.lh"
+@@lpp.import "event/BroadcastEventBus.lh"
+@@lpp.import "graphics/Font.lh"
+@@lpp.import "graphics/CompiledShader.lh"
+@@lpp.import "net/Connection.lh"
+@@lpp.import "ui/Inspector.lh"
+@@lpp.import "ui/widgets/Text.lh"
+@@lpp.import "ui/widgets/Button.lh"
+@@lpp.import "ui/widgets/Separator.lh"
+@@lpp.import "ui/widgets/InputText.lh"
+@@lpp.import "ui/widgets/CollapsingHeader.lh"
 
 @@lpp.import "game/client/Client.lh"
+@@lpp.import "game/server/Server.lh"
 
 static Logger logger =
   Logger::create("ecs.eng"_str, Logger::Verbosity::Info);
@@ -58,6 +57,7 @@ $ end
 
   @initSystem(source_data_file_reg.init(),              source data file reg);
   @initSystem(eventbus.broadcast.init(),                broadcast event bus);
+  @initSystem(net::init(),                              net);
   @initSystem(input.init(*this),                        input);
   @initSystem(Window::initializeBackend(),              window backend);
   @initSystem(window.init("ecs"_str,input),             window);
@@ -85,17 +85,17 @@ $ end
       .assetmgr     = &assetmgr,
     };
 
-    u8 pixels[16] = 
-    { 
-      0xff, 0xff, 0xff, 0xff, 
-      0xff, 0xff, 0xff, 0xff, 
-      0xff, 0xff, 0xff, 0xff, 
-      0xff, 0xff, 0xff, 0xff, 
+    u8 pixels[16] =
+    {
+      0xff, 0xff, 0xff, 0xff,
+      0xff, 0xff, 0xff, 0xff,
+      0xff, 0xff, 0xff, 0xff,
+      0xff, 0xff, 0xff, 0xff,
     };
 
     gfx::CompiledTexture::compileFromMemory(pixels, white_texture_params);
 
-    auto* white_texture_compiled = 
+    auto* white_texture_compiled =
       gfx::CompiledTexture::load(
         "assets/textures/white"_str,assetmgr, renderer);
     if (white_texture_compiled == nullptr)
@@ -115,7 +115,7 @@ $ end
 
     gfx::CompiledTexture::compilePNG(null_texture_params);
 
-    auto* null_texture_compiled = 
+    auto* null_texture_compiled =
       gfx::CompiledTexture::load(
         "assets/textures/null"_str, assetmgr, renderer);
     if (null_texture_compiled == nullptr)
@@ -250,7 +250,33 @@ $ else
 
 $ end
 
-  client = clientCreate(this);
+  if (launch_args.find("-dedicated"_hashed))
+  {
+    StackArray<u8, 64> password = {};
+    LaunchArg* password_arg = launch_args.find("-password"_hashed);
+    if (password_arg != nullptr)
+    {
+      password.len = min(64ULL, password_arg->value.len);
+      mem::copy(password.arr, password_arg->value.ptr, password.len);
+    }
+
+    sv::CreateParams server_params =
+    {
+      .engine = *this,
+      .global_allocation_size = unit::kilobytes(10),
+      .match_allocation_size = unit::kilobytes(100),
+      .tick_allocation_size = unit::megabytes(2),
+      .dedicated = true,
+      .publicity = (password.len > 0)
+        ? sv::ServerPublicity::Password : sv::ServerPublicity::Public,
+      .password = password,
+    };
+    server = sv::create(server_params);
+  }
+  else
+  {
+    client = clientCreate(this);
+  }
 
   init_time = TimePoint::now();
 
@@ -287,7 +313,10 @@ b8 Engine::update()
   if (!input.update(*this))
     return ERROR("failed to update input\n");
 
-  clientUpdate(client);
+  if (client)
+    clientUpdate(client);
+  if (server)
+    sv::update(server);
 
   if (!ui.update(*this))
     return ERROR("failed to update ui\n");

@@ -14,6 +14,7 @@ if sys.os == "linux" then
 elseif sys.os == "windows" then
   ecs.report.ext.SharedLib "user32"
   ecs.report.ext.SharedLib "gdi32"
+  ecs.report.ext.StaticLib "Ws2_32"
 else
   error "unhandled os"
 end
@@ -73,7 +74,7 @@ for cfile in lake.find "src/**/*.cpp" :each() do
 end
 
 
-local ecs_bobjs = 
+local ecs_bobjs =
   ecs:gatherBuildObjects{bobj.LppObj, bobj.LuaObj, bobj.CppObj}
 
 if sys.isProjectEnabled "hreload" then

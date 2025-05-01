@@ -4,13 +4,15 @@
 
 $ require "common"
 
-@@lpp.import "asset/Asset.lh"
 @@lpp.import "asset/OffsetPtr.lh"
 
+#include "iro/Common.h"
 #include "iro/containers/SmallArray.h"
+#include "iro/Unicode.h"
 
 struct Asset;
 struct AssetMgr;
+struct Ref;
 struct SourceDataFileReg;
 
 /* ============================================================================
@@ -52,8 +54,8 @@ struct CompiledData
   // that was provided for 'compile', not a path to where it would show up in 
   // data/. Similarly to 'compile' the extension may be omitted in the name.
   static CompiledData* load(
-    String name, 
-    String type, 
+    String name,
+    String type,
     AssetMgr& assetmgr,
     Asset** out_asset = nullptr);
 
@@ -80,8 +82,8 @@ struct CompiledData
   {
     String type;
     Ref* ptr;
-  };  
-  
+  };
+
   typedef SmallArray<DataRef, 16> Refs;
 
   void getRefs(Refs* refs);

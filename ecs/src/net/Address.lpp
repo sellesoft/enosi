@@ -1,0 +1,421 @@
+/*
+ * ref: https://github.com/id-Software/Quake-III-Arena/blob/master/code/qcommon/qcommon.h
+ * ref: https://github.com/ValveSoftware/GameNetworkingSockets/blob/master/include/steam/steamnetworkingtypes.h
+ */
+$ require "common"
+
+$ if IRO_WIN32 then
+#define WIN32_LEAN_AND_MEAN
+#include <Winsock2.h>
+#include <ws2def.h>
+#include <ws2tcpip.h>
+#undef ERROR
+#undef max
+#undef min
+#undef interface
+$ else -- if IRO_WIN32
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <netinet/in.h>
+$ end -- if not IRO_WIN32
+
+@@lpp.import "net/Address.lh"
+
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+#include "iro/memory/Memory.h"
+
+#include <cstdlib>
+#include <cstdio>
+
+using namespace iro;
+
+namespace net
+{
+
+Address::Address()
+{
+  this->type = AddressType::Invalid;
+}
+
+Address::Address(u32 ipv4, u16 port)
+{
+  if (ipv4 == 0)
+  {
+    this->type = AddressType::Offline;
+  }
+  else
+  {
+    this->ipv4._8zeros = 0;
+    this->ipv4._0000 = 0;
+    this->ipv4._ffff = 0xffff;
+    this->ipv4.ip[0] = (u8)(ipv4 >> 24);
+    this->ipv4.ip[1] = (u8)(ipv4 >> 16);
+    this->ipv4.ip[2] = (u8)(ipv4 >> 8);
+    this->ipv4.ip[3] = (u8)(ipv4);
+    this->port = port;
+
+    if (   this->ipv4.ip[0] == 127 && this->ipv4.ip[1] == 0
+        && this->ipv4.ip[2] == 0   && this->ipv4.ip[3] == 1)
+    {
+      this->type = AddressType::Local;
+    }
+    else
+    {
+      this->type = AddressType::Remote;
+    }
+  }
+}
+
+Address::Address(u8 ipv4a, u8 ipv4b, u8 ipv4c, u8 ipv4d, u16 port)
+{
+  if (ipv4a == 0 && ipv4b == 0 && ipv4c == 0 && ipv4d == 0)
+  {
+    this->type = AddressType::Offline;
+  }
+  else
+  {
+    this->ipv4._8zeros = 0;
+    this->ipv4._0000 = 0;
+    this->ipv4._ffff = 0xffff;
+    this->ipv4.ip[0] = ipv4a;
+    this->ipv4.ip[1] = ipv4b;
+    this->ipv4.ip[2] = ipv4c;
+    this->ipv4.ip[3] = ipv4d;
+    this->port = port;
+
+    if (   this->ipv4.ip[0] == 127 && this->ipv4.ip[1] == 0
+        && this->ipv4.ip[2] == 0   && this->ipv4.ip[3] == 1)
+    {
+      this->type = AddressType::Local;
+    }
+    else
+    {
+      this->type = AddressType::Remote;
+    }
+  }
+}
+
+Address::Address(const u8* ipv6, u16 port)
+{
+  const u64* v1 = (const u64*)ipv6;
+  if (v1[0] == 0 && v1[1] == 0)
+  {
+    this->type = AddressType::Offline;
+  }
+  else
+  {
+    u64* v2 = (u64*)this->ipv6;
+    v2[0] = v1[0];
+    v2[1] = v1[1];
+    this->port = port;
+
+    if (   this->ipv4._8zeros == 0 && this->ipv4._0000 == 0
+        && this->ipv4._ffff == 0 && ipv6[12] == 0 && ipv6[13] == 0
+        && ipv6[14] == 0 && ipv6[15] == 1)
+    {
+      this->type = AddressType::Local;
+    }
+    else
+    {
+      this->type = AddressType::Remote;
+    }
+  }
+}
+
+Address::Address(utf8::String address_string)
+{
+  this->type = AddressType::Invalid;
+  if (address_string.isEmpty())
+    return;
+  assert(address_string.len <= 63);
+
+  // ensure the address string is null-terminated
+  io::StaticBuffer<63> address_buffer;
+  address_buffer.write(address_string);
+  address_string = address_buffer.asStr();
+
+  // parse domain name address like "some.domain.com:8080"
+  if (address_string.ptr[0] < '0' || address_string.ptr[0] > '9')
+  {
+    addrinfo hints;
+    addrinfo* result;
+    mem::zero(&hints, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_DGRAM;
+
+    utf8::String host = address_string;
+    utf8::String port_str;
+    auto colon_pos = address_string.findLast(':');
+    if (colon_pos.found())
+    {
+      host = address_string.subToFirst(':');
+      port_str = address_string.sub(colon_pos.x + 1);
+    }
+
+    const char* port_cstr = port_str.isEmpty() ? "0" :
+      (const char*)port_str.ptr;
+
+    if (getaddrinfo((const char*)host.ptr, port_cstr, &hints, &result) == 0)
+    {
+      if (result->ai_family == AF_INET)
+      {
+        struct sockaddr_in* addr = (struct sockaddr_in*)result->ai_addr;
+        this->ipv4._8zeros = 0;
+        this->ipv4._0000 = 0;
+        this->ipv4._ffff = 0xffff;
+        mem::copy(this->ipv4.ip, &addr->sin_addr, 4);
+        this->port = ntohs(addr->sin_port);
+        this->type = AddressType::Remote;
+      }
+      else if (result->ai_family == AF_INET6)
+      {
+        struct sockaddr_in6* addr = (struct sockaddr_in6*)result->ai_addr;
+        mem::copy(this->ipv6, &addr->sin6_addr, 16);
+        this->port = ntohs(addr->sin6_port);
+        this->type = AddressType::Remote;
+      }
+      freeaddrinfo(result);
+    }
+
+    return;
+  }
+
+  // parse IPv6 address like "2001:0db8:85a3:0000:0000:8a2e:0370:7334"
+  auto first_colon = address_string.findFirst(':');
+  auto last_colon = address_string.findLast(':');
+  if (first_colon.found() && first_colon.x != last_colon.x)
+  {
+    u16 groups[8] = {0};
+    int group_count = 0;
+    utf8::String remaining = address_string;
+    u16 port = 0;
+    auto bracket_start = remaining.findFirst('[');
+    auto bracket_end = remaining.findFirst(']');
+
+    if (   (bracket_start.found() != bracket_end.found())
+        || (bracket_start.found() && bracket_start.x != 0))
+    {
+      return; // invalid bracket
+    }
+
+    if (bracket_end.found())
+    {
+      remaining = remaining.sub(1, bracket_end.x);
+      auto port_str = address_string.sub(bracket_end.x + 2);
+      if (!port_str.isEmpty() && port_str.isNumeric())
+        port = (u16)atoi((const char*)port_str.ptr);
+    }
+
+    bool had_shorthand = false;
+    while (!remaining.isEmpty() && group_count < 8)
+    {
+      auto pos = remaining.findFirst(':');
+      auto group_str = pos.found() ? remaining.subToFirst(':') : remaining;
+      if (!group_str.isEmpty())
+      {
+        if (group_str.len > 4)
+          return; // group too long
+
+        u16 value = 0;
+        for (u32 i = 0; i < group_str.len; i++)
+        {
+          u8 c = group_str.ptr[i];
+          if (c >= '0' && c <= '9')
+            value = (value << 4) | (c - '0');
+          else if (c >= 'a' && c <= 'f')
+            value = (value << 4) | (c - 'a' + 10);
+          else if (c >= 'A' && c <= 'F')
+            value = (value << 4) | (c - 'A' + 10);
+          else
+            return; // invalid hex character
+        }
+        groups[group_count++] = value;
+      }
+
+      if (!pos.found()) break;
+      remaining = remaining.sub(pos.x + 1);
+
+      if (remaining.ptr[0] == ':')
+      {
+        if (had_shorthand)
+          return; // multiple :: not allowed
+        had_shorthand = true;
+
+        int remaining_colons = 0;
+        for (auto scan = remaining.sub(1); !scan.isEmpty(); 
+             scan = scan.sub(1))
+        {
+          if (scan.ptr[0] == ':') remaining_colons++;
+        }
+
+        int zero_groups = 7 - (group_count + remaining_colons);
+        if (zero_groups < 0)
+          return; // too many groups
+
+        while (zero_groups-- > 0 && group_count < 8)
+          groups[group_count++] = 0;
+        remaining = remaining.sub(1);
+      }
+    }
+
+    if (group_count != 8)
+      return; // wrong number of groups
+
+    for (int i = 0; i < 8; i++)
+    {
+      this->ipv6[i*2] = groups[i] >> 8;
+      this->ipv6[i*2 + 1] = groups[i] & 0xFF;
+    }
+    this->port = port;
+
+    if (   this->ipv4._8zeros == 0 && this->ipv4._0000 == 0
+        && this->ipv4._ffff == 0xffff)
+    {
+      if (   this->ipv4.ip[0] == 127 && this->ipv4.ip[1] == 0
+          && this->ipv4.ip[2] == 0 && this->ipv4.ip[3] == 1)
+      {
+        this->type = AddressType::Local;
+      }
+      else
+      {
+        this->type = AddressType::Remote;
+      }
+    }
+    else
+    {
+      this->type = AddressType::Remote;
+    }
+
+    return;
+  }
+
+  // parse IPv4 address like "127.0.0.1:8080"
+  u8 ip[4] = {0};
+  int ip_parts = 0;
+  utf8::String remaining = address_string;
+
+  while (!remaining.isEmpty() && ip_parts < 4)
+  {
+    auto pos = remaining.findFirst('.');
+    if (pos.found())
+    {
+      auto num_str = remaining.subToFirst('.');
+      if (!num_str.isNumeric() || num_str.len > 3)
+        return; // invalid number
+
+      int value = atoi((const char*)num_str.ptr);
+      if (value > 255)
+        return; // number too large
+
+      ip[ip_parts] = (u8)value;
+      remaining = remaining.sub(pos.x + 1);
+      ip_parts++;
+      continue;
+    }
+
+    pos = remaining.findFirst(':');
+    if (pos.found())
+    {
+      auto num_str = remaining.subToFirst(':');
+      if (!num_str.isNumeric() || num_str.len > 3)
+        return; // invalid number
+
+      int value = atoi((const char*)num_str.ptr);
+      if (value > 255)
+        return; // number too large
+
+      ip[ip_parts] = (u8)value;
+      remaining = remaining.sub(pos.x + 1);
+      ip_parts++;
+      break;
+    }
+
+    break;
+  }
+
+  if (remaining.isEmpty() || !remaining.isNumeric() || remaining.len > 5)
+    return; // invalid port
+
+  int port = atoi((const char*)remaining.ptr);
+  if (port > 65535)
+    return; // port too large
+
+  if (ip_parts != 4)
+    return; // wrong number of IP parts
+
+  this->ipv4._8zeros = 0;
+  this->ipv4._0000 = 0;
+  this->ipv4._ffff = 0xffff;
+  this->ipv4.ip[0] = ip[0];
+  this->ipv4.ip[1] = ip[1];
+  this->ipv4.ip[2] = ip[2];
+  this->ipv4.ip[3] = ip[3];
+  this->port = (u16)port;
+
+  if (ip[0] == 127 && ip[1] == 0 && ip[2] == 0 && ip[3] == 1)
+  {
+    this->type = AddressType::Local;
+  }
+  else
+  {
+    this->type = AddressType::Remote;
+  }
+}
+
+io::StaticBuffer<64> Address::toString() const
+{
+  io::StaticBuffer<64> buffer;
+  if (this->type == AddressType::Offline)
+  {
+    buffer.write("offline"_str);
+    return buffer;
+  }
+
+  if (   this->ipv4._8zeros == 0 && this->ipv4._0000 == 0
+      && this->ipv4._ffff == 0xffff)
+  {
+    buffer.len = snprintf((char*)buffer.buffer, 64, "%u.%u.%u.%u:%u",
+      this->ipv4.ip[0], this->ipv4.ip[1],
+      this->ipv4.ip[2], this->ipv4.ip[3],
+      this->port);
+  }
+  else
+  {
+    buffer.len = snprintf((char*)buffer.buffer, 64,
+      "[%02x%02x:%02x%02x:%02x%02x:%02x%02x:"
+      "%02x%02x:%02x%02x:%02x%02x:%02x%02x]:%u",
+      this->ipv6[0], this->ipv6[1], this->ipv6[2], this->ipv6[3],
+      this->ipv6[4], this->ipv6[5], this->ipv6[6], this->ipv6[7],
+      this->ipv6[8], this->ipv6[9], this->ipv6[10], this->ipv6[11],
+      this->ipv6[12], this->ipv6[13], this->ipv6[14], this->ipv6[15],
+      this->port);
+  }
+  assert(buffer.len > 0);
+
+  return buffer;
+}
+
+Address Address::createOffline()
+{
+  Address address;
+  address.type = AddressType::Offline;
+  return address;
+}
+
+u32 Address::getIPv4() const
+{
+  return ((u32)this->ipv4.ip[0] << 24)
+    | ((u32)this->ipv4.ip[1] << 16)
+    | ((u32)this->ipv4.ip[2] << 8)
+    | ((u32)this->ipv4.ip[3]);
+}
+
+b8 Address::isIPv4() const
+{
+  return this->ipv4._8zeros == 0 && this->ipv4._0000 == 0
+    && this->ipv4._ffff == 0xffff;
+}
+
+}

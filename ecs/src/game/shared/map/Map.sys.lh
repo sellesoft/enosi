@@ -1,6 +1,5 @@
 $ local cmn = require "common"
 
-
 #include "iro/Common.h"
 #include "iro/containers/Array.h"
 #include "iro/Unicode.h"
@@ -8,8 +7,6 @@ $ local cmn = require "common"
 
 @@lpp.import "game/shared/map/Map.defs.lh"
 @@lpp.import "game/shared/entity/EntitySys.lh"
-
-@@lpp.import "graphics/Texture.lh"
 
 using namespace iro;
 
@@ -31,9 +28,9 @@ struct Tile
   TileKindConfig configuration = TileKindConfig::Default;
 
   b8 init(
-    const MapTileDef& def, 
+    const MapTileDef& def,
     Layer& layer,
-    u32 layer_idx, 
+    u32 layer_idx,
     vec2f pos,
     EntityMgr& entmgr);
 
@@ -65,13 +62,13 @@ struct Layer
   // Asserts if the given Tile does not belong to this Layer.
   vec2f getTilePos(const Tile& tile) const;
 
-  // Returns a Tile at the given position, which must be local to the 
+  // Returns a Tile at the given position, which must be local to the
   // Layer. If the given index is out of bounds, nullptr is returned.
   Tile* getTileAtPos(s32 x, s32 y);
 
-  Tile* getTileAtPos(vec2f pos) 
-  { 
-    return getTileAtPos(s32(pos.x), s32(pos.y)); 
+  Tile* getTileAtPos(vec2f pos)
+  {
+    return getTileAtPos(s32(pos.x), s32(pos.y));
   }
 };
 
@@ -89,9 +86,8 @@ struct MapSys : EntitySys
 
   struct LoadParams
   {
-    AssetMgr&      assetmgr;
-    EntityMgr&     entmgr;
-    gfx::Renderer& renderer;
+    AssetMgr& assetmgr;
+    EntityMgr& entmgr;
   };
 
   b8 load(const MapDef& def, LoadParams& params);

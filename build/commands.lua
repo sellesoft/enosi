@@ -350,8 +350,8 @@ cmd.Exe = Type:make()
 ---@field libdirs List
 --- If true, a shared library will be built.
 ---@field is_shared boolean
---- Whether to output debug information. This is probably only useful on Windows where
---- it intends to output a pdb.
+--- Whether to output debug information. This is probably only useful on
+--- Windows where it intends to output a pdb.
 ---@field debug_info boolean
 --- Link with address sanitizer enabled.
 --- NOTE that if this is enabled, it must be enabled when compiling linked
@@ -385,25 +385,26 @@ cmd.Exe.new = function(params)
     o.partial = helpers.listBuilder(
       "clang++",
       "-fuse-ld="..params.linker,
+      params.subsystem,
       params.is_shared and "-shared",
       params.address_sanitizer and "-fsanitize=address",
-      params.debug_info and "-g")
+      params.debug_info and "-g",
+      params.static_msvcrt and "-fms-runtime-lib=static",
+      params.disabled_warnings or "")
 
     o.links = helpers.listBuilder(
       params.libdirs and params.libdirs:flatten():map(function(dir)
         return "-L"..dir
       end),
-      "-Wl,--start-group",
+      params.start_group,
       params.shared_libs and params.shared_libs:flatten():map(function(lib)
         return "-l"..lib
       end),
       params.static_libs and params.static_libs:flatten():map(function(lib)
         return "-l"..lib
       end),
-      "-Wl,--end-group",
-      "-Wl,-E",
-      params.static_msvcrt and "-fms-runtime-lib=static",
-      params.disabled_warnings or "")
+      params.end_group,
+      params.export_dynamic)
       -- Tell the exe's dynamic linker to check the directory its in
       -- for shared libraries.
       -- NOTE(sushi) this is disabled for now as I'm not actually using it
@@ -416,6 +417,28 @@ cmd.Exe.new = function(params)
       --             load into the init script as its probably safer and
       --             more portable.
       --"-Wl,-rpath,$ORIGIN")
+  elseif "link" == params.linker
+    or "lld-link" == params.linker
+    or "radlink" == params.linker
+  then
+    o.partial = helpers.listBuilder(
+      params.linker,
+      "-nologo",
+      params.subsystem,
+      params.is_shared and "-dll",
+      params.debug_info and "-debug:full",
+      params.disabled_warnings or "")
+
+    o.links = helpers.listBuilder(
+      params.libdirs and params.libdirs:flatten():map(function(dir)
+        return "-libpath:"..dir
+      end),
+      params.shared_libs and params.shared_libs:flatten():map(function(lib)
+        return lib..".lib"
+      end),
+      params.static_libs and params.static_libs:flatten():map(function(lib)
+        return lib..".lib"
+      end))
   else
     error("unhandled linker "..params.linker)
   end
@@ -424,12 +447,28 @@ cmd.Exe.new = function(params)
 end
 
 cmd.Exe.complete = function(self, objs, out)
-  return helpers.listBuilder(
-    self.partial,
-    objs,
-    "-o",
-    out,
-    self.links)
+  if "ld" == self.linker
+    or "lld" == self.linker
+    or "mold" == self.linker
+  then
+    return helpers.listBuilder(
+      self.partial,
+      objs,
+      "-o",
+      out,
+      self.links)
+  elseif "link" == self.linker
+    or "lld-link" == self.linker
+    or "radlink" == self.linker
+  then
+    return helpers.listBuilder(
+      self.partial,
+      objs,
+      "-out:"..out,
+      self.links)
+  else
+    error("unhandled linker "..self.linker)
+  end
 end
 
 ---@class cmd.StaticLib.Params

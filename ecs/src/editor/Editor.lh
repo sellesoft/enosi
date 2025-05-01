@@ -1,7 +1,7 @@
 /*
  *  System for UI that's used to edit assets and control game state.
  *
- *  The Editor organizes various widgets used for editing and provides 
+ *  The Editor organizes various widgets used for editing and provides
  *  helpers for interacting with assets and game state.
  */
 
@@ -14,6 +14,8 @@ $ local ui = require "ui.UI"
 #include "iro/Flags.h"
 
 @@lpp.import "ui/UI.lh"
+
+struct GameMgr;
 
 struct Editor
 {

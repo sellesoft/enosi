@@ -1,12 +1,12 @@
 /*
- *  A lighter weight type used for Arrays in Defs. 
+ *  A lighter weight type used for Arrays in Defs.
  *
- *  We originally used iro's Array but that contained uneeded data that made 
- *  compiling and loading the data from disk more complicated (eg. it stores 
+ *  We originally used iro's Array but that contained uneeded data that made
+ *  compiling and loading the data from disk more complicated (eg. it stores
  *  its len, space, and allocator info embedded in the allocated data).
  *
  *  This array expects that the amount of elements is known when it is created
- *  so each element is allocated immediately, then they are filled out by 
+ *  so each element is allocated immediately, then they are filled out by
  *  whatever is using this.
  */
 
@@ -14,6 +14,8 @@ $ require "common"
 
 #include "iro/Common.h"
 #include "iro/memory/Allocator.h"
+
+#include <assert.h>
 
 using namespace iro;
 
@@ -37,7 +39,7 @@ struct ArrayDef
   }
 
   T& operator [](s64 i) { assert(i >= 0 && i < len); return arr[i]; }
-  const T& operator [](s64 i) const 
+  const T& operator [](s64 i) const
     { assert(i >= 0 && i < len); return arr[i]; }
 
   T* begin() { return arr; }

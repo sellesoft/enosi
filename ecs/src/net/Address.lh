@@ -1,0 +1,56 @@
+/*
+ * A network address that will be the target destination of packets. An
+ * offline address type means the source is sending packets to itself (so we
+ * don't need to actually send them over a socket). A local address type means
+ * the source is sending packets to its local network.
+ */
+
+#include "iro/Common.h"
+#include "iro/Unicode.h"
+#include "iro/io/IO.h"
+
+namespace net
+{
+
+/* ============================================================================
+ */
+enum struct AddressType : u16
+{
+  Invalid,
+  Offline,
+  Local,
+  Remote,
+};
+
+/* ============================================================================
+ */
+struct Address
+{
+  union
+  {
+    u8 ipv6[16];
+    struct
+    {
+      u64 _8zeros;
+      u16 _0000;
+      u16 _ffff;
+      u8 ip[4];
+    }ipv4;
+  };
+  u16 port;
+  AddressType type;
+
+
+  Address();
+  Address(u32 ipv4, u16 port);
+  Address(u8 ipv4a, u8 ipv4b, u8 ipv4c, u8 ipv4d, u16 port);
+  Address(const u8* ipv6, u16 port);
+  Address(iro::utf8::String address_string);
+
+  static Address createOffline();
+  iro::io::StaticBuffer<64> toString() const;
+  u32 getIPv4() const;
+  b8 isIPv4() const;
+};
+
+}

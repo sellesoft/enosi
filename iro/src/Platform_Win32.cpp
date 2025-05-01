@@ -1891,6 +1891,72 @@ u64 byteSwap(u64 x)
 #endif // #else // #if defined(_MSC_VER)
 }
 
+/* ----------------------------------------------------------------------------
+ */
+void* reserve_memory(u64 size)
+{
+  void* result = VirtualAlloc(nullptr, size, MEM_RESERVE, PAGE_READWRITE);
+  if (result == nullptr)
+  {
+    ERROR("failed to reserve memory: ",
+      makeWin32ErrorMsg(GetLastError()), "\n");
+    cleanupWin32ErrorMsg();
+  }
+  return result;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 commit_memory(void* ptr, u64 size)
+{
+  b8 result = (VirtualAlloc(ptr, size, MEM_COMMIT, PAGE_READWRITE) != nullptr);
+  if (!result)
+  {
+    ERROR("failed to commit memory: ",
+      makeWin32ErrorMsg(GetLastError()), "\n");
+    cleanupWin32ErrorMsg();
+  }
+  return result;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void* reserve_large_memory(u64 size)
+{
+  // NOTE(delle) win32 requires large pages to be committed and reserved
+  void* result = VirtualAlloc(nullptr, size,
+    MEM_RESERVE | MEM_COMMIT | MEM_LARGE_PAGES, PAGE_READWRITE);
+  if (result == nullptr)
+  {
+    ERROR("failed to reserve and commit large memory: ",
+      makeWin32ErrorMsg(GetLastError()), "\n");
+    cleanupWin32ErrorMsg();
+  }
+  return result;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 commit_large_memory(void* ptr, u64 size)
+{
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void decommit_memory(void* ptr, u64 size)
+{
+  VirtualFree(ptr, size, MEM_DECOMMIT);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void release_memory(void* ptr, u64 size)
+{
+  // NOTE(delle) size not used on win32
+  VirtualFree(ptr, 0, MEM_RELEASE);
+}
+
 }
 
 #endif // #if IRO_WIN32

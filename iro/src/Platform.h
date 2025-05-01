@@ -334,9 +334,41 @@ u64 getPid();
 /* ----------------------------------------------------------------------------
  *  TODO(sushi) put these somewhere better later.
  */
- u16 byteSwap(u16 x);
- u32 byteSwap(u32 x);
- u64 byteSwap(u64 x);
+u16 byteSwap(u16 x);
+u32 byteSwap(u32 x);
+u64 byteSwap(u64 x);
+
+/* ----------------------------------------------------------------------------
+ * Reserves pages of memory. This only reserves an address range.
+ * Minimum size is OS-dependent, but 4 kilobytes is common.
+ */
+void* reserve_memory(u64 size);
+
+/* ----------------------------------------------------------------------------
+ * Commits pages of memory. This actually maps the reserved pointer to
+ * physical memory.
+ */
+b8 commit_memory(void* ptr, u64 size);
+
+/* ----------------------------------------------------------------------------
+ * Reserves large pages of memory. This only reserves an address range.
+ * Minimum size is CPU-dependent, but 2 megabytes is common.
+ */
+void* reserve_large_memory(u64 size);
+
+/* ----------------------------------------------------------------------------
+ * Commits large pages of memory. This actually maps the reserved pointer to
+ * physical memory.
+ */
+b8 commit_large_memory(void* ptr, u64 size);
+
+/* ----------------------------------------------------------------------------
+ */
+void decommit_memory(void* ptr, u64 size);
+
+/* ----------------------------------------------------------------------------
+ */
+void release_memory(void* ptr, u64 size);
 
 } // namespace iro::platform
 

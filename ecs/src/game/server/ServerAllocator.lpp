@@ -1,0 +1,114 @@
+$ require "common"
+
+@@lpp.import "game/server/ServerAllocator.lh"
+
+#include "iro/Common.h"
+#include "iro/Logger.h"
+#include "iro/memory/Memory.h"
+#include "iro/Platform.h"
+
+@log.ger(sv.allocator, Info)
+
+using namespace iro;
+
+namespace sv
+{
+
+/* ----------------------------------------------------------------------------
+ * TODO(delle) investigate chunking server allocations and only committing
+ *   memory as necessary
+ */
+b8 ServerAllocator::init(u64 size)
+{
+  TRACE("initializing a server allocator with ", size, " bytes\n");
+
+  this->backing = (u8*)platform::reserve_memory(size);
+  if (this->backing == nullptr)
+    return false;
+  if (!platform::commit_memory(this->backing, size))
+    return false;
+
+  this->size = size;
+  this->used = 0;
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void ServerAllocator::deinit()
+{
+  TRACE("deinitializing a server allocator\n");
+  if(this->backing == nullptr)
+    return;
+
+  platform::decommit_memory(this->backing, this->size);
+  platform::release_memory(this->backing, this->size);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void ServerAllocator::clear()
+{
+  assertpointer(this->backing);
+  TRACE("clearing a server allocator\n");
+
+  if (this->used > 0)
+    mem::zero(this->backing, this->used);
+}
+
+/* ----------------------------------------------------------------------------
+ * NOTE(delle) We use additional bytes to store the size because Allocator
+ * requires we implement a reallocate function.
+ */
+void* ServerAllocator::allocate(u64 size)
+{
+  assertpointer(this->backing);
+  assert(this->size > 0);
+  TRACE("allocating ", size, " bytes on the server\n");
+
+  u64 new_used = this->used + size + sizeof(u64);
+  if (new_used > this->size)
+    return nullptr;
+
+  u64* cursor = (u64*)(this->backing + this->used);
+  *cursor = size;
+  this->used = new_used;
+
+  return (u8*)(cursor + 1);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void* ServerAllocator::reallocate(void* ptr, u64 size)
+{
+  assertpointer(this->backing);
+  assert(this->size > 0);
+  assertpointer(ptr);
+  assertrange(ptr, this->backing, this->backing + this->size);
+  TRACE("reallocating ", size, " bytes on the server\n");
+
+  WARN("Avoid using reallocate() via the server allocator. The server"
+    " allocator is a bump allocator so reallocating will leave a hole"
+    " in the memory.\n");
+
+  void* result = this->allocate(size);
+  if (result != nullptr)
+    mem::copy(result, ptr, *((u64*)ptr - 1));
+
+  return result;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void ServerAllocator::free(void* ptr)
+{
+  assertpointer(this->backing);
+  assert(this->size > 0);
+  assertpointer(ptr);
+
+  WARN("Avoid using free() via the server allocator. The server allocator"
+    " is a bump allocator so freeing will leave a hole in the memory.\n");
+}
+
+} // namespace sv

@@ -1463,6 +1463,7 @@ b8 Renderer::update()
       .pClearValues = clear_values,
     };
 
+$ if ECS_DEBUG then
     if (ri.func_vkCmdBeginDebugUtilsLabelEXT != nullptr)
     {
       VkDebugUtilsLabelEXT label =
@@ -1473,6 +1474,7 @@ b8 Renderer::update()
       };
       ri.func_vkCmdBeginDebugUtilsLabelEXT(ri.command_buffer, &label);
     }
+$ end -- if ECS_DEBUG
 
     vkCmdBeginRenderPass(ri.command_buffer, &begin_info,
       VK_SUBPASS_CONTENTS_INLINE);
@@ -1538,10 +1540,12 @@ b8 Renderer::update()
 
       vkCmdEndRenderPass(ri.command_buffer);
 
+$ if ECS_DEBUG then
       if (ri.func_vkCmdEndDebugUtilsLabelEXT != nullptr)
       {
         ri.func_vkCmdEndDebugUtilsLabelEXT(ri.command_buffer);
       }
+$ end -- if ECS_DEBUG
 
       // transition framebuffer image back to SHADER_READ_ONLY after rendering
       if (current_framebuffer.index != 0)
@@ -1665,6 +1669,7 @@ b8 Renderer::update()
         .pClearValues = clear_values,
       };
 
+$ if ECS_DEBUG then
       if (ri.func_vkCmdBeginDebugUtilsLabelEXT != nullptr)
       {
         iro::io::StaticBuffer<63> name = {};
@@ -1678,6 +1683,7 @@ b8 Renderer::update()
         };
         ri.func_vkCmdBeginDebugUtilsLabelEXT(ri.command_buffer, &label);
       }
+$ end -- if ECS_DEBUG
 
       vkCmdBeginRenderPass(ri.command_buffer, &begin_info,
         VK_SUBPASS_CONTENTS_INLINE);
@@ -1978,10 +1984,12 @@ $ end -- if ECS_DEBUG
   {
     vkCmdEndRenderPass(ri.command_buffer);
 
+$ if ECS_DEBUG then
     if (ri.func_vkCmdEndDebugUtilsLabelEXT != nullptr)
     {
       ri.func_vkCmdEndDebugUtilsLabelEXT(ri.command_buffer);
     }
+$ end -- if ECS_DEBUG
 
     // transition framebuffer image back to SHADER_READ_ONLY after rendering
     if (current_framebuffer.index != 0)

@@ -1,0 +1,35 @@
+/*
+ *  The server side of the GameSim. This provides the highest level interface
+ *  for running the game as viewed by a server.
+ */
+$ require "common"
+
+@@lpp.import "game/shared/GameSim.lh"
+@@lpp.import "game/server/entity/EntitySysMgr.lh"
+
+#include "iro/Common.h"
+
+struct MapDef;
+
+namespace sv
+{
+
+/* ============================================================================
+ */
+struct GameSim : SharedGameSim
+{
+  EntitySysMgr entsysmgr;
+  MapDef* map_def;
+
+  struct InitParams : SharedGameSim::InitParams
+  {
+    MapDef& map_def;
+  };
+
+  b8 init(const InitParams& params);
+  void deinit();
+
+  b8 update();
+};
+
+}

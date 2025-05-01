@@ -1,0 +1,182 @@
+/*
+ * ref: https://github.com/id-Software/Quake-III-Arena/blob/master/code/qcommon/qcommon.h
+ * ref: https://gafferongames.com/post/sending_and_receiving_packets/
+ */
+$ require "common"
+
+$ if IRO_WIN32 then
+#define WIN32_LEAN_AND_MEAN
+#include <Winsock2.h>
+#include <Ws2ipdef.h>
+#undef ERROR
+#undef max
+#undef min
+#undef interface
+$ else -- if IRO_WIN32
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <fcntl.h>
+$ end -- if not IRO_WIN32
+
+@@lpp.import "net/Connection.lh"
+@@lpp.import "net/Packet.lh"
+
+#include "iro/Logger.h"
+
+using namespace iro;
+
+@log.ger(net.connection, Info)
+
+$ if IRO_WIN32 then
+#define NET_ERROR(msg) \
+  ERROR("failed to " msg " due to WSA error: ", WSAGetLastError(), "\n")
+$ else -- if IRO_WIN32
+#define NET_ERROR(msg) \
+  ERROR("failed to " msg " due to error: ", strerror(errno), "\n")
+$ end -- if not IRO_WIN32
+
+namespace net
+{
+
+Packet offline_packet[2];
+
+b8 init()
+{
+  TRACE("initializing net\n");
+$ if IRO_WIN32 then
+  WSADATA wsa_data;
+  return NO_ERROR == WSAStartup(MAKEWORD(2,2), &wsa_data);
+$ else -- if IRO_WIN32
+  return true;
+$ end -- if not IRO_WIN32
+}
+
+void deinit()
+{
+  TRACE("deinitializing net\n");
+$ if IRO_WIN32 then
+  WSACleanup();
+$ end -- if IRO_WIN32
+}
+
+Packet* getOfflinePacket(Source source)
+{
+  if (source == Source::Client)
+    return &offline_packet[0];
+  else
+    return &offline_packet[1];
+}
+
+b8 Connection::init(Address address)
+{
+  TRACE("initializing a connection\n");
+
+  this->socket_handle = 0;
+  this->address = address;
+  this->incoming_sequence = 0;
+  this->outgoing_sequence = 1;
+  this->dropped_count = 0;
+
+  if (this->address.type == AddressType::Offline)
+    return true;
+
+  int new_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+  if (new_socket <= 0)
+    return NET_ERROR("open a socket");
+  auto close_socket_if_failure = deferWithCancel
+  {
+$ if IRO_WIN32 then
+    closesocket(new_socket);
+$ else -- if IRO_WIN32
+    close(new_socket);
+$ end -- if not IRO_WIN32
+    this->socket_handle = 0;
+  };
+
+  u_long non_blocking = true;
+$ if IRO_WIN32 then
+  if (-1 == ioctlsocket(new_socket, FIONBIO, &non_blocking))
+$ else -- if IRO_WIN32
+  if (-1 == ioctl(new_socket, F_SETFL, O_NONBLOCK, non_blocking))
+$ end -- if not IRO_WIN32
+    return NET_ERROR("make a socket non-blocking");
+
+  int i = 1;
+  if (-1 == setsockopt(new_socket, SOL_SOCKET, SO_BROADCAST,
+                       (char*)&i, sizeof(i)))
+    return NET_ERROR("make a socket broadcast capable");
+
+  sockaddr_in socket_address;
+  if (this->address.type == AddressType::Local)
+  {
+    socket_address.sin_port = htons(this->address.port);
+    socket_address.sin_addr.s_addr = INADDR_ANY;
+    socket_address.sin_family = AF_INET;
+  }
+  else if (this->address.isIPv4())
+  {
+    socket_address.sin_port = htons(this->address.port);
+    socket_address.sin_addr.s_addr = htonl(this->address.getIPv4());
+    socket_address.sin_family = AF_INET;
+  }
+  else
+  {
+    sockaddr_in6 socket_address_v6;
+    socket_address_v6.sin6_port = htons(this->address.port);
+    socket_address_v6.sin6_family = AF_INET6;
+    memcpy(&socket_address_v6.sin6_addr, &this->address.ipv6,
+           sizeof(socket_address_v6.sin6_addr));
+
+    if (-1 == bind(new_socket, (sockaddr*)&socket_address_v6,
+                   sizeof(sockaddr_in6)))
+      return NET_ERROR("bind a socket");
+
+    DEBUG("Opening IPv6 socket: ", address.toString(), "\n");
+    this->socket_handle = new_socket;
+    close_socket_if_failure.cancel();
+    return true;
+  }
+
+  if (-1 == bind(new_socket, (sockaddr*)&socket_address,
+                 sizeof(sockaddr_in)))
+    return NET_ERROR("bind a socket");
+
+  DEBUG("Opening IPv4 socket: ", address.toString(), "\n");
+  this->socket_handle = new_socket;
+  close_socket_if_failure.cancel();
+  return true;
+}
+
+void Connection::deinit()
+{
+  TRACE("deinitializing a connection\n");
+  if (this->socket_handle == 0)
+    return;
+
+$ if IRO_WIN32 then
+  closesocket(this->socket_handle);
+$ else -- if IRO_WIN32
+  close(this->socket_handle);
+$ end -- if not IRO_WIN32
+  this->socket_handle = 0;
+}
+
+b8 Connection::send(Source source, const Packet& packet)
+{
+  // TODO(delle) implement this
+  return false;
+}
+
+b8 Connection::sendPriorityMessage(Source source, const u8* data, u32 size)
+{
+  // TODO(delle) implement this
+  return false;
+}
+
+b8 Connection::read(Source source, Packet& packet)
+{
+  // TODO(delle) implement this
+  return false;
+}
+
+}

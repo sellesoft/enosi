@@ -1,5 +1,5 @@
 /*
- *  The client side entity system manager. See shared/EntitySysMgr.lh for 
+ *  The server side entity system manager. See shared/EntitySysMgr.lh for
  *  information on what this does.
  */
 
@@ -24,6 +24,9 @@ struct EntitySysMgr : SharedEntitySysMgr
   void deinit();
 
   b8 update();
+
+  template<typename TEntSys>
+  TEntSys& get();
 };
 
 }

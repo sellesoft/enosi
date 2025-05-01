@@ -246,8 +246,8 @@ b8 MapSys::load(const MapDef& def, LoadParams& params)
 /* ----------------------------------------------------------------------------
  */
 b8 MapSys::getTileAndLayerAtPos(
-    Layer** out_layer, 
-    Tile**  out_tile,  
+    Layer** out_layer,
+    Tile**  out_tile,
     vec2f   pos)
 {
   for (s32 layer_idx = layers.len()-1; layer_idx >= 0; --layer_idx)
@@ -263,8 +263,8 @@ b8 MapSys::getTileAndLayerAtPos(
         vec2f tile_pos = layer->getTilePos(*tile);
 
         if (math::pointInRect<f32>(
-              pos, 
-              layer_pos + tile_pos, 
+              pos,
+              layer_pos + tile_pos,
               {1,1}))
         {
           if (out_layer)

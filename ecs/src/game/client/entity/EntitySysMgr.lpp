@@ -15,8 +15,8 @@ $$$
 local TEntSys
 local importer = require "reflect.Importer"
 {
-  patterns = 
-  { 
+  patterns =
+  {
     "src/game/client/**/*.sys.lh",
     "src/game/shared/**/*.sys.lh",
   },
@@ -55,7 +55,7 @@ $   if isSys(decl) then
 $     -- Only take classes that aren't derived from to avoid creating both
 $     -- the shared version of a system that is derived from on client side.
 $     if decl.derived:isEmpty() then
-$       local system = 
+$       local system =
 $       {
 $         name = decl:getIdSafeName():match("([%w_]-)Sys"):lower(),
 $         typename = name,
@@ -93,7 +93,7 @@ b8 EntitySysMgr::init(const InitParams& params)
   systems = mem::stl_allocator.allocateType<EntitySystems>();
   mem::zero(systems, sizeof(EntitySystems));
 
-  INFO("allocated ", color::green(io::ByteUnits(sizeof(EntitySystems))), 
+  INFO("allocated ", color::green(io::ByteUnits(sizeof(EntitySystems))),
        " for client entity systems\n");
 
   auto on_fail_deallocate_systems = deferWithCancel
@@ -137,15 +137,28 @@ $ systems:each(function(sys)
   sys_init_start = TimePoint::now();
   if (!systems->$(sys.name).init())
     return false;
-  INFO("initialized ", color::cyan("$(sys.typename)"_str), " in ", 
+  INFO("initialized ", color::cyan("$(sys.typename)"_str), " in ",
        WithUnits(TimePoint::now() - sys_init_start), "\n");
 $ end)
 
-  INFO("initialized all client entity systems in ", 
+  INFO("initialized all client entity systems in ",
        WithUnits(TimePoint::now() - init_start), "!\n");
 
   on_fail_deallocate_systems.cancel();
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void EntitySysMgr::deinit()
+{
+$ systems:each(function(sys)
+$   if sys.decl:hasMethod "deinit" then
+  systems->$(sys.name).deinit();
+$   end
+$ end)
+
+  SharedEntitySysMgr::deinit();
 }
 
 /* ----------------------------------------------------------------------------
