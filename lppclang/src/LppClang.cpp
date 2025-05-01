@@ -1534,7 +1534,8 @@ b8 isEnum(Decl* decl)
 b8 isTypedef(Decl* decl)
 {
   assert(decl);
-  return clang::TypedefDecl::classof(getClangDecl(decl));
+  return clang::TypedefDecl::classof(getClangDecl(decl)) ||
+         clang::TypeAliasDecl::classof(getClangDecl(decl));
 }
 
 /* ----------------------------------------------------------------------------
