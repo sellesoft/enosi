@@ -183,7 +183,6 @@ b8 GameMgr::loadMap(String name)
   {
     .assetmgr = eng->assetmgr,
     .entmgr   = sim->entmgr,
-    .renderer = eng->renderer,
   };
 
   if(!entsysmgr.get<MapSys>().load(*mapdef, map_params))

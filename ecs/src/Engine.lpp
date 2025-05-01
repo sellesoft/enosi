@@ -256,7 +256,7 @@ $ end
     LaunchArg* password_arg = launch_args.find("-password"_hashed);
     if (password_arg != nullptr)
     {
-      password.len = min(64ULL, password_arg->value.len);
+      password.len = min<u64>(64ULL, password_arg->value.len);
       mem::copy(password.arr, password_arg->value.ptr, password.len);
     }
 
