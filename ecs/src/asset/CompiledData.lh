@@ -26,33 +26,56 @@ struct CompiledData
 
   OffsetSlice<u8> strings;
 
+  // API for compiling some source data on disk to compiled data.
+  // Any source data may be compiled as it has a 'type'.
+  //
+  // 'name' is the name of the source data file to be compiled. Eg. a path
+  // relative to ecs' root. The extension may be omitted and if so, the type
+  // provided in 'type' will be used to automatically determine the extension
+  // based on metadata.source_types applied to types. If this metadata cannot
+  // be found for the specified type, compilation will fail.
+  //
+  // 'type' is the C++ type that the source data is expected to return. 
+  // 
   struct CompileParams
   {
     String name;
     String type;
+
     AssetMgr& assetmgr;
     SourceDataFileReg& sfile_reg;
   };
 
-  template<typename T>
   static b8 compile(const CompileParams& params);
 
-  static b8 compile(const CompileParams& params);
-
+  // Loads some compiled data. The name is expected to be the source data name
+  // that was provided for 'compile', not a path to where it would show up in 
+  // data/. Similarly to 'compile' the extension may be omitted in the name.
   static CompiledData* load(
     String name, 
     String type, 
     AssetMgr& assetmgr,
     Asset** out_asset = nullptr);
 
+  // Gets the loaded data as the specified C++ type. Note that currently there 
+  // are no safety checks for if the provided 'T' actually matches the type the 
+  // data was compiled for. 
+  // TODO(sushi) implement those checks.
   template<typename T>
   T* getRootAs() const
   {
     return (T*)root.getSlice().ptr;
   }
   
-  void makeDataPointersAbsolute(); 
+  // Fixes all pointers in the loaded data to absolute addresses.
+  // Not yet safe to call twice :>
+  // Automatically called in load()!
+  void fixPointers(); 
 
+  // TODO(sushi) rework this to just take a callback for each Ref, or at least
+  //             add an option to get them that way, I think that usage would
+  //             be more common as atm I can't think of any reason we'd want
+  //             to store these off.
   struct DataRef
   {
     String type;

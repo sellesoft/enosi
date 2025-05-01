@@ -15,7 +15,7 @@ static Logger logger =
 
 @@lpp.import "game/shared/component/Component.lh"
 
-$ local TComponent = comps.p.decls.map["struct Component"]
+$ local TComponent = comps.p:lookupDecl "struct Component"
 $ comps:eachDecl(function(name, decl)
 $   if not decl:is(ast.Record) or not decl:isDerivedFrom(TComponent) then
 $     return

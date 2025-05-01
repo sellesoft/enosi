@@ -4,7 +4,11 @@ $ require "common"
 
 // \@\@lpp.import "game/shared/Sprite.comp.lh"
 
+@@lpp.import "game/shared/Appearance.comp.lh"
+
 @log.ger(sys.openable, Info)
+
+#include "iro/Platform.h"
 
 /* ----------------------------------------------------------------------------
  */
@@ -12,21 +16,12 @@ void SharedOpenableSys::onInteract(EntComp<Openable> ent, Interact&)
 {
   ent.comp.open = !ent.comp.open;
 
-$ if false then
-  if (auto* sprite = tryComp<Sprite>(ent.ent))
+  if (auto* comp = tryComp<Appearance>(ent.ent))
   {
-    String desired_state = ent.comp.open? "Open"_str : "Closed"_str;
-    u64 state_idx = sprite->states->map.findIndex(desired_state.hash());
-
-    if (state_idx == sprite->states->map.len)
-    {
-      WARN("missing sprite state ", desired_state, " on Openable entity ",
-           ent.ent.value, "\n");
-    }
-    else
-    {
-      sprite->state = state_idx;
-    }
+    appearance->setData(
+      ent.ent, 
+      "IsOpen"_str, 
+      ent.comp.open ? "True"_hashed : "False"_hashed,
+      *comp);
   }
-$ end
 }

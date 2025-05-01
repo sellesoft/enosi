@@ -1,0 +1,43 @@
+$ require "common"
+
+@@lpp.import "game/client/graphics/Visualizer.sys.lh"
+
+@log.ger(cl.sys.visualizer, Info)
+
+namespace cl
+{
+
+/* ----------------------------------------------------------------------------
+ */
+void VisualizerSys::onAppearanceChange(
+    EntComp<Visualizer> ec, 
+    AppearanceChange& ev)
+{
+  if (ev.sprite == nullptr)
+    return;
+
+  Visualizer& comp = ec.comp;
+  Appearance& appearance = ev.data;
+  Sprite* sprite = ev.sprite;
+
+  for (auto& visual : comp.visuals)
+  {
+    DEBUG("vis ", visual.key, "\n");
+
+    if (StringHash* appearance_val = appearance.data.find(visual.key))
+    {
+      DEBUG("  found\n");
+      if (StringHash* new_state = visual.elem.find(appearance_val->val))
+      {
+        u64 idx = sprite->states->map.findIndex(new_state->val);
+        if (idx != sprite->states->map.len)
+        {
+            DEBUG("  new state ", idx, "\n");
+            sprite->state = idx;
+        }
+      }
+    }
+  }
+}
+
+}

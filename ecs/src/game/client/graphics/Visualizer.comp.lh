@@ -1,0 +1,22 @@
+/*
+ *  Component used on Entities that are generically visualized.
+ */
+
+$ require "common"
+$ local metadata = require "reflect.Metadata"
+
+@@lpp.import "game/shared/component/Component.lh"
+
+@@lpp.import "asset/StringMap.lh"
+@@lpp.import "asset/StringHash.lh"
+
+namespace cl
+{
+
+struct Visualizer : Component
+{
+  @metadata.data_field
+  StringMap<StringMap<StringHash>> visuals;
+};
+
+}

@@ -1536,7 +1536,8 @@ $       return "Vec2State"
 $     elseif decl.specialized_name == "TypedPtr" then
 $       local TPtr = decl.template_args[1]
 $       local DPtr = TPtr:getDecl()
-$       return "TypedPointerState<"..importer.removeTag(DPtr.name)..">"
+$       local name = DPtr and importer.removeTag(DPtr.name) or "void"
+$       return "TypedPointerState<"..name..">"
 $     elseif decl.specialized_name == "ArrayDef" then
 $       local subtype = decl.template_args[1]
 $       local subdecl = subtype:getDecl()
@@ -1780,6 +1781,12 @@ $ end
 template<>
 TypedPointerState<$(name)> __typed_pointer_state_dummy_<$(name)> = {};
 $ end
+
+template<>
+struct TypedPointerState<void> : ValueState
+{
+
+};
 
 $ -- * ------------------------------------------------------------------------
 

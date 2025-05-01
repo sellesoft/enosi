@@ -1,0 +1,32 @@
+/*
+ *  A generic, client-side, system that updates states of a Sprite
+ *  based on an Entity's Appearance data. In order for an Entity to be 
+ *  updated by this system, it must contain a cl::Visualizer component.
+ */
+
+$ require "common"
+
+@@lpp.import "game/shared/entity/EntitySys.lh"
+
+@@lpp.import "game/client/graphics/Visualizer.comp.lh"
+@@lpp.import "game/client/Appearance.events.lh"
+
+namespace cl
+{
+
+/* ============================================================================
+ */
+struct VisualizerSys : EntitySys
+{
+  b8 init()
+  {
+    subscribeTo<Visualizer, AppearanceChange>(
+      &VisualizerSys::onAppearanceChange);
+
+    return true;
+  }
+
+  void onAppearanceChange(EntComp<Visualizer>,AppearanceChange&);
+};
+
+}

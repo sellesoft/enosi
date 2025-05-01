@@ -25,7 +25,7 @@ $   end)
 $ end
 
 static Logger logger = 
-  Logger::create("entmgr"_str, Logger::Verbosity::Debug);
+  Logger::create("entmgr"_str, Logger::Verbosity::Info);
 
 /* ----------------------------------------------------------------------------
  */
@@ -113,9 +113,20 @@ EntityId EntityMgr::createEntityFromSourceData(
 
 /* ----------------------------------------------------------------------------
  */
-EntityId EntityMgr::spawnEntity(const EntityDef& def)
+EntityId EntityMgr::spawnEntity(const EntityDef& def, vec2f pos, u32 layer)
 {
-  return loadEntity(def, *this);
+  EntityId id = loadEntity(def, *this);
+  if (isnil(id))
+    return nil;
+
+  auto* transform = tryComp<Transform>(id);
+  transform->pos = pos;
+  transform->placement_layer = layer;
+
+  eventbus.raise(id, ComponentInit{});
+  eventbus.raise(id, ComponentStartup{});
+
+  return id;
 }
 
 /* ----------------------------------------------------------------------------

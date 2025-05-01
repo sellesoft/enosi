@@ -11,7 +11,7 @@ struct InputSys;
  */
 struct MindSys : EntitySys
 {
-  InputSys& input;
+  InputSys* input;
   
   EntityId attached = nil;
 

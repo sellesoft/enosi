@@ -277,16 +277,22 @@ LPPCFUNC String getDeclName(Decl* decl);
  */ 
 LPPCFUNC Type* getDeclType(Decl* decl);
 
-// retrieves the Type representation of a Type declaration.
-// This does not give the type of the declaraion!!
-LPPCFUNC Type* getTypeDeclType(Context* ctx, Decl* decl);
-
 /* ----------------------------------------------------------------------------
  |  Gets the offset into the provided string where the given declaration 
  |  begins and ends.
  */
 LPPCFUNC u64 getDeclBegin(Context* ctx, Decl* decl);
 LPPCFUNC u64 getDeclEnd(Context* ctx, Decl* decl);
+
+/* ----------------------------------------------------------------------------
+ *  Whether this declares a type.
+ */
+LPPCFUNC b8 isTypeDecl(Decl* decl);
+
+/* ----------------------------------------------------------------------------
+ *  Gets the Type of a type declaration.
+ */
+LPPCFUNC Type* getTypeDeclType(Context* ctx, Decl* decl);
 
 /* ----------------------------------------------------------------------------
  *  Whether this decl represents a struct or union.
@@ -299,6 +305,7 @@ LPPCFUNC b8 isRecord(Decl* decl);
 LPPCFUNC b8 isStruct(Decl* decl);
 LPPCFUNC b8 isUnion(Decl* decl);
 LPPCFUNC b8 isEnum(Decl* decl);
+LPPCFUNC b8 isTypedef(Decl* decl);
 
 /* ---------------------------------------------------------------------------
  */
@@ -349,6 +356,14 @@ LPPCFUNC u64 getFieldOffset(Context* ctx, Decl* field);
 /* ----------------------------------------------------------------------------
  */
 LPPCFUNC b8 isComplete(Decl* decl);
+
+/* ---------------------------------------------------------------------------
+ */
+LPPCFUNC Type* getTypedefSubType(Decl* decl);
+
+/* ---------------------------------------------------------------------------
+ */
+LPPCFUNC Decl* getTypedefSubDecl(Decl* decl);
 
 /* ----------------------------------------------------------------------------
  *  Gets a comment, if any, attached to the given Decl.
@@ -427,6 +442,18 @@ LPPCFUNC b8 isElaborated(Type* type);
 /* ----------------------------------------------------------------------------
  */
 LPPCFUNC Type* getDesugaredType(Context* ctx, Type* type);
+
+/* ----------------------------------------------------------------------------
+ */
+LPPCFUNC Type* getSingleStepDesugaredType(Context* ctx, Type* type);
+
+/* ---------------------------------------------------------------------------
+ */
+LPPCFUNC b8 isTypedefType(Type* type);
+
+/* ---------------------------------------------------------------------------
+ */
+LPPCFUNC Decl* getTypedefTypeDecl(Type* type);
 
 /* ----------------------------------------------------------------------------
  |  Helpers for dealing with pointers.

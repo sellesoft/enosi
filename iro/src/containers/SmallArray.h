@@ -50,6 +50,7 @@ struct SmallArray
   b8 init(mem::Allocator* big_allocator = &mem::stl_allocator)
   {
     this->big_allocator = big_allocator;
+    arr = small_arr;
     return true;
   }
 

@@ -115,6 +115,8 @@ Type.getDecl = function(self)
   local type = self:getDesugared()
   if type:is(ast.TagType) then
     return type.decl
+  elseif type:is(ast.TypedefType) then
+    return type.decl
   end
 end
 
@@ -240,6 +242,21 @@ CArray.tostring = function(self)
   return "CArray("..self.subtype:tostring()..")"
 end
 
+local TypedefType = Type:derive()
+ast.TypedefType = TypedefType
+
+TypedefType.new = function(decl)
+  local o = {}
+  o.decl = decl
+  if not decl:is(ast.TypedefDecl) then
+  end
+  return setmetatable(o, TypedefType)
+end
+
+TypedefType.tostring = function(self)
+  return "Typedef("..self.decl.name..","..self.decl.subtype:tostring()..")"
+end
+
 local TagType = Type:derive()
 ast.TagType = TagType
 
@@ -254,13 +271,30 @@ TagType.tostring = function(self)
   return "TagType("..self.name..")"
 end
 
-local TagDecl = Decl:derive()
+local TypeDecl = Decl:derive()
+ast.TypeDecl = TypeDecl
+
+local TagDecl = TypeDecl:derive()
 ast.TagDecl = TagDecl
 
 TagDecl.new = function(name)
   local o = {}
   o.name = name
   return setmetatable(o, TagDecl)
+end
+
+local TypedefDecl = TypeDecl:derive()
+ast.TypedefDecl = TypedefDecl
+
+TypedefDecl.new = function(name, subtype)
+  local o = {}
+  o.name = name
+  o.subtype = subtype
+  return setmetatable(o, TypedefDecl)
+end
+
+TypedefDecl.__tostring = function(self)
+  return "Typedef("..self.name..","..self.subtype:tostring()..")"
 end
 
 local ElaboratedType = Type:derive()

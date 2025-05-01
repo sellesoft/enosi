@@ -22,7 +22,7 @@ local importer = require "reflect.Importer"
   },
 
   filter = function(p, decl)
-    TEntSys = p.processed_clang_objs["struct EntitySys"]
+    TEntSys = p:lookupDecl "struct EntitySys"
     if TEntSys then
       if decl:is(ast.Record) and decl:isDerivedFrom(TEntSys) then
         return true
@@ -62,6 +62,9 @@ $         typename = name,
 $         decl = decl,
 $       }
 $       systems_by_canonical_name[decl.name] = system
+$       for base in decl.bases:each() do
+$         systems_by_canonical_name[base.name] = system
+$       end
 $       systems:push(system)
 $     end
 $   end
@@ -98,61 +101,34 @@ b8 EntitySysMgr::init(const InitParams& params)
     mem::stl_allocator.free(systems);
   };
   
-  // Trick to properly resolve references to other systems by first 
-  // initializing the system on the stack with the reference then mem
-  // copying that over to the actual system on heap to allow them to 
-  // use C++ style references w/o needing each system to make a constructor
-  // that takes in the reference.
-  //
-  // This is somewhat hacky and prob inefficient but since it's only done 
-  // once, I don't really have a problem with it. Another reason why we
-  // do it this way is because it also supports systems defining default 
-  // values, as those will be properly initialized when we create it on 
-  // the stack.
 $ systems:each(function(sys)
 $   if not sys.decl:hasMethod "init" then
 $     error("system "..sys.typename.." is missing an 'init' function")
 $   end
-  $(sys.typename) $(sys.name) = 
-  {
-$ local function initializer(decl)
+$   local sysvar = "systems->"..sys.name
+  new (&$(sysvar)) $(sys.typename);
+  $(sysvar).entmgr = &params.entmgr;
+$ local function initStruct(decl)
 $   for base in decl.bases:each() do
-    {
-$     initializer(base)
-    },
-$   end
-$   if decl == TEntSys then
-    .entmgr = params.entmgr,
-$     return
+$     initStruct(base)
 $   end
 $   for field in decl:eachFieldWithIndex() do
 $     local is_ptr = field.type:is(ast.PointerType)
 $     local is_ref = field.type:is(ast.ReferenceType)
-$     if is_ptr or is_ref then
+$     if is_ref then
+$       error("entity systems cannot contain references! ("..sys.typename..
+$             "::"..field.name..")")
+$     end
+$     if is_ptr then
 $       local decl = field.type.subtype:getDecl()
 $       if decl and isSys(decl) then
-$         local sysname = 
-$           "systems->"..systems_by_canonical_name[decl.name].name
-$         if is_ptr then
-    .$(field.name) = &$(sysname),
-$         else
-    .$(field.name) = $(sysname),
-$         end
-$       end
-$     else
-$       -- Prevent systems from trying to store another system.
-$       local decl = field.type:getDecl()
-$       if decl and isSys(decl) then
-$         error("systems are not allowed to store another system! "..
-$               "use a reference or pointer.")
+$         local refsys = "systems->"..systems_by_canonical_name[decl.name].name
+  $(sysvar).$(field.name) = &$(refsys);
 $       end
 $     end
 $   end
 $ end
-$ initializer(sys.decl)
-  };
-  // Copy the stack initialized system over to the heap.
-  mem::copy(&systems->$(sys.name), &$(sys.name), sizeof($(sys.typename)));
+$ initStruct(sys.decl)
 $ end)
 
   TimePoint sys_init_start;

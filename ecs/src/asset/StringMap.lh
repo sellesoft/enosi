@@ -17,7 +17,6 @@ using namespace iro;
 template<typename TElem>
 struct StringMap
 {
-
   struct Slot
   {
     u64 hash;
@@ -104,4 +103,20 @@ struct StringMap
   {
     return add(key.hash(), key);
   }
+
+  /* --------------------------------------------------------------------------
+   */
+  void set(String key, const TElem& value)
+  {
+    u64 hash = key.hash();
+
+    TElem* elem = find(hash);
+    if (elem == nullptr)
+      elem = add(hash, key);
+
+    *elem = value;
+  }
+
+  Slot* begin() { return slots; }
+  Slot* end() { return slots + len; }
 };

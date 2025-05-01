@@ -13,13 +13,10 @@ struct MapSys;
  */
 struct StructureSys : EntitySys
 {
-  MapSys& map;
+  MapSys* map;
 
   b8 init() 
   { 
-    subscribeTo<MapPostLoad>(&StructureSys::onMapLoad);
     return true; 
   }
-
-  void onMapLoad(MapPostLoad&);
 };

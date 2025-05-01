@@ -14,7 +14,7 @@ $ require "common"
 namespace gfx
 {
 
-@log.ger(ref.texture, Debug);
+@log.ger(ref.texture, Info);
 
 /* ----------------------------------------------------------------------------
  */
@@ -39,6 +39,8 @@ b8 TextureRef::load(LoadParams& params)
 
   if (!CompiledData::compile(compile_params))
     return false;
+
+  DEBUG("loading ", src_path, "\n");
 
   auto* data =
     CompiledData::load(src_path, "gfx::TextureDef"_str, params.assetmgr);

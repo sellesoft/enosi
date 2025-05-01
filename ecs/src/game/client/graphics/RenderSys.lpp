@@ -278,8 +278,8 @@ b8 RenderSys::update(const UpdateParams& params)
   ///////////////////////////////////////////////
   // 0. Update Scene
   {
-    renderer.setViewport(params.viewport.pos, params.viewport.size);
-    renderer.setScissor(params.viewport.pos, params.viewport.size);
+    renderer.setViewport(params.viewport.pos(), params.viewport.size());
+    renderer.setScissor(params.viewport.pos(), params.viewport.size());
 
     mat3x2 proj = mat3x2::identity();
     proj.set(0, 0, EyeSys::pixels_per_meter * 2.f / (f32)params.viewport.w);
@@ -339,12 +339,10 @@ b8 RenderSys::update(const UpdateParams& params)
 
       for (const Tile& tile : layer.tiles)
       {
-        const MapTileDef* tiledef = tile.def;
-
-        if (tiledef == nullptr || !tiledef->kind.isValid())
+        if (!tile.kind.isValid())
           continue;
 
-        const TileKindDef& tilekind = *tiledef->kind;
+        const TileKindDef& tilekind = *tile.kind;
 
         gfx::Texture texture = null_texture;
 
@@ -388,6 +386,9 @@ b8 RenderSys::update(const UpdateParams& params)
       const gfx::TextureRef* texref = 
         sprite_states.map.getAtIndex(sprite.state);
 
+      // INFO(sprite.state, " ", entmgr.getEntity(sprite.owner)->name, 
+      //      sprite_states.map.slots[sprite.state].key, "\n");
+
       gfx::Texture texture = null_texture;
       if (texref != nullptr && texref->isValid())
       {
@@ -396,14 +397,13 @@ b8 RenderSys::update(const UpdateParams& params)
       else
       {
         WARN("sprite component for entity ", owner->name, " has no texture\n");
-        platform::debugBreak();
       }
 
       if (auto* transform = owner->tryComp<Transform>())
       {
         Layer& layer = map.layers[transform->placement_layer];
 
-        vec2f pos = layer.def->pos + transform->pos;
+        vec2f pos = layer.pos + transform->pos;
         Color color = sprite.color;
         if (texture == null_texture)
           color = 0xff0000ff;

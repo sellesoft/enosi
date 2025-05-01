@@ -1,0 +1,49 @@
+$ require "common"
+
+@@lpp.import "game/client/Appearance.sys.lh"
+@@lpp.import "game/client/graphics/Sprite.comp.lh"
+
+@log.ger(cl.aprnce, Debug)
+
+namespace cl
+{
+
+/* ----------------------------------------------------------------------------
+ */
+void AppearanceSys::onStartup(EntComp<Appearance> ec, ComponentStartup&)
+{
+  queueUpdate(ec.ent, ec.comp);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void AppearanceSys::queueUpdate(EntityId id, Appearance& comp)
+{
+  auto* update = queued_updates.push();
+  update->ent = id;
+  update->comp = &comp;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 AppearanceSys::update()
+{
+  while (!queued_updates.isEmpty())
+  {
+    auto [ent, comp] = *queued_updates.last();
+
+    comp->is_dirty = false;
+
+    raise(ent, AppearanceChange
+    {
+      .data = *comp,
+      .sprite = tryComp<Sprite>(ent),
+    });
+
+    queued_updates.pop();
+  }
+
+  return true;
+}
+
+}

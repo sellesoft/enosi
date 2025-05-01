@@ -1,0 +1,33 @@
+/*
+ *  Sets visual states for structures.
+ */
+
+$ require "common"
+
+@@lpp.import "game/shared/entity/EntitySys.lh"
+@@lpp.import "game/client/Appearance.events.lh"
+
+struct MapSys;
+struct ExtendableStructure;
+
+namespace cl
+{
+
+/* ============================================================================
+ */
+struct StructureVisualizerSys : EntitySys
+{
+  MapSys* map;
+
+  b8 init()
+  {
+    subscribeTo<ExtendableStructure, AppearanceChange>(
+      &StructureVisualizerSys::onAppearanceChange);
+
+    return true;
+  }
+
+  void onAppearanceChange(EntComp<ExtendableStructure>,AppearanceChange&);
+};
+
+}

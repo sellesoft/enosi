@@ -38,7 +38,12 @@ struct GameSim : SharedGameSim
 
   void setViewport(vec2i pos, vec2i size) 
   {
-    viewport = {  };
+    viewport.set(pos,size);
+  }
+
+  b8 loadMap(String name)
+  {
+    return gamemgr.loadMap(name);
   }
 };
 

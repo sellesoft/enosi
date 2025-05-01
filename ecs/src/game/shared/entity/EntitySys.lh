@@ -15,7 +15,7 @@ $ require "common"
  */
 struct EntitySys
 {
-  EntityMgr& entmgr;
+  EntityMgr* entmgr;
 
   // Subscribes to events of type TEvent raised on entities that contain a 
   // Component of type TComp.
@@ -30,7 +30,7 @@ struct EntitySys
       void (*y)(void*, EntComp<TComp>, TEvent&);
     } x { cb };
 
-    entmgr.eventbus.subscribeTo<TComp,TEvent>(this, x.y);
+    entmgr->eventbus.subscribeTo<TComp,TEvent>(this, x.y);
   }
 
   // Subscribes to events raised of type TEvent, when that event is raised
@@ -46,14 +46,14 @@ struct EntitySys
       void (*y)(void*, TEvent&);
     } x { cb };
 
-    entmgr.eventbus.subscribeTo<TEvent>(this, x.y);
+    entmgr->eventbus.subscribeTo<TEvent>(this, x.y);
   }
 
   // Raises the event TEvent on the given entity.
   template<typename TEvent>
   void raise(EntityId id, TEvent& event)
   {
-    entmgr.eventbus.raise(id, event);
+    entmgr->eventbus.raise(id, event);
   }
 
   template<typename TEvent>
@@ -63,7 +63,7 @@ struct EntitySys
   template<typename TEvent>
   void raise(TEvent& event)
   {
-    entmgr.eventbus.raise(event);
+    entmgr->eventbus.raise(event);
   }
 
   template<typename TEvent>
@@ -71,17 +71,26 @@ struct EntitySys
 
   // Attempts to retrieve a Component of type TComp from the given entity.
   template<typename TComp>
-  TComp* tryComp(EntityId id) { return entmgr.tryComp<TComp>(id); }
+  TComp* tryComp(EntityId id) { return entmgr->tryComp<TComp>(id); }
 
   template<typename TComp, typename X>
-  TComp* tryComp(EntComp<X> id) { return entmgr.tryComp<TComp>(id); }
+  TComp* tryComp(EntComp<X> id) { return entmgr->tryComp<TComp>(id); }
+
+  Entity* getEntity(EntityId id) { return entmgr->getEntity(id); }
 
   // Iterates all Components of type TComp, for use in entity systems 
   // that manage certain types of components in their update function.
   template<typename TComp>
   ComponentIter<TComp> iterateComp()
   {
-    return entmgr.cmpmgr.iterate<TComp>();
+    return entmgr->cmpmgr.iterate<TComp>();
   }
+
+  // Because entity systems may use virtual functions, this struct must
+  // also be virtual. If not then in methods defined here, 'this' is different
+  // from that in virtual derived structs (probably cause of the vtable ptr
+  // or something idk). We dont have any use for virtual stuff in this at the
+  // moment, so this dummy is here to force it to be virtual.
+  virtual void __dummy() {}
 };
 

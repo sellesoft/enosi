@@ -15,6 +15,7 @@ namespace gfx
  */
 @metadata.inline_value(name)
 @metadata.def
+@metadata.pack_from(String/name)
 struct TextureRef : Ref
 {
   @metadata.source_type(png)
