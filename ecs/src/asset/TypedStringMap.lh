@@ -29,4 +29,6 @@ struct TypedStringMap
 {
   String type;
   StringMap<TypedPtr<void>> map;
+
+  b8 construct(T* ptr);
 };

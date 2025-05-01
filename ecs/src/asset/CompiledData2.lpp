@@ -3,6 +3,8 @@ $ local glob = require "Glob"
 $ local Processor = require "reflect.Processor"
 $ local ast = require "reflect.AST"
 $ local clog = require "Logger" ("compiledata", Verbosity.Debug)
+$ local Type = require "Type"
+$ local List = require "List"
 
 #include "iro/Logger.h"
 #include "iro/fs/File.h"
@@ -27,7 +29,7 @@ local importer = require "reflect.Importer"
       return true
     end
 
-    local TComponent = p.processed_clang_objs["struct Component"]
+    local TComponent = p:lookupDecl "struct Component"
     if TComponent and decl:is(ast.Record) and decl:isDerivedFrom(TComponent)
     then
       return true
@@ -42,6 +44,116 @@ $$$
 @@lpp.import "asset/Packing.lh"
 @@lpp.import "asset/AssetMgr.lh"
 @@lpp.import "asset/SourceDataFileReg.lh"
+
+$ local function visitDecls(opts)
+$   local placed = {}
+$   local placed_list = List{}
+$   local place_queue = List{}
+$
+$   local visit, visitType
+$
+$   local visitRecord = function(name, decl)
+$     for base in decl.bases:each() do
+$       visit(base)
+$     end
+$     
+$     if decl == TAssetRef or decl:isDerivedFrom(TAssetRef) then
+$       if opts.asset_ref then
+$         opts.asset_ref(name, decl)
+$       end
+$       return
+$     end
+$     
+$     if decl:is(ast.TemplateSpecialization) then
+$       for arg in decl.template_args:each() do
+$         if arg:is(ast.Type) then
+$           visitType(arg)
+$         end
+$       end
+$       if opts.template_spec then
+$         opts.template_spec(name, decl)
+$       end
+$       return
+$     elseif decl:is(ast.Struct) then
+$       for field in decl:eachFieldWithIndex() do
+$         visitType(field.type)
+$       end
+$       if opts.struct then
+$         opts.struct(name, decl)
+$       end
+$       return
+$     end
+$   end
+$
+$   local visitEnum = function(name, decl)  
+$     if opts.enum then
+$       opts.enum(name, decl)
+$     end
+$   end
+$  
+$   local visitTypedef = function(name, decl)
+$   end
+$
+$   visitType = function(type)
+$     local desugared = type:getDesugared()
+$     if desugared:is(ast.TagType) then
+$       return (visit(desugared:getDecl()))
+$     elseif desugared:is(ast.TypedefType) then
+$       return (visit(desugared.decl))
+$     end
+$   end
+$  
+$   visit = function(decl)
+$     if placed[decl.name] then return end
+$    
+$     for to_place in place_queue:each() do
+$       if to_place == decl then
+$         if opt.forward_decl then
+$           opt.forward_decl(name, decl)
+$         end
+$         return
+$       end
+$     end
+$
+$     place_queue:push(decl)
+$     
+$     if decl:is(ast.TagDecl) then
+$       if decl:is(ast.Record) then
+$         visitRecord(importer.removeTag(decl.name), decl)
+$       elseif decl:is(ast.Enum) then
+$         visitEnum(importer.removeTag(decl.name), decl)
+$       end
+$     elseif decl:is(ast.TypedefDecl) then
+$       visitType(decl.subtype)
+$       if opts.typedef then
+$         opts.typedef(importer.removeTag(decl.name), decl)
+$       end
+$     end
+$     
+$     place_queue:pop()
+$     placed[decl.name] = decl
+$     placed_list:push(decl)
+$   end
+$   
+$   importer:eachDecl(function(name, decl)
+$     visit(decl)
+$   end)
+$ end
+
+$ visitDecls
+$ {
+$   struct = function(name, decl)
+$     print(name)
+$   end,
+$   
+$   typedef = function(name, decl)
+$     print(name)
+$   end,
+$   
+$   template_spec = function(name, decl)
+$     print(name)
+$   end,
+$ }
 
 /* ----------------------------------------------------------------------------
  *  Helper for searching for the proper source type of an asset when its 
@@ -208,8 +320,8 @@ $ local place_queue = cmn.List{}
 
 $ local putCompiler
 $ local putTypeCompiler
-$ local TAssetRef = importer.p.processed_clang_objs["struct AssetRef"]
-$ local TTextureRef = importer.p.processed_clang_objs["struct gfx::TextureRef"]
+$ local TAssetRef = importer.p:lookupDecl "struct AssetRef"
+$ local TTextureRef = importer.p:lookupDecl "struct gfx::TextureRef"
 
 $ local function putNumberCompiler(name)
 /* ----------------------------------------------------------------------------
@@ -286,7 +398,19 @@ b8 Compiler::compile(const String& str)
   writeData<String>();
   return true;
 }
-$ recordPlaced(importer.p.processed_clang_objs["struct iro::utf8::String"])
+$ recordPlaced(importer.p:lookupDecl "struct iro::utf8::String")
+
+/* ----------------------------------------------------------------------------
+ *  Special implementation of compiling Colors, since its a union and we don't
+ *  handle those for now.
+ */
+template<>
+b8 Compiler::compile(const Color& color)
+{
+  writeData(color);  
+  return true;
+}
+$ recordPlaced(importer.p:lookupDecl "struct Color")
 
 $ -- * ------------------------------------------------------------------------
 $ -- Place specializations of Compiler::compile for structure types.
@@ -571,7 +695,7 @@ $     return (putVec2Compiler(name, decl))
 $   elseif "Flags" == spec then
 $     return (putFlagsCompiler(name, decl))
 $   end
-$   clog:warn("unhandled template spec used in data: ", name, "\n")
+$   clog:warn("unhandled template spec (compile): ", name, "\n")
 $ end
 
 $ -- * ------------------------------------------------------------------------
@@ -615,7 +739,7 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
-$ putCompiler = function(decl, from_type)
+$ putCompiler = function(decl)
 $   if placed[decl.name] then return end
 $  
 $   for to_place in place_queue:each() do
@@ -653,7 +777,8 @@ $   if desugared:is(ast.TagType) then
 $     local decl = desugared:getDecl()
 $     putCompiler(decl)
 $   elseif desugared:is(ast.TypedefType) then
-$     putCompiler(desugared.decl)
+$     local decl = desugared.decl
+$     putCompiler(decl)
 $   end
 $   if type:is(ast.ElaboratedType) then
 $     if not placed_types[type.name] then
@@ -671,63 +796,23 @@ $ end)
 
 $ -- * ------------------------------------------------------------------------
 
-$ local function eachPlacedName(f)
-$   local placed_names = {}
-$   for decl in placed_list:each() do
-$     local name = importer.removeTag(decl.name)
-$     placed_names[name] = true
-$     f(name, decl)
-$   end
-$   for type in placed_types_list:each() do
-$     if type:is(ast.ElaboratedType) and not placed_names[type.name] then
-$       local desugared = type:getDesugared()
-$       f(name, desugared:getDecl())
-$     end
-$   end
-$ end
-
-$ -- * ------------------------------------------------------------------------
-
-$ if false then
 $ local function placeRuntimeCases(f)
+$   local placed_rt = {}
 $   for decl in placed_list:each() do
-$     print(decl)
-$     local dname = importer.removeTag(decl.name)
-$     if decl.types then
-$       for name,type in pairs(decl.types) do
-$        -- io.write("    ", dname, "\n", 
-$        --          "    ", type.name, "\n", 
-$        --          "    ", type:tostring(), "\n")
-$         local can_place = false
-$         if type:is(ast.ElaboratedType) then
-$           -- Don't place elaborated type names when the type is a nested
-$           -- type, because it will cause collisions.
-$           if not decl.parent then
-$             can_place = true
-$           end
-$         elseif type:is(ast.TagType) then
-$           can_place = true
-$         end
-$         
-$         if can_place then
-$           if type.name ~= dname then
-  case "$(type.name)"_hashed:
-$           end
-$         end
+$     for td in decl.typedefs:each() do
+$       if not placed_rt[td.name] then
+$         placed_rt[td.name] = true
+  case "$(importer.removeTag(td.name))"_hashed:
+$         f(decl)
+    break;
 $       end
 $     end
-  case "$(dname)"_hashed:
-$   f(decl)
-    break;
-$   end
-$ end
-$ end
-
-$ local function placeRuntimeCases(f)
-$   for decl in placed_list:each() do
+$     if not placed_rt[decl.name] then
+$       placed_rt[decl.name] = true
   case "$(importer.removeTag(decl.name))"_hashed:
-$   f(decl)
+$       f(decl)
     break;
+$     end
 $   end
 $ end
 
@@ -764,9 +849,6 @@ b8 Compiler::compile(const TypedPtr<void>& x)
   switch (x.type.hash())
   {
   // Uhh yeah
-  case "b8"_hashed:
-    p->pointee_size = sizeof(b8);
-    break;
 $ placeRuntimeCases(function(decl)
     p->pointee_size = sizeof($(decl.name));
 $ end)
@@ -1111,7 +1193,11 @@ $ local function putGetTypedPtrRefs(name, decl)
 template<>
 void getRefs(CompiledData::Refs* refs, $(name)* ptr)
 {
+$ if decl.template_args[1].name == "void" then
+  getRefs(ptr->type, refs, ptr->ptr);
+$ else
   getRefs(refs, ptr->ptr);
+$ end
 }
 $ end
 
@@ -1188,7 +1274,7 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
-$ local function putGetAssetRefRefs(name, decl)
+$ local function putGetRefRefs(name, decl)
 /* ----------------------------------------------------------------------------
  */
 template<>
@@ -1201,10 +1287,11 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local function putGetRecordRefs(name, decl)
-$   if decl == TAssetRef or decl:isDerivedFrom(TAssetRef) then
-$     return (putGetAssetRefRefs(name, decl))
+$   local TRef = importer.p:lookupDecl "struct Ref"
+$   if decl == TRef or decl:isDerivedFrom(TRef) then
+$     return (putGetRefRefs(name, decl))
 $   end
-$   
+$ 
 $   if name == "iro::utf8::String" then
 $     return -- Explicitly a noop.
 $   end

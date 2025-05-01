@@ -19,7 +19,7 @@ local importer = require "reflect.Importer"
         return true
       end
       
-      local TComponent = p.processed_clang_objs["struct Component"]
+      local TComponent = p:lookupDecl "struct Component"
       if TComponent and decl:isDerivedFrom(TComponent) then
         return true
       end

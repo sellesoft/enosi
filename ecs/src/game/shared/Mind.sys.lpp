@@ -12,13 +12,13 @@ b8 MindSys::update()
 {
   if (auto* movement = tryComp<Movement>(attached))
   {
-    if (input.mgr->wasKeyPressed(Key::W))
+    if (input->mgr->wasKeyPressed(Key::W))
       movement->input.y += 1.f;
-    if (input.mgr->wasKeyPressed(Key::S))
+    if (input->mgr->wasKeyPressed(Key::S))
       movement->input.y -= 1.f;
-    if (input.mgr->wasKeyPressed(Key::D))
+    if (input->mgr->wasKeyPressed(Key::D))
       movement->input.x += 1.f;
-    if (input.mgr->wasKeyPressed(Key::A))
+    if (input->mgr->wasKeyPressed(Key::A))
       movement->input.x -= 1.f;
 
     movement->input.normalize();

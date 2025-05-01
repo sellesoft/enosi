@@ -80,14 +80,24 @@ end
 
 -- * --------------------------------------------------------------------------
 
-Processor.recordProcessed = function(self, canonical_name, obj)
-  self.processed_clang_objs[canonical_name] = obj
+Processor.recordProcessed = function(self, cdecl, obj)
+  self.processed_clang_objs[tostring(cdecl.handle)] = obj
 end
 
 -- * --------------------------------------------------------------------------
 
-Processor.findProcessed = function(self, canonical_name)
-    return self.processed_clang_objs[canonical_name]
+Processor.findProcessed = function(self, cdecl)
+  return self.processed_clang_objs[tostring(cdecl.handle)]
+end
+
+-- * --------------------------------------------------------------------------
+
+Processor.lookupDecl = function(self, name)
+  for _,v in pairs(self.processed_clang_objs) do
+    if name == v.name then
+      return v
+    end
+  end
 end
 
 -- * --------------------------------------------------------------------------
@@ -204,21 +214,21 @@ end
 Processor.resolveDecl = function(self, cdecl)
   cdecl = self:ensureDefinitionDecl(cdecl)
 
+  local processed = self:findProcessed(cdecl)
+  if processed then
+    return processed
+  end
+
   -- NOTE(sushi) we should only be getting type decls in here for now.
   local ctype = cdecl:getTypeDeclType()
   if not ctype then
     return
   end
-  io.write("----------------\n",
-    cdecl:name(), "\n",
-    ctype:getTypeName(), "\n" ,
-    ctype:getCanonicalTypeName(), "\n")
-  local canonical_name = ctype:getCanonicalTypeName()
-
-  local processed = self:findProcessed(canonical_name)
-  if processed then
-    return processed
-  end
+  -- io.write("----------------\n",
+  --   cdecl:name(), "\n",
+  --   ctype:getTypeName(), "\n" ,
+  --   ctype:getCanonicalTypeName(), "\n",
+  --   tostring((cdecl.handle)), "\n")
 
   -- Ignore template declarations for now.
   if cdecl:isTemplate() then return end
@@ -238,6 +248,9 @@ Processor.resolveDecl = function(self, cdecl)
     decl = self:processEnum(cdecl, ctype)
   elseif cdecl:isTypedef() then
     decl = self:processTypedef(cdecl, ctype)
+  else
+    cdecl:dump()
+    error "unhandled decl"
   end
 
   if decl then
@@ -246,6 +259,7 @@ Processor.resolveDecl = function(self, cdecl)
     if decl:is(ast.Record) and cdecl:isAnonymous() then
       decl.is_anonymous = true
     end
+    decl.typedefs = List{}
   end
 
   return decl
@@ -257,10 +271,6 @@ end
 --- If it doesn't exist then process it and return the result.
 Processor.resolveType = function(self, ctype)
   local type
-
-  if self.processed_types[ctype.handle] then
-    return self.processed_types[ctype.handle]
-  end
 
   if ctype:isPointer() then
     if ctype:isFunctionPointer() then
@@ -296,8 +306,16 @@ Processor.resolveType = function(self, ctype)
         ctype:size() / 8)
   elseif ctype:isTypedef() then
     local decl = self:resolveDecl(ctype:getTypedefDecl())
+    if not decl then
+      ctype:dump()
+      ctype:getTypedefDecl():dump()
+    end
     type = ast.TypedefType.new(decl)
-    type.size = ctype:size() / 8
+    if decl:is(ast.TypedefDecl) then
+      type.size = decl.subtype.size
+    else
+      type.size = ctype:size() / 8
+    end
   else
     local builtin = ast.BuiltinType[ctype:getTypeName()]
     if builtin then
@@ -331,15 +349,6 @@ Processor.resolveType = function(self, ctype)
       require "Util" .dumpValue(getmetatable(decl), 2)
       error("unhandled decl kind of type '"..ctype:getCanonicalTypeName()..
             "'")
-    end
-  end
-
-  if type then
-    -- io.write(tostring(ctype.handle), " ", type:tostring(), "\n")
-    self.processed_types[ctype.handle] = type
-    if not self.types.map[ctype:getTypeName()] then
-      self.types.map[ctype:getTypeName()] = type
-      self.types.list:push(type)
     end
   end
 
@@ -386,7 +395,7 @@ end
 
 Processor.processStruct = function(self, cdecl, ctype)
   local struct = ast.Struct.new(ctype:getCanonicalTypeName())
-  self:recordProcessed(ctype:getCanonicalTypeName(), struct)
+  self:recordProcessed(cdecl, struct)
 
   self:processRecordMembers(cdecl, ctype, struct)
 
@@ -412,7 +421,7 @@ end
 
 Processor.processUnion = function(self, cdecl, ctype)
   local union = ast.Union.new(ctype:getCanonicalTypeName())
-  self:recordProcessed(ctype:getCanonicalTypeName(), union)
+  self:recordProcessed(cdecl, union)
 
   self:processRecordMembers(cdecl, ctype, union)
 
@@ -428,7 +437,7 @@ Processor.processTemplateSpecialization = function(self, cdecl, ctype)
       ctype:getCanonicalTypeName(),
       specdecl:name())
 
-  self:recordProcessed(spec.name, spec)
+  self:recordProcessed(cdecl, spec)
 
   local iter = cdecl:getTemplateArgIter()
   while true do
@@ -552,7 +561,7 @@ end
 
 Processor.processEnum = function(self, cdecl, ctype)
   local enum = ast.Enum.new(ctype:getCanonicalTypeName())
-  self:recordProcessed(ctype:getCanonicalTypeName(), enum)
+  self:recordProcessed(cdecl, enum)
 
   local iter = cdecl:getEnumIter()
   if iter then
@@ -584,7 +593,12 @@ Processor.processTypedef = function(self, cdecl, ctype)
   local typedef = ast.TypedefDecl.new(ctype:getTypeName())
   typedef.subtype = self:resolveType(cdecl:getTypedefSubType())
     or error("failed to get subtype of "..ctype:getTypeName())
-  self:recordProcessed(ctype:getCanonicalTypeName(), typedef)
+  self:recordProcessed(cdecl, typedef)
+
+  local subdecl = typedef.subtype:getDecl()
+  if subdecl then
+    subdecl.typedefs:push(typedef)
+  end
 
   return typedef
 end

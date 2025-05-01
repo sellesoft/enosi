@@ -5,9 +5,26 @@
 $ local metadata = require "reflect.Metadata"
 
 // Raised when this Component is added to an Entity.
+// BEWARE that you cannot reliably access other components on the Entity
+// using this, as the Entity may still be undergoing creation. If you want 
+// to initialize a Component, use ComponentInit as it is raised after all 
+// Components have been added to an Entity.
 @metadata.event(entity)
 struct ComponentAdd { };
 
-// Raised when this Component is removed from an Entity.
+// Raised after all Components have been added to an Entity. 
+// BEWARE (again) that you cannot rely on other Components being initialized!
+// If you need all Components to have been initialized, use ComponentStartup.
+@metadata.event(entity)
+struct ComponentInit { };
+
+// Raised after all Components on an Entity have been initialized. Currently
+// this is only called when an entity is spawned, but maybe should be called
+// when Components are added to an Entity at 'run-time'? 
+@metadata.event(entity)
+struct ComponentStartup { };
+
+// Raised when this Component is removed from an Entity and is about to be 
+// deallocated.
 @metadata.event(entity)
 struct ComponentRemove { };

@@ -1,6 +1,6 @@
 $ local cmn = require "common"
 $ local ast = require "reflect.AST"
-$ local clog = require "Logger" ("packing", Verbosity.Debug)
+$ local clog = require "Logger" ("packing", Verbosity.Info)
 $ local List = require "List"
 
 $$$
@@ -54,7 +54,7 @@ $ local placed = {}
 $ local place_queue = List{}
 $ local putPacker
 $ local putTypePacker
-$ local TAssetRef = importer.p.processed_clang_objs["struct AssetRef"]
+$ local TAssetRef = importer.p:lookupDecl "struct AssetRef"
 
 $ local function putNumberPacker(name)
 /* ----------------------------------------------------------------------------
@@ -116,6 +116,44 @@ b8 Packer::pack(const SourceData& data, String* out)
   return true;
 }
 $ placed["struct iro::utf8::String"] = true
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 Packer::pack(const SourceData& data, Color* out)
+{
+if (!data.hasChildren())
+    return ERROR("expected an object to pack Color\n");
+
+  // TODO(sushi) nameless initialization
+
+  for (const SourceData* child : data.children)
+  {
+    if (!child->hasNumberValue())
+      return ERROR("Color members can only be numbers\n");
+
+    switch (child->name.hash())
+    {
+    case "r"_hashed:
+      out->r = strtof((char*)child->val.str.ptr, nullptr);
+      break;
+    case "g"_hashed:
+      out->g = strtof((char*)child->val.str.ptr, nullptr);
+      break;
+    case "b"_hashed:
+      out->b = strtof((char*)child->val.str.ptr, nullptr);
+      break;
+    case "a"_hashed:
+      out->a = strtof((char*)child->val.str.ptr, nullptr);
+      break;
+    default:
+      return ERROR("no member named ", child->name, " in Color\n");
+    }
+  }
+
+  return true;
+}
+$ placed["struct Color"] = true
 
 /* ----------------------------------------------------------------------------
  */
@@ -278,8 +316,6 @@ b8 Packer::pack(const SourceData& data, $(name)* out)
   if (!data.hasObjectData())
     return ERROR("expected object data to pack into $(name)\n");
 
-  if (data.children.isEmpty())
-    return true;
 
   if (!out->init(data.children.len(), &packed->buffer))
     return ERROR("failed to initialize $(name)\n");
@@ -316,39 +352,81 @@ b8 Packer::pack(const SourceData& data, $(name)* out)
   if (!data.hasObjectData())
     return ERROR("expected object data to pack into $(name)\n");
 
-  if (data.children.isEmpty())
-    return true;
-
-  if (!out->map.init(data.children.len(), &packed->buffer))
-    return ERROR("failed to initialize $(name)\n");
-
 $ local function packIntoDecl(decl)
-  for (const SourceData* child : data.children)
   {
-    if (isnil(child->name))
-      return ERROR("children of $(name) data must be named\n");
+    // TODO(sushi) it would be better to count the number of fields used +
+    //             any unspecified defaults to properly size this, but this
+    //             is simpler for now. Wastes space, though, so ideally we 
+    //             get rid of this.
+    if (!out->map.init($(decl:getFieldCount()), &packed->buffer))
+      return ERROR("failed to initialize $(name)\n");
 
-    TypedPtr<void>* tptr = nullptr;
-    switch (child->name.hash())
+    BitArray<$(decl:getFieldCount())> found_fields = {};
+    for (const SourceData* child : data.children)
     {
-$   for field in decl:eachFieldWithIndex() do
-    case "$(field.name)"_hashed:
-      tptr = out->map.add("$(field.name)"_str);
-$     local ftype = field.type
+      if (isnil(child->name))
+        return ERROR("children of $(name) data must be named\n");
+
+      TypedPtr<void>* tptr = nullptr;
+      switch (child->name.hash())
       {
-        auto* p = 
-          packed->buffer.allocateType<$(ftype.name)>();
+$     for field,idx in decl:eachFieldWithIndex() do
+      case "$(field.name)"_hashed:
+        found_fields.set($(idx));
+        tptr = out->map.add("$(field.name)"_str);
+$       local ftype = field.type
+        {
+          auto* p = 
+            packed->buffer.allocateType<$(ftype.name)>();
 
-        if (!pack(*child, p))
-          return ERROR("failed to pack $(ftype.name) into TypedStringMap "
-                       "field $(field.name)\n");
+          if (!pack(*child, p))
+            return ERROR("failed to pack $(ftype.name) into TypedStringMap "
+                         "field $(field.name)\n");
 
-        tptr->type = "$(importer.removeTag(ftype.name))"_str;
-        tptr->ptr = p;
+          tptr->type = "$(importer.removeTag(ftype.name))"_str;
+          tptr->ptr = p;
+        }
+        break;
+$     end
       }
-      break;
-$   end
     }
+
+$   for field,i in decl:eachFieldWithIndex() do
+$     if field.metadata.default and not field.metadata.hidden then
+    if (!found_fields.test($(i)))
+    {
+      TypedPtr<void>* tptr = out->map.add("$(field.name)"_str);
+      auto* p = packed->buffer.allocateType<$(field.type.name)>();
+
+      // TODO(sushi) this can absolutely be done better, given that we know this 
+      //             information at compile time, but I'm just wanting to get 
+      //             this working for now. In the future, we should be able to 
+      //             determine a constant value for the default data given to 
+      //             us and be able to just mem copy it into the member here.
+      SourceDataFile file;
+      file.init();
+      defer { file.deinit(); };
+
+      auto view = io::StringView::from("$(field.metadata.default)"_str);
+      SourceDataParser parser;
+
+      parser.init(&file, &view, "$(field.name) default"_str);
+      defer { parser.deinit(); };
+
+      SourceData* default_data = file.allocateSourceData();
+
+      if (!parser.parsePossiblyTypedData(default_data))
+        return ERROR("failed to parse default value of $(field.name)\n");
+      
+      if (!pack(*default_data, p))
+        return ERROR("failed to pack default data for field $(field.name) " 
+                     "of $(name)\n");
+
+      tptr->type = "$(importer.removeTag(field.type.name))"_str;
+      tptr->ptr = p;
+    }
+$     end
+$   end
   }
 $ end
 
@@ -362,6 +440,8 @@ $   if d.metadata.hidden then
                  "is marked hidden\n");
 $   else
     out->type = data.type.allocateCopy(&packed->buffer);
+    if (data.children.isEmpty())
+      return true;
 $     packIntoDecl(d)
 $   end
     break;
@@ -370,6 +450,9 @@ $     eachDerived(der)
 $   end
 $ end
 $ eachDerived(subdecl)
+  default:
+    ERROR("unknown type ", data.type, " used in TypedStringMap\n");
+    return false;
   }
 
   return true;

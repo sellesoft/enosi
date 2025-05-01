@@ -161,7 +161,6 @@ b8 GameMgr::loadMap(String name)
 
   CompiledData::Refs refs;
 
-  @dbgBreak;
   data->getRefs(&refs);
 
   Ref::LoadParams load_params = 

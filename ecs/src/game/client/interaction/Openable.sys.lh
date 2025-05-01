@@ -9,7 +9,12 @@ namespace cl
  */
 struct OpenableSys : SharedOpenableSys
 {
-  b8 init() { return SharedOpenableSys::init(); }
+  b8 init() 
+  { 
+    return SharedOpenableSys::init(); 
+  }
+
+  void onInteract(EntComp<Openable> ent, Interact&);
 };
 
 }

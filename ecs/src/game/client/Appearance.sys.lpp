@@ -3,28 +3,44 @@ $ require "common"
 @@lpp.import "game/client/Appearance.sys.lh"
 @@lpp.import "game/client/graphics/Sprite.comp.lh"
 
+@log.ger(cl.aprnce, Debug)
+
 namespace cl
 {
 
 /* ----------------------------------------------------------------------------
  */
+void AppearanceSys::onStartup(EntComp<Appearance> ec, ComponentStartup&)
+{
+  queueUpdate(ec.ent, ec.comp);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void AppearanceSys::queueUpdate(EntityId id, Appearance& comp)
+{
+  auto* update = queued_updates.push();
+  update->ent = id;
+  update->comp = &comp;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 AppearanceSys::update()
 {
-  // TODO(sushi) implement as a queue and have systems change appearance data
-  //             by calling into this system instead so that we can avoid
-  //             iterating every appearance component every update.
-  for (auto& appearance : iterateComp<Appearance>())
+  while (!queued_updates.isEmpty())
   {
-    if (appearance.is_dirty)
-    {
-      appearance.is_dirty = false;
+    auto [ent, comp] = *queued_updates.last();
 
-      raise(appearance.owner, AppearanceChange
-      {
-        .data = appearance,
-        .sprite = tryComp<Sprite>(appearance.owner),
-      });
-    }
+    comp->is_dirty = false;
+
+    raise(ent, AppearanceChange
+    {
+      .data = *comp,
+      .sprite = tryComp<Sprite>(ent),
+    });
+
+    queued_updates.pop();
   }
 
   return true;

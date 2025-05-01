@@ -22,7 +22,7 @@ struct VisualizerSys : EntitySys
   {
     subscribeTo<Visualizer, AppearanceChange>(
       &VisualizerSys::onAppearanceChange);
-    
+
     return true;
   }
 

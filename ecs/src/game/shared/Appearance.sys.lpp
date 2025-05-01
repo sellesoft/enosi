@@ -1,0 +1,30 @@
+$ require "common"
+
+@@lpp.import "game/shared/Appearance.sys.lh"
+
+/* ----------------------------------------------------------------------------
+ */
+void SharedAppearanceSys::onInit(EntComp<Appearance> ec, ComponentInit&)
+{
+  // TODO(sushi) currently hardcoding this to only store 8 keys, which is prob
+  //             fine for now and possibly the near future, but we prob want 
+  //             this to be able to grow. Problem is I conflated packed data
+  //             and components too much and used StringMap on Appearance 
+  //             which cannot grow (cause its only supposed to be used
+  //             to pack source data, where we know the size and that it 
+  //             wont change).
+  ec.comp.data.init(8, &mem::stl_allocator);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SharedAppearanceSys::setData(
+    EntityId id, 
+    String key, 
+    StringHash val, 
+    Appearance& comp)
+{
+  comp.data.set(key, val);
+  comp.is_dirty = true;
+  queueUpdate(id, comp);
+}

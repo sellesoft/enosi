@@ -16,15 +16,7 @@ $ local m = require "reflect.Metadata"
  */
 struct Appearance : Component
 { 
-  @m.hidden
   b8 is_dirty = false;
 
-  @m.hidden
   StringMap<StringHash> data;
-
-  void set(String key, StringHash value)
-  {
-    data.set(key, value);
-    is_dirty = true;
-  }
 };

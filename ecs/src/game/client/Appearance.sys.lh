@@ -5,18 +5,46 @@
 
 $ require "common"
 
+@@lpp.import "game/shared/Appearance.sys.lh"
+
 @@lpp.import "game/shared/entity/EntitySys.lh"
 @@lpp.import "game/client/Appearance.events.lh"
 @@lpp.import "game/shared/Appearance.comp.lh"
+
+#include "iro/containers/Array.h"
+
+struct ComponentStartup;
 
 namespace cl
 {
 
 /* ============================================================================
  */
-struct AppearanceSys : EntitySys
+struct AppearanceSys : SharedAppearanceSys
 {
-  b8 init() { return true; }
+  struct AppearanceUpdate
+  {
+    EntityId ent;
+    Appearance* comp;
+  };
+
+  // TODO(sushi) this allocates from stl, bad.
+  Array<AppearanceUpdate> queued_updates;
+
+  b8 init() 
+  { 
+    if (!SharedAppearanceSys::init())
+      return false;
+
+    queued_updates.init();
+
+    subscribeTo<Appearance, ComponentStartup>(&AppearanceSys::onStartup);
+    return true; 
+  }
+
+  void onStartup(EntComp<Appearance>, ComponentStartup&);
+
+  void queueUpdate(EntityId id, Appearance& comp) override;
 
   b8 update();
 };

@@ -3,7 +3,12 @@ return EntityDef
   name = "GlassWorkTable",
   components = 
   {
+    Appearance {},
     ExtendableStructure { kind = "GlassTable" },
-    cl::Sprite { states = "assets/entities/tables/glass/Table" }
+    cl::Sprite 
+    { 
+      state = 0,
+      states = "assets/entities/tables/glass/Table",
+    }
   }
 }

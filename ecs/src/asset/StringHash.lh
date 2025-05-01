@@ -22,6 +22,11 @@ struct StringHash
   StringHash() { val = 0; }
   StringHash(u64 val) : val(val) {}
 
+  bool operator == (const StringHash& rhs) const
+  {
+    return val == rhs.val;
+  } 
+
   b8 isValid() const
   {
     return val != 0;

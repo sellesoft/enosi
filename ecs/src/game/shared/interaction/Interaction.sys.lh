@@ -13,9 +13,9 @@ struct MapSys;
 
 struct InteractionSys : EntitySys
 {
-  InputSys& input;
-  EyeSys&   eye;
-  MapSys&   map;
+  InputSys* input;
+  EyeSys*   eye;
+  MapSys*   map;
   
   b8 init() { return true; }
 

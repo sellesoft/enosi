@@ -3,6 +3,7 @@
  */
 
 $ require "common"
+$ local metadata = require "reflect.Metadata"
 
 @@lpp.import "game/shared/component/Component.lh"
 @@lpp.import "game/shared/entity/Entity.defs.lh"
@@ -15,7 +16,9 @@ struct Spawner : Component
   //             such but for now we just need to get a controllable 
   //             entity spawned in the world w/o assuming we just 
   //             attach to each spawned entity.
+  @metadata.data_field
   b8 attach;
 
+  @metadata.data_field
   EntityDefRef kind;
 };
