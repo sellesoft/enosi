@@ -7,13 +7,15 @@ $ require "common"
 @@lpp.import "game/shared/entity/EntityId.lh"
 @@lpp.import "game/shared/entity/EntitySys.lh"
 
-struct GameMgr;
+struct MapSys;
 
 /* ============================================================================
  */
 struct EyeSys : EntitySys
 {
   static const u32 pixels_per_meter = 64;
+
+  MapSys* map;
 
   vec2f pos = {};
   f32   rotation = 0.f;

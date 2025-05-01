@@ -30,7 +30,9 @@ void SpawnerSys::onMapLoad(MapPostLoad&)
       continue;
     }
 
-    @log.info("spawned ", entid.value, " (", getEntity(entid)->name, ")\n");
+    @log.info("spawned ", entid.value, " (", getEntity(entid)->name, ") at ",
+              spawner_transform->pos, ":", spawner_transform->placement_layer,
+              "\n");
     
     if (spawner.attach)
     {
