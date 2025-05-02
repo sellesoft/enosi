@@ -19,6 +19,7 @@ $ local ui = require "ui.UI"
 #include "iro/containers/LinkedPool.h"
 #include "iro/containers/Tree.h"
 #include "iro/memory/Bump.h"
+#include "math/Rect.h"
 
 namespace gfx
 {
@@ -26,22 +27,22 @@ namespace gfx
   struct Renderer;
 }
 
-struct Window;
-struct Engine;
-struct WindowResized;
-struct PostReload;
+struct InputMgr;
 
 namespace ui
 {
-
-static constexpr u32 MAX_VERTICES = 0xffff;
-static constexpr u32 MAX_INDICES = (MAX_VERTICES / 4) * 6;
-static constexpr u64 PUSH_CONSTANT_SIZE = 16 * sizeof(f32);
 
 /* ============================================================================
  */
 struct UI
 {
+  enum 
+  {
+    MaxVertices = 0xffff,
+    MaxIndices = (MaxVertices / 4) * 6,
+    PushConstantSize = 16 * sizeof(f32),
+  };
+
   // Root item of anything in the item tree.
   Item* root;
 
@@ -75,8 +76,6 @@ struct UI
   u64 vertex_next;
   u64 index_next;
 
-  Engine* eng;
-
   vec2f scrollbar_offset;
   Item* scrolling_item;
   b8 horizontal_scroll;
@@ -84,13 +83,44 @@ struct UI
   gfx::Font* gohu_font;
   gfx::Texture gohu_font_texture;
 
+  gfx::Texture white_texture;
+
   mem::LenientBump temp_alloc;
 
+  // NOTE(sushi) don't like doing this, but currently moving UI to be under
+  //             Client and removing it just storing whatever stores it 
+  //             (eg. it used to just store an Engine*) to move towards it
+  //             being passed what it needs on update and init and stuff.
+  //             This makes Item callbacks annoying, though, as then they
+  //             all have to also be passed that stuff, which sucks. So I'm
+  //             cheating for now and just storing systems it should be using
+  //             instead. Eventually though this needs to be changed.
+  //             Especially removing the asset mgr, I don't like UI logic
+  //             managing assets (like, inside widgets) and would like to
+  //             move towards these things being stored on data driven 
+  //             style structures, where each asset we use is known there
+  //             and loaded all at one time.
+  AssetMgr* assetmgr;
+  InputMgr* input;
+  gfx::Renderer* renderer;
 
-  b8   init(Engine& engine);
+  Rect viewport;
+
+  struct InitParams
+  {
+    AssetMgr& assetmgr;
+    gfx::Renderer& renderer;
+    InputMgr& input;
+
+    gfx::Texture white_texture;
+
+    Rect viewport;
+  };
+
+  b8   init(InitParams& params);
   void deinit();
 
-  b8 update(Engine& engine);
+  b8 update();
 
   // Helper for widgets to allocate themselves and initialize base Item
   // stuff.
@@ -122,6 +152,12 @@ struct UI
   b8 testFocusableRegion(vec2f pos, vec2f size);
 
   b8 testHoverableRegion(vec2f pos, vec2f size);
+
+  void setViewport(Rect viewport)
+  {
+    this->viewport = viewport;
+    root->dirty = true;
+  }
 
 private:
 
@@ -184,10 +220,6 @@ private:
     vec4f current_scissor);
 
   void emitDrawCmds(DeferredDrawCmdList& drawcmds);
-
-  void onWindowResized(WindowResized& x);
-
-  void onPostReload(PostReload& _);
 };
 
 }

@@ -72,7 +72,7 @@ b8 Item::isHovered(UI* ui, HoverKind kind)
     return ui->hovered == this;
 
   case HoverKind::Area:
-    return containsPoint(ui->eng->input.mouse.window);
+    return containsPoint(ui->input->mouse.window);
 
   case HoverKind::Child:
     {

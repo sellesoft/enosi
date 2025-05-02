@@ -36,65 +36,23 @@ static Logger logger =
 
 /* ----------------------------------------------------------------------------
  */
-b8 GameMgr::init(const InitParams& params)
+b8 GameMgr::init(InitParams& params)
 {
-  sim = params.gamesim;
+  sim = params.sim;
 
   if (!entsysmgr.init({sim->entmgr}))
     return @log.error("failed to initialize entsysmgr\n");
 
-  entsysmgr.get<InputSys>().mgr = &sim->engine->input;
+  entsysmgr.get<InputSys>().mgr = &params.input;
 
-  if (!rendersys.init(sim->engine->renderer, sim->engine->assetmgr))
+  RenderSys::InitParams render_params = 
+  {
+    .renderer = params.renderer,
+    .assetmgr = params.assetmgr,
+    .white_texture = params.white_texture,
+  };
+  if (!rendersys.init(render_params))
     return @log.error("failed to initialize rendersys\n");
-
-$ if false then
-
-  entsysmgr.get<InputSys>().mgr = &eng->input;
-  
-  using namespace fs;
-
-  CompiledData::CompileParams params = 
-  {
-    .name = "assets/maps/Test"_str,
-    .type = "MapDef"_str,
-    .assetmgr = eng->assetmgr,
-    .sfile_reg = eng->source_data_file_reg,
-  };
-
-  CompiledData::compile(params);
-
-  auto* data = CompiledData::load(
-    "assets/maps/Test.map"_str, "MapDef"_str, eng->assetmgr);
-
-  auto* mapdef = data->getRootAs<MapDef>();
-
-  CompiledData::Refs refs;
-  data->getRefs(&refs);
-
-  Ref::LoadParams load_params = 
-  {
-    .renderer = eng->renderer,
-    .assetmgr = eng->assetmgr,
-    .sfile_reg = &eng->source_data_file_reg,
-  };
-
-  for (auto& ref : refs)
-  {
-    ref.ptr->load(ref.type, load_params);
-  }
-
-  MapSys::LoadParams map_params =
-  {
-    .assetmgr = engine->assetmgr,
-    .entmgr   = entmgr,
-    .renderer = engine->renderer,
-  };
-
-  if(!entsysmgr.get<MapSys>().load(*mapdef, map_params))
-    return ERROR("failed to load map '", mapdef->name, "'\n");
-
-$ end
 
   return true;
 }
@@ -109,8 +67,6 @@ void GameMgr::deinit()
  */
 b8 GameMgr::update()
 {
-  entsysmgr.get<EyeSys>().viewport_size = sim->viewport.size();
-
   if (!entsysmgr.update())
     return ERROR("failed to update entity systems\n");
 
@@ -119,12 +75,12 @@ b8 GameMgr::update()
 
 /* ----------------------------------------------------------------------------
  */
-b8 GameMgr::render()
+b8 GameMgr::render(gfx::Renderer& renderer)
 {
   RenderSys::UpdateParams render_params =
   {
     .viewport = sim->viewport,
-    .renderer = sim->engine->renderer,
+    .renderer = renderer,
     .map = &entsysmgr.get<MapSys>(),
     .entmgr = &sim->entmgr,
   };
@@ -138,24 +94,26 @@ b8 GameMgr::render()
 
 /* ----------------------------------------------------------------------------
  */
-b8 GameMgr::loadMap(String name)
+b8 GameMgr::loadMap(
+    String name,
+    AssetMgr& assetmgr,
+    SourceDataFileReg& sfilereg,
+    gfx::Renderer& renderer)
 {
   INFO("setting map to ", name, "\n");
-
-  Engine* eng = sim->engine;
 
   CompiledData::CompileParams params = 
   {
     .name = "assets/maps/Test"_str,
     .type = "MapDef"_str,
-    .assetmgr = eng->assetmgr,
-    .sfile_reg = eng->source_data_file_reg,
+    .assetmgr = assetmgr,
+    .sfile_reg = sfilereg,
   };
 
   CompiledData::compile(params);
 
   auto* data = CompiledData::load(
-    "assets/maps/Test.map"_str, "MapDef"_str, eng->assetmgr);
+    "assets/maps/Test.map"_str, "MapDef"_str, assetmgr);
 
   auto* mapdef = data->getRootAs<MapDef>();
 
@@ -165,9 +123,9 @@ b8 GameMgr::loadMap(String name)
 
   Ref::LoadParams load_params = 
   {
-    .renderer = eng->renderer,
-    .assetmgr = eng->assetmgr,
-    .sfile_reg = &eng->source_data_file_reg,
+    .renderer = renderer,
+    .assetmgr = assetmgr,
+    .sfile_reg = &sfilereg,
   };
 
   for (auto& ref : refs)
@@ -181,7 +139,7 @@ b8 GameMgr::loadMap(String name)
 
   MapSys::LoadParams map_params =
   {
-    .assetmgr = eng->assetmgr,
+    .assetmgr = assetmgr,
     .entmgr   = sim->entmgr,
   };
 
@@ -189,6 +147,13 @@ b8 GameMgr::loadMap(String name)
     return ERROR("failed to load map '", mapdef->name, "'\n");
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void GameMgr::setViewport(Rect viewport)
+{
+  entsysmgr.get<EyeSys>().viewport_size = viewport.size();
 }
 
 }

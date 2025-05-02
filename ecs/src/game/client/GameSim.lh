@@ -24,26 +24,43 @@ struct GameSim : SharedGameSim
 
   struct InitParams : SharedGameSim::InitParams
   {
-    Rect initial_viewport;
+    Rect viewport;
+
+    gfx::Renderer& renderer;
+    AssetMgr& assetmgr;
+    InputMgr& input;
+    SourceDataFileReg& sfilereg;
+
+    gfx::Texture white_texture;
   };
 
   // Where on the screen the game is expected to render.
   Rect viewport;
 
-  b8 init(const InitParams& params);
+  b8 init(InitParams& params);
   void deinit();
 
   b8 update();
-  b8 render();
+  b8 render(gfx::Renderer& renderer);
 
-  void setViewport(vec2i pos, vec2i size) 
+  void setViewport(Rect viewport) 
   {
-    viewport.set(pos,size);
+    this->viewport = viewport;
+    gamemgr.setViewport(viewport);
   }
 
-  b8 loadMap(String name)
+  b8 loadMap(
+      String name, 
+      AssetMgr& assetmgr, 
+      SourceDataFileReg& sfilereg,
+      gfx::Renderer& renderer)
   {
-    return gamemgr.loadMap(name);
+    return 
+      gamemgr.loadMap(
+        name,
+        assetmgr,
+        sfilereg,
+        renderer);
   }
 };
 

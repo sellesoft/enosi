@@ -10,6 +10,8 @@ $ require "common"
 
 #include "iro/Common.h"
 
+#include "math/Rect.h"
+
 @@lpp.import "game/shared/entity/EntityMgr.lh"
 
 struct Engine;
@@ -18,8 +20,6 @@ struct Engine;
  */
 struct SharedGameSim
 {
-  Engine* engine;
-
   EntityMgr entmgr;
 
   String current_map;
@@ -28,13 +28,10 @@ struct SharedGameSim
    */
   struct InitParams
   {
-    Engine* engine;
   };
 
   b8 init(const InitParams& params) 
   { 
-    engine = params.engine;
-    
     if (!entmgr.init())
       return false;
 
@@ -45,7 +42,6 @@ struct SharedGameSim
    */
   void deinit() 
   {  
-    engine = nullptr;
   }
 
   /* --------------------------------------------------------------------------

@@ -11,17 +11,29 @@ namespace cl
 
 /* ----------------------------------------------------------------------------
  */
-b8 GameSim::init(const InitParams& params)
+b8 GameSim::init(InitParams& params)
 {
   if (!SharedGameSim::init(params))
     return false;
 
-  if (!gamemgr.init({this}))
+  GameMgr::InitParams gamemgr_params = 
+  {
+    .sim = this,
+    .renderer = params.renderer,
+    .assetmgr = params.assetmgr,
+    .input = params.input,
+    .white_texture = params.white_texture,
+  };
+  if (!gamemgr.init(gamemgr_params))
     return false;
 
-  viewport.set({0,0}, params.engine->window.size);
+  setViewport(params.viewport);
 
-  loadMap("assets/maps/Test.map"_str);
+  loadMap(
+    "assets/maps/Test.map"_str,
+    params.assetmgr,
+    params.sfilereg,
+    params.renderer);
 
   return true;
 }
@@ -46,9 +58,9 @@ b8 GameSim::update()
 
 /* ----------------------------------------------------------------------------
  */
-b8 GameSim::render()
+b8 GameSim::render(gfx::Renderer& renderer)
 {
-  return gamemgr.render();
+  return gamemgr.render(renderer);
 }
 
 }

@@ -12,6 +12,8 @@ $ local cmn = require "common"
 @@lpp.import "game/client/entity/EntitySysMgr.lh"
 @@lpp.import "game/client/graphics/RenderSys.lh"
 
+struct InputMgr;
+
 namespace cl
 {
 
@@ -28,19 +30,31 @@ struct GameMgr
 
   struct InitParams
   {
-    GameSim* gamesim;
+    GameSim* sim;
+
+    gfx::Renderer& renderer;
+    AssetMgr& assetmgr;
+    InputMgr& input;
+
+    gfx::Texture white_texture;
   };
 
-  b8 init(const InitParams& params);
+  b8 init(InitParams& params);
   void deinit();
 
   b8 update();
-  b8 render();
+  b8 render(gfx::Renderer& renderer);
 
   /* --------------------------------------------------------------------------
    *  Loads the client into some map.
    */
-  b8 loadMap(String name);
+  b8 loadMap(
+    String name,
+    AssetMgr& assetmgr,
+    SourceDataFileReg& sfilereg,
+    gfx::Renderer& renderer);
+
+  void setViewport(Rect viewport);
 };
 
 }

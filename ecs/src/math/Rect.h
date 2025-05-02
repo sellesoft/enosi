@@ -12,6 +12,11 @@ struct Rect
 {
   s32 x, y, w, h;
 
+  static Rect from(vec2i pos, vec2i size)
+  {
+    return { pos.x, pos.y, size.x, size.y };
+  }
+
   void set(vec2i pos, vec2i size)
   {
     x = pos.x; y = pos.y;

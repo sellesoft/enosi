@@ -9,14 +9,14 @@ $ local cmn = require "common"
 
 /* ----------------------------------------------------------------------------
  */
-b8 InputMgr::init(Engine& engine)
+b8 InputMgr::init()
 {
   return true;
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 InputMgr::update(Engine& engine)
+b8 InputMgr::update()
 {
   keys_old = keys_new;
   mouse_old = mouse_new;

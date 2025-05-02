@@ -40,10 +40,10 @@ struct InputMgr
   u8 char_count;
   u8 real_char_count;
 
-  b8   init(Engine& engine);
+  b8   init();
   void deinit();
 
-  b8 update(Engine& engine);
+  b8 update();
 
   // TODO(sushi) do this better. This is used to allow the UI system to 
   //             consume input so that when we are, say, typing into an 

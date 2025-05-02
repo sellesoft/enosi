@@ -77,9 +77,9 @@ void CollapsingHeader::update(UI* ui, UpdateReason reason)
       $ local this = ui.createItemContext("CollapsingHeader", "this")
       @@this.style:lookup(header_height)
 
-      vec2f mpos = ui->eng->input.mouse.window;
+      vec2f mpos = ui->input->mouse.window;
       if (math::pointInRect(
-            ui->eng->input.mouse.window,
+            ui->input->mouse.window,
             pos_screen,
             vec2f(size.x, @this.style.header_height)))
       {

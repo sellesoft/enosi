@@ -180,7 +180,7 @@ InputTextState::StateChange InputTextState::update(
   if (!params.is_focused || params.reason != UpdateReason::FocusedKeyPress)
     return StateChange::None;
 
-  InputMgr& input = ui.eng->input;
+  InputMgr& input = *ui.input;
 
   b8 state_changed = false;
   b8 ctrl_down = input.isKeyDown(Key::LCtrl) || input.isKeyDown(Key::RCtrl);
@@ -333,8 +333,8 @@ void InputText::evaluate(UI* ui)
     font = 
       gfx::Font::load(
         @this.style.font, 
-        ui->eng->assetmgr, 
-        ui->eng->renderer);
+        *ui->assetmgr, 
+        *ui->renderer);
   }
 }
 
@@ -422,7 +422,7 @@ void InputText::update(UI* ui, UpdateReason reason)
     return;
   }
 
-  InputMgr& input = ui->eng->input;
+  InputMgr& input = *ui->input;
 
   if (input.wasKeyPressed(Key::Right))
   {

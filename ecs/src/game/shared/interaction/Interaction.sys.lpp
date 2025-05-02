@@ -28,6 +28,8 @@ b8 InteractionSys::update()
 
   vec2f mouse_world = eye->screenToWorld(input->mgr->mouse.window);
 
+  INFO(mouse_world, "\n");
+
   Layer* mouse_layer;
   Tile*  mouse_tile;
   if (!map->getTileAndLayerAtPos(&mouse_layer, &mouse_tile, mouse_world))

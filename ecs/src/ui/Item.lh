@@ -107,6 +107,44 @@ enum class UpdateReason
 typedef Flags<UpdateReason> UpdateReasonFlags;
 DefineFlagsOrOp(UpdateReasonFlags, UpdateReason);
 
+struct ItemLayout
+{
+  vec2f pos;
+  vec2f size;
+
+  enum class Positioning
+  {
+    Static,
+    Relative,
+    Absolute,
+    Fixed,
+  };
+
+  Positioning positioning;
+
+  enum class Sizing
+  {
+    Normal,
+    AutoX,
+    AutoY,
+    PercentX,
+    PercentY,
+    Square,
+    Flex,
+  };
+
+  Sizing sizing;
+
+  struct Bounds
+  {
+    vec4f val;
+
+    
+  };
+
+  vec4f margin;
+};
+
 /* ============================================================================
  */
 @ui.widget(Item,

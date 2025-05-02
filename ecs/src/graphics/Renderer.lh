@@ -20,8 +20,10 @@ $ require "common"
 
 using namespace iro;
 
-struct Engine;
+struct Client;
 struct WindowResized;
+struct Window;
+struct PostReload;
 
 namespace gfx
 {
@@ -30,16 +32,28 @@ namespace gfx
  */
 struct Renderer
 {
-  Engine* engine;
   mem::Allocator* allocator;
   void* internal;
   u64 frame;
   Array<DrawCmd> drawcmds;
   ResourceMgr resource_mgr;
 
-  b8 init(Engine& engine, mem::Allocator& allocator);
+  struct InitParams
+  {
+    AssetMgr& assetmgr;
+    Window& window;
+    mem::Allocator& allocator;
+  };
+
+  b8 init(InitParams& params);
   b8 deinit();
-  b8 update();
+
+  struct UpdateParams
+  {
+    Window& window;
+  };
+
+  b8 update(UpdateParams& params);
 
   void setScissor(vec2i pos, vec2i size);
   void setViewport(vec2i pos, vec2i size);
@@ -59,6 +73,8 @@ struct Renderer
   void debugEndLabel();
   void debugInsertLabel(vec4f color, utf8::String label);
 
+  void onWindowResized(vec2i size);
+
   // NOTE(sushi) explicitly deleting the copy constructor of Renderer
   //             to prevent accidental copies since operating on a copy
   //             of it has potential to cause really really awesome bugs
@@ -68,7 +84,7 @@ struct Renderer
   Renderer operator=(const Renderer& rhs) = delete;
 
 private:
-  void onWindowResized(WindowResized& event);
+  b8 updateSwapchain(vec2i viewport_size);
 };
 
 }

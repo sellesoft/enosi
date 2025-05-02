@@ -7,51 +7,234 @@
 
 $ require "common"
 
+@@lpp.import "game/client/Client.lh"
+
 @@lpp.import "game/client/GameSim.lh"
+
+@@lpp.import "Engine.lh"
+
+@@lpp.import "ui/UI.lh"
+@@lpp.import "graphics/Renderer.lh"
+@@lpp.import "input/InputMgr.lh"
 
 @log.ger(client, Debug)
 
-/* ============================================================================
- */
-struct Client
-{
-  cl::GameSim sim;
-
-  b8 init(Engine* engine)
-  {
-    return sim.init({engine});
-  }
-
-  b8 update()
-  {
-    if (!sim.update())
-      return false;
-
-    return sim.render();
-  }
-};
-
 /* ----------------------------------------------------------------------------
  */
-Client* clientCreate(Engine* engine)
+b8 Client::init(Engine* engine)
 {
-  INFO("creating client...\n");
-  
-  // TODO(sushi) also create the thread and stuff yeah.
-  auto* client = mem::stl_allocator.construct<Client>();
+  this->engine = engine;
 
-  if (!client->init(engine))
+$ local function init(act, name)
   {
-    mem::stl_allocator.free(client);
-    return nullptr;
+    auto start = TimePoint::monotonic();
+    if (!$(act))
+      return FATAL("failed to initialize $(name)\n");
+    INFO("finished initializing ", color::cyan("$(name)"), " in ",
+         WithUnits(TimePoint::monotonic() - start), "\n");
   }
+$ end
 
-  return client;
+  @init(input.init(), InputMgr);
+
+  @init(Window::initializeBackend(), Window backend);
+  @init(window.init("ecs"_str, input), Window);
+
+  gfx::Renderer::InitParams renderer_params = 
+  {
+    .assetmgr = engine->assetmgr,
+    .window = window,
+    .allocator = mem::stl_allocator,
+  };
+  @init(renderer.init(renderer_params), Renderer);
+
+
+  ui::UI::InitParams ui_params = 
+  {
+    .assetmgr = engine->assetmgr,
+    .renderer = renderer,
+    .input = input,
+
+    .viewport = Rect::from({0,0}, window.size),
+  };
+  @init(ui.init(ui_params), UI);
+
+  cl::GameSim::InitParams sim_params = 
+  {
+    .viewport = Rect::from({0,0}, window.size),
+    .renderer = renderer,
+    .assetmgr = engine->assetmgr,
+    .sfilereg = engine->source_data_file_reg,
+    .input = input,
+  };
+  @init(sim.init(sim_params), cl::GameSim);
+
+  return true;
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 clientUpdate(Client* client)
+b8 Client::update()
 {
-  return client->update();
+  if (!window.update(input))
+    return ERROR("failed to update window\n");
+
+  gfx::Renderer::UpdateParams renderer_params = 
+  {
+    .window = window,
+  };
+
+  if (!renderer.update(renderer_params))
+    return ERROR("failed to update renderer\n");
+
+  if (!input.update())
+    return ERROR("failed to update input\n");
+
+  if (!sim.update())
+    return ERROR("failed to update game sim\n");
+
+  if (!sim.render(renderer))
+    return ERROR("failed to render game sim\n");
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Client::compileRequiredAssets(AssetMgr& assetmgr)
+{
+  TRACE("compiling white and null textures\n");
+  {
+    mem::LenientBump texture_compile_allocator;
+    if (!texture_compile_allocator.init())
+      return ERROR("failed to initialize texture compile allocator\n");
+    defer { texture_compile_allocator.deinit(); };
+
+    gfx::CompiledTexture::CompileParams white_texture_params =
+    {
+      .name         = "assets/textures/white"_str,
+      .width        = 2,
+      .height       = 2,
+      .format       = gfx::ImageFormat::BW,
+      .usage        = gfx::ImageUsage::Sampled,
+      .filter       = gfx::ImageFilter::Nearest,
+      .address_mode = gfx::ImageAddressMode::ClampToWhite,
+      .allocator    = &texture_compile_allocator,
+      .assetmgr     = &assetmgr,
+    };
+
+    u8 pixels[16] =
+    {
+      0xff, 0xff, 0xff, 0xff,
+      0xff, 0xff, 0xff, 0xff,
+      0xff, 0xff, 0xff, 0xff,
+      0xff, 0xff, 0xff, 0xff,
+    };
+
+    gfx::CompiledTexture::compileFromMemory(pixels, white_texture_params);
+
+    auto* white_texture_compiled =
+      gfx::CompiledTexture::load(
+        "assets/textures/white"_str,assetmgr, renderer);
+    if (white_texture_compiled == nullptr)
+      return ERROR("failed to load white texture\n");
+    white_texture = white_texture_compiled->gfx_texture;
+
+    gfx::CompiledTexture::CompileParams null_texture_params =
+    {
+      .name         = "assets/textures/null"_str,
+      .format       = gfx::ImageFormat::RGBA,
+      .usage        = gfx::ImageUsage::Sampled,
+      .filter       = gfx::ImageFilter::Nearest,
+      .address_mode = gfx::ImageAddressMode::ClampToWhite,
+      .allocator    = &texture_compile_allocator,
+      .assetmgr     = &assetmgr,
+    };
+
+    gfx::CompiledTexture::compilePNG(null_texture_params);
+
+    auto* null_texture_compiled =
+      gfx::CompiledTexture::load(
+        "assets/textures/null"_str, assetmgr, renderer);
+    if (null_texture_compiled == nullptr)
+      return ERROR("failed to load null texture\n");
+  }
+
+  TRACE("compiling shaders\n");
+  {
+    gfx::CompiledShader::CompileParams scene_vertex_shader_params =
+    {
+      .name      = "assets/shaders/scene.vertex"_str,
+      .type      = gfx::ShaderType::Vertex,
+      .allocator = &mem::stl_allocator,
+      .assetmgr  = &assetmgr,
+    };
+    gfx::CompiledShader::compileGLSL(scene_vertex_shader_params);
+
+    gfx::CompiledShader::CompileParams scene_fragment_shader_params =
+    {
+      .name      = "assets/shaders/scene.fragment"_str,
+      .type      = gfx::ShaderType::Fragment,
+      .allocator = &mem::stl_allocator,
+      .assetmgr  = &assetmgr,
+    };
+    gfx::CompiledShader::compileGLSL(scene_fragment_shader_params);
+
+    gfx::CompiledShader::CompileParams fullscreen_vertex_shader_params =
+    {
+      .name      = "assets/shaders/fullscreen.vertex"_str,
+      .type      = gfx::ShaderType::Vertex,
+      .allocator = &mem::stl_allocator,
+      .assetmgr  = &assetmgr,
+    };
+    gfx::CompiledShader::compileGLSL(fullscreen_vertex_shader_params);
+
+    gfx::CompiledShader::CompileParams stars_fragment_shader_params =
+    {
+      .name      = "assets/shaders/stars.fragment"_str,
+      .type      = gfx::ShaderType::Fragment,
+      .allocator = &mem::stl_allocator,
+      .assetmgr  = &assetmgr,
+    };
+    gfx::CompiledShader::compileGLSL(stars_fragment_shader_params);
+
+    gfx::CompiledShader::CompileParams ui_vertex_shader_params =
+    {
+      .name      = "assets/shaders/ui.vertex"_str,
+      .type      = gfx::ShaderType::Vertex,
+      .allocator = &mem::stl_allocator,
+      .assetmgr  = &assetmgr,
+    };
+    gfx::CompiledShader::compileGLSL(ui_vertex_shader_params);
+
+    gfx::CompiledShader::CompileParams ui_fragment_shader_params =
+    {
+      .name      = "assets/shaders/ui.fragment"_str,
+      .type      = gfx::ShaderType::Fragment,
+      .allocator = &mem::stl_allocator,
+      .assetmgr  = &assetmgr,
+    };
+    gfx::CompiledShader::compileGLSL(ui_fragment_shader_params);
+  }
+
+  TRACE("compiling gohu font\n");
+  {
+    CodepointRange ascii =
+    {
+      .first_codepoint = 32,
+      .num_codepoints = 94,
+    };
+
+    gfx::Font::CompileParams params =
+    {
+      .name       = "assets/fonts/gohu"_str,
+      .ranges     = CodepointRanges::from(&ascii, 1),
+      .allocator  = &mem::stl_allocator,
+      .assetmgr   = &assetmgr,
+    };
+
+    gfx::Font::compileBDF(params);
+  }
+
+  return true;
 }
