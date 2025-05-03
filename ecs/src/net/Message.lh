@@ -9,18 +9,17 @@ namespace net
 
 /* ============================================================================
  */
-struct Packet
+struct Message
 {
-  constexpr static u16 MAX_SIZE = 16384;
+  constexpr static u16 MAX_SIZE = 16384; // in bytes
 
-  u8 data[MAX_SIZE];
-  u16 size;
-  u16 byte_cursor; // not used when writing
-  b8 bit_cursor;
-  b8 overflowed;
 
-  void init();
-  b8 init(u8* data, u16 size);
+  u8* data;
+  u32 cursor; // in bits
+  u16 size; // in bytes
+
+
+  void init(u8* data, u16 size);
 
   template<u64 BITS> void writeBits(u64 value);
   void writeU8(u8 value);
@@ -35,6 +34,7 @@ struct Packet
   void writeAngle8(f32 angle);
   void writeAngle16(f32 angle);
   void writeData(const u8* data, u16 bytes);
+  void writeDebug(u8 value);
 
   template<u64 BITS> u64 readBits();
   u8 readU8();
@@ -49,6 +49,7 @@ struct Packet
   f32 readAngle8();
   f32 readAngle16();
   void readData(u8* data, u16 bytes);
+  void readDebug(u8 value);
 };
 
 }

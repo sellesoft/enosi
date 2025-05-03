@@ -269,6 +269,7 @@ $ end
       .dedicated = true,
       .publicity = (password.len > 0)
         ? sv::ServerPublicity::Password : sv::ServerPublicity::Public,
+      .max_clients = 8,
       .password = password,
     };
     server = sv::create(server_params);

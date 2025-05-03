@@ -25,7 +25,7 @@ namespace iro
 {
 
 template<typename T>
-struct Array 
+struct Array
 {
   struct Header
   {
@@ -39,7 +39,7 @@ struct Array
   static Header* getHeader(T* ptr) { return (Header*)ptr - 1; }
   static s32& len(T* ptr) { return getHeader(ptr)->len; }
   static s32& space(T* ptr) { return getHeader(ptr)->space; }
-  static mem::Allocator* allocator(T* ptr) 
+  static mem::Allocator* allocator(T* ptr)
     { return getHeader(ptr)->allocator; }
 
   static Array<T> fromOpaquePointer(T* ptr) { return Array<T>{ptr}; }
@@ -50,13 +50,15 @@ struct Array
   }
 
   /* --------------------------------------------------------------------------
-   */ 
+   */
   b8 init(s32 init_space = 8, mem::Allocator* allocator = &mem::stl_allocator)
   {
     init_space = (8 > init_space ? 8 : init_space);
 
-    Header* header = 
+    Header* header =
       (Header*)allocator->allocate(sizeof(Header) + init_space * sizeof(T));
+    if (header == nullptr)
+      return false;
 
     header->space = init_space;
     header->len = 0;
@@ -68,14 +70,14 @@ struct Array
   }
 
   /* --------------------------------------------------------------------------
-   */ 
+   */
   static Array<T> create(
-      s32 init_space = 8, 
+      s32 init_space = 8,
       mem::Allocator* allocator = &mem::stl_allocator)
   {
 
     Array<T> out = {};
-    
+
     if (!out.init(init_space, allocator))
       return nil;
 
@@ -83,7 +85,7 @@ struct Array
   }
 
   /* --------------------------------------------------------------------------
-   */ 
+   */
   void destroy()
   {
     if (isnil(*this))
@@ -95,14 +97,14 @@ struct Array
   }
 
   /* --------------------------------------------------------------------------
-   */ 
+   */
   Slice<T> asSlice() const
   {
     return Slice<T>::from(arr, len());
   }
 
   /* --------------------------------------------------------------------------
-   */ 
+   */
   Header* getHeader();
   s32& len();
   s32& space();
@@ -115,7 +117,7 @@ struct Array
   b8 isEmpty() const { return len() == 0; }
 
   /* --------------------------------------------------------------------------
-   */ 
+   */
   T* push()
   {
     growIfNeeded(1);
@@ -131,7 +133,7 @@ struct Array
   }
 
   /* --------------------------------------------------------------------------
-   */ 
+   */
   void pop()
   {
     assert(len() != 0);
@@ -139,7 +141,7 @@ struct Array
   }
 
   /* --------------------------------------------------------------------------
-   */ 
+   */
   void insert(s32 idx, const T& x)
   {
     assert(idx >= 0 && idx <= len());
@@ -157,7 +159,7 @@ struct Array
   }
 
   /* --------------------------------------------------------------------------
-   */ 
+   */
   void remove(T* x)
   {
     return remove(x - arr);
@@ -170,14 +172,14 @@ struct Array
   }
 
   /* --------------------------------------------------------------------------
-   */ 
+   */
   void clear()
   {
     array::clear(arr, &len());
   }
 
   /* --------------------------------------------------------------------------
-   */ 
+   */
   void resize(u64 new_len)
   {
     if (new_len == 0)
@@ -199,15 +201,15 @@ struct Array
 
       for (u64 i = len(); i < new_len; ++i)
         new (arr + i) T;
-  
+
       len() = new_len;
     }
   }
 
   /* --------------------------------------------------------------------------
-   */ 
+   */
   T& operator [](s64 i) { assert(i >=0 && i < len()); return arr[i]; }
-  const T& operator[](s64 i) const 
+  const T& operator[](s64 i) const
     { assert(i >= 0 && i < len()); return arr[i]; }
 
   T* begin() { return arr; }
@@ -216,11 +218,11 @@ struct Array
   const T* begin() const { return arr; }
   const T* end()   const { return arr + len(); }
 
-  T* first() { return begin(); } 
+  T* first() { return begin(); }
   T* last() { return end() - 1; }
 
   /* --------------------------------------------------------------------------
-   */ 
+   */
   void growIfNeeded(s32 new_elements)
   {
     Header* header = getHeader();
@@ -231,7 +233,7 @@ struct Array
     while (header->len + new_elements > header->space)
       header->space *= 2;
 
-    header = 
+    header =
       (Header*)header->allocator->reallocate(
           header, sizeof(Header) + header->space * sizeof(T));
     arr = (T*)(header + 1);
@@ -242,7 +244,7 @@ struct Array
 //             for inlining them to help debugging.
 
 /* ----------------------------------------------------------------------------
- */ 
+ */
 template<typename T>
 Array<T>::Header* Array<T>::getHeader()
 {
@@ -250,7 +252,7 @@ Array<T>::Header* Array<T>::getHeader()
 }
 
 /* ----------------------------------------------------------------------------
- */ 
+ */
 template<typename T>
 s32& Array<T>::len()
 {
@@ -258,15 +260,15 @@ s32& Array<T>::len()
 }
 
 /* ----------------------------------------------------------------------------
- */ 
+ */
 template<typename T>
-s32& Array<T>::space() 
+s32& Array<T>::space()
 {
   return getHeader()->space;
 }
 
 /* ----------------------------------------------------------------------------
- */ 
+ */
 template<typename T>
 mem::Allocator* Array<T>::allocator()
 {

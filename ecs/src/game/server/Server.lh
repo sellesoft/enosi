@@ -33,6 +33,7 @@ struct CreateParams
   u64 tick_allocation_size;
   b8 dedicated;
   ServerPublicity publicity;
+  u16 max_clients;
   StackArray<u8, 64> password;
 };
 

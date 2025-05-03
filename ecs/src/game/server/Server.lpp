@@ -10,7 +10,7 @@ $ require "common"
 @@lpp.import "game/server/ServerAllocator.lh"
 @@lpp.import "game/shared/entity/EntityId.lh"
 @@lpp.import "net/Connection.lh"
-@@lpp.import "net/Packet.lh"
+@@lpp.import "net/Message.lh"
 
 #include "iro/Common.h"
 #include "iro/containers/Array.h"
@@ -43,8 +43,6 @@ struct ServerClient
 
   static constexpr u32 MAX_NAME_LENGTH = 63;
   StackArray<u8, MAX_NAME_LENGTH + 1> name;
-
-  EntityId entity;
 };
 
 } // namespace sv
@@ -62,6 +60,7 @@ struct Server
   sv::ServerPublicity publicity;
   StackArray<u8, 64> password;
 
+  u16 max_clients;
   Array<sv::ServerClient> clients;
 
   Engine* engine;
@@ -115,12 +114,23 @@ Server* create(const CreateParams& params)
   server->dedicated = params.dedicated;
   server->publicity = params.publicity;
   server->password = params.password;
-  if (!server->clients.init(8, &server->global_allocator))
+  server->max_clients = params.max_clients;
+  if (!server->clients.init(params.max_clients, &server->global_allocator))
   {
     @log.error("failed to init the server clients array\n");
     return nullptr;
   }
   server->engine = &params.engine;
+
+  if (server->publicity == ServerPublicity::Offline)
+  {
+    ServerClient* offline_client = server->clients.push();
+    offline_client->connection.init(net::Source::Server,
+                                    net::Address::createOffline(),
+                                    &server->global_allocator);
+    mem::copy(offline_client->name.arr, (void*)"offlineplayer", 13);
+    offline_client->name.len = 13;
+  }
 
   deinit_global_allocator_if_failure.cancel();
   deinit_match_allocator_if_failure.cancel();
@@ -203,26 +213,73 @@ b8 update(Server* server)
 
   server->tick_allocator.clear();
 
-  // ping the server list
-  // TODO(delle) server list
+  // check for incoming packets
+  if (server->publicity == ServerPublicity::Offline)
+  {
+    assert(server->clients.len() > 0);
 
-  // check for connection requests
-  // TODO(delle) connections
+    // TODO(delle) better offline connection handling
+    StackArray<u8, net::MAX_FRAGMENT_SIZE> packet_data;
+    server->clients[0].connection.receive(net::Source::Client, packet_data);
+  }
+  else
+  {
+    net::Address packet_address;
+    StackArray<u8, net::MAX_FRAGMENT_SIZE> packet_data;
+    while (net::checkForPackets(packet_address, packet_data))
+    {
+      for (ServerClient& client : server->clients)
+      {
+        if (mem::equal(client.connection.address, packet_address))
+        {
+          client.connection.receive(net::Source::Client, packet_data);
+          break;
+        }
+      }
+    }
 
-  // simulate the game
+    // ping the server list
+    // TODO(delle) server list
+
+    // check for connection requests
+    // TODO(delle) connections
+  }
+
   if (server->state == ServerState::Ingame)
   {
-    // check for client packets
-    net::Packet client_packet;
+    // parse messages from clients
     for (ServerClient& client : server->clients)
     {
-      client.connection.read(net::Source::Client, client_packet);
+      if (client.connection.incoming_message_pending_fragments)
+        continue;
+
+      net::Message message;
+      message.init(client.connection.incoming_message_data,
+                   client.connection.incoming_message_size);
 
       // TODO(delle) implement client packet parsing
     }
 
+    // simulate
     if(!server->sim.update())
       return @log.error("failed to update server sim\n");
+
+    // send messages to clients
+    u8 message_data[net::Message::MAX_SIZE];
+    for (ServerClient& client : server->clients)
+    {
+      net::Message message;
+      message.init(message_data, 0);
+      mem::zero(message_data, net::Message::MAX_SIZE);
+
+      // TODO(delle) implement client packet creation
+
+      client.connection.send(net::Source::Server, message, false);
+      if (client.connection.outgoing_message_pending_fragments)
+      {
+        client.connection.sendNextFragment();
+      }
+    }
   }
 
   return true;
