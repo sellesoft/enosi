@@ -8,7 +8,7 @@ $ require "common"
 @@lpp.import "game/shared/Mind.sys.lh"
 @@lpp.import "game/shared/Eye.sys.lh"
 
-@log.ger(sys.spawner, Debug)
+@log.ger(sh.sys.spawner, Debug)
 
 /* ----------------------------------------------------------------------------
  */
@@ -16,25 +16,29 @@ void SpawnerSys::onMapLoad(MapPostLoad&)
 {
   for (auto& spawner : iterateComp<Spawner>())
   {
-    EntityId entid = entmgr.spawnEntity(*spawner.kind);
+    auto* spawner_transform = tryComp<Transform>(spawner.owner);
+
+    EntityId entid = 
+      entmgr->spawnEntity(
+        *spawner.kind,
+        spawner_transform->pos,
+        spawner_transform->placement_layer);
+
     if (isnil(entid))
     {
       @log.error("failed to spawn entity\n");
       continue;
     }
 
-    @log.info("spawned ", entid.value, "\n");
-
-    auto* spawner_transform = tryComp<Transform>(spawner.owner);
-    auto* spawned_transform = tryComp<Transform>(entid);
-
-    spawned_transform->pos = spawner_transform->pos;
-    spawned_transform->placement_layer = spawner_transform->placement_layer;
+    @log.info("spawned ", entid.value, " (", getEntity(entid)->name, ") at ",
+              spawner_transform->pos, ":", spawner_transform->placement_layer,
+              "\n");
     
     if (spawner.attach)
     {
-      mind.attach(entid);
-      eye.attach(entid);
+      INFO("attaching mind and eye to ", entid.value, "\n");
+      mind->attach(entid);
+      eye->attach(entid);
     }
   }
 }

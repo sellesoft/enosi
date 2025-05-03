@@ -1,0 +1,150 @@
+$ require "common"
+
+@@lpp.import "game/shared/structure/Structure.comp.lh"
+@@lpp.import "game/client/structure/StructureVisualizer.sys.lh"
+
+@@lpp.import "game/shared/map/Map.sys.lh"
+
+@@lpp.import "game/shared/Transform.comp.lh"
+@@lpp.import "game/client/graphics/Sprite.comp.lh"
+
+@log.ger(cl.sys.structure, Debug)
+
+namespace cl
+{
+
+/* ----------------------------------------------------------------------------
+ */
+void StructureVisualizerSys::onAppearanceChange(
+    EntComp<ExtendableStructure> ec,
+    AppearanceChange& ev)
+{
+  auto* transform = tryComp<Transform>(ec.ent);
+  auto* sprite = tryComp<Sprite>(ec.ent);
+
+  if (sprite == nullptr)
+    return;
+
+  auto& sprite_states = *sprite->states;
+
+  Layer* layer;
+  Tile*  tile;
+  if (!map->getTileAndLayerAtPos(&layer, &tile, transform->pos))
+  {
+    WARN("failed to get layer and tile of entity ", ec.ent.value, " at ", 
+         transform->pos, "\n");
+    return;
+  }
+
+  enum 
+  {
+    R = 1 << 0,
+    T = 1 << 1,
+    L = 1 << 2,
+    B = 1 << 3,
+  };
+
+  u8 mask = 0;
+  
+  // TODO(sushi) it would be nice to not have to iterate all other comps,
+  //             but at the moment we don't have a way to get entities from
+  //             map tiles. Later on we should be implementing chunking, 
+  //             though, so this should use that when we do.
+  for (auto& other_comp : iterateComp<ExtendableStructure>())
+  {
+    // Don't connect an entity to itself.
+    if (ec.ent == other_comp.owner)
+      continue;
+
+    // Only connect structures of the same kind.
+    if (ec.comp.kind != other_comp.kind)
+      continue;
+
+    auto* other_transform = tryComp<Transform>(other_comp.owner);
+    auto* other_sprite    = tryComp<Transform>(other_comp.owner);
+
+    if (other_sprite == nullptr)
+      continue;
+
+    Layer* other_layer;
+    Tile*  other_tile;
+    if (!map->getTileAndLayerAtPos(
+          &other_layer, 
+          &other_tile, 
+          other_transform->pos))
+      continue;
+
+    if (layer != other_layer)
+      continue;
+
+    vec2f pos0 = layer->getTilePos(*tile);
+    vec2f pos1 = other_layer->getTilePos(*other_tile);
+    vec2f diff = pos1 - pos0;
+
+    if (diff.mag() == 1)
+    {
+      if (diff.x == 1)
+        mask |= R;
+      else if (diff.y == 1)
+        mask |= T;
+      else if (diff.x == -1)
+        mask |= L;
+      else
+        mask |= B;
+    }
+  }
+
+  static const u64 state_map[] = 
+  {
+    [0]       = "Island"_hashed,
+    [R]       = "HorizontalLeftCap"_hashed,
+    [T]       = "VerticalBottomCap"_hashed,
+    [L]       = "HorizontalRightCap"_hashed,
+    [B]       = "VerticalTopCap"_hashed,
+    [R|T]     = "BottomLeft"_hashed,
+    [R|L]     = "Horizontal"_hashed,
+    [R|B]     = "TopLeft"_hashed,
+    [T|L]     = "BottomRight"_hashed,
+    [T|B]     = "Vertical"_hashed,
+    [L|B]     = "TopRight"_hashed,
+    [R|T|L]   = "FullBottomCap"_hashed,
+    [R|T|B]   = "FullLeftCap"_hashed,
+    [R|L|B]   = "FullTopCap"_hashed,
+    [T|L|B]   = "FullRightCap"_hashed,
+    [R|T|L|B] = "Full"_hashed,
+  };
+
+  static const String state_string_map[] = 
+  {
+    [0]       = "Island"_str,
+    [R]       = "HorizontalLeftCap"_str,
+    [T]       = "VerticalBottomCap"_str,
+    [L]       = "HorizontalRightCap"_str,
+    [B]       = "VerticalTopCap"_str,
+    [R|T]     = "BottomLeft"_str,
+    [R|L]     = "Horizontal"_str,
+    [R|B]     = "TopLeft"_str,
+    [T|L]     = "BottomRight"_str,
+    [T|B]     = "Vertical"_str,
+    [L|B]     = "TopRight"_str,
+    [R|T|L]   = "FullBottomCap"_str,
+    [R|T|B]   = "FullRightCap"_str,
+    [R|L|B]   = "FullTopCap"_str,
+    [T|L|B]   = "FullLeftCap"_str,
+    [R|T|L|B] = "Full"_str,
+  };
+
+  u64 state_idx = sprite_states.map.findIndex(state_map[mask]);
+  if (state_idx == sprite_states.map.len)
+  {
+    WARN("missing sprite for state ", state_string_map[mask], "\n");
+    sprite->state = 0;
+  }
+  else
+  {
+    sprite->state = state_idx;
+    DEBUG("set state of ", ec.ent.value, " to ", state_string_map[mask], "\n");
+  }
+}
+
+}

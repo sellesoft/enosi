@@ -14,8 +14,8 @@ struct MapPostLoad;
  */
 struct SpawnerSys : EntitySys
 {
-  EyeSys&  eye;
-  MindSys& mind;
+  EyeSys*  eye;
+  MindSys* mind;
 
   b8 init()
   {

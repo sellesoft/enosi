@@ -57,7 +57,15 @@ struct RenderSys
     f32 resolution_and_time[4];
   };
 
-  b8 init(gfx::Renderer& renderer, AssetMgr& assetmgr);
+  struct InitParams
+  {
+    gfx::Renderer& renderer;
+    AssetMgr& assetmgr;
+    gfx::Texture& white_texture;
+  };
+
+  b8 init(InitParams& params);
+
   void deinit(gfx::Renderer& renderer);
 
   struct UpdateParams
@@ -105,6 +113,8 @@ struct RenderSys
   gfx::Shader fullscreen_vertex_shader;
   gfx::Shader stars_fragment_shader;
   gfx::Pipeline stars_pipeline;
+
+  gfx::Texture white_texture;
 };
 
 }

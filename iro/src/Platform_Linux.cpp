@@ -23,6 +23,7 @@
 #include "sys/wait.h"
 #include "sys/ptrace.h"
 #include "sys/sendfile.h"
+#include "sys/mman.h"
 
 #include "valgrind/callgrind.h"
 
@@ -991,7 +992,7 @@ u64 byteSwap(u64 x)
 
 /* ----------------------------------------------------------------------------
  */
-void* reserve_memory(u64 size)
+void* reserveMemory(u64 size)
 {
   void* result = mmap(nullptr, size, PROT_NONE,
     MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -1005,7 +1006,7 @@ void* reserve_memory(u64 size)
 
 /* ----------------------------------------------------------------------------
  */
-b8 commit_memory(void* ptr, u64 size)
+b8 commitMemory(void* ptr, u64 size)
 {
   if (-1 == mprotect(ptr, size, PROT_READ | PROT_WRITE))
     return reportErrno("failed to commit memory");
@@ -1014,7 +1015,7 @@ b8 commit_memory(void* ptr, u64 size)
 
 /* ----------------------------------------------------------------------------
  */
-void* reserve_large_memory(u64 size)
+void* reserveLargeMemory(u64 size)
 {
   void* result = mmap(nullptr, size, PROT_NONE,
     MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
@@ -1028,7 +1029,7 @@ void* reserve_large_memory(u64 size)
 
 /* ----------------------------------------------------------------------------
  */
-b8 commit_large_memory(void* ptr, u64 size)
+b8 commitLargeMemory(void* ptr, u64 size)
 {
   if (-1 == mprotect(ptr, size, PROT_READ | PROT_WRITE))
     return reportErrno("failed to commit memory");
@@ -1037,20 +1038,26 @@ b8 commit_large_memory(void* ptr, u64 size)
 
 /* ----------------------------------------------------------------------------
  */
-void decommit_memory(void* ptr, u64 size)
+void decommitMemory(void* ptr, u64 size)
 {
   if (-1 == madvise(ptr, size, MADV_DONTNEED))
-    return reportErrno("failed to decommit memory");
+  {
+    reportErrno("failed to decommit memory");
+    return;
+  }
   if (-1 == mprotect(ptr, size, PROT_NONE))
-    return reportErrno("failed to decommit memory");
+  {
+    reportErrno("failed to decommit memory");
+    return;
+  }
 }
 
 /* ----------------------------------------------------------------------------
  */
-void release_memory(void* ptr, u64 size)
+void releaseMemory(void* ptr, u64 size)
 {
   if (-1 == munmap(ptr, size))
-    return reportErrno("failed to release memory");
+    reportErrno("failed to release memory");
 }
 
 }

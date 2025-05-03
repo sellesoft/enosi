@@ -169,9 +169,9 @@ b8 Window::init(String title, InputMgr& inputmgr)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Window::update(Engine& engine)
+b8 Window::update(InputMgr& input)
 {
-  engine.input.scroll = 0.f;
+  input.scroll = 0.f;
 
   XEvent event;
   for (;;)
@@ -200,14 +200,14 @@ b8 Window::update(Engine& engine)
       {
         KeySym ks = XLookupKeysym(&event.xkey, 0);
         Key key = keysymToKey(ks);
-        engine.input.keys_real.set(key);
+        input.keys_real.set(key);
 
         KeySym unused;
-        engine.input.real_char_count += 
+        input.real_char_count += 
           XLookupString(
             &event.xkey, 
-            (char*)engine.input.chars + engine.input.real_char_count,
-            sizeof(engine.input.chars) - engine.input.real_char_count,
+            (char*)input.chars + input.real_char_count,
+            sizeof(input.chars) - input.real_char_count,
             &unused,
             0);
       }
@@ -217,7 +217,7 @@ b8 Window::update(Engine& engine)
       {
         KeySym ks = XLookupKeysym(&event.xkey, 0);
         Key key = keysymToKey(ks);
-        engine.input.keys_real.unset(key);
+        input.keys_real.unset(key);
       } 
       break;
 
@@ -230,8 +230,8 @@ b8 Window::update(Engine& engine)
 $ local map = function(x, y)
         case $(x):
           (event.type == ButtonPress?
-            engine.input.mouse_real.set(MouseButton::$(y)) :
-            engine.input.mouse_real.unset(MouseButton::$(y)));
+            input.mouse_real.set(MouseButton::$(y)) :
+            input.mouse_real.unset(MouseButton::$(y)));
             break;
 $ end
         @map(Button1, Left)
@@ -239,8 +239,8 @@ $ end
         @map(Button3, Right)
 $ map = nil
 
-        case Button4: engine.input.scroll += 1.f; break;
-        case Button5: engine.input.scroll -= 1.f; break;
+        case Button4: input.scroll += 1.f; break;
+        case Button5: input.scroll -= 1.f; break;
         default:
             WARN("unhandled button given by XButtonEvent: ", bev.button, 
                  "\n");
@@ -252,8 +252,8 @@ $ map = nil
     case MotionNotify:
       {
         XMotionEvent motion = event.xmotion;
-        engine.input.mouse.window = vec2f(motion.x, motion.y);
-        engine.input.mouse.screen = vec2f(motion.x_root, motion.y_root);
+        input.mouse.window = vec2f(motion.x, motion.y);
+        input.mouse.screen = vec2f(motion.x_root, motion.y_root);
       }
       break;
 
@@ -263,7 +263,7 @@ $ map = nil
         size.x = cev.width;
         size.y = cev.height;
         
-        raise<WindowResized>(engine, { size });
+        // raise<WindowResized>( { size });
       }
       break;
     }

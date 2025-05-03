@@ -16,6 +16,18 @@ struct OffsetPtr
 {
   s32 offset = 0;
 
+  template<typename TPtr>
+  static TPtr* getPtrAsOffsetPtr(TPtr** ptr)
+  {
+    return ((OffsetPtr<TPtr>*)ptr)->get();
+  }
+
+  template<typename TPtr>
+  static void setPtrAsOffsetPtr(TPtr** ptr, TPtr* realptr)
+  {
+    ((OffsetPtr<TPtr>*)ptr)->set(realptr);
+  }
+
   T* get() const
   {
     return offset == 0? nullptr : (T*)((u8*)(this) + offset);

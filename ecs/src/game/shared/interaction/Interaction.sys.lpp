@@ -17,35 +17,42 @@ $ require "common"
 
 @log.ger(sh.sys.interact, Info)
 
+#include "iro/Platform.h"
+
 /* ----------------------------------------------------------------------------
  */
 b8 InteractionSys::update()
 {
-  if (!input.mgr->wasMouseButtonPressed(MouseButton::Left))
+  if (!input->mgr->wasMouseButtonPressed(MouseButton::Left))
     return true;
 
-  vec2f mouse_world = eye.screenToWorld(input.mgr->mouse.window);
+  vec2f mouse_world = eye->screenToWorld(input->mgr->mouse.window);
+
+  INFO(mouse_world, "\n");
 
   Layer* mouse_layer;
   Tile*  mouse_tile;
-  if (!map.getTileAndLayerAtPos(&mouse_layer, &mouse_tile, mouse_world))
+  if (!map->getTileAndLayerAtPos(&mouse_layer, &mouse_tile, mouse_world))
     return true;
+
+  DEBUG(map->getTilePos(*mouse_layer, *mouse_tile), "\n");
 
   for (auto& interactable : iterateComp<Interactable>())
   {
     auto* transform = tryComp<Transform>(interactable.owner);
 
-    const Layer& transform_layer = map.layers[transform->placement_layer];
+    const Layer& transform_layer = map->layers[transform->placement_layer];
     vec2f interactable_pos = 
-      transform_layer.def->pos + 
+      transform_layer.pos + 
       transform->pos;
 
     Layer* layer;
     Tile* tile;
-    if (map.getTileAndLayerAtPos(&layer, &tile, interactable_pos))
+    if (map->getTileAndLayerAtPos(&layer, &tile, interactable_pos))
     {
-      INFO(mouse_world, " ", mouse_tile, " ", tile, " ", transform->pos, "\n");
-      if (layer == mouse_layer && tile == mouse_tile)
+      DEBUG(mouse_tile, " ", tile, " ", transform->pos, " ", 
+           interactable_pos, "\n");
+      if (tile == mouse_tile)
       {
         raise(interactable.owner, Interact{});
       }

@@ -42,6 +42,35 @@ Importer.eachDecl = function(self, f)
   end
 end
 
+local function formTypeName(name, type)
+  if type:is(ast.ElaboratedType) then
+    name:put(type.name)
+  elseif type:is(ast.TagType) then
+    name:put(type.name)
+  elseif type:is(ast.BuiltinType) then
+    name:put(type.name)
+  elseif type:is(ast.PointerType) then
+    formTypeName(name, type.subtype)
+    name:put "*"
+  elseif type:is(ast.ReferenceType) then
+    formTypeName(name, type.subtype)
+    name:put "&"
+  elseif type:is(ast.CArray) then
+    formTypeName(name, type.subtype)
+    name:put('[', type.len, ']')
+  else
+    io.write("unhandled type kind: ", type:tostring(), "\n")
+  end
+end
+
+Importer.eachType = function(self, f)
+  for type in self.p.types.list:each() do
+    local name = cmn.buffer.new()
+    formTypeName(name, type)
+    f(name:get(), type)
+  end
+end
+
 Importer.removeTag = function(name)
   return name
     :gsub("struct ", "")

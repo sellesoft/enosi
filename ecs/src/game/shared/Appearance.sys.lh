@@ -1,0 +1,28 @@
+/*
+ *  TODO(sushi) doc this because its very important.
+ */
+
+@@lpp.import "game/shared/entity/EntitySys.lh"
+@@lpp.import "game/client/Appearance.events.lh"
+@@lpp.import "game/shared/Appearance.comp.lh"
+
+#include "iro/containers/Array.h"
+
+struct ComponentInit;
+
+/* ============================================================================
+ */
+struct SharedAppearanceSys : EntitySys
+{
+  b8 init() 
+  { 
+    subscribeTo<Appearance, ComponentInit>(&SharedAppearanceSys::onInit);
+    return true; 
+  }
+
+  void onInit(EntComp<Appearance>, ComponentInit&);
+
+  void setData(EntityId id, String key, StringHash val, Appearance& comp);
+
+  virtual void queueUpdate(EntityId id, Appearance& comp) {}
+};

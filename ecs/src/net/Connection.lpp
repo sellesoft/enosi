@@ -25,6 +25,10 @@ $ else -- if IRO_WIN32
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <fcntl.h>
+#include "errno.h"
+#include "string.h"
+#include "unistd.h"
+#include "sys/ioctl.h"
 $ end -- if not IRO_WIN32
 
 @@lpp.import "net/Address.lh"

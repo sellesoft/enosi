@@ -16,6 +16,7 @@ $ local function eachDecl(f)
 $   importer:eachDecl(function(name, decl)
 $     if decl.is_anonymous then return end
 $     if decl.has_unhandled_arg_kind then return end
+$     if decl:is(ast.TypedefDecl) then return end
 $     f(name, decl)
 $   end)
 $ end
@@ -102,5 +103,7 @@ $ end)
   return nil;
 }
 
+/* ----------------------------------------------------------------------------
+ */
 
 }

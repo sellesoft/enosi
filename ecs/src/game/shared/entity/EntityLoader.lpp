@@ -19,7 +19,7 @@ local importer = require "reflect.Importer"
         return true
       end
       
-      local TComponent = p.processed_clang_objs["struct Component"]
+      local TComponent = p:lookupDecl "struct Component"
       if TComponent and decl:isDerivedFrom(TComponent) then
         return true
       end
@@ -48,7 +48,7 @@ $$$
 
 @cmn.defFileLogger(ent.loader, Info);
 
-$ local TComponent = importer.p.decls.map["struct Component"]
+$ local TComponent = importer.p:lookupDecl "struct Component"
 $ local function eachComp(f)
 $   importer:eachDecl(function(name, decl)
 $     if decl:is(ast.Record) and decl:isDerivedFrom(TComponent) then
@@ -151,23 +151,34 @@ EntityId loadEntity(const EntityDef& def, EntityMgr& entmgr)
 
   Entity* ent = entmgr.getEntity(entid);
 
-  for (ComponentPtr defcomp : def.components)
+  for (auto& compdef : def.components)
   {
-    if (defcomp.ptr == nullptr)
-      continue;
-
-    switch (defcomp.ptr->kind)
+    switch (compdef.type.hash())
     {
 $ eachComp(function(name, decl)
     case "$(name)"_hashed:
       {
-        auto* comp = 
-          cmpmgr.allocateComponentFromInitialData(
-            *($(name)*)defcomp.ptr);
+        auto* comp = cmpmgr.allocateComponent<$(name)>();
+
+$   for field in decl:eachFieldWithIndex() do
+        if (auto* ptr = compdef.map.find("$(field.name)"_hashed))
+        {
+$     if field.metadata.hidden then
+          ERROR("field '$(field.name)' of $(name) is hidden\n");
+          return nil;
+$     elseif field.metadata.data_field then
+          comp->$(field.name) = *($(field.type.name)*)ptr->ptr;
+$     end
+        }
+$   end
+      
         entmgr.addComp(ent, comp);
       }
       break;
 $ end)
+    default:
+      ERROR("unknown component type used in data: ", compdef.type, "\n");
+      return nil;
     }
   }
 
@@ -178,7 +189,6 @@ $ end)
   }
 
   return entid;
-
 }
 
 /* ----------------------------------------------------------------------------

@@ -4,6 +4,7 @@ $ local metadata = require "reflect.Metadata"
 @@lpp.import "asset/ArrayDef.lh"
 @@lpp.import "game/shared/component/Component.lh"
 @@lpp.import "asset/Asset.lh"
+@@lpp.import "asset/TypedStringMap.lh"
 
 /* ============================================================================
  */
@@ -12,7 +13,7 @@ $ local metadata = require "reflect.Metadata"
 struct EntityDef
 {
   String name;
-  ArrayDef<ComponentPtr> components;
+  ArrayDef<TypedStringMap<Component>> components;
 };
 
 typedef TypedSourceAssetRef<EntityDef> EntityDefRef;

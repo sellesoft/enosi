@@ -1159,13 +1159,13 @@ struct ObjectState : DatumState
         !parent->embedsChildren())
     {
       vec2f local_cursor = 
-        ui.eng->input.mouse.window - editor->pos_screen;
+        ui.input->mouse.window - editor->pos_screen;
 
       f32 name_extent = calcInlineValueX(editor->max_name_width);
 
       if (ui.testFocusableRegion(pos, {name_extent, skin.rows.height}))
       {
-        if (ui.eng->input.isKeyDown(Key::LAlt))
+        if (ui.input->isKeyDown(Key::LAlt))
         {
           data->dump();
         }
@@ -1536,7 +1536,8 @@ $       return "Vec2State"
 $     elseif decl.specialized_name == "TypedPtr" then
 $       local TPtr = decl.template_args[1]
 $       local DPtr = TPtr:getDecl()
-$       return "TypedPointerState<"..importer.removeTag(DPtr.name)..">"
+$       local name = DPtr and importer.removeTag(DPtr.name) or "void"
+$       return "TypedPointerState<"..name..">"
 $     elseif decl.specialized_name == "ArrayDef" then
 $       local subtype = decl.template_args[1]
 $       local subdecl = subtype:getDecl()
@@ -1780,6 +1781,12 @@ $ end
 template<>
 TypedPointerState<$(name)> __typed_pointer_state_dummy_<$(name)> = {};
 $ end
+
+template<>
+struct TypedPointerState<void> : ValueState
+{
+
+};
 
 $ -- * ------------------------------------------------------------------------
 
@@ -2395,8 +2402,8 @@ SourceDataEditor* SourceDataEditor::create(UI& ui, Interface* interface)
   editor->font = 
     gfx::Font::load(
       "assets/fonts/gohu"_str,
-      ui.eng->assetmgr,
-      ui.eng->renderer);
+      *ui.assetmgr,
+      *ui.renderer);
 
   editor->font_texture = editor->font->texture->gfx_texture;
 
@@ -2623,7 +2630,7 @@ void SourceDataEditor::DatumTextEdit::update(
   InputTextState::UpdateParams params = 
   {
     .local_mouse = 
-      ui.eng->input.mouse.window - (editor->pos_screen + pos),
+      ui.input->mouse.window - (editor->pos_screen + pos),
     .font = editor->font,
     .is_focused = true,
     .font_height = skin.font_height,
@@ -2645,7 +2652,7 @@ void SourceDataEditor::DatumTextEdit::update(
     {
       state_changed = true;
     }
-    else if (ui.eng->input.wasKeyPressed(Key::Enter))
+    else if (ui.input->wasKeyPressed(Key::Enter))
     {
       datum->onEdit(editor);
       state_changed = true;
@@ -2767,7 +2774,7 @@ void SourceDataEditor::beginEditDatumText(
     datum_text_edit.input_text.update(ui,
     {
       .local_mouse = 
-        ui.eng->input.mouse.window - (pos_screen + pos),
+        ui.input->mouse.window - (pos_screen + pos),
       .font = font,
       .is_focused = true,
       .font_height = skin.font_height,

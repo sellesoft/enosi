@@ -181,11 +181,8 @@ b8 startMatch(Server* server, String map_name, b8 existing)
   server->match_allocator.clear();
   server->state = ServerState::Ingame;
 
-  sv::GameSim::InitParams game_sim_params =
-  {
-    server->engine,
-    .map_def = *map_def,
-  };
+  sv::GameSim::InitParams game_sim_params = {};
+
   if (!server->sim.init(game_sim_params))
     return @log.error("failed to init server sim\n");
 

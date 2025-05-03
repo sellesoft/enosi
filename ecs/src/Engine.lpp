@@ -58,150 +58,7 @@ $ end
   @initSystem(source_data_file_reg.init(),              source data file reg);
   @initSystem(eventbus.broadcast.init(),                broadcast event bus);
   @initSystem(net::init(),                              net);
-  @initSystem(input.init(*this),                        input);
-  @initSystem(Window::initializeBackend(),              window backend);
-  @initSystem(window.init("ecs"_str,input),             window);
-  @initSystem(renderer.init(*this, mem::stl_allocator), renderer);
   @initSystem(assetmgr.init(&mem::stl_allocator),       asset mgr);
-
-  //TODO(delle) move required asset compilation somewhere else
-  TRACE("compiling white and null textures\n");
-  {
-    mem::LenientBump texture_compile_allocator;
-    if (!texture_compile_allocator.init())
-      return ERROR("failed to initialize texture compile allocator\n");
-    defer { texture_compile_allocator.deinit(); };
-
-    gfx::CompiledTexture::CompileParams white_texture_params =
-    {
-      .name         = "assets/textures/white"_str,
-      .width        = 2,
-      .height       = 2,
-      .format       = gfx::ImageFormat::BW,
-      .usage        = gfx::ImageUsage::Sampled,
-      .filter       = gfx::ImageFilter::Nearest,
-      .address_mode = gfx::ImageAddressMode::ClampToWhite,
-      .allocator    = &texture_compile_allocator,
-      .assetmgr     = &assetmgr,
-    };
-
-    u8 pixels[16] =
-    {
-      0xff, 0xff, 0xff, 0xff,
-      0xff, 0xff, 0xff, 0xff,
-      0xff, 0xff, 0xff, 0xff,
-      0xff, 0xff, 0xff, 0xff,
-    };
-
-    gfx::CompiledTexture::compileFromMemory(pixels, white_texture_params);
-
-    auto* white_texture_compiled =
-      gfx::CompiledTexture::load(
-        "assets/textures/white"_str,assetmgr, renderer);
-    if (white_texture_compiled == nullptr)
-      return ERROR("failed to load white texture\n");
-    white_texture = white_texture_compiled->gfx_texture;
-
-    gfx::CompiledTexture::CompileParams null_texture_params =
-    {
-      .name         = "assets/textures/null"_str,
-      .format       = gfx::ImageFormat::RGBA,
-      .usage        = gfx::ImageUsage::Sampled,
-      .filter       = gfx::ImageFilter::Nearest,
-      .address_mode = gfx::ImageAddressMode::ClampToWhite,
-      .allocator    = &texture_compile_allocator,
-      .assetmgr     = &assetmgr,
-    };
-
-    gfx::CompiledTexture::compilePNG(null_texture_params);
-
-    auto* null_texture_compiled =
-      gfx::CompiledTexture::load(
-        "assets/textures/null"_str, assetmgr, renderer);
-    if (null_texture_compiled == nullptr)
-      return ERROR("failed to load null texture\n");
-  }
-
-  TRACE("compiling shaders\n");
-  {
-    gfx::CompiledShader::CompileParams scene_vertex_shader_params =
-    {
-      .name      = "assets/shaders/scene.vertex"_str,
-      .type      = gfx::ShaderType::Vertex,
-      .allocator = &mem::stl_allocator,
-      .assetmgr  = &assetmgr,
-    };
-    gfx::CompiledShader::compileGLSL(scene_vertex_shader_params);
-
-    gfx::CompiledShader::CompileParams scene_fragment_shader_params =
-    {
-      .name      = "assets/shaders/scene.fragment"_str,
-      .type      = gfx::ShaderType::Fragment,
-      .allocator = &mem::stl_allocator,
-      .assetmgr  = &assetmgr,
-    };
-    gfx::CompiledShader::compileGLSL(scene_fragment_shader_params);
-
-    gfx::CompiledShader::CompileParams fullscreen_vertex_shader_params =
-    {
-      .name      = "assets/shaders/fullscreen.vertex"_str,
-      .type      = gfx::ShaderType::Vertex,
-      .allocator = &mem::stl_allocator,
-      .assetmgr  = &assetmgr,
-    };
-    gfx::CompiledShader::compileGLSL(fullscreen_vertex_shader_params);
-
-    gfx::CompiledShader::CompileParams stars_fragment_shader_params =
-    {
-      .name      = "assets/shaders/stars.fragment"_str,
-      .type      = gfx::ShaderType::Fragment,
-      .allocator = &mem::stl_allocator,
-      .assetmgr  = &assetmgr,
-    };
-    gfx::CompiledShader::compileGLSL(stars_fragment_shader_params);
-
-    gfx::CompiledShader::CompileParams ui_vertex_shader_params =
-    {
-      .name      = "assets/shaders/ui.vertex"_str,
-      .type      = gfx::ShaderType::Vertex,
-      .allocator = &mem::stl_allocator,
-      .assetmgr  = &assetmgr,
-    };
-    gfx::CompiledShader::compileGLSL(ui_vertex_shader_params);
-
-    gfx::CompiledShader::CompileParams ui_fragment_shader_params =
-    {
-      .name      = "assets/shaders/ui.fragment"_str,
-      .type      = gfx::ShaderType::Fragment,
-      .allocator = &mem::stl_allocator,
-      .assetmgr  = &assetmgr,
-    };
-    gfx::CompiledShader::compileGLSL(ui_fragment_shader_params);
-  }
-
-  TRACE("compiling gohu font\n");
-  {
-    CodepointRange ascii =
-    {
-      .first_codepoint = 32,
-      .num_codepoints = 94,
-    };
-
-    gfx::Font::CompileParams params =
-    {
-      .name       = "assets/fonts/gohu"_str,
-      .ranges     = CodepointRanges::from(&ascii, 1),
-      .allocator  = &mem::stl_allocator,
-      .assetmgr   = &assetmgr,
-    };
-
-    gfx::Font::compileBDF(params);
-  }
-
-  @initSystem(ui.init(*this),              ui);
-
-  INFO("done initializing in ",
-    WithUnits(TimePoint::monotonic() - start_time), "\n");
 
 $ if true then
 
@@ -256,7 +113,7 @@ $ end
     LaunchArg* password_arg = launch_args.find("-password"_hashed);
     if (password_arg != nullptr)
     {
-      password.len = min(64ULL, password_arg->value.len);
+      password.len = min<u64>(64ULL, password_arg->value.len);
       mem::copy(password.arr, password_arg->value.ptr, password.len);
     }
 
@@ -276,12 +133,16 @@ $ end
   }
   else
   {
-    client = clientCreate(this);
+    client = new Client;
+    
+    if (!client->init(this))
+      return FATAL("failed to initialize Client\n");
   }
 
   init_time = TimePoint::now();
 
-  INFO("done!\n");
+  INFO("done initializing in ",
+    WithUnits(TimePoint::monotonic() - start_time), "\n");
 
   return true;
 }
@@ -305,22 +166,10 @@ b8 Engine::update()
   frame_start_time = TimeSpan::fromSeconds(time_point.s).toSeconds()
     + TimeSpan::fromNanoseconds(time_point.ns).toSeconds();
 
-  if (!window.update(*this))
-    return ERROR("failed to update window\n");
-
-  if (!renderer.update())
-    return ERROR("failed to update renderer\n");
-
-  if (!input.update(*this))
-    return ERROR("failed to update input\n");
-
   if (client)
-    clientUpdate(client);
+    client->update();
   if (server)
     sv::update(server);
-
-  if (!ui.update(*this))
-    return ERROR("failed to update ui\n");
 
   // inspector->fps->dirty = true;
   //

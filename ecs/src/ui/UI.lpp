@@ -9,12 +9,12 @@ $ local ui = require "ui.UI"
 @@lpp.import "window/Window.lh"
 @@lpp.import "window/Window.events.lh"
 @@lpp.import "math/util.h"
+@@lpp.import "game/client/Client.lh"
 
 #include "iro/Logger.h"
 #include "iro/containers/SmallArray.h"
 
 $ require "Log"
-
 
 using namespace iro;
 
@@ -25,16 +25,16 @@ namespace ui
 
 /* ----------------------------------------------------------------------------
  */
-void pushConstantFromTransform(
+static void pushConstantFromTransform(
+  Rect viewport,
   gfx::Renderer& renderer,
-  const Window& window,
   const mat3x2& transform)
 {
   f32 push_constant[16];
   transform.toMat4(push_constant);
 
-  f32 scale_x = 2.0f / window.size.x;
-  f32 scale_y = 2.0f / window.size.y;
+  f32 scale_x = 2.0f / viewport.w;
+  f32 scale_y = 2.0f / viewport.h;
   push_constant[0] *= scale_x;
   push_constant[1] *= scale_x;
   push_constant[4] *= scale_y;
@@ -45,7 +45,7 @@ void pushConstantFromTransform(
   push_constant[2] = 0.0f;
   push_constant[6] = 0.0f;
 
-  renderer.pushConstant(push_constant, ui::PUSH_CONSTANT_SIZE);
+  renderer.pushConstant(push_constant, UI::PushConstantSize);
 }
 
 /* ----------------------------------------------------------------------------
@@ -103,11 +103,13 @@ void UI::endItem()
 
 /* ----------------------------------------------------------------------------
  */
-b8 UI::init(Engine& engine)
+b8 UI::init(InitParams& params)
 {
-  AssetMgr& assetmgr = engine.assetmgr;
-  gfx::Renderer& renderer = engine.renderer;
-  Window& window = engine.window;
+  assetmgr      = &params.assetmgr;
+  renderer      = &params.renderer;
+  input         = &params.input;
+  viewport      = params.viewport;
+  white_texture = params.white_texture;
 
   if (!item_stack.init())
     return ERROR("failed to init item stack\n");
@@ -124,34 +126,34 @@ b8 UI::init(Engine& engine)
 
   gfx::CompiledShader* compiled_vertex_shader =
     gfx::CompiledShader::load("assets/shaders/ui.vertex"_str,
-      assetmgr, renderer);
+      *assetmgr, *renderer);
   if (compiled_vertex_shader == nullptr)
     return ERROR("failed to load ui vertex shader\n");
   vertex_shader = compiled_vertex_shader->gfx_shader;
 
   gfx::CompiledShader* compiled_fragment_shader =
     gfx::CompiledShader::load("assets/shaders/ui.fragment"_str,
-      assetmgr, renderer);
+      *assetmgr, *renderer);
   if (compiled_fragment_shader == nullptr)
     return ERROR("failed to load ui fragment shader\n");
   fragment_shader = compiled_fragment_shader->gfx_shader;
 
-  if (!pipeline.init(renderer, vertex_shader, fragment_shader,
-      ui::PUSH_CONSTANT_SIZE, true, "ui"_str))
+  if (!pipeline.init(*renderer, vertex_shader, fragment_shader,
+      PushConstantSize, true, "ui"_str))
     return ERROR("failed to init ui pipeline\n");
 
-  if (!vertex_buffer.init(renderer, nullptr,
-    sizeof(gfx::Vertex) * ui::MAX_VERTICES,
-    gfx::Buffer::Usage::VertexBuffer,
-    gfx::Buffer::MemoryProperty::DeviceMappable,
-    gfx::Buffer::MappingBehavior::Occasional))
+  if (!vertex_buffer.init(*renderer, nullptr,
+        sizeof(gfx::Vertex) * MaxVertices,
+        gfx::Buffer::Usage::VertexBuffer,
+        gfx::Buffer::MemoryProperty::DeviceMappable,
+        gfx::Buffer::MappingBehavior::Occasional))
     return ERROR("failed to init ui vertex buffer\n");
 
-  if (!index_buffer.init(renderer, nullptr,
-    sizeof(gfx::Index) * ui::MAX_INDICES,
-    gfx::Buffer::Usage::IndexBuffer,
-    gfx::Buffer::MemoryProperty::DeviceMappable,
-    gfx::Buffer::MappingBehavior::Occasional))
+  if (!index_buffer.init(*renderer, nullptr,
+        sizeof(gfx::Index) * MaxIndices,
+        gfx::Buffer::Usage::IndexBuffer,
+        gfx::Buffer::MemoryProperty::DeviceMappable,
+        gfx::Buffer::MappingBehavior::Occasional))
     return ERROR("failed to init ui index buffer\n");
 
   // NOTE(sushi) I do not like making root manually here but in order
@@ -169,55 +171,42 @@ b8 UI::init(Engine& engine)
   $ local root = ui.createItemContext("Item", "root")
 
   @root.style.set.pos({0,0});
-  @root.style.set.size(vec2f(window.size));
+  @root.style.set.size(viewport.size());
 
   item_stack.push(root);
 
   vertex_next = index_next = 0;
 
-  engine.subscribeToBroadcast<WindowResized>(this, &UI::onWindowResized);
-  engine.subscribeToBroadcast<PostReload>(this, &UI::onPostReload);
-
   gohu_font = 
     gfx::Font::load(
       "assets/fonts/gohu"_str,
-      assetmgr,
-      renderer);
+      *assetmgr,
+      *renderer);
   if (gohu_font == nullptr)
     return ERROR("failed to load gohu font\n");
   gohu_font_texture = gohu_font->texture->gfx_texture;
-
-  // Store a reference to the engine in case widgets need to access
-  // information from it.
-  eng = &engine;
 
   return true;
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 UI::update(Engine& engine)
+b8 UI::update()
 {
   TRACE("ui update\n");
 
-  Window& window = eng->window;
-  gfx::Renderer& renderer = eng->renderer;
-  InputMgr& input = eng->input;
+  gfx::Renderer& renderer = *this->renderer;
+  InputMgr&      input    = *this->input;
 
   if (item_stack.head->data != root)
     return ERROR("items left on stack!\n");
 
-  // TODO(sushi) only do this if the mouse moves by subscribing to the
-  //             MouseMoved event, maybe. A lot of other stuff will
-  //             also make this need to be retriggered as well.
-  // findHoveredItem(item_tree.root);
-
   renderer.bindPipeline(pipeline);
-  renderer.setViewport(vec2i(0,0), window.size);
-  renderer.setScissor(vec2i(0,0), window.size);
+  renderer.setViewport(viewport.pos(), viewport.size());
+  renderer.setScissor(viewport.pos(), viewport.size());
   renderer.bindVertexBuffer(vertex_buffer);
   renderer.bindIndexBuffer(index_buffer);
-  pushConstantFromTransform(renderer, window,
+  pushConstantFromTransform(viewport, renderer,
     mat3x2::createTransform({0.f, 0.f}, 0.f));
 
   TRACE("  mapping buffers\n");
@@ -244,10 +233,10 @@ b8 UI::update(Engine& engine)
   updateTree(root->node, ctx);
 
   // Draw top most drawcmds with no scissor.
-  renderer.setScissor(vec2i(0,0), window.size);
+  renderer.setScissor(viewport.pos(), viewport.size());
   emitDrawCmds(top_most_drawcmds);
 
-  pushConstantFromTransform(renderer, window,
+  pushConstantFromTransform(viewport, renderer,
     mat3x2::createTransform({0.f, 0.f}, 0.f));
 
   for (ReportedDrawCmd& ddc : debug_drawcmds)
@@ -369,16 +358,15 @@ void UI::updateTree(ItemNode* node, UpdateTreeContext& ctx)
   // INFO("update ", node, " (", node->data->name, ")\n");
   // SCOPED_INDENT;
 
-  gfx::Renderer& renderer = eng->renderer;
-  Window&        window   = eng->window;
-  InputMgr&      input    = eng->input;
+  gfx::Renderer& renderer = *this->renderer;
+  InputMgr&      input    = *this->input;
 
   Item* item = node->data;
   Item* parent = (node->parent? node->parent->data : nullptr);
 
-  eng->renderer.debugBeginLabel(vec4f(0.5f, 0.2f, 0.2f, 1.f),
+  renderer.debugBeginLabel(vec4f(0.5f, 0.2f, 0.2f, 1.f),
     notnil(item->name) ? item->name : "unnamed ui item"_str);
-  defer { eng->renderer.debugEndLabel(); };
+  defer { renderer.debugEndLabel(); };
 
   vec2f init_scroll = item->scroll;
   item->scroll = min(vec2f(0.f,0.f), max(item->scroll, item->max_scroll));
@@ -518,7 +506,7 @@ $ end
         vec2f(0,0),
         min(
           item->pos_screen + item->size,
-          vec2f(window.size)));
+          vec2f(viewport.size())));
     item->visible_start = item->pos_screen;
     item->visible_size = item->size;
   }
@@ -526,7 +514,7 @@ $ end
   // TODO(sushi) we can maybe pull some of these conditions into the
   //             calculations above to stop doing work much earlier.
   b8 item_in_view =
-    scoff.x < window.size.x && scoff.y < window.size.y &&
+    scoff.x < viewport.w    && scoff.y < viewport.h    &&
     scsiz.x != 0.f          && scsiz.y != 0.f          &&
     scoff.x + scsiz.x > 0.f && scoff.y + scsiz.y > 0.f;
 
@@ -563,13 +551,13 @@ $ end
       switch (current_space = desired_space)
       {
       case ItemSpace::Padded:
-        pushConstantFromTransform(renderer, window, item_padded_transform);
+        pushConstantFromTransform(viewport, renderer, item_padded_transform);
         break;
       case ItemSpace::Bordered:
-        pushConstantFromTransform(renderer, window, item_bordered_transform);
+        pushConstantFromTransform(viewport, renderer, item_bordered_transform);
         break;
       case ItemSpace::Margined:
-        pushConstantFromTransform(renderer, window, item_margined_transform);
+        pushConstantFromTransform(viewport, renderer, item_margined_transform);
         break;
       }
     };
@@ -628,10 +616,10 @@ $ end
     if (child_ctx.hovered == nullptr)
     {
       if (math::pointInRect(
-            eng->input.mouse.window, 
+            input.mouse.window, 
             item->visible_start,
             item->calcVisualArea()) ||
-          item->onHitTest(eng->input.mouse.window - item->pos_screen))
+          item->onHitTest(input.mouse.window - item->pos_screen))
         ctx.hovered = item;
     }
     else
@@ -817,7 +805,6 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
 
   Item* item = node->data;
   Item* parent = (node->parent? node->parent->data : nullptr);
-
 
   if (item == eval_break)
   {
@@ -1339,8 +1326,6 @@ $ end
  */
 void UI::genItemBranch(ItemNode* node)
 {
-  InputMgr& input = eng->input;
-
   Item* item = node->data;
 
   $ local item = ui.createItemContext("Item", "item")
@@ -1526,7 +1511,7 @@ b8 UI::testFocusableRegion(vec2f pos, vec2f size)
     return false;
 
   if (math::pointInRect(
-        eng->input.mouse.window,
+        input->mouse.window,
         updating_item->pos_screen + pos,
         size))
   {
@@ -1545,7 +1530,7 @@ b8 UI::testHoverableRegion(vec2f pos, vec2f size)
     return false;
 
   return math::pointInRect(
-      eng->input.mouse.window,
+      input->mouse.window,
       updating_item->pos_screen + pos,
       size);
 }
@@ -1588,19 +1573,19 @@ void UI::emitDrawCmd(
     if (scissor_w == 0 || scissor_h == 0)
       return;
 
-    eng->renderer.setScissor(
+    renderer->setScissor(
       vec2i(scissor_x, scissor_y), vec2i(scissor_w, scissor_h));
   }
 
   if (notnil(drawcmd->tex))
   {
     TRACE("  drawcmd has tex ", drawcmd->tex.index, "\n");
-    eng->renderer.bindTexture(drawcmd->tex);
+    renderer->bindTexture(drawcmd->tex);
   }
   else
   {
     TRACE("  drawcmd has no tex\n");
-    eng->renderer.bindTexture(eng->white_texture);
+    renderer->bindTexture(white_texture);
   }
 
   TRACE("  pushing draw \n",
@@ -1608,14 +1593,14 @@ void UI::emitDrawCmd(
       "\n    ic: ", drawcmd->counts_used.y,
       "\n    vo: ", drawcmd->vertex_offset, "\n");
 
-  eng->renderer.draw(
+  renderer->draw(
     drawcmd->index_offset,
     drawcmd->counts_used.y,
     drawcmd->vertex_offset);
 
   if (drawcmd_scissor)
   {
-    eng->renderer.setScissor(current_scissor.xy(), current_scissor.zw());
+    renderer->setScissor(current_scissor.xy(), current_scissor.zw());
   }
 }
 
@@ -1627,25 +1612,10 @@ void UI::emitDrawCmds( DeferredDrawCmdList& drawcmds)
   {
     if (cmd.drawcmd->counts_used.x != 0)
     {
-      pushConstantFromTransform(eng->renderer, eng->window, cmd.transform);
+      pushConstantFromTransform(viewport, *renderer, cmd.transform);
     }
     emitDrawCmd(cmd.drawcmd, nullptr, {});
   }
-}
-
-/* ----------------------------------------------------------------------------
- */
-void UI::onWindowResized(WindowResized& event)
-{
-  $ local root = ui.createItemContext("Item", "root")
-  @root.style.set.size(event.size);
-}
-
-/* ----------------------------------------------------------------------------
- */
-void UI::onPostReload(PostReload& _)
-{
-  root->dirty = true;
 }
 
 }

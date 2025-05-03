@@ -23,7 +23,6 @@ struct GameSim : SharedGameSim
 
   struct InitParams : SharedGameSim::InitParams
   {
-    MapDef& map_def;
   };
 
   b8 init(const InitParams& params);

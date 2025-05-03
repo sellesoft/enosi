@@ -33,7 +33,11 @@ $ local TRef = importer.p.decls.map["struct Ref"]
 $ local function placeDer(der)
 $   local name = importer.removeTag(der.name)
   case "$(name)"_hashed:
+  {
+    TRACE("loading $(name)\n");
+    SCOPED_INDENT;
     return (($(name)*)this)->load(params);
+  }
 $   for der in der.derived:each() do
 $     placeDer(der)
 $   end

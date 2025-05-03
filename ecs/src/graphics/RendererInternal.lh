@@ -131,26 +131,32 @@ constexpr u32 STORAGE_BUFFER_DESCRIPTOR_SET_INDEX = 2;
  */
 struct RendererInternal
 {
+  // Constants.
+  enum 
+  {
+    MaxTextures = 512,
+    MaxBuffers = 512,
+    MaxFramebuffers = 4,
+    MaxShaders = 32,
+    MaxPipelines = 8,
+    MaxDefaultFramebuffers = 4,
+  };
+
   //// Renderer Objects ////
 
-  static constexpr s32 MAX_TEXTURES = 512;
-  FixedPool<RendererTexture, MAX_TEXTURES> texture_pool;
+  FixedPool<RendererTexture, MaxTextures> texture_pool;
   u32 texture_count;
 
-  static constexpr s32 MAX_BUFFERS = 512;
-  FixedPool<RendererBuffer, MAX_BUFFERS> buffer_pool;
+  FixedPool<RendererBuffer, MaxBuffers> buffer_pool;
   u32 buffer_count;
 
-  static constexpr s32 MAX_FRAMEBUFFERS = 4;
-  FixedPool<RendererFramebuffer, MAX_FRAMEBUFFERS> framebuffer_pool;
+  FixedPool<RendererFramebuffer, MaxFramebuffers> framebuffer_pool;
   u32 framebuffer_count;
 
-  static constexpr s32 MAX_SHADERS = 32;
-  FixedPool<RendererShader, MAX_SHADERS> shader_pool;
+  FixedPool<RendererShader, MaxShaders> shader_pool;
   u32 shader_count;
 
-  static constexpr s32 MAX_PIPELINES = 8;
-  FixedPool<RendererPipeline, MAX_PIPELINES> pipeline_pool;
+  FixedPool<RendererPipeline, MaxPipelines> pipeline_pool;
   u32 pipeline_count;
 
   StackArray<RendererHeap, VK_MAX_MEMORY_TYPES> heaps;
@@ -199,12 +205,12 @@ $ end -- if ECS_DEBUG
   u32 swapchain_min_image_count;
   u32 swapchain_image_count;
 
-  static constexpr u32 MAX_DEFAULT_FRAMEBUFFERS = 4;
   VkRenderPass default_renderpass;
-  VkImage default_framebuffer_images[MAX_DEFAULT_FRAMEBUFFERS];
-  RendererHeapAllocation* default_framebuffer_image_allocations[MAX_DEFAULT_FRAMEBUFFERS];
-  VkImageView default_framebuffer_image_views[MAX_DEFAULT_FRAMEBUFFERS];
-  VkFramebuffer default_framebuffers[MAX_DEFAULT_FRAMEBUFFERS];
+  VkImage default_framebuffer_images[MaxDefaultFramebuffers];
+  RendererHeapAllocation* 
+    default_framebuffer_image_allocations[MaxDefaultFramebuffers];
+  VkImageView default_framebuffer_image_views[MaxDefaultFramebuffers];
+  VkFramebuffer default_framebuffers[MaxDefaultFramebuffers];
   u32 default_framebuffer_index;
 
   VkSemaphore image_acquired_semaphore;

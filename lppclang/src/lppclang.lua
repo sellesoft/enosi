@@ -114,13 +114,15 @@ typedef struct
  DeclKind getDeclKind(Decl* decl);
  String getDeclName(Decl* decl);
  Type* getDeclType(Decl* decl);
- Type* getTypeDeclType(Context* ctx, Decl* decl);
  u64 getDeclBegin(Context* ctx, Decl* decl);
  u64 getDeclEnd(Context* ctx, Decl* decl);
+ b8 isTypeDecl(Decl* decl);
+ Type* getTypeDeclType(Context* ctx, Decl* decl);
  b8 isRecord(Decl* decl);
  b8 isStruct(Decl* decl);
  b8 isUnion(Decl* decl);
  b8 isEnum(Decl* decl);
+ b8 isTypedef(Decl* decl);
  BaseIter* createBaseIter(Context* ctx, Decl* decl);
  Type* nextBase(BaseIter* iter);
  b8 isTagDecl(Decl* decl);
@@ -140,6 +142,8 @@ typedef struct
  b8 isAnonymousField(Decl* decl);
  u64 getFieldOffset(Context* ctx, Decl* field);
  b8 isComplete(Decl* decl);
+ Type* getTypedefSubType(Decl* decl);
+ Decl* getTypedefSubDecl(Decl* decl);
  String getComment(Context* ctx, Decl* decl);
  Decl* getDefinition(Decl* decl);
  void makeComplete(Context* ctx, Type* type);
@@ -160,6 +164,9 @@ typedef struct
  b8 isConst(Type* type);
  b8 isElaborated(Type* type);
  Type* getDesugaredType(Context* ctx, Type* type);
+ Type* getSingleStepDesugaredType(Context* ctx, Type* type);
+ b8 isTypedefType(Type* type);
+ Decl* getTypedefTypeDecl(Type* type);
  b8 isPointer(Type* type);
  b8 isFunctionPointer(Type* type);
  b8 isReference(Type* type);
@@ -548,6 +555,22 @@ Decl.getEnd = function(self)
   return assert(tonumber(lppclang.getDeclEnd(self.ctx.handle, self.handle)))
 end
 
+Decl.isTypeDecl = function(self)
+  return 0 ~= lppclang.isTypeDecl(self.handle)
+end
+
+Decl.isTypedef = function(self)
+  return 0 ~= lppclang.isTypedef(self.handle)
+end
+
+Decl.getTypedefSubDecl = function(self)
+  return Decl.new(self.ctx, lppclang.getTypedefSubDecl(self.handle))
+end
+
+Decl.getTypedefSubType = function(self)
+  return Type.new(self.ctx, lppclang.getTypedefSubType(self.handle))
+end
+
 --- Test if this Decl is an enum.
 ---
 ---@return boolean
@@ -850,6 +873,14 @@ Type.isBuiltin = function(self)
   return 0 ~= lppclang.typeIsBuiltin(self.handle)
 end
 
+Type.isTypedef = function(self)
+  return 0 ~= lppclang.isTypedefType(self.handle)
+end
+
+Type.getTypedefDecl = function(self)
+  return Decl.new(self.ctx, lppclang.getTypedefTypeDecl(self.handle))
+end
+
 --- Get the offset of a field decl in bits.
 ---
 ---@param decl Decl
@@ -915,6 +946,12 @@ Type.getDesugaredType = function(self)
   return Type.new(
     self.ctx, 
     lppclang.getDesugaredType(self.ctx.handle, self.handle))
+end
+
+Type.getSingleStepDesugaredType = function(self)
+  return Type.new(
+    self.ctx,
+    lppclang.getSingleStepDesugaredType(self.ctx.handle, self.handle))
 end
 
 Type.getArrayElementType = function(self)

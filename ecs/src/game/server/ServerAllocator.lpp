@@ -22,10 +22,10 @@ b8 ServerAllocator::init(u64 size)
 {
   TRACE("initializing a server allocator with ", size, " bytes\n");
 
-  this->backing = (u8*)platform::reserve_memory(size);
+  this->backing = (u8*)platform::reserveMemory(size);
   if (this->backing == nullptr)
     return false;
-  if (!platform::commit_memory(this->backing, size))
+  if (!platform::commitMemory(this->backing, size))
     return false;
 
   this->size = size;
@@ -42,8 +42,8 @@ void ServerAllocator::deinit()
   if(this->backing == nullptr)
     return;
 
-  platform::decommit_memory(this->backing, this->size);
-  platform::release_memory(this->backing, this->size);
+  platform::decommitMemory(this->backing, this->size);
+  platform::releaseMemory(this->backing, this->size);
 }
 
 /* ----------------------------------------------------------------------------

@@ -1409,20 +1409,6 @@ String getClangDeclSpelling(Decl* decl)
 
 /* ----------------------------------------------------------------------------
  */
-Type* getTypeDeclType(Context* ctx, Decl* decl)
-{
-  assert(ctx && decl);
-
-  auto cdecl = getClangDecl(decl);
-  if (!clang::TypeDecl::classof(cdecl))
-    return nullptr;
-
-  auto tdecl = (clang::TypeDecl*)cdecl;
-  return (Type*)ctx->getASTContext()->getTypeDeclType(tdecl).getAsOpaquePtr();
-}
-
-/* ----------------------------------------------------------------------------
- */
 u64 getDeclBegin(Context* ctx, Decl* decl)
 {
   using namespace clang;
@@ -1449,6 +1435,28 @@ u64 getDeclEnd(Context* ctx, Decl* decl)
     srcmgr.getDecomposedSpellingLoc(
         getClangDecl(decl)->getEndLoc());
   return offset;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 isTypeDecl(Decl* decl)
+{
+  assert(decl);
+  return clang::TypeDecl::classof(getClangDecl(decl));
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Type* getTypeDeclType(Context* ctx, Decl* decl)
+{
+  assert(ctx && decl);
+
+  auto cdecl = getClangDecl(decl);
+  if (!clang::TypeDecl::classof(cdecl))
+    return nullptr;
+
+  auto tdecl = (clang::TypeDecl*)cdecl;
+  return (Type*)ctx->getASTContext()->getTypeDeclType(tdecl).getAsOpaquePtr();
 }
 
 /* ----------------------------------------------------------------------------
@@ -1519,6 +1527,15 @@ b8 isEnum(Decl* decl)
   if (clang::TagDecl::classof(cdecl))
     return clang::TagTypeKind::Enum == ((clang::TagDecl*)cdecl)->getTagKind();
   return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 isTypedef(Decl* decl)
+{
+  assert(decl);
+  return clang::TypedefDecl::classof(getClangDecl(decl)) ||
+         clang::TypeAliasDecl::classof(getClangDecl(decl));
 }
 
 /* ----------------------------------------------------------------------------
@@ -1712,6 +1729,32 @@ b8 isComplete(Decl* decl)
   auto* cdecl = getClangDecl(decl);
   assert(clang::TagDecl::classof(cdecl));
   return ((clang::TagDecl*)cdecl)->isCompleteDefinition();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Type* getTypedefSubType(Decl* decl)
+{
+  assert(isTypedef(decl));
+
+  return 
+    (Type*)((clang::TypedefDecl*)getClangDecl(decl))->
+      getUnderlyingType().getAsOpaquePtr();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Decl* getTypedefSubDecl(Decl* decl)
+{
+  assert(isTypedef(decl));
+
+  auto* subdecl = 
+    ((clang::TypedefDecl*)getClangDecl(decl))->getUnderlyingDecl();
+
+  if (subdecl == nullptr)
+    return nullptr;
+
+  return (Decl*)subdecl;
 }
 
 /* ----------------------------------------------------------------------------
@@ -1941,6 +1984,35 @@ Type* getDesugaredType(Context* ctx, Type* type)
       getClangType(type).
       getDesugaredType(*ctx->getASTContext()).
       getAsOpaquePtr();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Type* getSingleStepDesugaredType(Context* ctx, Type* type)
+{
+  assert(ctx && type);
+
+  return (Type*)
+      getClangType(type).
+      getSingleStepDesugaredType(*ctx->getASTContext()).
+      getAsOpaquePtr();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 isTypedefType(Type* type)
+{
+  assert(type);
+  return clang::TypedefType::classof(getClangType(type).getTypePtr());
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Decl* getTypedefTypeDecl(Type* type)
+{
+  assert(isTypedefType(type));
+  return 
+    (Decl*)((clang::TypedefType*)getClangType(type).getTypePtr())->getDecl();
 }
 
 /* ----------------------------------------------------------------------------

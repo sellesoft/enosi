@@ -24,13 +24,13 @@ b8 GameSim::init(const InitParams& params)
   if (!this->entsysmgr.init({this->entmgr}))
     return @log.error("failed to initialize the entity system manager\n");
 
-  MapSys::LoadParams map_params =
-  {
-    .assetmgr = this->engine->assetmgr,
-    .entmgr   = this->entmgr,
-  };
-  if(!entsysmgr.get<MapSys>().load(params.map_def, map_params))
-    return @log.error("failed to load map '", params.map_def.name, "'\n");
+  // MapSys::LoadParams map_params =
+  // {
+  //   .assetmgr = params.assetmgr,
+  //   .entmgr   = this->entmgr,
+  // };
+  // if(!entsysmgr.get<MapSys>().load(params.map_def, map_params))
+  //   return @log.error("failed to load map '", params.map_def.name, "'\n");
 
   return true;
 }

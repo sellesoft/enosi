@@ -78,7 +78,7 @@ void ComboBox::update(UI* ui, UpdateReason reason)
         {0.f,0.f}, 
         size.yadd(@this.style.option_height * options.len())))
   {
-    vec2f cursor_local = ui->eng->input.mouse.window - pos_screen;
+    vec2f cursor_local = ui->input->mouse.window - pos_screen;
     
 
     if (cursor_local.y > @this.style.box_height)
@@ -151,8 +151,8 @@ void ComboBox::generate(UI* ui)
     gfx::Font* font = 
       gfx::Font::load(
         @this.style.font, 
-        ui->eng->assetmgr,
-        ui->eng->renderer);
+        *ui->assetmgr,
+        *ui->renderer);
 
     vec2f cursor = {0.f, @this.style.box_height};
 

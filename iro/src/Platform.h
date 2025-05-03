@@ -342,33 +342,33 @@ u64 byteSwap(u64 x);
  * Reserves pages of memory. This only reserves an address range.
  * Minimum size is OS-dependent, but 4 kilobytes is common.
  */
-void* reserve_memory(u64 size);
+void* reserveMemory(u64 size);
 
 /* ----------------------------------------------------------------------------
  * Commits pages of memory. This actually maps the reserved pointer to
  * physical memory.
  */
-b8 commit_memory(void* ptr, u64 size);
+b8 commitMemory(void* ptr, u64 size);
 
 /* ----------------------------------------------------------------------------
  * Reserves large pages of memory. This only reserves an address range.
  * Minimum size is CPU-dependent, but 2 megabytes is common.
  */
-void* reserve_large_memory(u64 size);
+void* reserveLargeMemory(u64 size);
 
 /* ----------------------------------------------------------------------------
  * Commits large pages of memory. This actually maps the reserved pointer to
  * physical memory.
  */
-b8 commit_large_memory(void* ptr, u64 size);
+b8 commitLargeMemory(void* ptr, u64 size);
 
 /* ----------------------------------------------------------------------------
  */
-void decommit_memory(void* ptr, u64 size);
+void decommitMemory(void* ptr, u64 size);
 
 /* ----------------------------------------------------------------------------
  */
-void release_memory(void* ptr, u64 size);
+void releaseMemory(void* ptr, u64 size);
 
 } // namespace iro::platform
 

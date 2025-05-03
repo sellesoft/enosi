@@ -2,6 +2,7 @@ $ require "common"
 
 @@lpp.import "game/shared/Eye.sys.lh"
 @@lpp.import "game/shared/Transform.comp.lh"
+@@lpp.import "game/shared/map/Map.sys.lh"
 
 #include "iro/Logger.h"
 
@@ -13,7 +14,8 @@ b8 EyeSys::update()
 {
   if (auto* transform = tryComp<Transform>(attached))
   {
-    pos = transform->pos;
+    Layer* layer = &map->layers[transform->placement_layer];
+    pos = transform->pos + layer->pos + vec2f(0.5f,0.5f);
     rotation = transform->rotation;
   }
   return true;

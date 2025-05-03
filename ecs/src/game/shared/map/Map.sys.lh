@@ -24,8 +24,7 @@ struct Layer;
  */
 struct Tile
 {
-  const MapTileDef* def = nullptr;
-
+  TileKindRef kind;
   TileKindConfig configuration = TileKindConfig::Default;
 
   b8 init(
@@ -33,7 +32,6 @@ struct Tile
     Layer& layer,
     u32 layer_idx,
     vec2f pos,
-    AssetMgr& assetmgr,
     EntityMgr& entmgr);
 
   void deinit();
@@ -43,14 +41,13 @@ struct Tile
  */
 struct Layer
 {
-  const MapLayerDef* def = nullptr;
-
+  vec2i pos;
+  vec2i size;
   Array<Tile> tiles;
 
   b8 init(
-    const MapLayerDef& def,
-    u32 layer_idx,
-    AssetMgr& assetmgr,
+    const MapLayerDef& def, 
+    u32 layer_idx, 
     EntityMgr& entmgr);
 
   void deinit();

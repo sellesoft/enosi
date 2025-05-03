@@ -8,11 +8,16 @@ $ require "common"
 @@lpp.import "game/shared/interaction/Interactable.comp.lh"
 @@lpp.import "game/shared/interaction/Interaction.events.lh"
 @@lpp.import "game/shared/interaction/Openable.comp.lh"
+@@lpp.import "game/shared/Appearance.sys.lh"
+
+struct SharedAppearanceSys;
 
 /* ============================================================================
  */
 struct SharedOpenableSys : EntitySys
 {
+  SharedAppearanceSys* appearance;
+
   b8 init()
   {
     subscribeTo<Openable, Interact>(&SharedOpenableSys::onInteract);

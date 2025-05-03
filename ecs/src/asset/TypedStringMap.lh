@@ -1,0 +1,34 @@
+/*
+ *  A StringMap restricted to keys that match fields of the given type. Used
+ *  to define things like Components in data w/o actually packing and 
+ *  compiling Components, just the fields that we set on them.
+ *
+ *  We achieve this by storing a map from Strings to TypedPtr<void>, where 
+ *  the TypedPtr can point to any type (hence it storing a void*). And so 
+ *  this type will likely nest itself, eg in cases where the given T contains
+ *  fields of other struct types.
+ *
+ *  The type 'T' is a restriction on what type we may use PLUS any of its 
+ *  derived types, as is necessary for the Component case. Defining a pure
+ *  Component is quite useless, and we really want to define a Spawner, 
+ *  a Visualizer, Movement, etc. So we store what the actual type we are 
+ *  filling out in 'type'.
+ *  Any of these types may be disabled for use in source data if it is marked
+ *  with \@metadata.hidden.
+ */
+
+$ require "common"
+
+@@lpp.import "asset/StringMap.lh"
+@@lpp.import "asset/TypedPtr.lh"
+
+/* ============================================================================
+ */
+template<typename T>
+struct TypedStringMap
+{
+  String type;
+  StringMap<TypedPtr<void>> map;
+
+  b8 construct(T* ptr);
+};

@@ -8,7 +8,7 @@ comp.importComponents = function()
     patterns = { "src/game/**/*.comp.lh" },
 
     filter = function(p, decl)
-      local TComponent = p.processed_clang_objs["struct Component"]
+      local TComponent = p:lookupDecl "struct Component"
       if TComponent and decl:is(ast.Record) and decl:isDerivedFrom(TComponent)
       then
         return true

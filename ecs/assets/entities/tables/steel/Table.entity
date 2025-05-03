@@ -3,7 +3,8 @@ return EntityDef
   name = "SteelWorkTable",
   components = 
   {
+    Appearance {},
     ExtendableStructure { kind = "SteelTable" },
-    Sprite { states = "assets/entities/tables/steel/Table" },
+    cl::Sprite { states = "assets/entities/tables/steel/Table" },
   }
 }

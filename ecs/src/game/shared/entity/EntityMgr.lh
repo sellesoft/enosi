@@ -16,6 +16,8 @@ $ require "common"
 @@lpp.import "game/shared/component/Component.lh"
 @@lpp.import "game/shared/component/ComponentMgr.lh"
 
+#include "math/vec.h"
+
 struct AssetMgr;
 
 namespace gfx
@@ -53,7 +55,7 @@ struct EntityMgr
     AssetMgr& assetmgr,
     gfx::Renderer& renderer);
 
-  EntityId spawnEntity(const EntityDef& def);
+  EntityId spawnEntity(const EntityDef& def, vec2f pos, u32 layer);
 
   void destroyEntity(EntityId id);
   void destroyAllEntities();

@@ -59,9 +59,9 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL vkDebugCallback(
 
 /* ----------------------------------------------------------------------------
  */
-static b8 updateSwapchain(Renderer& renderer)
+b8 Renderer::updateSwapchain(vec2i viewport_size)
 {
-  RendererInternal& ri = *(RendererInternal*)renderer.internal;
+  RendererInternal& ri = *(RendererInternal*)internal;
 
   VkSwapchainKHR old_swapchain = ri.swapchain;
 
@@ -74,7 +74,7 @@ static b8 updateSwapchain(Renderer& renderer)
     ri.surface, &format_count, nullptr);
   assert(format_count != 0 && "surface should not have been selected");
   auto formats =
-    renderer.allocator->allocateType<VkSurfaceFormatKHR>(format_count);
+    allocator->allocateType<VkSurfaceFormatKHR>(format_count);
   if (formats == nullptr)
     return FATAL("failed to alloc memory for vulkan surface formats\n");
   vkGetPhysicalDeviceSurfaceFormatsKHR(ri.physical_device,
@@ -105,7 +105,7 @@ $ end
     ri.surface, &present_mode_count, nullptr);
   assert(present_mode_count != 0 && "surface should not have been selected");
   auto present_modes =
-    renderer.allocator->allocateType<VkPresentModeKHR>(present_mode_count);
+    allocator->allocateType<VkPresentModeKHR>(present_mode_count);
   if (present_modes == nullptr)
     return FATAL("failed to alloc memory for vulkan surface present modes\n");
   vkGetPhysicalDeviceSurfacePresentModesKHR(ri.physical_device,
@@ -167,10 +167,10 @@ $ end
     //TODO(delle) user settings for resolution selection
     ri.surface_extent.width = max(capabilities.minImageExtent.width,
       min(capabilities.maxImageExtent.width,
-        (u32)renderer.engine->window.size.x));
+        (u32)viewport_size.x));
     ri.surface_extent.height = max(capabilities.minImageExtent.height,
       min(capabilities.maxImageExtent.height,
-        (u32)renderer.engine->window.size.y));
+        (u32)viewport_size.y));
   }
 
   u32 queue_family_indices[2] =
@@ -227,10 +227,10 @@ static b8 updateFramebuffers(Renderer& renderer, u32 old_image_count)
 
   vkGetSwapchainImagesKHR(ri.device, ri.swapchain,
     &ri.swapchain_image_count, nullptr);
-  if (ri.swapchain_image_count > RendererInternal::MAX_DEFAULT_FRAMEBUFFERS)
+  if (ri.swapchain_image_count > RendererInternal::MaxDefaultFramebuffers)
     return FATAL("vulkan swapchain image count is >",
-      RendererInternal::MAX_DEFAULT_FRAMEBUFFERS,
-      "; bump RendererInternal::MAX_DEFAULT_FRAMEBUFFERS\n");
+      RendererInternal::MaxDefaultFramebuffers,
+      "; bump RendererInternal::MaxDefaultFramebuffers\n");
 
   for (u32 i = 0; i < old_image_count; i++)
   {
@@ -367,14 +367,13 @@ static b8 updateFramebuffers(Renderer& renderer, u32 old_image_count)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Renderer::init(Engine& engine, mem::Allocator& allocator)
+b8 Renderer::init(InitParams& params)
 {
   INFO("Renderer::init\n");
 
-  this->engine = &engine;
-  this->allocator = &allocator;
+  this->allocator = &params.allocator;
 
-  this->internal = allocator.allocate(sizeof(RendererInternal));
+  this->internal = allocator->allocate(sizeof(RendererInternal));
   if (this->internal == nullptr)
     return FATAL("failed to allocate memory for the renderer's internal data\n");
 
@@ -653,7 +652,7 @@ $ if IRO_LINUX then
     {
       .sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
       .dpy = x11.display,
-      .window = (X11Window)engine.window.handle,
+      .window = (X11Window)params.window.handle,
     };
 
     if (VK_SUCCESS != vkCreateXlibSurfaceKHR(ri.instance, &create_info,
@@ -664,7 +663,7 @@ $ elseif IRO_WIN32 then --if IRO_LINUX
     {
       .sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
       .hinstance = win32.h_console_instance,
-      .hwnd = (HWND)engine.window.handle,
+      .hwnd = (HWND)params.window.handle,
     };
 
     if (VK_SUCCESS != vkCreateWin32SurfaceKHR(ri.instance, &create_info,
@@ -815,9 +814,9 @@ $ end -- if IRO_LINUX
       {
         ri.heaps[i].preferred_block_size = unit::megabytes(256);
       }
-      ri.heaps[i].blocks.init(8, &allocator);
-      ri.heaps[i].allocations.init(512, &allocator);
-      ri.heaps[i].free_chunks.init(8, &allocator);
+      ri.heaps[i].blocks.init(8, allocator);
+      ri.heaps[i].allocations.init(512, allocator);
+      ri.heaps[i].free_chunks.init(8, allocator);
     }
   }
 
@@ -1011,7 +1010,7 @@ $ end -- if IRO_LINUX
 
   TRACE("creating the vulkan swapchain\n");
   {
-    if (!updateSwapchain(*this))
+    if (!updateSwapchain(params.window.size))
       return false;
   }
 
@@ -1077,9 +1076,9 @@ $ end -- if IRO_LINUX
   {
     vkGetSwapchainImagesKHR(ri.device, ri.swapchain,
       &ri.swapchain_image_count, nullptr);
-    if (ri.swapchain_image_count > ri.MAX_DEFAULT_FRAMEBUFFERS)
+    if (ri.swapchain_image_count > RendererInternal::MaxDefaultFramebuffers)
       return FATAL("vulkan swapchain image count is >",
-        ri.MAX_DEFAULT_FRAMEBUFFERS, "; bump the code limit\n");
+        RendererInternal::MaxDefaultFramebuffers, "; bump the code limit\n");
 
     for (u32 i = 0; i < ri.swapchain_image_count; i++)
     {
@@ -1407,7 +1406,7 @@ $ end -- if ECS_DEBUG
 
 /* ----------------------------------------------------------------------------
  */
-b8 Renderer::update()
+b8 Renderer::update(UpdateParams& params)
 {
   RendererInternal& ri = *(RendererInternal*)this->internal;
   TRACE("Renderer::update\n");
@@ -1418,8 +1417,7 @@ b8 Renderer::update()
     &ri.default_framebuffer_index);
   if (acquire_result == VK_ERROR_OUT_OF_DATE_KHR)
   {
-    WindowResized event = { engine->window.size };
-    onWindowResized(event);
+    onWindowResized(params.window.size);
     return true;
   }
   else if (acquire_result != VK_SUCCESS && acquire_result != VK_SUBOPTIMAL_KHR)
@@ -2053,7 +2051,7 @@ $ end -- if ECS_DEBUG
       VK_PIPELINE_STAGE_TRANSFER_BIT,
       0, 0, nullptr, 0, nullptr, 1, &barrier);
 
-    VkImage swapchain_images[ri.MAX_DEFAULT_FRAMEBUFFERS];
+    VkImage swapchain_images[RendererInternal::MaxDefaultFramebuffers];
     vkGetSwapchainImagesKHR(ri.device, ri.swapchain,
       &ri.swapchain_image_count, swapchain_images);
 
@@ -2179,8 +2177,7 @@ $ end -- if ECS_DEBUG
     VkResult result = vkQueuePresentKHR(ri.graphics_queue, &present_info);
     if (result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR)
     {
-      WindowResized event = { engine->window.size };
-      onWindowResized(event);
+      onWindowResized(params.window.size);
       return true;
     }
     else if (result != VK_SUCCESS)
@@ -2443,7 +2440,7 @@ u64 Renderer::getMaxPushConstantSize()
 
 /* ----------------------------------------------------------------------------
  */
-void Renderer::onWindowResized(WindowResized& event)
+void Renderer::onWindowResized(vec2i size)
 {
   RendererInternal& ri = *(RendererInternal*)this->internal;
 
@@ -2452,7 +2449,7 @@ void Renderer::onWindowResized(WindowResized& event)
   u32 old_image_count = ri.swapchain_image_count;
 
   TRACE("recreating the vulkan swapchain\n");
-  updateSwapchain(*this);
+  updateSwapchain(size);
 
   TRACE("recreating the default vulkan framebuffers\n");
   updateFramebuffers(*this, old_image_count);

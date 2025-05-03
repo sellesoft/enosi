@@ -48,3 +48,8 @@ b8 packSourceDataIntoType(
 b8 packSourceDataFromType(
   const SourceData& data, 
   PackContext& ctx);
+
+static b8 packSourceDataFromType(
+  const SourceData& data,
+  void* ptr,
+  PackContext& ctx) { return false; }

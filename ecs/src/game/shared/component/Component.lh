@@ -3,6 +3,7 @@
  */
 
 $ require "common"
+$ local m = require "reflect.Metadata"
 
 #include "iro/Common.h"
 #include "iro/Unicode.h"
@@ -16,10 +17,14 @@ using namespace iro;
 
 /* ============================================================================
  */
+@m.hidden
 struct Component
 {
   u64 kind = 0;
+
+  @m.hidden
   EntityId owner = nil;
+
   // TODO(sushi) this kiiinda sucks, we really need to make an intrisic pool
   //             so that we stop having to do this where its not needed.
   // TODO(sushi) to remove at least one pointer we can prob just store a 
@@ -27,6 +32,7 @@ struct Component
   //             using an SLinkedList?
   //             Ideally though we avoid using iro's lists and manually
   //             implement Component management.
+  @m.hidden
   void* node = nullptr;
   
   static u64 getKind(const Component* cmp) { return cmp->kind; }
@@ -35,15 +41,6 @@ struct Component
   
   template<typename T>
   static void onCreate(Component* comp);
-
-  b8 init(u64 kind)
-  {
-    assert(kind != 0);
-
-    this->kind = kind;
-    
-    return true;
-  }
 };
 
 DefineNilValue(Component, {0}, { return x.kind == 0; });

@@ -2,15 +2,6 @@
  *  Functions for creating a Client, which contains the client-side systems 
  *  and memory needed when the game is running as a client.
  *
- *  This is its own interface at the moment because the Engine needs to be 
- *  able to import both Client and Server stuff without mixing up their types
- *  (as they are given equivalent names, because I (sushi) like that more :).
- *
- *  This may not be necessary and could just be a redundent and annoying (!)
- *  extra layer over the already complicated game systems and organization,
- *  but it's likely that, when threading is finally implemented in iro, that 
- *  this layer will be what handles the Client's thread.
- *
  *  It's probably more appropriate for this to be an engine level interface
  *  as well, that simply hooks into the game (as I would like this project
  *  to try and keep the Engine agnostic of the Game running in it for 
@@ -21,15 +12,32 @@
 
 $ require "common"
 
-struct Client;
+@@lpp.import "game/client/GameSim.lh"
 
-/* ----------------------------------------------------------------------------
+@@lpp.import "ui/UI.lh"
+@@lpp.import "window/Window.lh"
+@@lpp.import "input/InputMgr.lh"
+@@lpp.import "graphics/Renderer.lh"
+
+/* ============================================================================
  */
-Client* clientCreate(Engine* engine);
+struct Client
+{
+  cl::GameSim sim;
 
-/* ----------------------------------------------------------------------------
- *  NOTE(sushi) this will likely be removed, as the Client will run on its 
- *              own thread and perform updates within that instead.
- */
-b8 clientUpdate(Client* client);
+  // Client only systems.
+  gfx::Renderer renderer;
+  ui::UI ui;
+  InputMgr input;
+  Window window;
 
+  gfx::Texture white_texture;
+
+  Engine* engine;
+
+  b8 init(Engine* engine);
+
+  b8 update();
+
+  b8 compileRequiredAssets(AssetMgr& assetmgr);
+};
