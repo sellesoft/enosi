@@ -25,7 +25,7 @@ struct Shader
 
   b8 init(
     Renderer& renderer,
-    ShaderType type,
+    ShaderKind kind,
     Slice<u8> spv_binary,
     String name = "unnamed"_str);
 

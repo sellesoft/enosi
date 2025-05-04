@@ -75,6 +75,8 @@ struct Log
       // If a logger logs a message that spans multiple lines, prefix each
       // line with the enabled information above.
       PrefixNewlines,
+
+      COUNT
     };
     typedef iro::Flags<Flag> Flags;
 

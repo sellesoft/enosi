@@ -21,14 +21,14 @@ typedef io::StaticBuffer<512> PathBuffer;
 
 /* ----------------------------------------------------------------------------
  */
-static shaderc_shader_kind shaderTypeToShaderc(ShaderType type)
+static shaderc_shader_kind shaderKindToShaderc(ShaderKind kind)
 {
-  switch (type)
+  switch (kind)
   {
-    case ShaderType::Vertex:   return shaderc_vertex_shader;
-    case ShaderType::Fragment: return shaderc_fragment_shader;
-    case ShaderType::Compute:  return shaderc_compute_shader;
-    case ShaderType::Geometry: return shaderc_geometry_shader;
+    case ShaderKind::Vertex:   return shaderc_vertex_shader;
+    case ShaderKind::Fragment: return shaderc_fragment_shader;
+    case ShaderKind::Compute:  return shaderc_compute_shader;
+    case ShaderKind::Geometry: return shaderc_geometry_shader;
     default: return shaderc_glsl_infer_from_source;
   }
 }
@@ -85,7 +85,7 @@ CompiledShader* CompiledShader::load(
   shader->asset.asset = asset;
 
   auto& data = shader->getData();
-  shader->gfx_shader.init(renderer, data.type, data.binary.getSlice(), name);
+  shader->gfx_shader.init(renderer, data.kind, data.binary.getSlice(), name);
 
   return shader;
 }
@@ -97,7 +97,7 @@ b8 CompiledShader::compileGLSL(CompileParams& params)
   using namespace fs;
 
   PathBuffer asset_path_buffer;
-  io::formatv(&asset_path_buffer, params.name, ".glsl"_str);
+  io::formatv(&asset_path_buffer, params.name);
   String asset_path = asset_path_buffer.asStr();
 
   if (!fs::Path::exists(asset_path))
@@ -156,7 +156,7 @@ $ end -- if ECS_DEBUG
   shaderc_compilation_result_t result = shaderc_compile_into_spv(
     compiler,
     (const char*)source_buffer.ptr, source_size,
-    shaderTypeToShaderc(params.type),
+    shaderKindToShaderc(params.kind),
     (const char*)asset_path.ptr, "main",
     options);
   defer { shaderc_result_release(result); };
@@ -177,7 +177,7 @@ $ end -- if ECS_DEBUG
   u64 spv_binary_length = shaderc_result_get_length(result);
 
   CompiledShaderData data;
-  data.type = params.type;
+  data.kind = params.kind;
   data.binary.setSlice((u8*)&data + sizeof(CompiledShaderData),
     spv_binary_length);
 

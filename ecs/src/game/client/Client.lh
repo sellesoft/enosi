@@ -18,12 +18,14 @@ $ require "common"
 @@lpp.import "window/Window.lh"
 @@lpp.import "input/InputMgr.lh"
 @@lpp.import "graphics/Renderer.lh"
+@@lpp.import "game/client/editor/Editor.lh"
 
 /* ============================================================================
  */
 struct Client
 {
   cl::GameSim sim;
+  Engine* engine;
 
   // Client only systems.
   gfx::Renderer renderer;
@@ -31,9 +33,9 @@ struct Client
   InputMgr input;
   Window window;
 
-  gfx::Texture white_texture;
+  cl::Editor editor;
 
-  Engine* engine;
+  gfx::Texture white_texture;
 
   b8 init(Engine* engine);
 

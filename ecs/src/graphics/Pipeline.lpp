@@ -1,16 +1,20 @@
 $ require "common"
 
+@@lpp.import "graphics/Pipeline.lh"
+
 @@lpp.import "graphics/RendererInternal.lh"
 
 @@lpp.import "graphics/Geo.lh"
-@@lpp.import "graphics/Pipeline.lh"
 @@lpp.import "graphics/Renderer.lh"
+@@lpp.import "graphics/Pipeline.defs.lh"
 
 #include "iro/Logger.h"
 
+
 @defFileLogger(gfx.pipeline, Info)
 
-namespace gfx {
+namespace gfx 
+{
 
 /* ----------------------------------------------------------------------------
  */
@@ -291,6 +295,24 @@ b8 Pipeline::deinit(Renderer& renderer)
   ri.pipeline_count--;
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Pipeline::init(
+    Renderer& renderer, 
+    u64 push_constant_size,
+    b8 has_vertex_input,
+    const PipelineDef& def)
+{
+  return 
+    init(
+      renderer, 
+      def.vertex_shader->gfx_shader,
+      def.fragment_shader->gfx_shader,
+      push_constant_size,
+      has_vertex_input,
+      def.name);
 }
 
 }

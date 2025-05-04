@@ -37,10 +37,16 @@ end
 -- * --------------------------------------------------------------------------
 
 Parser.errorHere = function(self, ...)
-  local line, column = 
-    lpp.getLineAndColumnFromOffset(self.file_offset + self.offset - 1)
+  self:errorAt(self.offset, ...)
+end
 
-  local scan = self.offset
+-- * --------------------------------------------------------------------------
+
+Parser.errorAt = function(self, offset, ...)
+  local line, column = 
+    lpp.getLineAndColumnFromOffset(self.file_offset + offset - 1)
+
+  local scan = offset
 
   while true do
     if self.text:sub(scan,scan) == "\n" or

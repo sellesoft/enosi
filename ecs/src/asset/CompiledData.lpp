@@ -2,7 +2,7 @@ $ local cmn = require "common"
 $ local glob = require "Glob"
 $ local Processor = require "reflect.Processor"
 $ local ast = require "reflect.AST"
-$ local clog = require "Logger" ("compiledata", Verbosity.Debug)
+$ local clog = require "Logger" ("compiledata", Verbosity.Info)
 $ local Type = require "Type"
 $ local List = require "List"
 
@@ -44,116 +44,6 @@ $$$
 @@lpp.import "asset/Packing.lh"
 @@lpp.import "asset/AssetMgr.lh"
 @@lpp.import "asset/SourceDataFileReg.lh"
-
-$ local function visitDecls(opts)
-$   local placed = {}
-$   local placed_list = List{}
-$   local place_queue = List{}
-$
-$   local visit, visitType
-$
-$   local visitRecord = function(name, decl)
-$     for base in decl.bases:each() do
-$       visit(base)
-$     end
-$     
-$     if decl == TAssetRef or decl:isDerivedFrom(TAssetRef) then
-$       if opts.asset_ref then
-$         opts.asset_ref(name, decl)
-$       end
-$       return
-$     end
-$     
-$     if decl:is(ast.TemplateSpecialization) then
-$       for arg in decl.template_args:each() do
-$         if arg:is(ast.Type) then
-$           visitType(arg)
-$         end
-$       end
-$       if opts.template_spec then
-$         opts.template_spec(name, decl)
-$       end
-$       return
-$     elseif decl:is(ast.Struct) then
-$       for field in decl:eachFieldWithIndex() do
-$         visitType(field.type)
-$       end
-$       if opts.struct then
-$         opts.struct(name, decl)
-$       end
-$       return
-$     end
-$   end
-$
-$   local visitEnum = function(name, decl)  
-$     if opts.enum then
-$       opts.enum(name, decl)
-$     end
-$   end
-$  
-$   local visitTypedef = function(name, decl)
-$   end
-$
-$   visitType = function(type)
-$     local desugared = type:getDesugared()
-$     if desugared:is(ast.TagType) then
-$       return (visit(desugared:getDecl()))
-$     elseif desugared:is(ast.TypedefType) then
-$       return (visit(desugared.decl))
-$     end
-$   end
-$  
-$   visit = function(decl)
-$     if placed[decl.name] then return end
-$    
-$     for to_place in place_queue:each() do
-$       if to_place == decl then
-$         if opt.forward_decl then
-$           opt.forward_decl(name, decl)
-$         end
-$         return
-$       end
-$     end
-$
-$     place_queue:push(decl)
-$     
-$     if decl:is(ast.TagDecl) then
-$       if decl:is(ast.Record) then
-$         visitRecord(importer.removeTag(decl.name), decl)
-$       elseif decl:is(ast.Enum) then
-$         visitEnum(importer.removeTag(decl.name), decl)
-$       end
-$     elseif decl:is(ast.TypedefDecl) then
-$       visitType(decl.subtype)
-$       if opts.typedef then
-$         opts.typedef(importer.removeTag(decl.name), decl)
-$       end
-$     end
-$     
-$     place_queue:pop()
-$     placed[decl.name] = decl
-$     placed_list:push(decl)
-$   end
-$   
-$   importer:eachDecl(function(name, decl)
-$     visit(decl)
-$   end)
-$ end
-
-$ visitDecls
-$ {
-$   struct = function(name, decl)
-$     print(name)
-$   end,
-$   
-$   typedef = function(name, decl)
-$     print(name)
-$   end,
-$   
-$   template_spec = function(name, decl)
-$     print(name)
-$   end,
-$ }
 
 /* ----------------------------------------------------------------------------
  *  Helper for searching for the proper source type of an asset when its 
@@ -321,7 +211,7 @@ $ local place_queue = cmn.List{}
 $ local putCompiler
 $ local putTypeCompiler
 $ local TAssetRef = importer.p:lookupDecl "struct AssetRef"
-$ local TTextureRef = importer.p:lookupDecl "struct gfx::TextureRef"
+$ local TResourceRef = importer.p:lookupDecl "struct gfx::ResourceRef"
 
 $ local function putNumberCompiler(name)
 /* ----------------------------------------------------------------------------
@@ -419,7 +309,11 @@ $ local function putStructCompiler(name, decl)
 $   -- Ensure that a compiler for each field type is defined before this 
 $   -- struct.
 $   for field in decl:eachFieldWithIndex() do
-$     putTypeCompiler(field.type)
+$     if not field.metadata.hidden then
+$       putTypeCompiler(field.type)
+$     else
+$       clog:info(field.name, "\n")
+$     end
 $   end
 /* ----------------------------------------------------------------------------
  */
@@ -505,10 +399,31 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local function putAssetRefCompiler(name, decl)
-$   clog:debug(name, "\n")
 $   if decl.template_args then
-$     putTypeCompiler(decl.template_args[1])
+$     for arg in decl.template_args:each() do
+$       if arg:is(ast.Type) then
+$         putTypeCompiler(arg)
+$       end
+$     end
 $   end
+$   clog:debug(name, "\n")
+template<>
+b8 Compiler::compile(const $(name)& x)
+{
+  if (!compile(x.name))
+    return false;
+
+  writeData<void*>();
+
+  return true;
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putResourceRefCompiler(name, decl)
+/* ----------------------------------------------------------------------------
+ */
 template<>
 b8 Compiler::compile(const $(name)& x)
 {
@@ -680,6 +595,8 @@ $   if     "Array" == spec then
 $     error("Arrays are not supported in compiled data! Use ArrayDef instead")
 $   elseif decl:isDerivedFrom(TAssetRef) then
 $     return (putAssetRefCompiler(name, decl))
+$   elseif decl:isDerivedFrom(TResourceRef) then
+$     return (putResourceRefCompiler(name, decl))
 $   elseif "TypedPtr" == spec then
 $     return (putTypedPtrCompiler(name, decl))
 $   elseif "ArrayDef" == spec then
@@ -705,12 +622,12 @@ $   for base in decl.bases:each() do
 $     putCompiler(base)
 $   end
 $ 
-$   -- TODO(sushi) having to handle these as special cases kind of sucks.
-$   --             Should eventually make a NameRef type or something that 
-$   --             these and any new ref types may inherit from to be 
-$   --             automatically handled as just compiling its name.
 $   if decl == TAssetRef or decl:isDerivedFrom(TAssetRef) then
 $     return (putAssetRefCompiler(name, decl))
+$   end
+$
+$   if decl == TResourceRef or decl:isDerivedFrom(TResourceRef) then
+$     return (putResourceRefCompiler(name, decl))
 $   end
 $  
 $   if decl:is(ast.TemplateSpecialization) then
@@ -741,7 +658,9 @@ $ -- * ------------------------------------------------------------------------
 
 $ putCompiler = function(decl)
 $   if placed[decl.name] then return end
-$  
+$
+$   clog:debug(decl.name, "\n")
+$
 $   for to_place in place_queue:each() do
 $     if to_place == decl then
 $       -- If we find that something we want to place depends on a type we 
@@ -773,6 +692,7 @@ $ -- * ------------------------------------------------------------------------
 
 $ putTypeCompiler = function(type)
 $   local desugared = type:getDesugared()
+$   clog:debug("type: ", desugared:tostring(), "\n")
 $   if desugared:is(ast.TagType) then
 $     local decl = desugared:getDecl()
 $     putCompiler(decl)
@@ -850,7 +770,9 @@ b8 Compiler::compile(const TypedPtr<void>& x)
   {
   // Uhh yeah
 $ placeRuntimeCases(function(decl)
+$   if decl.is_complete then
     p->pointee_size = sizeof($(decl.name));
+$   end
 $ end)
   default:
     return ERROR("unhandled type used in TypedPtr: ", x.type, "\n");
@@ -1517,11 +1439,27 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
+$ local function putFixResourceRefPointers(name, decl)
+/* ----------------------------------------------------------------------------
+ */
+template<>
+void fixPointers($(name)* ptr)
+{
+  ptr->name = OffsetString::getStringAsOffsetString(&ptr->name);
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
 $ local function putFixRecordPointers(name, decl)
 $   if decl == TAssetRef or decl:isDerivedFrom(TAssetRef) then
 $     return (putFixAssetRefPointers(name, decl))
 $   end
 $ 
+$   if decl == TResourceRef or decl:isDerivedFrom(TResourceRef) then
+$     return (putFixResourceRefPointers(name, decl))
+$   end
+$
 $   if name == "iro::utf8::String" then
 $     return -- Explicitly implemented.
 $   end

@@ -1,12 +1,14 @@
 $ require "common"
+$ local ui = require "ui.UI"
 
-$ if false then
+@@lpp.import "game/client/editor/MenuBar.lh"
 
-@@lpp.import "editor/MenuBar.lh"
+namespace ui
+{
 
 /* ----------------------------------------------------------------------------
  */
-EditorMenuBar* EditorMenuBar::create(UI& ui, Editor* editor)
+EditorMenuBar* EditorMenuBar::create(UI& ui, cl::Editor* editor)
 {
   auto* menubar = ui.allocateAndInitItem<EditorMenuBar>("editor.menubar"_str);
   if (menubar == nullptr)
@@ -14,7 +16,21 @@ EditorMenuBar* EditorMenuBar::create(UI& ui, Editor* editor)
 
   menubar->editor = editor;
 
+  @ui.style(menubar, EditorMenuBar, 
+  | size: 100% 20
+  | background_color: 0x000000ff)
+
+  menubar->layout.sizing = ItemLayout::Sizing::PercentX;
+  menubar->size = {100.f, 20.f};
+
   return menubar;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void EditorMenuBar::update(UI* ui, UpdateReason reason)
+{
+
 }
 
 /* ----------------------------------------------------------------------------
@@ -38,5 +54,11 @@ void EditorMenuBar::generate(UI* ui)
   
 }
 
-$ end
+/* ----------------------------------------------------------------------------
+ */
+void EditorMenuBar::reportDrawCmds(UI* ui, DrawCmdLists& lists)
+{
+  
+}
 
+}

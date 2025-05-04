@@ -42,6 +42,8 @@ enum class OpenFlag
   NoFollow,  
   // Do not block on read/write requests to the opened file.
   NoBlock,   
+
+  COUNT
 };
 typedef iro::Flags<OpenFlag> OpenFlags;
 
@@ -75,6 +77,8 @@ enum class PollEvent
   Err,     // Error occured.
   HangUp,  // Whatever was there isnt anymore.
   Invalid, // Invalid request.
+
+  COUNT
 };
 typedef Flags<PollEvent> PollEventFlags;
 

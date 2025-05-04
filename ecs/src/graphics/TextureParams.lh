@@ -28,6 +28,8 @@ enum class ImageUsage
 {
   Sampled,
   FramebufferColor,
+
+  COUNT
 };
 
 typedef Flags<ImageUsage> ImageUsageFlags;

@@ -29,8 +29,9 @@ enum class Flag
   Open,
   Writable,
   Readable,
-};
 
+  COUNT
+};
 typedef iro::Flags<Flag> Flags; 
 
 /* ============================================================================

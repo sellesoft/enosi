@@ -16,6 +16,7 @@ $ require "common"
 @@lpp.import "ui/UI.lh"
 @@lpp.import "graphics/Renderer.lh"
 @@lpp.import "input/InputMgr.lh"
+@@lpp.import "graphics/Ref.defs.lh"
 
 @log.ger(client, Debug)
 
@@ -48,6 +49,14 @@ $ end
   };
   @init(renderer.init(renderer_params), Renderer);
 
+  // compileRequiredAssets(engine->assetmgr);
+
+  AssetLoader asset_loader = 
+  {
+    .renderer = renderer,
+    .assetmgr = engine->assetmgr,
+    .sfilereg = engine->source_data_file_reg,
+  };
 
   ui::UI::InitParams ui_params = 
   {
@@ -56,11 +65,14 @@ $ end
     .input = input,
 
     .viewport = Rect::from({0,0}, window.size),
+
+    .loader = asset_loader,
   };
   @init(ui.init(ui_params), UI);
 
   cl::GameSim::InitParams sim_params = 
   {
+    .loader = asset_loader,
     .viewport = Rect::from({0,0}, window.size),
     .renderer = renderer,
     .assetmgr = engine->assetmgr,
@@ -68,6 +80,8 @@ $ end
     .input = input,
   };
   @init(sim.init(sim_params), cl::GameSim);
+
+  @init(editor.init(this), Editor);
 
   return true;
 }
@@ -92,6 +106,9 @@ b8 Client::update()
 
   if (!sim.update())
     return ERROR("failed to update game sim\n");
+
+  if (!ui.update())
+    return ERROR("failed to update ui\n");
 
   if (!sim.render(renderer))
     return ERROR("failed to render game sim\n");
@@ -162,10 +179,39 @@ b8 Client::compileRequiredAssets(AssetMgr& assetmgr)
 
   TRACE("compiling shaders\n");
   {
+    Ref::LoadParams load_params = 
+    {
+      .renderer = renderer,
+      .assetmgr = engine->assetmgr,
+      .sfile_reg = &engine->source_data_file_reg,
+    };
+
+    auto compile = [&](String name)
+    {
+      gfx::ShaderRef ref;
+      ref.name = name;
+      if (!ref.load(load_params))
+        return ERROR("failed to load shader ", name, "\n");
+      return true;
+    };
+
+    if (!compile("assets/shaders/Fullscreen.vert"_str))
+      return false;
+
+    if (!compile("assets/shaders/Scene.frag"_str))
+      return false;
+
+    if (!compile("assets/shaders/Scene.vert"_str))
+      return false;
+
+    if (!compile("assets/shaders/Stars.frag"_str))
+      return false;
+
+
     gfx::CompiledShader::CompileParams scene_vertex_shader_params =
     {
       .name      = "assets/shaders/scene.vertex"_str,
-      .type      = gfx::ShaderType::Vertex,
+      .kind      = gfx::ShaderKind::Vertex,
       .allocator = &mem::stl_allocator,
       .assetmgr  = &assetmgr,
     };
@@ -174,7 +220,7 @@ b8 Client::compileRequiredAssets(AssetMgr& assetmgr)
     gfx::CompiledShader::CompileParams scene_fragment_shader_params =
     {
       .name      = "assets/shaders/scene.fragment"_str,
-      .type      = gfx::ShaderType::Fragment,
+      .kind      = gfx::ShaderKind::Fragment,
       .allocator = &mem::stl_allocator,
       .assetmgr  = &assetmgr,
     };
@@ -183,7 +229,7 @@ b8 Client::compileRequiredAssets(AssetMgr& assetmgr)
     gfx::CompiledShader::CompileParams fullscreen_vertex_shader_params =
     {
       .name      = "assets/shaders/fullscreen.vertex"_str,
-      .type      = gfx::ShaderType::Vertex,
+      .kind      = gfx::ShaderKind::Vertex,
       .allocator = &mem::stl_allocator,
       .assetmgr  = &assetmgr,
     };
@@ -192,7 +238,7 @@ b8 Client::compileRequiredAssets(AssetMgr& assetmgr)
     gfx::CompiledShader::CompileParams stars_fragment_shader_params =
     {
       .name      = "assets/shaders/stars.fragment"_str,
-      .type      = gfx::ShaderType::Fragment,
+      .kind      = gfx::ShaderKind::Fragment,
       .allocator = &mem::stl_allocator,
       .assetmgr  = &assetmgr,
     };
@@ -201,7 +247,7 @@ b8 Client::compileRequiredAssets(AssetMgr& assetmgr)
     gfx::CompiledShader::CompileParams ui_vertex_shader_params =
     {
       .name      = "assets/shaders/ui.vertex"_str,
-      .type      = gfx::ShaderType::Vertex,
+      .kind      = gfx::ShaderKind::Vertex,
       .allocator = &mem::stl_allocator,
       .assetmgr  = &assetmgr,
     };
@@ -210,7 +256,7 @@ b8 Client::compileRequiredAssets(AssetMgr& assetmgr)
     gfx::CompiledShader::CompileParams ui_fragment_shader_params =
     {
       .name      = "assets/shaders/ui.fragment"_str,
-      .type      = gfx::ShaderType::Fragment,
+      .kind      = gfx::ShaderKind::Fragment,
       .allocator = &mem::stl_allocator,
       .assetmgr  = &assetmgr,
     };

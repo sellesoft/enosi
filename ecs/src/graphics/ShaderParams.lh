@@ -9,7 +9,7 @@ namespace gfx
 
 /* ============================================================================
  */
-enum class ShaderType : u8
+enum class ShaderKind : u8
 {
   Vertex,
   Fragment,

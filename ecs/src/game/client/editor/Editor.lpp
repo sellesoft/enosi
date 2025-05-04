@@ -1,0 +1,39 @@
+$ require "common"
+
+@@lpp.import "game/client/editor/Editor.lh"
+
+@@lpp.import "game/client/Client.lh"
+@@lpp.import "game/client/editor/MenuBar.lh"
+
+namespace cl
+{
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Editor::init(Client* client)
+{
+  this->client = client;
+
+  documents.init();
+
+  menubar = ui::EditorMenuBar::create(client->ui, this);
+  
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Editor::deinit()
+{
+  documents.destroy();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Editor::update()
+{
+  
+  return true;
+}
+
+}

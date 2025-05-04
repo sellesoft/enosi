@@ -6,6 +6,7 @@ $ local metadata = require "reflect.Metadata"
 #include "iro/containers/Array.h"
 #include "iro/containers/Slice.h"
 
+@@lpp.import "asset/Asset.lh"
 @@lpp.import "asset/ArrayDef.lh"
 
 using namespace iro;
@@ -23,10 +24,11 @@ typedef Slice<CodepointRange> CodepointRanges;
 /* ============================================================================
  */
 @metadata.def
-struct FontSchema
+struct FontDef
 {
   String name;
   String asset_path;
   ArrayDef<CodepointRange> ranges;
 };
 
+typedef TypedSourceAssetRef<FontDef> FontDefRef;

@@ -1,0 +1,39 @@
+$ require "common"
+
+@@lpp.import "ui/ItemSkin.defs.lh"
+@@lpp.import "graphics/Ref.defs.lh"
+
+namespace ui
+{
+
+/* ============================================================================
+ */
+enum class TextWrap
+{
+  None,
+  Char,
+  Word,
+};
+
+/* ============================================================================
+ *  A set of properties for styling some text. 
+ */
+struct TextSkinDef
+{
+  gfx::FontRef font;
+
+  f32 font_height;
+  TextWrap wrap;
+};
+
+/* ============================================================================
+ *  A set of properties for styling some text that is visually displayed 
+ *  as its own Item (eg. a Button).
+ */
+struct TextItemSkinDef
+{
+  TextSkinDef text;
+  ItemSkinDef item;
+};
+
+}

@@ -41,3 +41,30 @@ protected:
 
   b8 load(LoadParams&) { return false; }
 }; 
+
+struct AssetLoader
+{
+  gfx::Renderer& renderer;
+  AssetMgr& assetmgr;
+  SourceDataFileReg& sfilereg;
+
+  template<typename T>
+  b8 load(T* ref)
+  {
+    Ref::LoadParams params = 
+    {
+      .renderer = renderer,
+      .assetmgr = assetmgr,
+      .sfile_reg = &sfilereg,
+    };
+
+    return ref->load(params);
+  }
+
+  template<typename T>
+  b8 load(T* ref, String name)
+  {
+    ref->name = name;
+    return load(ref);
+  }
+};

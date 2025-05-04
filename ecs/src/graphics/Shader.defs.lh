@@ -1,0 +1,19 @@
+$ require "common"
+$ local m = require "reflect.Metadata"
+
+@@lpp.import "graphics/ShaderParams.lh"
+
+namespace gfx
+{
+
+/* ============================================================================
+ */
+@m.def
+@m.source_types(shader)
+struct ShaderDef
+{
+  String source;
+  ShaderKind kind;
+};
+
+}

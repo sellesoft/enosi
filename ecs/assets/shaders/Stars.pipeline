@@ -1,0 +1,7 @@
+return gfx::PipelineDef
+{
+  name = "Stars",
+
+  vertex_shader = "assets/shaders/Fullscreen.vert",
+  fragment_shader = "assets/shaders/Stars.frag",
+}

@@ -23,6 +23,7 @@ b8 GameSim::init(InitParams& params)
     .assetmgr = params.assetmgr,
     .input = params.input,
     .white_texture = params.white_texture,
+    .loader = params.loader,
   };
   if (!gamemgr.init(gamemgr_params))
     return false;

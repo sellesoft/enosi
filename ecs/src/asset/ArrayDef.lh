@@ -14,6 +14,7 @@ $ require "common"
 
 #include "iro/Common.h"
 #include "iro/memory/Allocator.h"
+#include "iro/containers/Slice.h"
 
 #include <assert.h>
 
@@ -47,4 +48,6 @@ struct ArrayDef
 
   const T* begin() const { return arr; }
   const T* end()   const { return arr + len; }
+
+  Slice<T> asSlice() const { return Slice<T>::from(arr, len); }
 };

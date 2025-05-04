@@ -106,6 +106,17 @@ Reflect.lookupType = function(name)
 end
 
 local imported = {}
+local imported_stack = List{}
+
+Reflect.pushImportedStack = function()
+  imported_stack:push(imported)
+  print "push import stack"
+  imported = {}
+end
+
+Reflect.popImportedStack = function()
+  imported = imported_stack:pop()
+end
 
 -- TODO(sushi) this needs to be a part of lpp itself.
 local import_list = List{}

@@ -55,6 +55,37 @@ $ local place_queue = List{}
 $ local putPacker
 $ local putTypePacker
 $ local TAssetRef = importer.p:lookupDecl "struct AssetRef"
+$ local TResourceRef = importer.p:lookupDecl "struct gfx::ResourceRef"
+
+$ local function recordPlaced(name, decl)
+$   placed[name] = decl or importer.p:lookupDecl(name) or 
+$     error("could not get decl for "..name)
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local log_depth = 0
+$ local function logLine(...)
+$   for i=1,log_depth do
+$     clog:debug " "
+$   end
+$   clog:debug(...)
+$   clog:debug "\n"
+$ end
+
+$ local function beginPlace(name)
+$   logLine("> ", name)
+$   log_depth = log_depth + 1
+$ end
+
+$ local function placeLayer(name)
+$   logLine("| ", name)
+$ end
+
+$ local function endPlace(name)
+$   logLine("< ", name)
+$   log_depth = log_depth - 1
+$ end
 
 $ local function putNumberPacker(name)
 /* ----------------------------------------------------------------------------
@@ -115,7 +146,7 @@ b8 Packer::pack(const SourceData& data, String* out)
 
   return true;
 }
-$ placed["struct iro::utf8::String"] = true
+$ recordPlaced "struct iro::utf8::String"
 
 /* ----------------------------------------------------------------------------
  */
@@ -153,7 +184,7 @@ if (!data.hasChildren())
 
   return true;
 }
-$ placed["struct Color"] = true
+$ recordPlaced "struct Color"
 
 /* ----------------------------------------------------------------------------
  */
@@ -167,15 +198,17 @@ b8 Packer::pack(const SourceData& data, StringHash* out)
 
   return true;
 }
-$ placed["struct StringHash"] = true
+$ recordPlaced "struct StringHash"
 
 $ -- * ------------------------------------------------------------------------
 
 $ local function putStructPacker(name, decl)
+$   placeLayer "struct"
 $   for field in decl:eachFieldWithIndex() do
-$     putTypePacker(field.type)
+$     if not field.metadata.hidden then
+$       putTypePacker(field.type)
+$     end
 $   end
-$   clog:debug("> putting struct packer ", name, "\n")
 /* ----------------------------------------------------------------------------
  */
 template<>
@@ -278,7 +311,7 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local function putArrayDefPacker(name, decl)
-$   clog:debug("> putting array def packer ", name, "\n")
+$   placeLayer "arrdef"
 /* ----------------------------------------------------------------------------
  */
 template<>
@@ -307,7 +340,7 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local function putStringMapPacker(name, decl)
-$   clog:debug("> putting string map packer ", name, "\n")
+$   placeLayer "strmap"
 /* ----------------------------------------------------------------------------
  */
 template<>
@@ -338,6 +371,7 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local function putTypedStringMapPacker(name, decl)
+$   placeLayer "tstrmap"
 $   local subtype = decl.template_args[1]
 $   local subdecl = subtype:getDecl()
 $   if not subdecl then
@@ -462,7 +496,25 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local function putAssetRefPacker(name, decl)
-$   clog:debug("putting asset ref packer ", name, "\n")
+$   placeLayer "assetref"
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 Packer::pack(const SourceData& data, $(name)* out)
+{
+  if (!data.hasStringValue())
+    return ERROR("expected string value to pack into $(name)\n");
+
+  out->name = data.val.str.allocateCopy(&packed->buffer);
+
+  return true;
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putResourceRefPacker(name, decl)
+$   placeLayer "rsrcref"
 /* ----------------------------------------------------------------------------
  */
 template<>
@@ -480,6 +532,7 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local function putVec2Packer(name, decl)
+$   placeLayer "vec2"
 /* ----------------------------------------------------------------------------
  */
 template<>
@@ -535,6 +588,7 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local function putEnumArrayPacker(name, decl)
+$   placeLayer "enumarr"
 $   local enum_type = decl.template_args[1]
 $   local enum_decl = enum_type:getDecl()
 /* ----------------------------------------------------------------------------
@@ -593,6 +647,7 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local function putFlagsPacker(name, decl)
+$   placeLayer "flags"
 $   local subtype = decl.template_args[1]
 $   local subdecl = subtype:getDecl()
 $   if not subdecl then
@@ -639,12 +694,13 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local function putTemplateSpecializationPacker(name, decl)
+$   placeLayer "templspec"
+$
 $   for arg in decl.template_args:each() do
 $     if arg:is(ast.Type) then
 $       putTypePacker(arg)
 $     end
 $   end
-$   clog:debug("> putting template spec packer ", name, "\n")
 $ 
 $   local spec = decl.specialized_name
 $   if     "Array" == spec then
@@ -666,6 +722,8 @@ $   elseif "Flags" == spec then
 $     return (putFlagsPacker(name, decl))
 $   elseif decl:isDerivedFrom(TAssetRef) then
 $     return (putAssetRefPacker(name, decl))
+$   elseif decl:isDerivedFrom(TResourceRef) then
+$     return (putResourceRefPacker(name, decl))
 $   end
 $   clog:warn("unhandled template spec used in data: ", name, "\n")
 $ end
@@ -673,7 +731,8 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local function putRecordPacker(name, decl)
-$   clog:debug("> putting record packer\n")
+$   placeLayer "record"
+$ 
 $   for derv in decl.derived:each() do
 $     putPacker(derv)
 $   end
@@ -697,7 +756,7 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local function putEnumPacker(name, decl)
-$   clog:debug("> putting enum packer\n")
+$   placeLayer "enum"
 /* ----------------------------------------------------------------------------
  */
 template<>
@@ -748,14 +807,14 @@ $ -- * ------------------------------------------------------------------------
 
 $ putPacker = function(decl)
 $   if placed[decl.name] then return end
-$   
-$   clog:debug("putting packer for ", decl.name, "\n")
-$   
-$   for to_place in place_queue:each() do
-$     if to_place == decl then
-$       clog:debug("loop: ", tostring(decl), "\n")
+$  
+$   beginPlace(decl.name)
+$  
 template<>
-b8 Packer::pack(const SourceData& data, $(to_place.name)*);
+b8 Packer::pack(const SourceData& data, $(decl.name)*);
+$   for to_place in place_queue:each() do
+$     logLine("? ", to_place.name)
+$     if to_place == decl then
 $       return
 $     end
 $   end
@@ -768,13 +827,16 @@ $       putRecordPacker(importer.removeTag(decl.name), decl)
 $     elseif decl:is(ast.Enum) then
 $       putEnumPacker(importer.removeTag(decl.name), decl)
 $     end
-$     putInterface(importer.removeTag(decl.name), decl)
+$     if decl.is_complete then
+$       putInterface(importer.removeTag(decl.name), decl)
+$     end
 $   elseif decl:is(ast.TypedefDecl) then
 $     putTypePacker(decl.subtype)
 $   end
 $ 
 $   place_queue:pop()
-$   placed[decl.name] = decl
+$   recordPlaced(decl.name, decl)
+$   endPlace(decl.name)
 $ end
 
 $ -- * ------------------------------------------------------------------------
@@ -812,11 +874,13 @@ b8 packSourceDataFromType(const SourceData& data, PackContext& ctx)
   switch (data.type.hash())
   {
 $ for name,decl in pairs(placed) do
+$   if decl and decl.is_complete then
   case "$(importer.removeTag(name))"_hashed:
     packer.packed->data.ptr = 
       (u8*)packer.packed->buffer.allocateType<$(name)>();
     packer.packed->data.len = sizeof($(name));
     return packer.pack<$(name)>(data, ($(name)*)packer.packed->data.ptr);
+$   end
 $ end
   }
 
