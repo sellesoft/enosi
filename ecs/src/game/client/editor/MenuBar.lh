@@ -15,7 +15,10 @@ $ local ui = require "ui.UI"
 @@lpp.import "ui/widgets/Button.lh"
 @@lpp.import "ui/widgets/ComboBox.lh"
 
-struct Editor;
+namespace cl
+{
+  struct Editor;
+}
 
 namespace ui
 {
@@ -23,16 +26,11 @@ namespace ui
 @ui.widget(EditorMenuBar,
 struct
 {
-  Editor* editor;
+  cl::Editor* editor;
 
-  static EditorMenuBar* create(Editor* editor);
+  static EditorMenuBar* create(UI& ui, cl::Editor* editor);
 
   void destroy();
-
-  struct Button
-  {
-    String name;
-  };
 
   void evaluate(UI* ui) override;
   void generate(UI* ui) override;

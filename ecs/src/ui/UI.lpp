@@ -124,23 +124,11 @@ b8 UI::init(InitParams& params)
   if (!free_drawcmds_index_sorted.init())
     return ERROR("failed to init index sorted free drawcmds array\n");
 
-  gfx::CompiledShader* compiled_vertex_shader =
-    gfx::CompiledShader::load("assets/shaders/ui.vertex"_str,
-      *assetmgr, *renderer);
-  if (compiled_vertex_shader == nullptr)
-    return ERROR("failed to load ui vertex shader\n");
-  vertex_shader = compiled_vertex_shader->gfx_shader;
-
-  gfx::CompiledShader* compiled_fragment_shader =
-    gfx::CompiledShader::load("assets/shaders/ui.fragment"_str,
-      *assetmgr, *renderer);
-  if (compiled_fragment_shader == nullptr)
-    return ERROR("failed to load ui fragment shader\n");
-  fragment_shader = compiled_fragment_shader->gfx_shader;
-
-  if (!pipeline.init(*renderer, vertex_shader, fragment_shader,
-      PushConstantSize, true, "ui"_str))
-    return ERROR("failed to init ui pipeline\n");
+  if (!params.loader.load(&pipeline_defref, "assets/shaders/UI"_str))
+    return ERROR("failed to load ui pipeline def\n");
+  
+  if (!pipeline.init(*renderer, PushConstantSize, true, *pipeline_defref))
+    return ERROR("failed to initialize ui pipeline\n");
 
   if (!vertex_buffer.init(*renderer, nullptr,
         sizeof(gfx::Vertex) * MaxVertices,
@@ -167,6 +155,10 @@ b8 UI::init(InitParams& params)
   root->visible_start = {0,0};
   root->visible_size = root->size;
   root->name = "root"_str;
+
+  @ui.layout(root, 
+  | pos: 0 0
+  | size: $(viewport.size()))
 
   $ local root = ui.createItemContext("Item", "root")
 
@@ -358,11 +350,16 @@ void UI::updateTree(ItemNode* node, UpdateTreeContext& ctx)
   // INFO("update ", node, " (", node->data->name, ")\n");
   // SCOPED_INDENT;
 
+  using namespace item_layout_typedefs;
+
   gfx::Renderer& renderer = *this->renderer;
   InputMgr&      input    = *this->input;
 
   Item* item = node->data;
   Item* parent = (node->parent? node->parent->data : nullptr);
+
+  const ItemLayout& layout = item->layout;
+  const ItemLayout& playout = parent->layout;
 
   renderer.debugBeginLabel(vec4f(0.5f, 0.2f, 0.2f, 1.f),
     notnil(item->name) ? item->name : "unnamed ui item"_str);
@@ -384,7 +381,7 @@ void UI::updateTree(ItemNode* node, UpdateTreeContext& ctx)
   //             purpose of the style map stuff though.
   @@item.style:lookup(overflow, display, margin, padding, border)
 
-  if (@item.style.display.test(hidden))
+  if (layout.display.test(Display::Hidden))
     return;
 
   $ local parent = ui.createItemContext("Item", "parent", true)
@@ -467,22 +464,22 @@ $ end
   vec2f scoff;
   vec2f scsiz;
 
-  if (parent && @parent.style.overflow != @Item.overflow.visible)
+  if (parent && playout.overflow != Overflow::Visible)
   {
-    vec2f cpos = item->pos_screen + @style.margin.top_left;
-    vec2f csiz = max(@item.getMarginedArea, item->calcVisualArea());
+    vec2f cpos = item->pos_screen + layout.margin.tl();
+    vec2f csiz = max(item->getMarginedArea(), item->calcVisualArea());
     vec2f cext = cpos + csiz;
 
     vec2f ppos =
       parent->pos_screen +
-      parent->calcContentStart(@parent.style.margin, @parent.style.border);
+      parent->calcContentStart(playout.margin, playout.border);
 
     ppos = max(ppos, parent->visible_start);
 
     vec2f psiz =
       parent->calcContentArea(
-        @parent.style.margin,
-        @parent.style.border,
+        playout.margin,
+        playout.border,
         parent->visible_size);
 
     vec2f pext = 
@@ -522,9 +519,9 @@ $ end
   {
     const mat3x2& current_transform = *ctx.current_transform;
 
-    vec2f item_margined_pos = item->pos_local   + @style.margin.top_left;
-    vec2f item_bordered_pos = item_margined_pos + @style.border.top_left;
-    vec2f item_padded_pos   = item_bordered_pos + @style.padding.top_left;
+    vec2f item_margined_pos = item->pos_local   + layout.margin.tl();
+    vec2f item_bordered_pos = item_margined_pos + layout.border.tl();
+    vec2f item_padded_pos   = item_bordered_pos + layout.padding.tl();
 
     mat3x2 item_screen_transform = 
       current_transform.mul(
@@ -789,6 +786,8 @@ $ end
   }
 }
 
+$ if false then
+
 /* ----------------------------------------------------------------------------
  */
 void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
@@ -841,8 +840,8 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
 
   vec2f area = @item.getMarginedArea;
 
-  b8 hauto = @style.sizing.test(auto_y);
-  b8 wauto = @style.sizing.test(auto_x);
+  b8 hauto = item->layout.sizing.test(ItemLayout::Sizing::AutoY);
+  b8 wauto = item->layout.sizing.test(ItemLayout::Sizing::AutoX);
 
   if (!hauto)
   {
@@ -1322,10 +1321,432 @@ $ end
   item->pos_local = floor(item->pos_local);
 }
 
+$ end
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
+{
+  using namespace item_layout_typedefs;
+
+  FlexContext flex = {};
+
+  SmallArray<Item*, 16> already_evaluated;
+  if (!already_evaluated.init())
+  {
+    ERROR("failed to initialize already evaluated array\n");
+    return;
+  }
+  defer { already_evaluated.deinit(); };
+
+  Item* item = node->data;
+  Item* parent = (node->parent? node->parent->data : nullptr);
+
+  if (item == eval_break)
+  {
+    eval_break = nullptr;
+    platform::debugBreak();
+  }
+
+  item->dirty = false;
+
+  vec2f area = item->getMarginedArea();
+
+  ItemLayout& layout = item->layout;
+
+  ItemLayout::SizingFlags sizing = layout.sizing;
+  ItemLayout::DisplayFlags display = layout.display;
+
+  Rect bounds = layout.bounds;
+
+  b8 hauto = sizing.test(Sizing::AutoY);
+  b8 wauto = sizing.test(Sizing::AutoX);
+
+  if (!hauto)
+  {
+    if (sizing.test(Sizing::Flex) &&
+        parent_flex &&
+        parent_flex->is_container &&
+        !parent_flex->disp_horizontal)
+    {
+      item->size.x = 
+        bounds.h / parent_flex->ratio_sum * parent_flex->effective_size;
+
+      if (parent_flex->n_ceils)
+      {
+        item->size.y = ceil(item->size.y);
+        parent_flex->n_ceils -= 1;
+      }
+      else
+      {
+        item->size.y = floor(item->size.y);
+      }
+    }
+    else if (sizing.test(Sizing::PercentY))
+    {
+      if (bounds.h < 0.f)
+        ERROR("PercentY is set but height (", bounds.h, ") is "
+              "negative\n");
+      else if (parent->layout.sizing.test(Sizing::PercentY))
+        item->size.y = bounds.h / 100.f * parent->getPaddedHeight();
+      else if (parent->layout.bounds.h >= 0.f)
+        item->size.y = bounds.h / 100.f * 
+                       parent->getPaddedStyleHeight();
+      else
+      {
+        ERROR("PercentY is set but this item's height is not explicitly "
+              "sized\n");
+        hauto = true;
+      }
+    }
+    else
+      item->size.y = 
+        bounds.h + layout.margin.hsum() + layout.border.hsum();
+  }
+  else
+    item->size.y = 0.f;
+
+  if (!wauto)
+  {
+    if (sizing.test(Sizing::Flex) &&
+        parent_flex && 
+        parent_flex->is_container &&
+        parent_flex->disp_horizontal)
+    {
+      item->size.x = 
+        bounds.w / parent_flex->ratio_sum * parent_flex->effective_size;
+
+      if (parent_flex->n_ceils)
+      {
+        item->size.x = ceil(item->size.x);
+        parent_flex->n_ceils -= 1;
+      }
+      else
+      {
+        item->size.x = floor(item->size.x);
+      }
+    }
+    else if (sizing.test(Sizing::PercentX))
+    {
+      if (bounds.w < 0.f)
+        ERROR("PercentX is set but width set (", bounds.w, ") is "
+              "negative\n");
+      else if (parent->layout.sizing.test(Sizing::PercentX))
+        item->size.x = bounds.w / 100.f * parent->getPaddedWidth();
+      else if (parent->layout.bounds.w >= 0.f)
+        item->size.x = bounds.w / 100.f * parent->getPaddedStyleWidth();
+      else
+      {
+        ERROR("PercentX is set but this item's parent's width is not "
+              "explicitly sized\n");
+        wauto = true;
+      }
+    }
+    else
+      item->size.x = 
+        bounds.w + layout.margin.hsum() + layout.border.hsum();
+  }
+  else
+    item->size.x = 0;
+  
+  // Determine info needed to flex children if this is a flex container.
+  if (display.test(Display::Flex))
+  {
+    b8 is_horizontal = layout.display.test(Display::Horizontal);
+
+    flex.is_container = true;
+    flex.effective_size = 
+      is_horizontal? item->getPaddedWidth() : item->getPaddedHeight();
+    flex.ratio_sum = 0.f;
+    flex.disp_horizontal = is_horizontal;
+
+    if (is_horizontal && wauto)
+    {
+      ERROR("display set to flex and horizontal, but sizing is set to auto "
+            "width\n");
+      return;
+    }
+    else if (!is_horizontal && hauto)
+    {
+      ERROR("display set to flex and vertical, but sizing is set to auto "
+            "height\n");
+      return;
+    }
+
+    // Perform a first pass to figure out the ratio sum.
+    for (ItemNode* cnode = node->first_child; cnode; cnode = cnode->next)
+    {
+      Item* child = cnode->data;
+
+      if (child->layout.sizing.test(Sizing::Flex))
+      {
+        flex.ratio_sum +=
+          (is_horizontal? child->layout.bounds.w : child->layout.bounds.h);
+      }
+      else
+      {
+        if ((is_horizontal && child->layout.sizing.test(Sizing::AutoX)) ||
+            child->layout.sizing.test(Sizing::AutoY))
+        {
+          // If a child has automatic sizing we can still support using it in
+          // flex containers by evaluating it early. When we do this we need
+          // to tell the main child eval loop later that it has already been
+          // evaluated and we do so by storing the child in already_evaluated.
+          evalItemBranch(cnode, &flex);
+          flex.effective_size -=
+            (is_horizontal? child->size.x : child->size.y);
+          already_evaluated.push(child);
+        }
+        else if (is_horizontal)
+        {
+          if (child->layout.sizing.test(Sizing::PercentX))
+          {
+            flex.effective_size -=
+              child->layout.bounds.w / 100.f * item->size.x;
+          }
+          else
+          {
+            flex.effective_size -=
+              child->layout.bounds.w + child->layout.margin.hsum();
+          }
+        }
+        else
+        {
+          if (child->layout.sizing.test(Sizing::PercentY))
+          {
+            flex.effective_size -=
+              child->layout.bounds.h / 100.f * item->size.y;
+          }
+          else
+          {
+            flex.effective_size -=
+              child->layout.bounds.h + child->layout.margin.vsum();
+          }
+        }
+      }
+    }
+
+      // Calculate how many item sizes will need to be ceil'd rather than 
+    // floored to properly fit inside the container.
+    f32 floored_sum = 0.f;
+    for (ItemNode* cnode = node->first_child; cnode; cnode = cnode->next)
+    {
+      Item* child = cnode->data;
+
+      if (child->layout.sizing.test(Sizing::Flex))
+      {
+        floored_sum +=
+          floor(
+           (is_horizontal
+            ? child->layout.bounds.w
+            : child->layout.bounds.h)
+          / flex.ratio_sum * flex.effective_size);
+      }
+    }
+    flex.n_ceils = flex.effective_size - floored_sum;
+  }
+
+  // Allow the Item to adjust its size.
+  Item::AdjustedSize adjusted_size = item->adjustItemSize(this, wauto, hauto);
+
+  if (adjusted_size.disable_auto_x)
+    wauto = false;
+  if (adjusted_size.disable_auto_y)
+    hauto = false;
+
+  // Call evaluate callback.
+  item->evaluate(this);
+
+  // Evaluate children if the Item wants us to.
+  vec2f max_extent = {};
+  if (item->shouldPlaceChildren())
+  {
+    vec2f cursor = 
+      layout.margin.tl() + 
+      layout.padding.tl() +
+      layout.border.tl();
+
+    // Allow widgets to adjust where child placement should begin, eg. in the
+    // case of a collapsing header. By default this doesn't move the cursor.
+    cursor = item->adjustCursorStart(this, cursor);
+
+    // Adjust cursor by scroll.
+    // TODO(sushi) apply scroll translation in the shader instead.
+    cursor += item->scroll;
+
+    // Keep stuff aligned to pixels nicely.
+    cursor = floor(cursor);
+
+    ItemNode* it = 
+      (display.test(Display::Reverse)
+       ? node->last_child
+       : node->first_child);
+
+    // Keep track of our index into the already_evaluated array to properly
+    // skip children evaluated early in flex logic.
+    u32 aeidx = 0;
+    while (it)
+    {
+      Item* child = it->data;
+      ItemLayout& clayout = child->layout;
+
+      if (clayout.display.test(Display::Hidden))
+      {
+        assert(it != it->next);
+        it = 
+          display.test(Display::Reverse)
+          ? it->prev 
+          : it->next;
+        continue;
+      }
+
+      if (already_evaluated.len < aeidx && already_evaluated[aeidx] == child)
+      {
+        aeidx += 1;
+      }
+      else
+      {
+        // Evaluate the child branch.
+        evalItemBranch(child->node, &flex);
+      }
+
+$ local function placeAnchorSwitch()
+      switch (clayout.anchor)
+      {
+      case Anchor::TopLeft:
+        child->pos_local.x += clayout.bounds.x;
+        child->pos_local.y += clayout.bounds.y;
+        break;
+
+      case Anchor::TopRight:
+        if (!wauto)
+          child->pos_local.x = 
+            item->getPaddedWidth() - child->size.x - clayout.bounds.x;
+        else
+          ERROR("item's anchor was specified as TopRight but the item's "
+                "width is set to auto\n");
+        child->pos_local.y += clayout.bounds.y;
+        break;
+
+      case Anchor::BottomRight:
+        if (!wauto)
+          child->pos_local.x = 
+            item->getPaddedWidth() - child->size.x - clayout.bounds.x;
+        else
+          ERROR("item's anchor was specified as BottomRight but the item's "
+                "width is set to auto\n");
+        if (!hauto)
+          child->pos_local.y = 
+            item->getPaddedHeight() - child->size.y - clayout.bounds.y;
+        else
+          ERROR("item's anchor was specified as BottomRight but the item's "
+                "height is set to auto\n");
+        break;
+
+      case Anchor::BottomLeft:
+        child->pos_local.x += clayout.bounds.x;
+
+        if (!hauto)
+          child->pos_local.y = 
+            item->getPaddedHeight() - child->size.y - clayout.bounds.y;
+        else
+          ERROR("item's anchor was specified as BottomRight but the item's "
+                "height is set to auto\n");
+        break;
+      }
+$ end
+
+      switch (clayout.positioning)
+      {
+      case Positioning::Static:
+        if (display.test(Display::Horizontal))
+        {
+          if (!hauto)
+          {
+            child->pos_local.y = 
+              cursor.y +
+              clayout.alignment.y * 
+              (item->getPaddedHeight() - child->size.y);
+          }
+          else
+          {
+            child->pos_local.y = cursor.y;
+          }
+          child->pos_local.x = cursor.x;
+        }
+        else
+        {
+          if (!wauto)
+          {
+            child->pos_local.x = 
+              cursor.x + 
+              clayout.alignment.x * 
+              (item->getPaddedWidth() - child->size.x);
+          }
+          else
+          {
+            child->pos_local.x = cursor.x;
+          }
+          child->pos_local.y = cursor.y;
+        }
+
+        if (display.test(Display::Horizontal))
+          cursor.x = child->pos_local.x + child->size.x;
+        else
+          cursor.y = child->pos_local.y + child->size.y;
+
+        @placeAnchorSwitch
+        break;
+
+      default:
+        assert(!"handle other positionings :)");
+      }
+
+      child->pos_local = floor(child->pos_local);
+
+      if (wauto)
+        item->size.x = max(item->size.x, child->pos_local.x + child->size.x);
+      if (hauto)
+        item->size.y = max(item->size.y, child->pos_local.y + child->size.y);
+
+      max_extent = 
+        max(max_extent, child->pos_local + child->size - item->scroll);
+
+      assert(it != it->next);
+      it = 
+        display.test(Display::Reverse)
+        ? it->prev
+        : it->next;
+    }
+  }
+
+  if (wauto)
+    item->size.x += 
+      layout.padding.right() + layout.margin.right() + layout.border.right();
+
+  if (hauto)
+    item->size.y += 
+      layout.padding.bottom() + layout.margin.bottom() + 
+      layout.border.bottom();
+
+  item->max_scroll = 
+    min(vec2f(0,0),
+      item->size - max_extent - 
+      layout.padding.br() -
+      layout.border.br() - 
+      layout.margin.br());
+
+  item->size = max(item->size, item->getMinSize(this));
+
+  item->pos_local = floor(item->pos_local);
+}
+
 /* ----------------------------------------------------------------------------
  */
 void UI::genItemBranch(ItemNode* node)
 {
+  using namespace item_layout_typedefs;
+
   Item* item = node->data;
 
   $ local item = ui.createItemContext("Item", "item")
@@ -1339,9 +1760,6 @@ void UI::genItemBranch(ItemNode* node)
     border_color,
     background_color,
     horizontal_scrollbar_height)
-
-  if (@item.style.display.test(hidden))
-    return;
 
   if (item != root)
     item->pos_screen = node->parent->data->pos_screen + item->pos_local;
@@ -1373,6 +1791,8 @@ void UI::genItemBranch(ItemNode* node)
   // TODO(sushi) move the following logic into Item::generate and just call it
   //             explicitly here.
 
+
+$ if false then
   if (@item.style.background_color.a != 0 )
   {
     if (item->builtin.background == nullptr)
@@ -1501,6 +1921,7 @@ void UI::genItemBranch(ItemNode* node)
 
     item->builtin.scrollbars->counts_used = sum;
   }
+$ end
 }
 
 /* ----------------------------------------------------------------------------

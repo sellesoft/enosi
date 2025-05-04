@@ -15,6 +15,7 @@ namespace gfx
 {
 
 struct Renderer;
+struct PipelineDef;
 
 struct Pipeline
 {
@@ -27,6 +28,12 @@ struct Pipeline
     u64 push_constant_size,
     b8 has_vertex_input,
     String name = "unnamed"_str);
+
+  b8 init(
+    Renderer& renderer, 
+    u64 push_constant_size,
+    b8 has_vertex_input,
+    const PipelineDef& def);
 
   b8 deinit(Renderer& renderer);
 };

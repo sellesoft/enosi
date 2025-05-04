@@ -32,6 +32,8 @@ struct GameSim : SharedGameSim
     SourceDataFileReg& sfilereg;
 
     gfx::Texture white_texture;
+
+    AssetLoader loader;
   };
 
   // Where on the screen the game is expected to render.

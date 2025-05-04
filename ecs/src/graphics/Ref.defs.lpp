@@ -2,6 +2,7 @@ $ require "common"
 
 @@lpp.import "graphics/Ref.defs.lh"
 @@lpp.import "graphics/Texture.defs.lh"
+@@lpp.import "graphics/Shader.defs.lh"
 
 @@lpp.import "asset/AssetMgr.lh"
 @@lpp.import "asset/CompiledData.lh"
@@ -14,10 +15,38 @@ $ require "common"
 namespace gfx
 {
 
-@log.ger(ref.texture, Info);
+@log.ger(ref.texture, Debug);
 
 /* ----------------------------------------------------------------------------
  */
+static String formName(PathBuffer* buf, String name, String ext)
+{
+  io::formatv(buf, name, ext);
+  return buf->asStr();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<typename T>
+static T* loadDef(String name, String ext, AssetRef::LoadParams& params)
+{
+  TypedSourceAssetRef<T> defref;
+
+  PathBuffer path;
+  defref.name = formName(&path, name, ext);
+
+  if (!defref.load(params))
+  {
+     ERROR("failed to load def ", defref.name, "\n");
+     return nullptr;
+  }
+
+  return &*defref;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
 b8 TextureRef::load(LoadParams& params)
 {
   // TODO(sushi) need a way to determine this outside of this function.
@@ -25,29 +54,9 @@ b8 TextureRef::load(LoadParams& params)
   if (isnil(name))
     return true;
 
-  PathBuffer src_path_buffer;
-  io::formatv(&src_path_buffer, name, ".texture"_str);
-  String src_path = src_path_buffer.asStr();
-
-  CompiledData::CompileParams compile_params =
-  {
-    .name = src_path,
-    .type = "gfx::TextureDef"_str,
-    .assetmgr = params.assetmgr,
-    .sfile_reg = *params.sfile_reg,
-  };
-
-  if (!CompiledData::compile(compile_params))
+  const auto* def = loadDef<TextureDef>(name, ".texture"_str, params);
+  if (def == nullptr)
     return false;
-
-  DEBUG("loading ", src_path, "\n");
-
-  auto* data =
-    CompiledData::load(src_path, "gfx::TextureDef"_str, params.assetmgr);
-  if (data == nullptr)
-    return ERROR("failed to load '", src_path, "' data");
-
-  auto* def = data->getRootAs<TextureDef>();
 
   if (isnil(def->name))
     return ERROR("loaded texture def has a nil name\n");
@@ -68,13 +77,98 @@ b8 TextureRef::load(LoadParams& params)
 
   String name = def->name.subToLast('.');
 
-  auto* compiled_texture =
+  resource =
     gfx::CompiledTexture::load(name, params.assetmgr, params.renderer);
 
-  if (compiled_texture == nullptr)
+  if (resource == nullptr)
     return ERROR("failed to load texture '", name, "'\n");
 
-  texture = compiled_texture->gfx_texture;
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 FontRef::load(LoadParams& params)
+{
+  if (isnil(name))
+    return true;
+
+  const auto* def = loadDef<FontDef>(name, ".font"_str, params);
+  if (def == nullptr)
+    return false;
+
+  if (isnil(def->name))
+    return ERROR("loaded font def has a nil name\n");
+  if (isnil(def->asset_path))
+    return ERROR("loaded font def has a nil asset path\n");
+
+  gfx::Font::CompileParams font_params =
+  {
+    .name = name,
+    .ranges = def->ranges.asSlice(),
+    .allocator = &mem::stl_allocator,
+    .assetmgr = &params.assetmgr,
+  };
+
+  if (!gfx::Font::compileBDF(font_params))
+    return ERROR("failed to compile font ", name, "\n");
+
+  resource = 
+    gfx::Font::load(name, params.assetmgr, params.renderer);
+  
+  if (resource == nullptr)
+    return ERROR("failed to load compiled font ", name, "\n");
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 ShaderRef::load(LoadParams& params)
+{
+  if (isnil(name))
+    return true;
+
+  auto* def = loadDef<ShaderDef>(name, ".shader"_str, params);
+  if (def == nullptr)
+    return false;
+
+  if (isnil(def->source))
+    return ERROR("loaded shader def has a nil source path\n");
+
+  PathBuffer source_name_buffer;
+  switch (def->kind)
+  {
+  case ShaderKind::Vertex:
+    io::formatv(&source_name_buffer, def->source, ".vert"_str);
+    break;
+  case ShaderKind::Fragment:
+    io::formatv(&source_name_buffer, def->source, ".frag"_str);
+    break;
+  default:
+    assert(!"unhandled shader kind");
+  }
+
+  String source_name = source_name_buffer.asStr();
+  
+  gfx::CompiledShader::CompileParams shader_params = 
+  {
+    .name = source_name,
+    .kind = def->kind,
+    .allocator = &mem::stl_allocator,
+    .assetmgr = &params.assetmgr,
+  };
+
+  if (!gfx::CompiledShader::compileGLSL(shader_params))
+    return ERROR("failed to compile shader ", name, "\n");
+
+  resource = 
+    gfx::CompiledShader::load(source_name, params.assetmgr, params.renderer);
+
+  if (resource == nullptr)
+    return ERROR("failed to load compiled shader ", name, "\n");
 
   return true;
 }

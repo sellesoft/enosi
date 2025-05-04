@@ -8,6 +8,7 @@ $ local metadata = require "reflect.Metadata"
 @@lpp.import "game/shared/component/Component.lh"
 @@lpp.import "graphics/Ref.defs.lh"
 @@lpp.import "asset/StringMap.lh"
+@@lpp.import "asset/Asset.lh"
 
 #include "Color.h"
 #include "math/vec.h"

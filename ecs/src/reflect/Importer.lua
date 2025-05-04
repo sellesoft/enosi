@@ -15,6 +15,7 @@ local cmn = require "common"
 local glob = require "Glob"
 local Processor = require "reflect.Processor"
 local ast = require "reflect.AST"
+local reflect = require "reflect.Reflector"
 
 local Importer = require "Type" .make()
 
@@ -23,11 +24,20 @@ Importer.new = function(opts)
   o.filter = opts.filter
   o.patterns = cmn.List(opts.patterns)
 
+  if opts.suppress_imports then
+    print "suppress_imports"
+    reflect.pushImportedStack()
+  end
+
   o.imported = cmn.buffer.new()
   for pattern in o.patterns:each() do
     glob(pattern):each(function(path)
       o.imported:put(lpp.import(path))
     end)
+  end
+
+  if opts.suppress_imports then
+    reflect.popImportedStack()
   end
 
   o.p = Processor.new(tostring(o.imported), o.filter)

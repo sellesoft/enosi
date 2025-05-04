@@ -37,6 +37,8 @@ struct GameMgr
     InputMgr& input;
 
     gfx::Texture white_texture;
+
+    AssetLoader loader;
   };
 
   b8 init(InitParams& params);

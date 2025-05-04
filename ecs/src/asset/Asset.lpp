@@ -18,7 +18,7 @@ template<>
 b8 TypedSourceAssetRef<int>::load(String type, LoadParams& params)
 {
   if (isnil(name))
-    return false;
+    return true;
 
   String asset_name = name;
 

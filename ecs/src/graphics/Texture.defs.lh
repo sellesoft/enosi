@@ -6,6 +6,7 @@ $ require "common"
 $ local metadata = require "reflect.Metadata"
 
 @@lpp.import "graphics/TextureParams.lh"
+@@lpp.import "asset/Asset.lh"
 
 namespace gfx
 {
@@ -27,5 +28,7 @@ struct TextureDef
 
   ImageAddressMode address_mode;
 };
+
+typedef TypedSourceAssetRef<TextureDef> TextureDefRef;
 
 }

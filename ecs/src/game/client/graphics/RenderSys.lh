@@ -20,6 +20,7 @@ $ require "common"
 @@lpp.import "graphics/CompiledTexture.lh"
 @@lpp.import "graphics/Buffer.lh"
 @@lpp.import "graphics/Pipeline.lh"
+@@lpp.import "graphics/Pipeline.defs.lh"
 
 namespace gfx
 {
@@ -62,6 +63,8 @@ struct RenderSys
     gfx::Renderer& renderer;
     AssetMgr& assetmgr;
     gfx::Texture& white_texture;
+
+    AssetLoader loader;
   };
 
   b8 init(InitParams& params);
@@ -87,7 +90,8 @@ struct RenderSys
     gfx::Texture texture,
     Color color);
 
-  gfx::Texture null_texture;
+  gfx::TextureRef null_texture;
+  gfx::Texture white_texture;
 
   Scene scene;
   gfx::Buffer scene_uniform_buffer;
@@ -106,15 +110,11 @@ struct RenderSys
   gfx::Buffer external_index_buffer;
   vec2i external_counts = {};
 
-  gfx::Shader quad_vertex_shader;
-  gfx::Shader quad_fragment_shader;
   gfx::Pipeline quad_pipeline;
+  gfx::PipelineDefRef quad_pipeline_defref;
 
-  gfx::Shader fullscreen_vertex_shader;
-  gfx::Shader stars_fragment_shader;
   gfx::Pipeline stars_pipeline;
-
-  gfx::Texture white_texture;
+  gfx::PipelineDefRef stars_pipeline_defref;
 };
 
 }

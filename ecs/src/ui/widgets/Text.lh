@@ -133,6 +133,18 @@ struct TextState
 
 /* ============================================================================
  */
+// struct Text
+// {
+//   DrawCmd* dc;
+//
+//   b8 init(UI& ui);
+//   void deinit(UI& ui);
+//
+//   void draw(UI& ui, String text, Rect bounds, const TextSkinDef& skin);
+// };
+
+/* ============================================================================
+ */
 @ui.widget(Text,
 schema
 {

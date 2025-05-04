@@ -1,0 +1,21 @@
+$ require "common"
+
+@@lpp.import "graphics/Ref.defs.lh"
+
+#include "math/Rect.h"
+#include "Color.h"
+
+namespace ui
+{
+
+/* ============================================================================
+ *  A basic set of properties for styling a plain Item.
+ */
+struct ItemSkinDef
+{
+  gfx::TextureRef texture;
+  Rect uv;
+  Color color;
+};
+
+}

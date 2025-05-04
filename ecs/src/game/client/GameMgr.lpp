@@ -50,6 +50,7 @@ b8 GameMgr::init(InitParams& params)
     .renderer = params.renderer,
     .assetmgr = params.assetmgr,
     .white_texture = params.white_texture,
+    .loader = params.loader,
   };
   if (!rendersys.init(render_params))
     return @log.error("failed to initialize rendersys\n");

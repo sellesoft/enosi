@@ -1,0 +1,7 @@
+return gfx::PipelineDef
+{
+  name = "Quad",
+
+  vertex_shader = "assets/shaders/Scene.vert",
+  fragment_shader = "assets/shaders/Scene.frag",
+}

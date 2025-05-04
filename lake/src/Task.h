@@ -93,6 +93,8 @@ struct Task
 
     VisitedPerm,
     VisitedTemp,
+
+    COUNT,
   };
   typedef Flags<Flag> Flags;
 

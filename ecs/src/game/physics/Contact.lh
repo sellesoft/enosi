@@ -6,8 +6,9 @@ namespace phys
 enum class ContactFlag
 {
   Touching,
-};
 
+  COUNT,
+};
 typedef Flags<ContactFlag> ContactFlags;
 
 struct Contact

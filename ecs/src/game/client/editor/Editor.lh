@@ -15,18 +15,28 @@ $ local ui = require "ui.UI"
 
 @@lpp.import "ui/UI.lh"
 
-struct GameMgr;
+struct Client;
+
+namespace ui
+{
+  struct EditorMenuBar;
+}
+
+namespace cl
+{
 
 struct Editor
 {
-  ui::Item* menubar;
+  ui::EditorMenuBar* menubar;
 
   Array<ui::Item*> documents;
 
-  GameMgr* gamemgr;
+  Client* client;
 
-  b8   init(GameMgr* gamemgr);
+  b8   init(Client* client);
   void deinit();
 
   b8 update();
 };
+
+}

@@ -1,8 +1,7 @@
 $ require "common"
 $ local metadata = require "reflect.Metadata"
 
-@@lpp.import "asset/Asset.lh"
-@@lpp.import "graphics/Texture.lh"
+@@lpp.import "asset/Ref.lh"
 
 #include "iro/Unicode.h"
 
@@ -13,23 +12,62 @@ namespace gfx
 
 /* ============================================================================
  */
-@metadata.inline_value(name)
-@metadata.def
-@metadata.pack_from(String/name)
-struct TextureRef : Ref
+struct ResourceRef : Ref
 {
-  @metadata.source_type(png)
-  String name;
+  String name = {};
 
   @metadata.hidden
-  gfx::Texture texture;
+  void* resource;
 
+  b8 isValid() const
+  {
+    return resource != nullptr;
+  }
+};
+
+/* ============================================================================
+ */
+template<typename TResource>
+struct TypedResourceRef : ResourceRef
+{
   b8 load(LoadParams&);
 
   b8 isValid() const
   {
-    return notnil(texture);
+    return resource != nullptr;
+  }
+
+  TResource* operator->()
+  {
+    assert(resource != nullptr);
+    return (TResource*)resource;
+  }
+
+  const TResource* operator->() const
+  {
+    assert(resource != nullptr);
+    return (TResource*)resource;
+  }
+
+  TResource& operator*()
+  {
+    assert(resource != nullptr);
+    return *(TResource*)resource;
+  }
+
+  const TResource& operator*() const
+  {
+    assert(resource != nullptr);
+    return *(TResource*)resource;
   }
 };
+
+struct CompiledTexture;
+struct CompiledShader;
+struct Font;
+
+typedef TypedResourceRef<CompiledTexture> TextureRef;
+typedef TypedResourceRef<CompiledShader>  ShaderRef;
+typedef TypedResourceRef<Font>            FontRef;
 
 }

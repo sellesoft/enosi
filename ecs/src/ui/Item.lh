@@ -12,6 +12,7 @@ $ local ui = require "ui.UI"
 
 #include "math/vec.h"
 #include "math/mat.h"
+#include "math/Rect.h"
 
 @@lpp.import "ui/Style.lh"
 
@@ -103,26 +104,31 @@ enum class UpdateReason
 
   // Last update callback ever invoked on an Item.
   Fin,
+
+  COUNT
 };
 typedef Flags<UpdateReason> UpdateReasonFlags;
 DefineFlagsOrOp(UpdateReasonFlags, UpdateReason);
 
+/* ============================================================================
+ */
 struct ItemLayout
 {
-  vec2f pos;
-  vec2f size;
+  Rect bounds;
 
-  enum class Positioning
+  enum class Positioning : u8
   {
     Static,
     Relative,
     Absolute,
     Fixed,
+
+    COUNT
   };
 
   Positioning positioning;
 
-  enum class Sizing
+  enum class Sizing : u8
   {
     Normal,
     AutoX,
@@ -131,19 +137,74 @@ struct ItemLayout
     PercentY,
     Square,
     Flex,
+
+    COUNT
   };
+  typedef Flags<Sizing> SizingFlags;
 
-  Sizing sizing;
+  SizingFlags sizing;
 
-  struct Bounds
+  enum class Display : u8
   {
-    vec4f val;
+    Horizontal,
+    Flex,
+    Reverse,
+    Hidden,
 
-    
+    COUNT
+  };
+  typedef Flags<Display> DisplayFlags;
+
+  DisplayFlags display;
+
+  struct BoxBorder : vec4f
+  {
+    vec2f tl() const { return xy(); }
+    vec2f br() const { return zw(); }
+
+    f32 top() const { return y; }
+    f32 left() const { return x; }
+    f32 right() const { return z; }
+    f32 bottom() const { return w; }
+
+    f32 hsum() const { return left() + right(); }
+    f32 vsum() const { return top() + bottom(); }
   };
 
-  vec4f margin;
+  BoxBorder margin;
+  BoxBorder padding;
+  BoxBorder border;
+
+  enum class Anchor
+  {
+    TopLeft,
+    TopRight,
+    BottomRight,
+    BottomLeft,
+  };
+
+  Anchor anchor;
+
+  enum class Overflow
+  {
+    Scroll,
+    Clip,
+    Visible,
+  };
+
+  Overflow overflow;
+
+  vec2f alignment;
 };
+
+namespace item_layout_typedefs
+{
+  using Positioning = ItemLayout::Positioning;
+  using Sizing = ItemLayout::Sizing;
+  using Display = ItemLayout::Display;
+  using Anchor = ItemLayout::Anchor;
+  using Overflow = ItemLayout::Overflow;
+}
 
 /* ============================================================================
  */
@@ -347,6 +408,8 @@ struct
   String name;
   StyleMap style;
 
+  ItemLayout layout;
+
   ItemNode* node;
 
   UpdateReasonFlags update_triggers;
@@ -535,6 +598,60 @@ struct
     vec2f* bar_size,
     vec2f* handle_pos,
     vec2f* handle_size);
+
+  f32 getMarginedWidth() const 
+    { return size.x - layout.margin.hsum(); }
+
+  f32 getMarginedHeight() const
+    { return size.y - layout.margin.vsum(); }
+
+  vec2f getMarginedArea() const 
+    { return { getMarginedWidth(), getMarginedHeight() }; }
+
+  f32 getMarginedStyleWidth() const
+    { return layout.bounds.w - layout.margin.hsum(); }
+
+  f32 getMarginedStyleHeight() const
+    { return layout.bounds.h - layout.margin.vsum(); }
+
+  vec2f getMarginedStyleArea() const
+    { return { getMarginedStyleWidth(), getMarginedStyleHeight() }; }
+
+  f32 getBorderedWidth() const
+    { return getMarginedWidth() - layout.border.hsum(); }
+
+  f32 getBorderedHeight() const
+    { return getMarginedHeight() - layout.border.vsum(); }
+
+  vec2f getBorderedArea() const
+    { return { getBorderedWidth(), getBorderedHeight() }; }
+
+  f32 getBorderedStyleWidth() const
+    { return getMarginedStyleWidth() - layout.border.hsum(); }
+
+  f32 getBorderedStyleHeight() const
+    { return getMarginedStyleHeight() - layout.border.vsum(); }
+
+  vec2f getBorderedStyleArea() const
+    { return { getBorderedStyleWidth(), getBorderedStyleHeight() }; }
+
+  f32 getPaddedWidth() const 
+    { return getBorderedWidth() - layout.padding.hsum(); }
+
+  f32 getPaddedHeight() const
+    { return getBorderedHeight() - layout.padding.vsum(); }
+
+  vec2f getPaddedArea() const 
+    { return { getPaddedWidth(), getPaddedHeight() }; }
+
+  f32 getPaddedStyleWidth() const 
+    { return getBorderedStyleWidth() - layout.padding.hsum(); }
+
+  f32 getPaddedStyleHeight() const
+    { return getBorderedStyleHeight() - layout.padding.vsum(); }
+
+  vec2f getPaddedStyleArea() const 
+    { return { getPaddedStyleWidth(), getPaddedStyleHeight() }; }
 })
 
 }

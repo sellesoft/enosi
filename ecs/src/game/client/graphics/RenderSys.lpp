@@ -31,22 +31,22 @@ b8 RenderSys::init(InitParams& params)
 {
   gfx::Renderer& renderer = params.renderer;
   AssetMgr& assetmgr = params.assetmgr;
+  AssetLoader& loader = params.loader;
 
   white_texture = params.white_texture;
 
-  //load the null texture
-  auto compiled_null_texture =
-    gfx::CompiledTexture::load(
-      "assets/textures/null"_str, assetmgr, renderer);
-  if (compiled_null_texture == nullptr)
-  {
-    compiled_null_texture =
-      gfx::CompiledTexture::load(
-        "assets/textures/white"_str, assetmgr, renderer);
-    if (compiled_null_texture == nullptr)
-      return ERROR("failed to find a valid null texture\n");
-  }
-  null_texture = compiled_null_texture->gfx_texture;
+  if (!loader.load(&null_texture, "assets/textures/null"_str))
+    return ERROR("failed to load null texture");
+
+  // if (compiled_null_texture == nullptr)
+  // {
+  //   compiled_null_texture =
+  //     gfx::CompiledTexture::load(
+  //       "assets/textures/white"_str, assetmgr, renderer);
+  //   if (compiled_null_texture == nullptr)
+  //     return ERROR("failed to find a valid null texture\n");
+  // }
+  // null_texture = compiled_null_texture->gfx_texture;
 
   //init scene uniform buffer
   if (!scene_uniform_buffer.init(renderer, nullptr, sizeof(Scene),
@@ -110,8 +110,7 @@ b8 RenderSys::init(InitParams& params)
     return ERROR("failed to init the quads index buffer\n");
 
   //init quads batches
-  batches[0].texture = null_texture;
-  batches[0].texture = null_texture;
+  batches[0].texture = null_texture->gfx_texture;
   batch_count = 1;
   quad_count = 0;
 
@@ -132,43 +131,20 @@ b8 RenderSys::init(InitParams& params)
       "render.sys external index"_str))
     return ERROR("failed to init external index buffer\n");
 
-  //init the quad pipeline
-  gfx::CompiledShader* compiled_quad_vertex_shader =
-    gfx::CompiledShader::load("assets/shaders/scene.vertex"_str,
-      assetmgr, renderer);
-  if (compiled_quad_vertex_shader == nullptr)
-    return ERROR("failed to load the vertex shader\n");
-  quad_vertex_shader = compiled_quad_vertex_shader->gfx_shader;
+  // Initialize the quad pipeline.
+  quad_pipeline_defref.name = "assets/shaders/Quad"_str;
+  if (!loader.load(&quad_pipeline_defref, "assets/shaders/Quad"_str))
+    return ERROR("failed to load quad pipeline def\n");
 
-  gfx::CompiledShader* compiled_quad_fragment_shader =
-    gfx::CompiledShader::load("assets/shaders/scene.fragment"_str,
-      assetmgr, renderer);
-  if (compiled_quad_fragment_shader == nullptr)
-    return ERROR("failed to load the fragment shader\n");
-  quad_fragment_shader = compiled_quad_fragment_shader->gfx_shader;
+  if (!quad_pipeline.init(renderer, 0, true, *quad_pipeline_defref))
+      return ERROR("failed to initialize quad pipeline\n");
 
-  if (!quad_pipeline.init(renderer, quad_vertex_shader, quad_fragment_shader,
-    0, true, "render.sys quad"_str))
-    return ERROR("failed to init the quad pipeline\n");
+  // Initialize the stars pipeline.
+  if (!loader.load( &stars_pipeline_defref, "assets/shaders/Stars"_str))
+    return ERROR("failed to load stars pipeline def\n");
 
-  //init the stars pipeline
-  gfx::CompiledShader* compiled_fullscreen_vertex_shader =
-    gfx::CompiledShader::load("assets/shaders/fullscreen.vertex"_str,
-      assetmgr, renderer);
-  if (compiled_fullscreen_vertex_shader == nullptr)
-    return ERROR("failed to load fullscreen vertex shader\n");
-  fullscreen_vertex_shader = compiled_fullscreen_vertex_shader->gfx_shader;
-
-  gfx::CompiledShader* compiled_stars_fragment_shader =
-    gfx::CompiledShader::load("assets/shaders/stars.fragment"_str,
-      assetmgr, renderer);
-  if (compiled_stars_fragment_shader == nullptr)
-    return ERROR("failed to load stars fragment shader\n");
-  stars_fragment_shader = compiled_stars_fragment_shader->gfx_shader;
-
-  if (!stars_pipeline.init(renderer, fullscreen_vertex_shader,
-    stars_fragment_shader, 0, false, "stars"_str))
-    return ERROR("failed to init the stars pipeline\n");
+  if (!stars_pipeline.init(renderer, 0, true, *stars_pipeline_defref))
+    return ERROR("failed to initialize stars pipeline\n");
 
   return true;
 }
@@ -184,11 +160,7 @@ void RenderSys::deinit(gfx::Renderer& renderer)
   quads_index_buffer.deinit(renderer);
   external_vertex_buffer.deinit(renderer);
   external_index_buffer.deinit(renderer);
-  quad_vertex_shader.deinit(renderer);
-  quad_fragment_shader.deinit(renderer);
   quad_pipeline.deinit(renderer);
-  fullscreen_vertex_shader.deinit(renderer);
-  stars_fragment_shader.deinit(renderer);
   stars_pipeline.deinit(renderer);
 }
 
@@ -213,7 +185,7 @@ static void drawBatches(RenderSys& sys, gfx::Renderer& renderer)
   assert(index_offset == 6*sys.quad_count);
 
   sys.batches[0].quad_count = 0;
-  sys.batches[0].texture = sys.null_texture;
+  sys.batches[0].texture = sys.null_texture->gfx_texture;
   sys.batch_count = 1;
   sys.quad_count = 0;
 }
@@ -351,14 +323,14 @@ b8 RenderSys::update(const UpdateParams& params)
 
         const TileKindDef& tilekind = *tile.kind;
 
-        gfx::Texture texture = null_texture;
+        gfx::Texture texture = null_texture->gfx_texture;
 
         gfx::TextureRef texref = tilekind.textures[tile.configuration];
         if (!texref.isValid())
           texref = tilekind.textures[TileKindConfig::Default];
 
         if (texref.isValid())
-          texture = texref.texture;
+          texture = texref->gfx_texture;
 
         vec2f pos = map.getTilePos(layer, tile);
         drawQuad(renderer, pos, texture, tint);
@@ -388,7 +360,7 @@ b8 RenderSys::update(const UpdateParams& params)
         continue;
       }
 
-      gfx::Texture texture = null_texture;
+      gfx::Texture texture = null_texture->gfx_texture;
       if (sprite.states.isValid())
       {
         const gfx::TextureRef* texref =
@@ -396,7 +368,7 @@ b8 RenderSys::update(const UpdateParams& params)
 
         if (texref != nullptr && texref->isValid())
         {
-          texture = texref->texture;
+          texture = (*texref)->gfx_texture;
         }
         else
         {
@@ -411,7 +383,7 @@ b8 RenderSys::update(const UpdateParams& params)
 
         vec2f pos = layer.pos + transform->pos;
         Color color = sprite.color;
-        if (texture == null_texture)
+        if (texture == null_texture->gfx_texture)
           color = 0xff0000ff;
         drawQuad(renderer, pos, texture, color);
       }

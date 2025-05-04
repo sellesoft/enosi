@@ -7,6 +7,7 @@ local Placeable = require "ui.Placeable"
 local List = require "List"
 local Style = require "ui.Style"
 local buffer = require "string.buffer"
+local layout = require "ui.Layout"
 
 local ui = {}
 
@@ -191,6 +192,12 @@ ui.style = function(var, widget, text)
       ";\n")
   end
   return out:get()
+end
+
+-- * --------------------------------------------------------------------------
+
+ui.layout = function(var, text)
+  return (layout(var, text, lpp.getMacroArgOffset(2)))
 end
 
 return ui

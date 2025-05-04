@@ -1,0 +1,22 @@
+$ require "common"
+
+#include "math/Rect.h"
+#include "Color.h"
+
+@@lpp.import "graphics/Ref.defs.lh"
+@@lpp.import "ui/widgets/TextSkin.defs.lh"
+
+namespace ui
+{
+
+/* ============================================================================
+ */
+struct ButtonSkinDef
+{
+  TextItemSkinDef normal;
+  TextItemSkinDef hovered;
+  TextItemSkinDef pressed;
+  TextItemSkinDef disabled;
+};
+
+}

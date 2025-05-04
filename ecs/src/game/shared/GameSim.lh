@@ -13,6 +13,7 @@ $ require "common"
 #include "math/Rect.h"
 
 @@lpp.import "game/shared/entity/EntityMgr.lh"
+@@lpp.import "asset/Ref.lh"
 
 struct Engine;
 
