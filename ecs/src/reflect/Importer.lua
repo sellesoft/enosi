@@ -1,13 +1,13 @@
---- 
+---
 --- Helper for importing files based on a pattern, processing those files
---- into our internal AST types and filtering the declarations retrieved from 
+--- into our internal AST types and filtering the declarations retrieved from
 --- the Processor.
 ---
 --- The filter is used to decide what top level declarations are 'recorded'
---- by the Processor. When a declaration is recorded, all of the things 
---- it uses are too. This way, we can record only declarations we are 
---- interested in as well as what they use. This avoids a lot of structures we 
---- generally don't care about, eg. a lot of iro structures like iro::Log, 
+--- by the Processor. When a declaration is recorded, all of the things
+--- it uses are too. This way, we can record only declarations we are
+--- interested in as well as what they use. This avoids a lot of structures we
+--- generally don't care about, eg. a lot of iro structures like iro::Log,
 --- defer_dummy, iro::Process, etc.
 ---
 
@@ -23,6 +23,7 @@ Importer.new = function(opts)
   local o = {}
   o.filter = opts.filter
   o.patterns = cmn.List(opts.patterns)
+  o.excludes = cmn.List(opts.excludes)
 
   if opts.suppress_imports then
     print "suppress_imports"
@@ -32,7 +33,17 @@ Importer.new = function(opts)
   o.imported = cmn.buffer.new()
   for pattern in o.patterns:each() do
     glob(pattern):each(function(path)
-      o.imported:put(lpp.import(path))
+      local excluded = false
+      for exclude in o.excludes:each() do
+        if exclude == path then
+          excluded = true
+          break
+        end
+      end
+
+      if not excluded then
+        o.imported:put(lpp.import(path))
+      end
     end)
   end
 
