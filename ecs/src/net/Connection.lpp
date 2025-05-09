@@ -174,6 +174,50 @@ $ else -- if IRO_WIN32
                       " due to error: ", strerror(errno), "\n");
 $ end -- if not IRO_WIN32
 
+  // bind the ipv4 socket to the server port
+  {
+    sockaddr_in ipv4_socket_address;
+    ipv4_socket_address.sin_family = AF_INET;
+    ipv4_socket_address.sin_port = htons(SERVER_PORT);
+    ipv4_socket_address.sin_addr.s_addr = INADDR_ANY;
+
+    int ipv4_bind_result = bind(s_ipv4_socket,
+                                (sockaddr*)&ipv4_socket_address,
+                                sizeof(ipv4_socket_address));
+$ if IRO_WIN32 then
+    if (SOCKET_ERROR == ipv4_bind_result)
+      return @log.error("Failed to bind the IPv4 socket due to error: ",
+                        WSAGetLastError(), "\n");
+$ else -- if IRO_WIN32
+    if (-1 == ipv4_bind_result)
+      return @log.error("Failed to bind the IPv4 socket due to error: ",
+                        strerror(errno), "\n");
+$ end -- if not IRO_WIN32
+    else
+      s_ipv4_socket_is_bound = true;
+  }
+
+  // bind the ipv6 socket to the server port
+  {
+    sockaddr_in6 ipv6_socket_address;
+    ipv6_socket_address.sin6_family = AF_INET6;
+    ipv6_socket_address.sin6_port = htons(SERVER_PORT);
+    ipv6_socket_address.sin6_addr = in6addr_any;
+
+    int ipv6_bind_result = bind(s_ipv6_socket,
+                                (sockaddr*)&ipv6_socket_address,
+                                sizeof(ipv6_socket_address));
+$ if IRO_WIN32 then
+    if (SOCKET_ERROR == ipv6_bind_result)
+      return @log.error("Failed to bind the IPv6 socket due to error: ",
+                        WSAGetLastError(), "\n");
+$ else -- if IRO_WIN32
+    if (-1 == ipv6_bind_result)
+      return @log.error("Failed to bind the IPv6 socket due to error: ",
+                        strerror(errno), "\n");
+$ end -- if not IRO_WIN32
+  }
+
   close_ipv4_socket_if_failure.cancel();
   close_s_ipv6_socket_if_failure.cancel();
   return true;
@@ -308,102 +352,49 @@ b8 Connection::init(
   this->message_queue_end = &this->message_queue_start;
   this->allocator = allocator;
 
-  // bind the sockets to the local address unless we're a client
-  if (source != net::Source::Client)
-  {
-    if (!s_ipv4_socket_is_bound)
-    {
-      sockaddr_in ipv4_socket_address;
-      ipv4_socket_address.sin_family = AF_INET;
-      ipv4_socket_address.sin_port = htons(SERVER_PORT);
-      ipv4_socket_address.sin_addr.s_addr = INADDR_ANY;
-
-      int ipv4_bind_result = bind(s_ipv4_socket,
-                                  (sockaddr*)&ipv4_socket_address,
-                                  sizeof(ipv4_socket_address));
-$ if IRO_WIN32 then
-      if (SOCKET_ERROR == ipv4_bind_result)
-        return @log.error("Failed to bind the IPv4 socket due to error: ",
-                          WSAGetLastError(), "\n");
-$ else -- if IRO_WIN32
-      if (-1 == ipv4_bind_result)
-        return @log.error("Failed to bind the IPv4 socket due to error: ",
-                          strerror(errno), "\n");
-$ end -- if not IRO_WIN32
-      else
-        s_ipv4_socket_is_bound = true;
-    }
-
-    if (!s_ipv6_socket_is_bound)
-    {
-      sockaddr_in6 ipv6_socket_address;
-      ipv6_socket_address.sin6_family = AF_INET6;
-      ipv6_socket_address.sin6_port = htons(SERVER_PORT);
-      ipv6_socket_address.sin6_addr = in6addr_any;
-
-      int ipv6_bind_result = bind(s_ipv6_socket,
-                                  (sockaddr*)&ipv6_socket_address,
-                                  sizeof(ipv6_socket_address));
-$ if IRO_WIN32 then
-      if (SOCKET_ERROR == ipv6_bind_result)
-        return @log.error("Failed to bind the IPv6 socket due to error: ",
-                          WSAGetLastError(), "\n");
-$ else -- if IRO_WIN32
-      if (-1 == ipv6_bind_result)
-        return @log.error("Failed to bind the IPv6 socket due to error: ",
-                          strerror(errno), "\n");
-$ end -- if not IRO_WIN32
-      else
-        s_ipv6_socket_is_bound = true;
-    }
-  }
-
   return true;
 }
 
 /* ----------------------------------------------------------------------------
  */
-static b8 sendPacket(Connection* connection, void* data, u16 size)
+static b8 sendPacket(const Address& address, void* data, u16 size)
 {
   @log.trace("sending a packet of ", size, "bytes\n");
 
   int bytes_sent;
-  if (connection->address.type == AddressType::Local)
+  if (address.type == AddressType::Local)
   {
     sockaddr_in socket_address;
     socket_address.sin_family = AF_INET;
-    socket_address.sin_port = htons(connection->address.port);
+    socket_address.sin_port = htons(address.port);
     socket_address.sin_addr.s_addr = INADDR_ANY;
 
     bytes_sent = sendto(s_ipv4_socket, (const char*)data, size, 0,
                         (sockaddr*)&socket_address, sizeof(socket_address));
-    @log.debug("Sent ", bytes_sent, " bytes to: ",
-               connection->address.toString(), "\n");
+    @log.debug("Sent ", bytes_sent, " bytes to: ", address.toString(), "\n");
   }
-  else if (connection->address.isIPv4())
+  else if (address.isIPv4())
   {
     sockaddr_in socket_address;
     socket_address.sin_family = AF_INET;
-    socket_address.sin_port = htons(connection->address.port);
-    socket_address.sin_addr.s_addr = htonl(connection->address.getIPv4());
+    socket_address.sin_port = htons(address.port);
+    socket_address.sin_addr.s_addr = htonl(address.getIPv4());
 
     bytes_sent = sendto(s_ipv4_socket, (const char*)data, size, 0,
                         (sockaddr*)&socket_address, sizeof(socket_address));
-    @log.debug("Sent ", bytes_sent, " bytes to: ",
-               connection->address.toString(), "\n");
+    @log.debug("Sent ", bytes_sent, " bytes to: ", address.toString(), "\n");
   }
   else
   {
     sockaddr_in6 socket_address;
     socket_address.sin6_family = AF_INET6;
-    socket_address.sin6_port = htons(connection->address.port);
-    memcpy(&socket_address.sin6_addr, &connection->address.ipv6,
+    socket_address.sin6_port = htons(address.port);
+    memcpy(&socket_address.sin6_addr, &address.ipv6,
            sizeof(socket_address.sin6_addr));
 
     bytes_sent = sendto(s_ipv6_socket, (const char*)data, size, 0,
                         (sockaddr*)&socket_address, sizeof(socket_address));
-    @log.debug("Sent ", bytes_sent, " bytes to: ",
-               connection->address.toString(), "\n");
+    @log.debug("Sent ", bytes_sent, " bytes to: ", address.toString(), "\n");
   }
 
 $ if IRO_WIN32 then
@@ -457,7 +448,7 @@ b8 Connection::sendNextFragment()
   }
 
   u32 packet_size = sizeof(FragmentHeader) + header->data_size;
-  if (!sendPacket(this, header, packet_size))
+  if (!sendPacket(this->address, header, packet_size))
     return false;
 
   this->outgoing_message_pending_offset += header->data_size;
@@ -582,7 +573,7 @@ b8 Connection::send(Source source, const Message& message, b8 priority)
   this->outgoing_message_size = sizeof(header) + message.size;
 
   // send the packet
-  if (!sendPacket(this, this->outgoing_message_data,
+  if (!sendPacket(this->address, this->outgoing_message_data,
                   this->outgoing_message_size))
   {
     @log.warn("Failed to send a message. This means that we might have"

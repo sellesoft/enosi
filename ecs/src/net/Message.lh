@@ -20,6 +20,7 @@ struct Message
 
 
   void init(u8* data, u16 size);
+  inline b8 overflowed() { return this->cursor >= this->size; }
 
   template<u64 BITS> void writeBits(u64 value);
   void writeU8(u8 value);
@@ -36,6 +37,7 @@ struct Message
   void writeData(const u8* data, u16 bytes);
   void writeDebug(u8 value);
 
+  // reads return 0 on overflow
   template<u64 BITS> u64 readBits();
   u8 readU8();
   s8 readS8();

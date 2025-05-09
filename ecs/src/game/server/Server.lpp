@@ -232,6 +232,10 @@ b8 update(Server* server)
     StackArray<u8, net::MAX_FRAGMENT_SIZE> packet_data;
     while (net::checkForPackets(packet_address, packet_data))
     {
+      // range validated in net::checkForPackets
+      assertrange(packet_data.len,
+        sizeof(net::FragmentHeader), net::MAX_FRAGMENT_SIZE);
+
       for (ServerClient& client : server->clients)
       {
         if (mem::equal(client.connection.address, packet_address))
@@ -240,13 +244,32 @@ b8 update(Server* server)
           break;
         }
       }
+
+      // check for connection requests
+      net::Message message;
+      message.init(packet_data.arr, packet_data.len);
+      u32 protocol = message.readU32();
+      u32 sequence = message.readU32();
+      u32 ack_index = message.readU32();
+      u32 ack_bitfield = message.readU32();
+      u16 fragment_offset = message.readU16();
+      u16 data_size = message.readU16();
+      u16 netevent = message.readU16();
+      if (netevent == 1) // TODO(delle) non-hardcoded netevent
+      {
+        ServerClient* new_client = server->clients.push();
+        new_client->connection.init(net::Source::Server, packet_address,
+                                    &server->global_allocator);
+        message.readData(new_client->name.arr, ServerClient::MAX_NAME_LENGTH);
+        new_client->name.len = message.readU8();
+
+        @log.info("CONNECTED [", String::from(new_client->name.asSlice()),
+          "] from [", packet_address.toString(), "]\n");
+      }
     }
 
     // ping the server list
     // TODO(delle) server list
-
-    // check for connection requests
-    // TODO(delle) connections
   }
 
   if (server->state == ServerState::Ingame)
