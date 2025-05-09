@@ -31,6 +31,7 @@ struct CreateParams
   u64 global_allocation_size;
   u64 match_allocation_size;
   u64 tick_allocation_size;
+  s64 target_tickrate_ms;
   b8 dedicated;
   ServerPublicity publicity;
   u16 max_clients;

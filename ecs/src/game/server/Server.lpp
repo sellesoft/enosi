@@ -16,6 +16,7 @@ $ require "common"
 #include "iro/containers/Array.h"
 #include "iro/containers/StackArray.h"
 #include "iro/Logger.h"
+#include "iro/time/Time.h"
 
 @log.ger(server, Debug)
 
@@ -39,7 +40,7 @@ enum struct ServerState : u8
 struct ServerClient
 {
   net::Connection connection;
-  u64 last_acknowledge_monotonic;
+  TimePoint last_acknowledge_monotonic;
 
   static constexpr u32 MAX_NAME_LENGTH = 63;
   StackArray<u8, MAX_NAME_LENGTH + 1> name;
@@ -54,6 +55,8 @@ struct Server
   sv::ServerAllocator global_allocator; // cleared on deinit
   sv::ServerAllocator match_allocator; // cleared before each match
   sv::ServerAllocator tick_allocator; // cleared before each tick
+
+  TimeSpan target_timespan;
 
   sv::ServerState state;
   b8 dedicated;
@@ -110,6 +113,8 @@ Server* create(const CreateParams& params)
   auto deinit_tick_allocator_if_failure = deferWithCancel
     { server->tick_allocator.deinit(); };
 
+  server->target_timespan =
+    TimeSpan::fromMilliseconds(params.target_tickrate_ms);
   server->state = ServerState::Lobby;
   server->dedicated = params.dedicated;
   server->publicity = params.publicity;
@@ -208,6 +213,8 @@ b8 update(Server* server)
   assertpointer(server);
   @log.trace("deinitializing a server allocator\n");
 
+  iro::TimePoint start_timepoint = iro::TimePoint::monotonic();
+
   server->tick_allocator.clear();
 
   // check for incoming packets
@@ -275,6 +282,39 @@ b8 update(Server* server)
       if (client.connection.outgoing_message_pending_fragments)
       {
         client.connection.sendNextFragment();
+      }
+    }
+
+    // sleep if we're under tickrate budget
+    {
+      TimeSpan current_timespan = TimePoint::monotonic() - start_timepoint;
+      TimeSpan wait_timespan = TimeSpan::fromNanoseconds(
+        server->target_timespan.ns - current_timespan.ns);
+      if (wait_timespan.ns > 0)
+      {
+        platform::sleep(wait_timespan);
+      }
+      else
+      {
+        // TODO: trigger profiler export
+      }
+    }
+  }
+  else
+  {
+    // sleep if we're under tickrate budget
+    // NOTE: hardcoded 200ms tickrate in the lobby
+    {
+      TimeSpan current_timespan = TimePoint::monotonic() - start_timepoint;
+      TimeSpan wait_timespan = TimeSpan::fromNanoseconds(
+        TimeSpan::fromMilliseconds(200).ns - current_timespan.ns);
+      if (wait_timespan.ns > 0)
+      {
+        platform::sleep(wait_timespan);
+      }
+      else
+      {
+        // TODO: trigger profiler export
       }
     }
   }

@@ -123,6 +123,7 @@ $ end
       .global_allocation_size = unit::megabytes(1),
       .match_allocation_size = unit::megabytes(1),
       .tick_allocation_size = unit::megabytes(2),
+      .target_tickrate_ms = 48,
       .dedicated = true,
       .publicity = (password.len > 0)
         ? sv::ServerPublicity::Password : sv::ServerPublicity::Public,
