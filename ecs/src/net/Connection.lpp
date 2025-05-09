@@ -41,7 +41,7 @@ $ end -- if not IRO_WIN32
 
 using namespace iro;
 
-@log.ger(net.connection, Trace)
+@log.ger(net.connection, Debug)
 
 namespace net
 {

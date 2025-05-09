@@ -120,8 +120,8 @@ $ end
     sv::CreateParams server_params =
     {
       .engine = *this,
-      .global_allocation_size = unit::kilobytes(10),
-      .match_allocation_size = unit::kilobytes(100),
+      .global_allocation_size = unit::megabytes(1),
+      .match_allocation_size = unit::megabytes(1),
       .tick_allocation_size = unit::megabytes(2),
       .dedicated = true,
       .publicity = (password.len > 0)
@@ -134,7 +134,7 @@ $ end
   else
   {
     client = new Client;
-    
+
     if (!client->init(this))
       return FATAL("failed to initialize Client\n");
   }
