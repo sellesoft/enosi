@@ -1,4 +1,4 @@
-return Font
+return FontDef
 {
   name = "gohu",
   asset_path = "assets/fonts/gohu.bdf",
