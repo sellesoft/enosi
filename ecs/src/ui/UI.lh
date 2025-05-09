@@ -37,7 +37,7 @@ namespace ui
  */
 struct UI
 {
-  enum 
+  enum
   {
     MaxVertices = 0xffff,
     MaxIndices = (MaxVertices / 4) * 6,
@@ -82,7 +82,7 @@ struct UI
   Item* scrolling_item;
   b8 horizontal_scroll;
 
-  gfx::Font* gohu_font;
+  gfx::FontRef gohu_font_ref;
   gfx::Texture gohu_font_texture;
 
   gfx::Texture white_texture;
@@ -90,7 +90,7 @@ struct UI
   mem::LenientBump temp_alloc;
 
   // NOTE(sushi) don't like doing this, but currently moving UI to be under
-  //             Client and removing it just storing whatever stores it 
+  //             Client and removing it just storing whatever stores it
   //             (eg. it used to just store an Engine*) to move towards it
   //             being passed what it needs on update and init and stuff.
   //             This makes Item callbacks annoying, though, as then they
@@ -99,7 +99,7 @@ struct UI
   //             instead. Eventually though this needs to be changed.
   //             Especially removing the asset mgr, I don't like UI logic
   //             managing assets (like, inside widgets) and would like to
-  //             move towards these things being stored on data driven 
+  //             move towards these things being stored on data driven
   //             style structures, where each asset we use is known there
   //             and loaded all at one time.
   AssetMgr* assetmgr;
@@ -151,7 +151,7 @@ struct UI
   template<typename TItem>
   void end() { endItem(); }
 
-  // In Items which perform custom drawing, this helper can be used to 
+  // In Items which perform custom drawing, this helper can be used to
   // test if a region of the Item was clicked during its update callback.
   b8 testFocusableRegion(vec2f pos, vec2f size);
 
@@ -219,8 +219,8 @@ private:
   void genItemBranch(ItemNode* node);
 
   void emitDrawCmd(
-    DrawCmd* drawcmd, 
-    Item* item, 
+    DrawCmd* drawcmd,
+    Item* item,
     vec4f current_scissor);
 
   void emitDrawCmds(DeferredDrawCmdList& drawcmds);

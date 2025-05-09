@@ -18,7 +18,7 @@ using namespace iro;
 $$$
 local importer = require "reflect.Importer"
 {
-  patterns = 
+  patterns =
   {
     "src/**/*.defs.lh",
     "src/**/*.comp.lh",
@@ -46,7 +46,7 @@ $$$
 @@lpp.import "asset/SourceDataFileReg.lh"
 
 /* ----------------------------------------------------------------------------
- *  Helper for searching for the proper source type of an asset when its 
+ *  Helper for searching for the proper source type of an asset when its
  *  extension is not provided by the user. I think RTR handles this now,
  *  so maybe not needed and remove later!?!!?!!?
  */
@@ -68,13 +68,13 @@ $ end)
 }
 
 /* ----------------------------------------------------------------------------
- *  Helper for getting the proper data path of an asset, resolving its 
+ *  Helper for getting the proper data path of an asset, resolving its
  *  extension if not provided by the user.
  */
 static String getDataAssetPath(
-    PathBuffer* out, 
+    PathBuffer* out,
     String data_dir,
-    String name, 
+    String name,
     String type)
 {
   using namespace fs;
@@ -99,7 +99,7 @@ static String getDataAssetPath(
 }
 
 /* ----------------------------------------------------------------------------
- *  Helper for getting the proper source path of an asset, resolving its 
+ *  Helper for getting the proper source path of an asset, resolving its
  *  extension if not provided by the user.
  */
 static String getSourceAssetPath(
@@ -183,7 +183,7 @@ struct Compiler
   // AND MADE AN ERROR EVENTUALLY!
   b8 compile(void* x);
 
-  // Runtime type variant of the above function. Will select the correct 
+  // Runtime type variant of the above function. Will select the correct
   // function based on the type provided in the given String.
   b8 compile(String type, void* ptr);
 };
@@ -196,8 +196,8 @@ $ local function recordPlaced(decl)
 $   placed[decl.name] = decl
 $   placed_list:push(decl)
 $ end
-$ -- Sort of hacky way to handle typedef stuff. We unwrap types to their 
-$ -- declarations to place a compiler function for them, which loses the 
+$ -- Sort of hacky way to handle typedef stuff. We unwrap types to their
+$ -- declarations to place a compiler function for them, which loses the
 $ -- actual name the type may be referred to as in code. So we store types that
 $ -- we place here, so that we may handle them properly.
 $ local placed_types = {}
@@ -237,20 +237,20 @@ $ end
 @putNumberCompiler "f64"
 
 /* ----------------------------------------------------------------------------
- *  Special implementation for void*'s. Since we dont attribute meaning to 
+ *  Special implementation for void*'s. Since we dont attribute meaning to
  *  plain pointers in SourceData, we just write the pointer value and don't
- *  handle it at all. This is not an error, because some types that may 
+ *  handle it at all. This is not an error, because some types that may
  *  appear here may store void* for internal purposes (eg. Component atm)
  *  and its likely that the type storing the pointer will never actually
- *  appear in CompiledData. 
+ *  appear in CompiledData.
  *
- *  This should be handled better though. The current case for this is 
- *  Component, which we never want to compile into data atm, since we 
+ *  This should be handled better though. The current case for this is
+ *  Component, which we never want to compile into data atm, since we
  *  define Components using TypedStringMaps in source data. We can prob just
- *  explicitly mark the Component struct as not compiled, but I don't want 
+ *  explicitly mark the Component struct as not compiled, but I don't want
  *  to fiddle with that atm.
  *
- *  Eventually, though, we need to make this an error, as we never want a 
+ *  Eventually, though, we need to make this an error, as we never want a
  *  plain pointer appearing in data because its use is ambiguous.
  */
 b8 Compiler::compile(void* x)
@@ -272,14 +272,14 @@ b8 Compiler::compile(const String& str)
     {
       // Mark where in the data the String is going to appear.
       .string_offset = data_buffer->len,
-      // Mark where in the string table the String's content is going 
+      // Mark where in the string table the String's content is going
       // to appear.
       .data_offset = string_buffer->len,
       // Cache the length of the String (we can probably just put this in
       // the actual String data but whatever).
       .data_len = str.len,
     });
-    
+
     // Copy the contents into the String table.
     string_buffer->allocateString(str);
   }
@@ -297,7 +297,7 @@ $ recordPlaced(importer.p:lookupDecl "struct iro::utf8::String")
 template<>
 b8 Compiler::compile(const Color& color)
 {
-  writeData(color);  
+  writeData(color);
   return true;
 }
 $ recordPlaced(importer.p:lookupDecl "struct Color")
@@ -306,7 +306,7 @@ $ -- * ------------------------------------------------------------------------
 $ -- Place specializations of Compiler::compile for structure types.
 
 $ local function putStructCompiler(name, decl)
-$   -- Ensure that a compiler for each field type is defined before this 
+$   -- Ensure that a compiler for each field type is defined before this
 $   -- struct.
 $   for field in decl:eachFieldWithIndex() do
 $     if not field.metadata.hidden then
@@ -320,7 +320,7 @@ $   end
 template<>
 b8 Compiler::compile(const $(name)& x)
 {
-  // Cache start offset so we can assert that the data written matches the 
+  // Cache start offset so we can assert that the data written matches the
   // size of this type later.
   // TODO(sushi) this should only happen in debug.
   u64 start_offset = data_buffer->len;
@@ -336,8 +336,8 @@ $ -- Compile out each field of this struct, keeping track of the last field
 $ -- we compiled such that we may insert whatever padding may be there.
 $   local last_field
 $   for field in decl:eachFieldWithIndex() do
-  // Field '$(field.name)' 
-  //   offset: $(field.offset) 
+  // Field '$(field.name)'
+  //   offset: $(field.offset)
   //     size: $(field.type.size)
   //     type: $(field.type:tostring())
 $    if last_field then
@@ -515,7 +515,7 @@ $ local function putTypedPtrCompiler(name, decl)
 $   local subtype = decl.template_args[1]
 $   if subtype.name == "void" then
 $     -- Explicitly specialized after normal functions have been placed.
-$    return 
+$    return
 $   end
 $   local subdecl = subtype:getDecl()
 $   if not subdecl then
@@ -582,14 +582,14 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local function putTemplateSpecializationCompiler(name, decl)
-$   -- Ensure compilers for any type used as arguments to this template 
+$   -- Ensure compilers for any type used as arguments to this template
 $   -- are placed.
 $   for arg in decl.template_args:each() do
 $     if arg:is(ast.Type) then
 $       putTypeCompiler(arg)
 $     end
 $   end
-$   
+$
 $   local spec = decl.specialized_name
 $   if     "Array" == spec then
 $     error("Arrays are not supported in compiled data! Use ArrayDef instead")
@@ -621,7 +621,7 @@ $ local function putRecordCompiler(name, decl)
 $   for base in decl.bases:each() do
 $     putCompiler(base)
 $   end
-$ 
+$
 $   if decl == TAssetRef or decl:isDerivedFrom(TAssetRef) then
 $     return (putAssetRefCompiler(name, decl))
 $   end
@@ -629,7 +629,7 @@ $
 $   if decl == TResourceRef or decl:isDerivedFrom(TResourceRef) then
 $     return (putResourceRefCompiler(name, decl))
 $   end
-$  
+$
 $   if decl:is(ast.TemplateSpecialization) then
 $     return (putTemplateSpecializationCompiler(name, decl))
 $   elseif decl:is(ast.Struct) and decl.is_complete then
@@ -663,8 +663,8 @@ $   clog:debug(decl.name, "\n")
 $
 $   for to_place in place_queue:each() do
 $     if to_place == decl then
-$       -- If we find that something we want to place depends on a type we 
-$       -- are already going to place, forward declare its specialization 
+$       -- If we find that something we want to place depends on a type we
+$       -- are already going to place, forward declare its specialization
 $       -- to avoid explicit specialization after implicit errors.
 template<>
 b8 Compiler::compile(const $(decl.name)& x);
@@ -673,7 +673,7 @@ $     end
 $   end
 $
 $   place_queue:push(decl)
-$ 
+$
 $   if decl:is(ast.TagDecl) then
 $     if decl:is(ast.Record) then
 $       putRecordCompiler(importer.removeTag(decl.name), decl)
@@ -683,7 +683,7 @@ $     end
 $   elseif decl:is(ast.TypedefDecl) then
 $     putTypeCompiler(decl.subtype)
 $   end
-$ 
+$
 $   place_queue:pop()
 $   recordPlaced(decl)
 $ end
@@ -737,10 +737,10 @@ $   end
 $ end
 
 /* ----------------------------------------------------------------------------
- *  Explicit specialization of TypedPtr<void>, after we know all the types 
+ *  Explicit specialization of TypedPtr<void>, after we know all the types
  *  we can compile.
  *
- *  TODO(sushi) the reason this is necessary is probably redundant itself, 
+ *  TODO(sushi) the reason this is necessary is probably redundant itself,
  *              as this is only here so we can store the size of the pointee
  *              which is used when we have a pointer to an array to properly
  *              iterate elements. Since we already have the typename, we could
@@ -805,7 +805,7 @@ b8 CompiledData::compile(const CompileParams& params)
 
   // Resolve source and output file paths.
   PathBuffer source_path_buffer;
-  String source_path = 
+  String source_path =
     getSourceAssetPath(
       &source_path_buffer,
       params.name,
@@ -815,9 +815,9 @@ b8 CompiledData::compile(const CompileParams& params)
     return false;
 
  PathBuffer data_path_buffer;
-  String data_path = 
+  String data_path =
     getDataAssetPath(
-      &data_path_buffer, 
+      &data_path_buffer,
       params.assetmgr.getDataDir(),
       params.name,
       params.type);
@@ -828,9 +828,9 @@ b8 CompiledData::compile(const CompileParams& params)
   // Don't compile if up-to-date.
   if (!AssetMgr::checkNeedsCompiled(source_path, data_path))
     return true;
-  
+
   // Load source data that we are compiling.
-  SourceDataFileHandle source_data_file = 
+  SourceDataFileHandle source_data_file =
     params.sfile_reg.loadFromDisk(source_path);
 
   if (!source_data_file.isValid())
@@ -842,14 +842,14 @@ b8 CompiledData::compile(const CompileParams& params)
 
   if (root_data->type != params.type)
     return ERROR(
-      "returned type (", root_data->type, ") of ", source_path, 
+      "returned type (", root_data->type, ") from ", source_path,
       " differs from expected type ", params.type, "\n");
 
   // Pack the source data into binary data we can output.
   PackedData packed;
   defer { packed.clear(); };
 
-  PackContext pack_context = 
+  PackContext pack_context =
   {
     nullptr, nullptr,
     &packed,
@@ -857,7 +857,7 @@ b8 CompiledData::compile(const CompileParams& params)
 
   if (!packSourceDataFromType(*root_data, pack_context))
     return ERROR("failed to pack data of ", source_path, "\n");
- 
+
   if (!platform::makeDir(Path::removeBasename(data_path), true))
     return @log.error("failed to make directories\n");
 
@@ -917,8 +917,8 @@ b8 CompiledData::compile(const CompileParams& params)
     // Gather the next set of pointers we find in a separate buffer.
     CompiledPtrs next_pointers;
     compiler.pointers = &next_pointers;
-    
-    // Compile data that is pointed to by this type into their own blocks. 
+
+    // Compile data that is pointed to by this type into their own blocks.
     for (auto& ptr : pointers)
     {
       // Get the address of the pointer and what it points to.
@@ -935,7 +935,7 @@ b8 CompiledData::compile(const CompileParams& params)
       {
         u64 offset = data_buffer.len;
         void* pointee = (u8*)ptrdata + i * ptr.pointee_size;
-        
+
         if (!compiler.compile(ptr.pointee_type, pointee))
           return false;
       }
@@ -945,7 +945,7 @@ b8 CompiledData::compile(const CompileParams& params)
     if (next_pointers.isEmpty())
       break;
 
-    // Otherwise, swap the new pointers into the current list and 
+    // Otherwise, swap the new pointers into the current list and
     // compile them.
     next_pointers.move(&pointers);
   }
@@ -963,9 +963,9 @@ b8 CompiledData::compile(const CompileParams& params)
     // Get the String that we wrote into the buffer.
     auto* strptr = (String*)(data_buffer.ptr + str.string_offset);
 
-    // Pun it as an OffsetString and point to its content. This will break 
-    // if String ever becomes smaller than OffsetString but I believe that 
-    // should never happen. If for whatever reason it does, we'll probably 
+    // Pun it as an OffsetString and point to its content. This will break
+    // if String ever becomes smaller than OffsetString but I believe that
+    // should never happen. If for whatever reason it does, we'll probably
     // need a special String type used in data we expect to be compiled.
     OffsetString::setStringAsOffsetString(strptr, String::from(
       data_buffer.ptr + strings_start + str.data_offset,
@@ -982,13 +982,13 @@ b8 CompiledData::compile(const CompileParams& params)
   compiled->data.setSlice(
     data_buffer.ptr + data_start, data_buffer.len - data_start);
 
-  // The string table will be placed directly after the binary data, so 
+  // The string table will be placed directly after the binary data, so
   // point its slice there.
   compiled->strings.setSlice(
     data_buffer.ptr + data_buffer.len, strings_buffer.len);
 
   // Finally open the data file and write out our result.
-  auto data_file = 
+  auto data_file =
     File::from(data_path,
         OpenFlag::Write
       | OpenFlag::Truncate
@@ -1008,8 +1008,8 @@ b8 CompiledData::compile(const CompileParams& params)
 /* ----------------------------------------------------------------------------
  */
 CompiledData* CompiledData::load(
-    String name, 
-    String type, 
+    String name,
+    String type,
     AssetMgr& assetmgr,
     Asset** out_asset)
 {
@@ -1017,9 +1017,9 @@ CompiledData* CompiledData::load(
 
   PathBuffer data_path_buffer;
 
-  String data_path = 
+  String data_path =
     getDataAssetPath(
-      &data_path_buffer, 
+      &data_path_buffer,
       assetmgr.getDataDir(),
       name,
       type);
@@ -1213,11 +1213,11 @@ $   local TRef = importer.p:lookupDecl "struct Ref"
 $   if decl == TRef or decl:isDerivedFrom(TRef) then
 $     return (putGetRefRefs(name, decl))
 $   end
-$ 
+$
 $   if name == "iro::utf8::String" then
 $     return -- Explicitly a noop.
 $   end
-$   
+$
 $   if decl:is(ast.TemplateSpecialization) then
 $     return (putGetTemplateSpecializationRefs(name, decl))
 $   elseif decl:is(ast.Struct) and decl.is_complete then
@@ -1239,7 +1239,7 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 $ -- Loop for placing specializations of getRefs. This uses the cached off
-$ -- placement order of Compiler::compile specializations, so ideally 
+$ -- placement order of Compiler::compile specializations, so ideally
 $ -- we shouldn't run into issues with placement.
 
 $ for decl in placed_list:each() do
@@ -1455,7 +1455,7 @@ $ local function putFixRecordPointers(name, decl)
 $   if decl == TAssetRef or decl:isDerivedFrom(TAssetRef) then
 $     return (putFixAssetRefPointers(name, decl))
 $   end
-$ 
+$
 $   if decl == TResourceRef or decl:isDerivedFrom(TResourceRef) then
 $     return (putFixResourceRefPointers(name, decl))
 $   end
@@ -1463,7 +1463,7 @@ $
 $   if name == "iro::utf8::String" then
 $     return -- Explicitly implemented.
 $   end
-$ 
+$
 $   if decl:is(ast.TemplateSpecialization) then
 $     return (putFixTemplateSpecializationPointers(name, decl))
 $   elseif decl:is(ast.Struct) and decl.is_complete then
@@ -1485,7 +1485,7 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 $ -- Loop for placing specializations of fixPointers. This uses the cached off
-$ -- placement order of Compiler::compile specializations, so ideally 
+$ -- placement order of Compiler::compile specializations, so ideally
 $ -- we shouldn't run into issues with placement.
 
 $ for decl in placed_list:each() do

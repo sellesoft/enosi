@@ -61,11 +61,11 @@ void UI::destroyItem(Item* item)
     focused = nullptr;
 
   destroyItemChildren(item);
-    
+
   item->cleanup();
   item->style.deinit();
   item_tree.remove(item->node);
-  
+
   if (item->builtin.borders)
     item->builtin.borders->remove(this);
 
@@ -126,7 +126,7 @@ b8 UI::init(InitParams& params)
 
   if (!params.loader.load(&pipeline_defref, "assets/shaders/UI"_str))
     return ERROR("failed to load ui pipeline def\n");
-  
+
   if (!pipeline.init(*renderer, PushConstantSize, true, *pipeline_defref))
     return ERROR("failed to initialize ui pipeline\n");
 
@@ -156,7 +156,7 @@ b8 UI::init(InitParams& params)
   root->visible_size = root->size;
   root->name = "root"_str;
 
-  @ui.layout(root, 
+  @ui.layout(root,
   | pos: 0 0
   | size: $(viewport.size()))
 
@@ -169,14 +169,9 @@ b8 UI::init(InitParams& params)
 
   vertex_next = index_next = 0;
 
-  gohu_font = 
-    gfx::Font::load(
-      "assets/fonts/gohu"_str,
-      *assetmgr,
-      *renderer);
-  if (gohu_font == nullptr)
+  if(!params.loader.load(&gohu_font_ref, "assets/fonts/gohu"_str))
     return ERROR("failed to load gohu font\n");
-  gohu_font_texture = gohu_font->texture->gfx_texture;
+  gohu_font_texture = gohu_font_ref->getTexture();
 
   return true;
 }
@@ -215,7 +210,7 @@ b8 UI::update()
   DeferredDrawCmdList top_most_drawcmds;
   DrawCmdList debug_drawcmds;
 
-  UpdateTreeContext ctx = 
+  UpdateTreeContext ctx =
   {
     .top_most_drawcmds = &top_most_drawcmds,
     .current_transform = &base_transform,
@@ -482,7 +477,7 @@ $ end
         playout.border,
         parent->visible_size);
 
-    vec2f pext = 
+    vec2f pext =
       min(ppos + psiz, parent->visible_start + parent->visible_size);
 
     scoff = max(vec2f(0,0), max(ppos, min(cpos, pext)));
@@ -523,17 +518,17 @@ $ end
     vec2f item_bordered_pos = item_margined_pos + layout.border.tl();
     vec2f item_padded_pos   = item_bordered_pos + layout.padding.tl();
 
-    mat3x2 item_screen_transform = 
+    mat3x2 item_screen_transform =
       current_transform.mul(
         mat3x2::createTransform(item->pos_local, 0.f));
 
-    mat3x2 item_margined_transform = 
+    mat3x2 item_margined_transform =
       current_transform.mul(mat3x2::createTransform(item_margined_pos, 0.f));
 
-    mat3x2 item_bordered_transform = 
+    mat3x2 item_bordered_transform =
       current_transform.mul(mat3x2::createTransform(item_bordered_pos, 0.f));
 
-    mat3x2 item_padded_transform = 
+    mat3x2 item_padded_transform =
       current_transform.mul(mat3x2::createTransform(item_padded_pos, 0.f));
 
     ItemSpace current_space = ItemSpace::Invalid;
@@ -613,7 +608,7 @@ $ end
     if (child_ctx.hovered == nullptr)
     {
       if (math::pointInRect(
-            input.mouse.window, 
+            input.mouse.window,
             item->visible_start,
             item->calcVisualArea()) ||
           item->onHitTest(input.mouse.window - item->pos_screen))
@@ -658,18 +653,18 @@ $ end
       io::StaticBuffer<32> text;
       io::format(&text, item);
 
-      auto [vp, ip] = 
+      auto [vp, ip] =
         item->builtin.debug->realloc(
-          this, 
-          gfx::putBordersCounts() + 
+          this,
+          gfx::putBordersCounts() +
           2 * gfx::putFilledRectCounts());
 
       vec2f text_size = gfx::measureText(
-        text.asStr(), gohu_font, 11.f, 1.f);
+        text.asStr(), gohu_font_ref.deref(), 11.f, 1.f);
 
       item->builtin.debug->counts_used = {};
 
-      vec2f text_pos = 
+      vec2f text_pos =
         max(vec2f(0,0), min(item->pos_screen, root->size - text_size));
 
       gfx::putFilledRect(
@@ -705,7 +700,7 @@ $ end
         item->visible_size,
         0xff0000ff);
 
-      auto [tvp, tip] = 
+      auto [tvp, tip] =
         item->builtin.debug_text->realloc(
           this, gfx::putTextCounts(text.asStr()));
 
@@ -716,7 +711,7 @@ $ end
         &item->builtin.debug_text->counts_used,
         max(vec2f(0,0), min(item->pos_screen, root->size - text_size)),
         text.asStr(),
-        gohu_font,
+        gohu_font_ref.deref(),
         11.f, 1.f,
         0xffffffff,
         nullptr);
@@ -726,10 +721,10 @@ $ end
     }
   }
 
-  if (item->isHovered(this, Item::HoverKind::Child) && 
+  if (item->isHovered(this, Item::HoverKind::Child) &&
       item->max_scroll.y != 0.f && input.scroll != 0.f)
   {
-    item->scroll.y = 
+    item->scroll.y =
       min(0.f, max(item->max_scroll.y, item->scroll.y + 10 * input.scroll));
     item->dirty = true;
   }
@@ -947,7 +942,7 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
     flex.is_container = true;
     flex.effective_size =
       is_horizontal
-      ? @item.getPaddedWidth 
+      ? @item.getPaddedWidth
       : @item.getPaddedHeight;
     flex.ratio_sum = 0.f;
     flex.disp_horizontal = is_horizontal;
@@ -1026,7 +1021,7 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
       }
     }
 
-    // Calculate how many item sizes will need to be ceil'd rather than 
+    // Calculate how many item sizes will need to be ceil'd rather than
     // floored to properly fit inside the container.
     f32 floored_sum = 0.f;
     for (ItemNode* cnode = node->first_child; cnode; cnode = cnode->next)
@@ -1227,7 +1222,7 @@ $ end
 
         case @schema.anchor.top_right:
           if (!wauto)
-            child->pos_local.x = 
+            child->pos_local.x =
               (@item.getPaddedWidth - child->size.x) - @child.style.pos.x;
           else
             ERROR("item's anchor is specified as top_right, but the item's"
@@ -1238,14 +1233,14 @@ $ end
 
         case @schema.anchor.bottom_right:
           if (!wauto)
-            child->pos_local.x = 
+            child->pos_local.x =
               (@item.getPaddedWidth - child->size.x) - @child.style.pos.x;
           else
             ERROR("item's anchor is specified as bottom_right, but the item's"
                   "width is set to auto\n");
 
           if (!hauto)
-            child->pos_local.y = 
+            child->pos_local.y =
               (@item.getPaddedHeight - child->size.y) - @child.style.pos.y;
           else
             ERROR("item's anchor is specified as bottom_right, but the item's"
@@ -1254,7 +1249,7 @@ $ end
 
         case @schema.anchor.bottom_left:
           if (!hauto)
-            child->pos_local.y = 
+            child->pos_local.y =
               (@item.getPaddedHeight - child->size.y) - @child.style.pos.y;
           else
             ERROR("item's anchor is specified as bottom_left, but the item's"
@@ -1369,7 +1364,7 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
         parent_flex->is_container &&
         !parent_flex->disp_horizontal)
     {
-      item->size.x = 
+      item->size.x =
         bounds.h / parent_flex->ratio_sum * parent_flex->effective_size;
 
       if (parent_flex->n_ceils)
@@ -1390,7 +1385,7 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
       else if (parent->layout.sizing.test(Sizing::PercentY))
         item->size.y = bounds.h / 100.f * parent->getPaddedHeight();
       else if (parent->layout.bounds.h >= 0.f)
-        item->size.y = bounds.h / 100.f * 
+        item->size.y = bounds.h / 100.f *
                        parent->getPaddedStyleHeight();
       else
       {
@@ -1400,7 +1395,7 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
       }
     }
     else
-      item->size.y = 
+      item->size.y =
         bounds.h + layout.margin.hsum() + layout.border.hsum();
   }
   else
@@ -1409,11 +1404,11 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
   if (!wauto)
   {
     if (sizing.test(Sizing::Flex) &&
-        parent_flex && 
+        parent_flex &&
         parent_flex->is_container &&
         parent_flex->disp_horizontal)
     {
-      item->size.x = 
+      item->size.x =
         bounds.w / parent_flex->ratio_sum * parent_flex->effective_size;
 
       if (parent_flex->n_ceils)
@@ -1443,19 +1438,19 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
       }
     }
     else
-      item->size.x = 
+      item->size.x =
         bounds.w + layout.margin.hsum() + layout.border.hsum();
   }
   else
     item->size.x = 0;
-  
+
   // Determine info needed to flex children if this is a flex container.
   if (display.test(Display::Flex))
   {
     b8 is_horizontal = layout.display.test(Display::Horizontal);
 
     flex.is_container = true;
-    flex.effective_size = 
+    flex.effective_size =
       is_horizontal? item->getPaddedWidth() : item->getPaddedHeight();
     flex.ratio_sum = 0.f;
     flex.disp_horizontal = is_horizontal;
@@ -1526,7 +1521,7 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
       }
     }
 
-      // Calculate how many item sizes will need to be ceil'd rather than 
+      // Calculate how many item sizes will need to be ceil'd rather than
     // floored to properly fit inside the container.
     f32 floored_sum = 0.f;
     for (ItemNode* cnode = node->first_child; cnode; cnode = cnode->next)
@@ -1561,8 +1556,8 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
   vec2f max_extent = {};
   if (item->shouldPlaceChildren())
   {
-    vec2f cursor = 
-      layout.margin.tl() + 
+    vec2f cursor =
+      layout.margin.tl() +
       layout.padding.tl() +
       layout.border.tl();
 
@@ -1577,7 +1572,7 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
     // Keep stuff aligned to pixels nicely.
     cursor = floor(cursor);
 
-    ItemNode* it = 
+    ItemNode* it =
       (display.test(Display::Reverse)
        ? node->last_child
        : node->first_child);
@@ -1593,9 +1588,9 @@ void UI::evalItemBranch(ItemNode* node, FlexContext* parent_flex)
       if (clayout.display.test(Display::Hidden))
       {
         assert(it != it->next);
-        it = 
+        it =
           display.test(Display::Reverse)
-          ? it->prev 
+          ? it->prev
           : it->next;
         continue;
       }
@@ -1620,7 +1615,7 @@ $ local function placeAnchorSwitch()
 
       case Anchor::TopRight:
         if (!wauto)
-          child->pos_local.x = 
+          child->pos_local.x =
             item->getPaddedWidth() - child->size.x - clayout.bounds.x;
         else
           ERROR("item's anchor was specified as TopRight but the item's "
@@ -1630,13 +1625,13 @@ $ local function placeAnchorSwitch()
 
       case Anchor::BottomRight:
         if (!wauto)
-          child->pos_local.x = 
+          child->pos_local.x =
             item->getPaddedWidth() - child->size.x - clayout.bounds.x;
         else
           ERROR("item's anchor was specified as BottomRight but the item's "
                 "width is set to auto\n");
         if (!hauto)
-          child->pos_local.y = 
+          child->pos_local.y =
             item->getPaddedHeight() - child->size.y - clayout.bounds.y;
         else
           ERROR("item's anchor was specified as BottomRight but the item's "
@@ -1647,7 +1642,7 @@ $ local function placeAnchorSwitch()
         child->pos_local.x += clayout.bounds.x;
 
         if (!hauto)
-          child->pos_local.y = 
+          child->pos_local.y =
             item->getPaddedHeight() - child->size.y - clayout.bounds.y;
         else
           ERROR("item's anchor was specified as BottomRight but the item's "
@@ -1663,9 +1658,9 @@ $ end
         {
           if (!hauto)
           {
-            child->pos_local.y = 
+            child->pos_local.y =
               cursor.y +
-              clayout.alignment.y * 
+              clayout.alignment.y *
               (item->getPaddedHeight() - child->size.y);
           }
           else
@@ -1678,9 +1673,9 @@ $ end
         {
           if (!wauto)
           {
-            child->pos_local.x = 
-              cursor.x + 
-              clayout.alignment.x * 
+            child->pos_local.x =
+              cursor.x +
+              clayout.alignment.x *
               (item->getPaddedWidth() - child->size.x);
           }
           else
@@ -1709,11 +1704,11 @@ $ end
       if (hauto)
         item->size.y = max(item->size.y, child->pos_local.y + child->size.y);
 
-      max_extent = 
+      max_extent =
         max(max_extent, child->pos_local + child->size - item->scroll);
 
       assert(it != it->next);
-      it = 
+      it =
         display.test(Display::Reverse)
         ? it->prev
         : it->next;
@@ -1721,19 +1716,19 @@ $ end
   }
 
   if (wauto)
-    item->size.x += 
+    item->size.x +=
       layout.padding.right() + layout.margin.right() + layout.border.right();
 
   if (hauto)
-    item->size.y += 
-      layout.padding.bottom() + layout.margin.bottom() + 
+    item->size.y +=
+      layout.padding.bottom() + layout.margin.bottom() +
       layout.border.bottom();
 
-  item->max_scroll = 
+  item->max_scroll =
     min(vec2f(0,0),
-      item->size - max_extent - 
+      item->size - max_extent -
       layout.padding.br() -
-      layout.border.br() - 
+      layout.border.br() -
       layout.margin.br());
 
   item->size = max(item->size, item->getMinSize(this));
@@ -1959,15 +1954,15 @@ b8 UI::testHoverableRegion(vec2f pos, vec2f size)
 /* ----------------------------------------------------------------------------
  */
 void UI::emitDrawCmd(
-    DrawCmd* drawcmd, 
-    Item* item, 
+    DrawCmd* drawcmd,
+    Item* item,
     vec4f current_scissor)
 {
   if (drawcmd->counts_used.y == 0)
     return;
 
-  b8 drawcmd_scissor = 
-    item != nullptr && 
+  b8 drawcmd_scissor =
+    item != nullptr &&
     drawcmd->scissor != vec4f(-1.f, -1.f, -1.f, -1.f);
 
   if (drawcmd_scissor)
@@ -1982,11 +1977,11 @@ void UI::emitDrawCmd(
 
     scissor_x = max(scissor_x, current_scissor.x);
     scissor_y = max(scissor_y, current_scissor.y);
-    scissor_w = 
+    scissor_w =
       min(
-        scissor_w, 
+        scissor_w,
         max(0.f, current_scissor.x + current_scissor.z - scissor_x));
-    scissor_h = 
+    scissor_h =
       min(
         scissor_h,
         max(0.f, current_scissor.y + current_scissor.w - scissor_y));
