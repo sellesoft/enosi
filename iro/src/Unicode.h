@@ -18,12 +18,12 @@
 namespace iro::utf8
 {
 
-/* 
+/*
  *  Using https://github.com/JuliaStrings/utf8proc/blob/master/utf8proc.c
  *  as a reference for some of this stuff.
  */
 
-// Returns how many bytes are needed to encode the given 
+// Returns how many bytes are needed to encode the given
 // codepoint. If 0 is returned then the given code point
 // should not be encoded.
 u8 bytesNeededToEncodeCharacter(u32 codepoint);
@@ -31,7 +31,7 @@ u8 bytesNeededToEncodeCharacter(u32 codepoint);
 b8 isContinuationByte(u8 c);
 
 /* ============================================================================
- *  Representation of an encoded character with enough space for a 4 byte 
+ *  Representation of an encoded character with enough space for a 4 byte
  *  character and a count of how many bytes were used.
  */
 struct Char
@@ -48,7 +48,7 @@ struct Char
 Char encodeCharacter(u32 codepoint);
 
 /* ============================================================================
- *  Representation of a decoded unicode codepoint along with the number of 
+ *  Representation of a decoded unicode codepoint along with the number of
  *  bytes needed it to represent it in utf8.
  */
 struct Codepoint
@@ -67,7 +67,7 @@ struct Codepoint
 
 // Attempt to decode the character at 's' into 'codepoint'.
 // If decoding fails for any reason, false is returned.
-// TODO(sushi) it may be nice to have an 'unsafe' version w all the valid checks disabled 
+// TODO(sushi) it may be nice to have an 'unsafe' version w all the valid checks disabled
 //             if we're ever confident we're dealing with proper utf8 strings
 Codepoint decodeCharacter(u8* s, s32 slen);
 
@@ -87,7 +87,7 @@ struct String
   operator Bytes() const { return {ptr, len}; }
 
   // where 'end' is a pointer to the byte AFTER the last of the range desired
-  static inline String from(u8* start, u8* end) 
+  static inline String from(u8* start, u8* end)
     { assert(start <= end); return {start, u64(end - start)}; }
   static inline String from(u8* start, u64 len) { return {start, len}; }
   static inline String from(Slice<u8> slice) { return {slice.ptr, slice.len}; }
@@ -107,25 +107,25 @@ struct String
   // Increments this String by n bytes.
   void increment(s32 n) { n = (n > len? len : n); ptr += n; len -= n; }
 
-  // If the provided buffer is large enough, copy this 
+  // If the provided buffer is large enough, copy this
   // String into it followed by a null terminator and return true.
   // Otherwise return false;
   b8 nullTerminate(u8* buffer, s32 buffer_len) const;
 
-  // Allocates a nullterminated copy of this string using the provided 
+  // Allocates a nullterminated copy of this string using the provided
   // allocator. The length of the returned string will be the same.
   String nullTerminate(mem::Allocator* allocator) const;
 
   String sub(s32 start) const
-  { 
-    assert(start >= 0 && start < len); 
-    return {ptr + start, len - start}; 
+  {
+    assert(start >= 0 && start < len);
+    return {ptr + start, len - start};
   }
-  
+
   String sub(s32 start, s32 end) const
-  { 
-    assert(start >= 0 && start <= end && end <= len); 
-    return {ptr + start, u64(end - start)};  
+  {
+    assert(start >= 0 && start <= end && end <= len);
+    return {ptr + start, u64(end - start)};
   }
 
   // Returns nil if no occurance of c is found.
@@ -175,8 +175,8 @@ struct String
   pos findLastNot(u8 c) const;
 
   void split(
-      u8 c, 
-      ExpandableContainer<String> auto* container, 
+      u8 c,
+      ExpandableContainer<String> auto* container,
       b8 remove_empty = true) const
   {
     String scan = *this;
@@ -247,13 +247,47 @@ inline u64 stringHash(const String* x)
   return seed;
 }
 
-}
+/* ============================================================================
+ */
+template<u64 Capacity>
+struct StackString
+{
+  u8 ptr[Capacity] = {};
+  u64 len = 0;
+
+  /* --------------------------------------------------------------------------
+   */
+  u64 capacity() { return Capacity; }
+
+  /* --------------------------------------------------------------------------
+   */
+  String asString()
+  {
+    return {ptr, len};
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  u8& operator[](u64 i) { assert(i < len); return ptr[i]; }
+  const u8& operator[](u64 i) const { assert(i < len); return ptr[i]; }
+
+  u8* begin() { return ptr; }
+  u8* end() { return ptr + len; }
+
+  const u8* begin() const { return ptr; }
+  const u8* end() const { return ptr + len; }
+};
+
+} // namespace iro::utf8
 
 namespace iro
 {
-// since we only use utf8 internally, just bring the string type into the 
+// since we only use utf8 internally, just bring the string type into the
 // global namespace
 using String  = utf8::String;
+
+template<u64 Capacity>
+using StackString  = utf8::StackString<Capacity>;
 
 static String operator ""_str (const char* s, size_t len)
 {
@@ -263,7 +297,7 @@ static String operator ""_str (const char* s, size_t len)
 }
 
 DefineNilValue(iro::utf8::String, {nullptr}, { return x.ptr == nullptr; });
-DefineNilValue(iro::utf8::Codepoint, {(u32)-1}, 
+DefineNilValue(iro::utf8::Codepoint, {(u32)-1},
     { return x.codepoint == (u32)-1; });
 
 #endif // _iro_unicode_h

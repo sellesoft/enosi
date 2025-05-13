@@ -33,6 +33,7 @@ if sys.os == "windows" then
     {
       "../shaderc/include",
       vulkan_path.."/Include",
+      "../hash",
     }
   }
 
@@ -49,7 +50,11 @@ if sys.os == "windows" then
 elseif sys.os == "linux" then
   ecs.report.dir.include
   {
-    direct = { "../shaderc/include", }
+    direct =
+    {
+      "../shaderc/include",
+      "../hash",
+    }
   }
 
   ecs.report.dir.lib
@@ -72,6 +77,7 @@ end
 for cfile in lake.find "src/**/*.cpp" :each() do
   ecs.report.CppObj(cfile)
 end
+ecs.report.CppObj("../hash/Hash.cpp")
 
 
 local ecs_bobjs =

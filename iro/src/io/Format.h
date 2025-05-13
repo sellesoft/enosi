@@ -1,8 +1,8 @@
 /*
  *  Formatting utils.
  *
- *  This file is for defining the 'format' interface. Format functions for 
- *  types other than the formatting wrappers and primitive types should go 
+ *  This file is for defining the 'format' interface. Format functions for
+ *  types other than the formatting wrappers and primitive types should go
  *  where those types are defined.
  *
  *  Eg. the format function for JSON is next to its definition, not here.
@@ -21,8 +21,8 @@ namespace iro::io
 struct IO;
 
 /* ----------------------------------------------------------------------------
- *  Defines the interface for 'format' functions, which take an IO* to write to 
- *  and a variable of some type and is expected to write some formatted output 
+ *  Defines the interface for 'format' functions, which take an IO* to write to
+ *  and a variable of some type and is expected to write some formatted output
  *  to the given IO* then return the number of bytes written.
  */
 template<typename T>
@@ -52,6 +52,14 @@ s64 format(IO* io, const char* x);
 
 /* ----------------------------------------------------------------------------
  */
+template<u64 Capacity>
+s64 format(IO* io, const StackString<Capacity>& x)
+{
+  return format(io, x.asString());
+}
+
+/* ----------------------------------------------------------------------------
+ */
 s64 formatv(IO* io, Formattable auto&&... args)
 {
   s64 accumulator = 0;
@@ -60,14 +68,14 @@ s64 formatv(IO* io, Formattable auto&&... args)
 }
 
 /* ----------------------------------------------------------------------------
- *  Types that wrap other formattable types and perform extra formatting on 
+ *  Types that wrap other formattable types and perform extra formatting on
  *  top of them.
  *
  *  TODO(sushi) build up a larger library of formatters later
  */
 
 /* ============================================================================
- */ 
+ */
 template<typename T>
 struct SanitizeControlCharacters
 {
@@ -82,7 +90,7 @@ s64 format(IO* io, const SanitizeControlCharacters<char>& x);
 s64 format(IO* io, const SanitizeControlCharacters<String>& x);
 
 /* ============================================================================
- */ 
+ */
 template<typename T>
 struct Hex
 {
@@ -100,7 +108,7 @@ s64 format(IO* io, Hex<s32> x);
 s64 format(IO* io, Hex<s64> x);
 
 /* ============================================================================
- */ 
+ */
 struct ByteUnits
 {
   u64 x;
