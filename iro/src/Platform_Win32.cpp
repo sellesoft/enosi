@@ -1893,7 +1893,7 @@ u64 byteSwap(u64 x)
 
 /* ----------------------------------------------------------------------------
  */
-void* reserve_memory(u64 size)
+void* reserveMemory(u64 size)
 {
   void* result = VirtualAlloc(nullptr, size, MEM_RESERVE, PAGE_READWRITE);
   if (result == nullptr)
@@ -1907,7 +1907,7 @@ void* reserve_memory(u64 size)
 
 /* ----------------------------------------------------------------------------
  */
-b8 commit_memory(void* ptr, u64 size)
+b8 commitMemory(void* ptr, u64 size)
 {
   b8 result = (VirtualAlloc(ptr, size, MEM_COMMIT, PAGE_READWRITE) != nullptr);
   if (!result)
@@ -1921,7 +1921,7 @@ b8 commit_memory(void* ptr, u64 size)
 
 /* ----------------------------------------------------------------------------
  */
-void* reserve_large_memory(u64 size)
+void* reserveLargeMemory(u64 size)
 {
   // NOTE(delle) win32 requires large pages to be committed and reserved
   void* result = VirtualAlloc(nullptr, size,
@@ -1937,21 +1937,21 @@ void* reserve_large_memory(u64 size)
 
 /* ----------------------------------------------------------------------------
  */
-b8 commit_large_memory(void* ptr, u64 size)
+b8 commitLargeMemory(void* ptr, u64 size)
 {
   return true;
 }
 
 /* ----------------------------------------------------------------------------
  */
-void decommit_memory(void* ptr, u64 size)
+void decommitMemory(void* ptr, u64 size)
 {
   VirtualFree(ptr, size, MEM_DECOMMIT);
 }
 
 /* ----------------------------------------------------------------------------
  */
-void release_memory(void* ptr, u64 size)
+void releaseMemory(void* ptr, u64 size)
 {
   // NOTE(delle) size not used on win32
   VirtualFree(ptr, 0, MEM_RELEASE);

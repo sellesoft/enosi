@@ -60,6 +60,11 @@ struct TypedResourceRef : ResourceRef
     assert(resource != nullptr);
     return *(TResource*)resource;
   }
+
+  TResource* deref()
+  {
+    return (TResource*)resource;
+  }
 };
 
 struct CompiledTexture;

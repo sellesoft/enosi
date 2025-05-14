@@ -39,7 +39,7 @@ namespace ui
  */
 struct UI
 {
-  enum 
+  enum
   {
     MaxVertices = 0xffff,
     MaxIndices = (MaxVertices / 4) * 6,
@@ -95,7 +95,7 @@ struct UI
   s32 cursor_track_pos = 0;
 
   // NOTE(sushi) don't like doing this, but currently moving UI to be under
-  //             Client and removing it just storing whatever stores it 
+  //             Client and removing it just storing whatever stores it
   //             (eg. it used to just store an Engine*) to move towards it
   //             being passed what it needs on update and init and stuff.
   //             This makes Item callbacks annoying, though, as then they
@@ -104,7 +104,7 @@ struct UI
   //             instead. Eventually though this needs to be changed.
   //             Especially removing the asset mgr, I don't like UI logic
   //             managing assets (like, inside widgets) and would like to
-  //             move towards these things being stored on data driven 
+  //             move towards these things being stored on data driven
   //             style structures, where each asset we use is known there
   //             and loaded all at one time.
   AssetMgr* assetmgr;
@@ -221,8 +221,8 @@ private:
   void evalItemBranch(ItemNode* node, FlexContext* flex);
 
   void emitDrawCmd(
-    DrawCmd* drawcmd, 
-    Item* item, 
+    DrawCmd* drawcmd,
+    Item* item,
     vec4f current_scissor);
 
   void emitDrawCmds(DeferredDrawCmdList& drawcmds);

@@ -10,12 +10,16 @@ $ if IRO_WIN32 then
 #undef min
 #undef interface
 
+struct InputMgr;
+
 struct Win32Stuff
 {
   HINSTANCE h_console_instance;
 
   HWND dummy_window_handle;
   HDC  dummy_window_device_handle;
+
+  InputMgr* input;
 };
 
 extern Win32Stuff win32;

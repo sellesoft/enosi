@@ -73,12 +73,14 @@ $ end
     sv::CreateParams server_params =
     {
       .engine = *this,
-      .global_allocation_size = unit::kilobytes(10),
-      .match_allocation_size = unit::kilobytes(100),
+      .global_allocation_size = unit::megabytes(1),
+      .match_allocation_size = unit::megabytes(1),
       .tick_allocation_size = unit::megabytes(2),
+      .target_tickrate_ms = 48,
       .dedicated = true,
       .publicity = (password.len > 0)
         ? sv::ServerPublicity::Password : sv::ServerPublicity::Public,
+      .max_clients = 8,
       .password = password,
     };
     server = sv::create(server_params);

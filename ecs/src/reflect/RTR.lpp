@@ -5,6 +5,7 @@ $$$
 local importer = require "reflect.Importer"
 {
   patterns = { "src/**/*.lh", },
+  excludes = { "src/graphics/RendererInternal.lh" },
 }
 $$$
 

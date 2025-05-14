@@ -1,0 +1,341 @@
+/*
+ * TODO: The reference uses a huffman coding algorithm to compress the data,
+ *   but it's a bit complicated so I'm putting it off until we need to
+ *   optimize bandwidth. The main complication is less-so with the algorithm
+ *   but instead building the skewed dataset so there's actually benefits. It
+ *   also seems that if we need to build a skewed dataset to fit to the
+ *   average data we send in a message, maybe we could instead do more a
+ *   specific mathematical analysis of the contents of a message to have a
+ *   better compression. Something to look into.     -delle (April 14, 2025)
+ *
+ * References:
+ *   https://github.com/id-Software/Quake-III-Arena/blob/master/code/qcommon/qcommon.h
+ */
+$ require "common"
+
+@@lpp.import "net/Message.lh"
+
+#include "iro/Common.h"
+#include "iro/Logger.h"
+#include "iro/memory/Memory.h"
+
+#include <bit>
+#include <cassert>
+
+using namespace iro;
+
+@log.ger(net.message, Info)
+
+namespace net
+{
+
+/* ----------------------------------------------------------------------------
+ */
+void Message::init(u8* data, u16 size)
+{
+  @log.trace("initializing message with ", size, " bytes\n");
+  if (size > MAX_SIZE)
+  {
+    @log.error("attempted to initialize a message with more bytes than"
+                      " the max size (", Message::MAX_SIZE, ")");
+    return;
+  }
+
+  this->data = data;
+  this->cursor = 0;
+  this->size = size;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<u64 BITS>
+void Message::writeBits(u64 value)
+{
+  static_assert(BITS > 0 && BITS <= 64);
+  if constexpr (BITS != 64)
+    assert(value < ((1ULL << BITS) - 1ULL));
+  @log.trace("writing bits to message\n");
+  @log.debug("offset: ", this->size, ", value: ", value,
+             ", bits: ", BITS, "\n");
+
+  if ((Message::MAX_SIZE - this->size) / 8 < BITS)
+  {
+    @log.warn("message overflow\n");
+    this->cursor = MAX_U32;
+    return;
+  }
+
+  if constexpr (BITS == 8)
+  {
+    this->data[this->size] = (u8)value;
+    this->size += 1;
+    this->cursor += 8;
+  }
+  else if constexpr (BITS == 16)
+  {
+    u16* p = (u16*)&this->data[this->size];
+    *p = (u16)value;
+    this->size += 2;
+    this->cursor += 16;
+  }
+  else if constexpr (BITS == 32)
+  {
+    u32* p = (u32*)&this->data[this->size];
+    *p = (u32)value;
+    this->size += 4;
+    this->cursor += 32;
+  }
+  else if constexpr (BITS == 64)
+  {
+    u64* p = (u64*)&this->data[this->size];
+    *p = value;
+    this->size += 8;
+    this->cursor += 64;
+  }
+  else
+  {
+    static_assert(!"arbitrary bit size writing not setup yet");
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Message::writeU8(u8 value)
+{
+  this->writeBits<8>((u64)value);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Message::writeS8(s8 value)
+{
+  this->writeBits<8>((u64)std::bit_cast<u8,s8>(value));
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Message::writeU16(u16 value)
+{
+  this->writeBits<16>((u64)value);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Message::writeS16(s16 value)
+{
+  this->writeBits<16>((u64)std::bit_cast<u16,s16>(value));
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Message::writeU32(u32 value)
+{
+  this->writeBits<32>((u64)value);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Message::writeS32(s32 value)
+{
+  this->writeBits<32>((u64)std::bit_cast<u32,s32>(value));
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Message::writeU64(u64 value)
+{
+  this->writeBits<64>(value);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Message::writeS64(s64 value)
+{
+  this->writeBits<64>(std::bit_cast<u64,s64>(value));
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Message::writeF32(f32 value)
+{
+  this->writeBits<32>((u64)std::bit_cast<u32,f32>(value));
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Message::writeAngle8(f32 angle)
+{
+  this->writeBits<8>((u64)(angle * (255.0f * 360.0f)) & 255);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Message::writeAngle16(f32 angle)
+{
+  this->writeBits<16>((u64)(angle / 65535.0f * 360.0f) & 65535);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Message::writeData(const u8* data, u16 bytes)
+{
+  constexpr u32 max_cursor = (u32)Message::MAX_SIZE * 8;
+  for (u16 i = 0; i < bytes && this->cursor < max_cursor; i++)
+    this->writeBits<8>(data[i]);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Message::writeDebug(u8 value)
+{
+$ if ECS_DEBUG then
+  this->writeU8(value);
+$ end -- if ECS_DEBUG
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<u64 BITS>
+u64 Message::readBits()
+{
+  static_assert(BITS > 0 && BITS <= 64);
+  @log.trace("reading bits to message\n");
+
+  u32 byte_cursor = this->cursor / 8;
+  if ((this->size - byte_cursor) < (BITS * 8))
+  {
+    @log.warn("message overflow\n");
+    this->cursor = this->size;
+    return 0;
+  }
+
+  u64 value = 0;
+  if constexpr (BITS == 8)
+  {
+    value = (u64)this->data[byte_cursor];
+    this->cursor += 8;
+  }
+  else if constexpr (BITS == 16)
+  {
+    u16* p = (u16*)&this->data[byte_cursor];
+    value = (u64)*p;
+    this->cursor += 16;
+  }
+  else if constexpr (BITS == 32)
+  {
+    u32* p = (u32*)&this->data[byte_cursor];
+    value = (u64)*p;
+    this->cursor += 32;
+  }
+  else if constexpr (BITS == 64)
+  {
+    u64* p = (u64*)&this->data[byte_cursor];
+    value = *p;
+    this->cursor += 64;
+  }
+  else
+  {
+    static_assert(!"arbitrary bit size reading not setup yet");
+  }
+  @log.debug("offset: ", this->cursor, ", value: ", value,
+             ", bits: ", BITS, "\n");
+
+  return value;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+u8 Message::readU8()
+{
+  return (u8)this->readBits<8>();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+s8 Message::readS8()
+{
+  return std::bit_cast<s8,u8>((u8)this->readBits<8>());
+}
+
+/* ----------------------------------------------------------------------------
+ */
+u16 Message::readU16()
+{
+  return (u16)this->readBits<16>();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+s16 Message::readS16()
+{
+  return std::bit_cast<s16,u16>((u16)this->readBits<16>());
+}
+
+/* ----------------------------------------------------------------------------
+ */
+u32 Message::readU32()
+{
+  return (u32)this->readBits<32>();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+s32 Message::readS32()
+{
+  return std::bit_cast<s32,u32>((u32)this->readBits<32>());
+}
+
+/* ----------------------------------------------------------------------------
+ */
+u64 Message::readU64()
+{
+  return (u64)this->readBits<64>();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+s64 Message::readS64()
+{
+  return std::bit_cast<s64,u64>(this->readBits<8>());
+}
+
+/* ----------------------------------------------------------------------------
+ */
+f32 Message::readF32()
+{
+  return std::bit_cast<f32,u32>((u32)this->readBits<32>());
+}
+
+/* ----------------------------------------------------------------------------
+ */
+f32 Message::readAngle8()
+{
+  return ((f32)this->readBits<8>() * (360.0f / 255.0f));
+}
+
+/* ----------------------------------------------------------------------------
+ */
+f32 Message::readAngle16()
+{
+  return ((f32)this->readBits<16>() * (65535.0f / 255.0f));
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Message::readData(u8* data, u16 bytes)
+{
+  constexpr u32 max_cursor = (u32)Message::MAX_SIZE * 8;
+  for (u16 i = 0; i < bytes && this->cursor < max_cursor; i++)
+    data[i] = this->readBits<8>();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Message::readDebug(u8 value)
+{
+$ if ECS_DEBUG then
+  assert(value == this->readU8());
+$ end -- if ECS_DEBUG
+}
+
+} // namespace net

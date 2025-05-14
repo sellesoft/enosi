@@ -1,19 +1,20 @@
 /*
- * A connection for writing/reading packets to/from an address in sequence.
+ * A connection for communicating sequenced messages with an address.
  */
 $ require "common"
 
 @@lpp.import "net/Address.lh"
+@@lpp.import "net/Message.lh"
 
 #include "iro/Common.h"
+#include "iro/containers/StackArray.h"
+
+namespace iro::mem{ struct Allocator; }
 
 namespace net
 {
 
-struct Packet;
-
-b8 init();
-void deinit();
+struct QueuedMessage;
 
 /* ============================================================================
  */
@@ -23,25 +24,71 @@ enum struct Source
   Server,
 };
 
-Packet* getOfflinePacket(Source source);
+/* ============================================================================
+ */
+// TODO(delle) networking data_size might be unnecessary
+struct FragmentHeader
+{
+  u32 protocol; // validate this is a packet we care about
+  u32 sequence_index; // sequence index of this message
+  u32 ack_index; // sequence index of the last message received
+  u32 ack_bitfield; // each bit acknowledges the indexes before ack_index
+  u16 fragment_offset; // offset into the message
+  u16 data_size; // number of bytes after this header
+};
+
+static constexpr u16 MAX_FRAGMENT_SIZE = 1200;
+static constexpr u16 MAX_FRAGMENT_DATA_SIZE =
+  MAX_FRAGMENT_SIZE - sizeof(FragmentHeader);
 
 /* ============================================================================
  */
 struct Connection
 {
-  int socket_handle = 0;
   Address address;
 
-  u32 incoming_sequence;
-  u32 outgoing_sequence;
-  u32 dropped_count;
+  u32 acknowledged_sequence;
+  u32 acknowledged_bitfield;
 
-  b8 init(Address address);
-  void deinit();
+  u32 incoming_message_sequence;
+  u32 incoming_fragment_sequence;
+  u16 incoming_message_size;
+  b8 incoming_message_pending_fragments;
+  u8 incoming_message_data[Message::MAX_SIZE];
 
-  b8 send(Source source, const Packet& packet);
-  b8 sendPriorityMessage(Source source, const u8* data, u32 size);
-  b8 read(Source source, Packet& packet);
+  u32 outgoing_message_sequence;
+  u16 outgoing_message_size;
+  u16 outgoing_message_pending_offset;
+  b8 outgoing_message_pending_fragments;
+  u8 outgoing_message_data[Message::MAX_SIZE + sizeof(FragmentHeader)];
+
+  QueuedMessage* message_queue_start;
+  QueuedMessage** message_queue_end;
+  iro::mem::Allocator* allocator;
+
+
+  b8 init(Source source, Address address, iro::mem::Allocator* allocator);
+
+  // priority messages are sent out-of-sequence
+  // returns true if the message was sent, fragmented, or queued
+  b8 send(Source source, const Message& message, b8 priority);
+  b8 sendNextFragment();
+
+  void receive(Source source, iro::StackArray<u8, MAX_FRAGMENT_SIZE>& data);
 };
+
+/* ----------------------------------------------------------------------------
+ */
+b8 init();
+
+/* ----------------------------------------------------------------------------
+ */
+void deinit();
+
+/* ----------------------------------------------------------------------------
+ */
+b8 checkForPackets(
+  Address& from_address,
+  iro::StackArray<u8, MAX_FRAGMENT_SIZE>& data);
 
 }
