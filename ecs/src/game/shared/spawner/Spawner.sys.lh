@@ -7,7 +7,7 @@ $ require "common"
 @@lpp.import "game/shared/entity/EntitySys.lh"
 
 struct EyeSys;
-struct MindSys;
+struct SharedInputSys;
 struct MapPostLoad;
 
 /* ============================================================================
@@ -15,7 +15,7 @@ struct MapPostLoad;
 struct SpawnerSys : EntitySys
 {
   EyeSys*  eye;
-  MindSys* mind;
+  SharedInputSys* input;
 
   b8 init()
   {

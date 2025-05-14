@@ -9,11 +9,13 @@ $ local cmn = require "common"
 $ local ui = require "ui.UI"
 
 @@lpp.import "ui/Item.lh"
+@@lpp.import "ui/widgets/Text.lh"
 
 namespace ui
 {
 
 struct UI;
+struct ButtonSkinDef;
 
 /* ============================================================================
  */
@@ -25,64 +27,38 @@ enum class ButtonActivation
 
 /* ============================================================================
  */
-@ui.widget(Button,
-schema
-{ 
-  triggers: flags
+struct Button
+{
+  DrawCmd* background;
+  Text text;
+
+  b8 init(UI& ui);
+  void deinit(UI& ui);
+
+  void draw(
+    UI& ui,
+    Rect bounds,
+    const ButtonSkinDef& skin);
+
+  enum class State
   {
+    None,
+    Hovered,
     Pressed,
     Released,
-
-    OnChild,
   };
-},
-struct
-{
-  typedef void (*Action)(Button*,void*,ButtonActivation);
 
-  Action action;
-  void* userdata;
+  State update(
+    ItemUpdateContext& ctx,
+    Rect bounds, 
+    String text, 
+    const ButtonSkinDef& skin);
 
-  static Button* make(UI& ui, void* data, Action action, String name = nil);
-  static Button* begin(UI& ui, void* data, Action action, String name = nil);
-  
-  // Helper for defining an action that takes typed data.
-  // Note that when using this you'll probably have to explicitly declare
-  // the type of the data as a template arg, as clang seems to be unable 
-  // to match it correctly.
-  template<typename TData>
-  static Button* make(
-    UI& ui, 
-    TData* data, 
-    void (*action)(Button*,TData*,ButtonActivation),
-    String name = nil)
+  void reportDrawCmds(UI& ui, DrawCmdLists& lists)
   {
-    union
-    {
-      decltype(action) x;
-      Action y;
-    } in { action };
-
-    return make(ui, (void*)data, in.y, name);
+    lists.pre_children.push(background);
+    lists.pre_children.push(text.dc);
   }
-
-  template<typename TData>
-  static Button* begin(
-    UI& ui,
-    TData* data,
-    void (*action)(Button*,TData*,ButtonActivation),
-    String name = nil)
-  {
-    union
-    {
-      decltype(action) x;
-      Action y;
-    } in { action };
-
-    return begin(ui, (void*)data, in.y, name);
-  }
-
-  void update(UI* ui, UpdateReason reason) override;
-})
+};
 
 }

@@ -55,14 +55,7 @@ struct AddressSet
 
 /* ============================================================================
  */
-@ui.widget(InspectorEngineTree,
-schema
-{
-  font = inherit;
-  font_height = inherit;
-  text_color = inherit;
-},
-struct
+struct InspectorEngineTree : Item
 {
   Engine* eng = nullptr;
 
@@ -92,23 +85,15 @@ struct
   template<typename T>
   b8 focusAddress(UI& ui, T* addr);
 
-  void evaluate(UI* ui) override;
-  void generate(UI* ui) override;
-  void reportDrawCmds(UI* ui, DrawCmdLists& lists) override;
+  void evaluate(UI& ui) override;
+  void reportDrawCmds(UI& ui, DrawCmdLists& lists) override;
 
-  virtual void update(UI* ui, UpdateReason reason) override;
-})
+  void update(ItemUpdateContext& ctx) override;
+};
 
 /* ============================================================================
  */
-@ui.widget(Inspector,
-schema
-{
-  font = inherit;
-  font_height = inherit;
-  text_color = inherit;
-},
-struct
+struct Inspector : Item
 {
   InspectorEngineTree* tree;
 
@@ -116,6 +101,6 @@ struct
 
   static Inspector* create(UI& ui, Engine* engine);
   void destroy();
-})
+};
 
 }

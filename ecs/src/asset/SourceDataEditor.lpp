@@ -4,6 +4,8 @@ $ local glob = require "Glob"
 $ local Processor = require "reflect.Processor"
 $ local ast = require "reflect.AST"
 
+$ if false then
+
 $$$
 local importer = require "reflect.Importer"
 {
@@ -2575,17 +2577,17 @@ void SourceDataEditor::generate(UI* ui)
   {
     if (datum_text_edit.datum != nullptr)
     {
-      InputTextState::DrawParams text_edit_params = 
-      {
-        .bounds = vec4f(datum_text_edit.pos, datum_text_edit.size),
-        .font = font,
-        .is_focused = true,
-        .font_height = skin.font_height,
-        .cursor_color = {255, 255, 255, 255},
-        .text_color = {255,255,255,255},
-      };
-
-      datum_text_edit.input_text.draw(*ui, text_edit_params);
+      // InputTextState::DrawParams text_edit_params = 
+      // {
+      //   .bounds = vec4f(datum_text_edit.pos, datum_text_edit.size),
+      //   .font = font,
+      //   .is_focused = true,
+      //   .font_height = skin.font_height,
+      //   .cursor_color = {255, 255, 255, 255},
+      //   .text_color = {255,255,255,255},
+      // };
+      //
+      // datum_text_edit.input_text.draw(*ui, text_edit_params);
     }
 
     u32 datum_count = 0;
@@ -2627,58 +2629,58 @@ void SourceDataEditor::DatumTextEdit::update(
   if (sdata == nullptr)
     return;
 
-  InputTextState::UpdateParams params = 
-  {
-    .local_mouse = 
-      ui.input->mouse.window - (editor->pos_screen + pos),
-    .font = editor->font,
-    .is_focused = true,
-    .font_height = skin.font_height,
-    .reason = reason,
-  };
-
-  b8 state_changed = false;
-  switch (reason)
-  {
-  case UpdateReason::MouseReleased:
-    if (input_text.update(ui, params) == 
-        InputTextState::StateChange::CursorMoved)
-      editor->dirty = true;
-    break;
-  
-  case UpdateReason::FocusedKeyPress:
-    if (input_text.update(ui, params) != 
-        InputTextState::StateChange::None)
-    {
-      state_changed = true;
-    }
-    else if (ui.input->wasKeyPressed(Key::Enter))
-    {
-      datum->onEdit(editor);
-      state_changed = true;
-    }
-    break;
-  }
-
-  if (state_changed)
-  {
-    switch (kind)
-    {
-    case Kind::Name:
-      sdata->name = input_text.asStr();
-      break;
-
-    case Kind::Type:
-      sdata->type = input_text.asStr();
-      break;
-
-    case Kind::Value:
-      sdata->val.str = input_text.asStr();
-      break;
-    }
-
-    editor->dirty = true;
-  }
+  // InputTextState::UpdateParams params = 
+  // {
+  //   .local_mouse = 
+  //     ui.input->mouse.window - (editor->pos_screen + pos),
+  //   .font = editor->font,
+  //   .is_focused = true,
+  //   .font_height = skin.font_height,
+  //   .reason = reason,
+  // };
+  //
+  // b8 state_changed = false;
+  // switch (reason)
+  // {
+  // case UpdateReason::MouseReleased:
+  //   if (input_text.update(ui, params) == 
+  //       InputTextState::StateChange::CursorMoved)
+  //     editor->dirty = true;
+  //   break;
+  //
+  // case UpdateReason::FocusedKeyPress:
+  //   if (input_text.update(ui, params) != 
+  //       InputTextState::StateChange::None)
+  //   {
+  //     state_changed = true;
+  //   }
+  //   else if (ui.input->wasKeyPressed(Key::Enter))
+  //   {
+  //     datum->onEdit(editor);
+  //     state_changed = true;
+  //   }
+  //   break;
+  // }
+  //
+  // if (state_changed)
+  // {
+  //   switch (kind)
+  //   {
+  //   case Kind::Name:
+  //     sdata->name = input_text.asStr();
+  //     break;
+  //
+  //   case Kind::Type:
+  //     sdata->type = input_text.asStr();
+  //     break;
+  //
+  //   case Kind::Value:
+  //     sdata->val.str = input_text.asStr();
+  //     break;
+  //   }
+  //
+  //   editor->dirty = true;
+  // }
 }
 
 /* ----------------------------------------------------------------------------
@@ -2836,3 +2838,5 @@ SourceData* SourceDataEditor::parseDefaultData(String s)
 }
 
 }
+
+$ end

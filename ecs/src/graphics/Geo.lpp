@@ -40,12 +40,48 @@ static void putGlyph(
 }
 
 /* ----------------------------------------------------------------------------
+ */ 
+void putGlyph(
+    Vertex* vp,
+    Index* ip,
+    vec2i* counts,
+    const PackedChar& pc,
+    vec2f font_size,
+    vec2f pos,
+    vec2f* size,
+    Color color)
+{
+  auto uv0 = vec2f(f32(pc.x0) / font_size.x, f32(pc.y0) / font_size.y);
+  auto uv1 = vec2f(f32(pc.x1) / font_size.x, f32(pc.y1) / font_size.y);
+
+  auto glyph_size = vec2f(pc.x1 - pc.x0, pc.y1 - pc.y0);
+  if (size)
+    *size = glyph_size;
+
+  vec2i counts_drawn =
+    gfx::putFilledRect(
+      vp,  
+      ip, 
+      *counts, 
+      pos,
+      glyph_size,
+      { uv0.x, uv0.y },
+      { uv1.x, uv0.y },
+      { uv1.x, uv1.y },
+      { uv0.x, uv1.y },
+      color);
+
+  counts->x += counts_drawn.x;
+  counts->y += counts_drawn.y;
+}
+
+/* ----------------------------------------------------------------------------
  */
 void putGlyph(
     Vertex* vp,
     Index*  ip,
     vec2i*  counts,
-    Font*   font,
+    const Font*   font,
     u32     codepoint,
     vec2f*  pos, 
     Color   color)
@@ -69,7 +105,7 @@ void putGlyph(
  */
 vec2f measureText(
     String text,
-    Font* font,
+    const Font* font,
     f32 font_height,
     f32 tab_spaces)
 {
@@ -119,7 +155,7 @@ void putText(
     vec2i*  offsets,
     vec2f   pos,
     String  text,
-    Font*   font,
+    const Font*   font,
     f32     font_height,
     f32     tab_spaces,
     Color   color,

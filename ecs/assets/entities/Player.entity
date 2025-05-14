@@ -4,6 +4,6 @@ return EntityDef
   components = 
   {
     cl::Sprite {  },
-    Movement { speed = 0.2, }
+    Movement { speed = 0.02, }
   }
 }

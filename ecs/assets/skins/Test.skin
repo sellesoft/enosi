@@ -1,0 +1,83 @@
+return TestSkinDef
+{
+  text = 
+  {
+    font = "assets/fonts/gohu",
+    wrap = "Word",
+    font_height = 11,
+    tab_spaces = 1,
+  },
+
+  combo_box = 
+  {
+    text = 
+    {
+      font = "assets/fonts/gohu",
+      font_height = 11,
+    },
+
+    background_color = { r=130, g=110, b=44, a=255 },
+    option_spacing = 4,
+    padding = { 5, 5 },
+  },
+
+  button = 
+  {
+    text_align = { 0.5, 0.5 },
+
+    normal = 
+    {
+      text = 
+      {
+        font = "assets/fonts/gohu",
+        font_height = 11,
+      },
+
+      item = 
+      {
+        color = { r=25,g=25,b=25,a=255 }
+      },
+    },
+
+    hovered = 
+    {
+      text = 
+      {
+        font = "assets/fonts/gohu",
+        font_height = 11,
+      },
+
+      item = 
+      {},
+    },
+
+    pressed = 
+    {
+      text = 
+      {
+        font = "assets/fonts/gohu",
+        font_height = 11,
+      },
+
+      item = 
+      {
+        color = { r=100,g=25,b=25,a=255 }
+      },
+    },
+  },
+
+  input_text = 
+  {
+    item = 
+    {
+      color = { r=25,g=100,b=25,a=255 },
+    },
+    text = 
+    {
+      font = "assets/fonts/gohu",
+      font_height = 11,
+    },
+    cursor_color = {r=255,g=255,b=255,a=255},
+    horizontal_padding = 5,
+  }
+}

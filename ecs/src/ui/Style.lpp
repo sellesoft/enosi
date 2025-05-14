@@ -1,6 +1,8 @@
 $ local cmn = require "common"
 $ local Style = require "ui.Style"
 
+$ if false then
+
 @@lpp.import "ui/Style.lh"
 @@lpp.import "ui/Item.lh"
 
@@ -113,7 +115,7 @@ void StyleMap::setAs(u64 id, $(pk.typename) val, Item* item)
   // TODO(sushi) see if clang optimizes out this branch if it knows that
   //             item == nullptr.
   if (item)
-    item->dirty = true;
+    item->setDirty();
 }
 
 /* ----------------------------------------------------------------------------
@@ -148,7 +150,7 @@ void StyleMap::setAsInherited<$(pk.typename)>(u64 id, Item* item)
   elem->kind = Elem::Kind::Inherit;
 
   if (item)
-    item->dirty = true;
+    item->setDirty();
 }
 
 
@@ -189,3 +191,5 @@ void StyleMap::deinit()
 }
 
 }
+
+$ end

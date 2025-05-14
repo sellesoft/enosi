@@ -6,6 +6,7 @@ $ local ui = require "ui.UI"
 @@lpp.import "Engine.lh"
 
 @@lpp.import "ui/UI.lh"
+@@lpp.import "ui/widgets/InputTextSkin.defs.lh"
 
 #include "iro/Logger.h"
 
@@ -18,7 +19,7 @@ namespace ui
 
 /* ----------------------------------------------------------------------------
  */
-b8 InputTextState::init(UI& ui, String init, String preview)
+b8 InputText::init(UI& ui, String init, String preview)
 {
   String text_init = 
     notnil(init)
@@ -30,35 +31,36 @@ b8 InputTextState::init(UI& ui, String init, String preview)
   if (notnil(preview))
     this->preview = preview.allocateCopy();
 
-  if (!text.init(text_init))
+  if (!text.init(ui))
   {
     if (notnil(preview))
       mem::stl_allocator.free(this->preview.ptr);
+
     return false;
   }
-
-  drawcmds.text = ui.drawcmds.add(); 
-  drawcmds.quads = ui.drawcmds.add();
-
-  drawcmds.quads->alloc(&ui, 2 * gfx::putFilledRectCounts());
+  
+  decor = ui.drawcmds.add();
+  decor->alloc(&ui, 2 * gfx::putFilledRectCounts());
 
   return true;
 }
 
 /* ----------------------------------------------------------------------------
  */
-void InputTextState::deinit(UI& ui)
+void InputText::deinit(UI& ui)
 {
   if (notnil(preview))
     mem::stl_allocator.free(preview.ptr);
 
-  drawcmds.text->remove(&ui);
-  drawcmds.quads->remove(&ui);
+  decor->remove(&ui);
+
+  text.deinit(ui);
 }
 
 /* ----------------------------------------------------------------------------
  */
-void InputTextState::draw(UI& ui, const DrawParams& params)
+$ if false then
+void InputText::draw(UI& ui, const DrawParams& params)
 {
   String str = text.asStr();
   if (str.isEmpty())
@@ -66,6 +68,7 @@ void InputTextState::draw(UI& ui, const DrawParams& params)
 
   auto [vp, ip] = drawcmds.text->realloc(&ui, gfx::putTextCounts(str));
   drawcmds.text->tex = params.font->texture->gfx_texture;
+
 
   drawcmds.text->scissor = params.bounds;
   drawcmds.quads->scissor = params.bounds;
@@ -144,339 +147,162 @@ void InputTextState::draw(UI& ui, const DrawParams& params)
       params.cursor_color);
   }
 }
-
-/* ----------------------------------------------------------------------------
- */
-InputTextState::StateChange InputTextState::update(
-    UI& ui, 
-    const UpdateParams& params)
-{
-  if (params.reason == UpdateReason::MouseReleased)
-  {
-    f32 x = 0.f;
-    String scan = text.asStr();
-    while (!scan.isEmpty())
-    {
-      gfx::PackedChar pc;
-      params.font->getPackedChar(&pc, scan.advance().codepoint);
-
-      x += pc.xadvance;
-      
-      if (params.local_mouse.x < x)
-      {
-        text.cursor.pos = text.asStr().len - scan.len - 1;
-        break;
-      }
-      else if (scan.isEmpty())
-      {
-        text.cursorMoveToEnd();
-        break;
-      }
-    }
-
-    return StateChange::CursorMoved;
-  }
-
-  if (!params.is_focused || params.reason != UpdateReason::FocusedKeyPress)
-    return StateChange::None;
-
-  InputMgr& input = *ui.input;
-
-  b8 state_changed = false;
-  b8 ctrl_down = input.isKeyDown(Key::LCtrl) || input.isKeyDown(Key::RCtrl);
-  b8 alt_down = input.isKeyDown(Key::LAlt) || input.isKeyDown(Key::RAlt);
-
-$ local function actions(len)
-  if (input.wasKeyPressed(Key::Right))
-  {
-    if (0 != text.cursorMoveRight$(len or "")())
-      return StateChange::CursorMoved;
-  }
-  if (input.wasKeyPressed(Key::Left))
-  {
-    if (0 != text.cursorMoveLeft$(len or "")())
-      return StateChange::CursorMoved;
-  }
-  if (input.wasKeyPressed(Key::Backspace))
-  {
-    if (0 != text.deleteLeft$(len or "")())
-      return StateChange::TextChanged;
-  }
-  if (input.wasKeyPressed(Key::Delete))
-  {
-    if (0 != text.deleteRight$(len or "")())
-      return StateChange::TextChanged;
-  }
 $ end
 
-  if (ctrl_down)
-  {
-    @actions "Word"
-  }
-  else if (alt_down)
-  {
-    @actions "WordPart"
-  }
-  else
-  {
-    @actions
-  }
+/* ----------------------------------------------------------------------------
+ */
+InputText::UpdateResult InputText::update(
+    ItemUpdateContext& ctx,
+    Rect bounds,
+    TextEdit::Buffer buffer,
+    const InputTextSkinDef& skin)
+{
+  b8 clicked = ctx.tryConsumeMouseReleaseInRect(bounds, MouseButton::Left);
 
-  if (input.char_count != 0 && !iscntrl(input.chars[0]))
+  b8 text_changed = false;
+  b8 buffer_too_small = false;
+  b8 cursor_moved = false;
+
+  if (!focused)
   {
-    auto insert = String::from(input.chars, input.char_count);
-    text.insertString(insert);
-    return StateChange::TextChanged;
+    if (clicked)
+      focused = true;   
   }
+  else if (ctx.input.wasAnyMouseButtonReleased() && 
+           !ctx.isCursorInHoverableRect(bounds))
+    focused = false;
+
+  text.setScissor(bounds.contractedX(skin.horizontal_padding));
   
-  return StateChange::None;
-}
+  Item::drawBackground(ctx.ui, bounds, decor, skin.item);
 
-/* ----------------------------------------------------------------------------
- */
-void InputTextState::reportDrawCmds(UI& ui, DrawCmdLists& lists, b8 is_focused)
-{
-  lists.pre_children.push(drawcmds.text);
-  if (is_focused)
-    lists.pre_children.push(drawcmds.quads);
-}
+  text_edit.setBuffer(buffer);
 
-/* ----------------------------------------------------------------------------
- */
-InputText* InputText::make(UI& ui, String init, String preview, String id)
-{
-  auto* input_text = ui.allocateAndInitItem<InputText>(id);
-  if (input_text == nullptr)
-    return nullptr;
-
-  if (!input_text->init(ui, init, preview))
+  if (focused)
   {
-    ui.destroyItem(input_text);
-    return nullptr;
-  }
+    b8 ctrl_down = 
+      ctx.input.isKeyDown(Key::LCtrl) || ctx.input.isKeyDown(Key::RCtrl);
+    b8 alt_down = 
+      ctx.input.isKeyDown(Key::LAlt) || ctx.input.isKeyDown(Key::RAlt);
 
-  return input_text;
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 InputText::init(UI& ui, String init, String preview)
-{
-  String text_init = 
-    notnil(init)
-    ? init
-    : notnil(preview)
-      ? preview
-      : nil;
-
-  if (notnil(preview))
-    this->preview = preview.allocateCopy();
-
-  if (!text.init(text_init))
-  {
-    if (notnil(preview))
-      mem::stl_allocator.free(this->preview.ptr);
-    return false;
-  }
-
-  drawcmds.text = ui.drawcmds.add(); 
-  drawcmds.cursor = ui.drawcmds.add();
-  drawcmds.selection = ui.drawcmds.add();
-
-  // TODO(sushi) combine these.
-  drawcmds.cursor->alloc(&ui, gfx::putFilledRectCounts());
-  drawcmds.selection->alloc(&ui, gfx::putFilledRectCounts());
-
-  update_triggers = 
-      UpdateReason::FocusedKeyPress
-    | UpdateReason::FocusGained
-    | UpdateReason::FocusLost;
-
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-Item::AdjustedSize InputText::adjustItemSize(UI* ui, b8 auto_x, b8 auto_y)
-{
-  $ local this = ui.createItemContext("InputText", "this")
-
-  if (auto_y)
-  {
-    @@this.style:lookup(font_height, padding)
-
-    size.y += 
-      @this.style.font_height + 
-      @this.style.padding.top + 
-      @this.style.padding.bottom;
-  }
-
-  return { .disable_auto_y = true };
-}
-
-/* ----------------------------------------------------------------------------
- */
-void InputText::evaluate(UI* ui)
-{
-  $ local this = ui.createItemContext("InputText", "this")
-
-  if (font == nullptr)
-  {
-    @@this.style:lookup(font);
-
-    if (@this.style.font == "null"_str)
+  $ local function actions(len)
+    if (ctx.input.tryConsumePressedKey(Key::Right))
     {
-      WARN("evaluate called on an InputText with a null font style\n");
-      return;
+      if (0 != text_edit.cursorMoveRight$(len or "")())
+        cursor_moved = true;
+    }
+    if (ctx.input.tryConsumePressedKey(Key::Left))
+    {
+      if (0 != text_edit.cursorMoveLeft$(len or "")())
+        cursor_moved = true;
+    }
+    if (ctx.input.tryConsumePressedKey(Key::Backspace))
+    {
+      if (0 != text_edit.deleteLeft$(len or "")())
+        cursor_moved = true;
+    }
+    if (ctx.input.tryConsumePressedKey(Key::Delete))
+    {
+      if (0 != text_edit.deleteRight$(len or "")())
+        cursor_moved = true;
+    }
+  $ end
+
+    if (ctrl_down)
+    {
+      @actions "Word"
+    }
+    else if (alt_down)
+    {
+      @actions "WordPart"
+    }
+    else
+    {
+      @actions
     }
 
-    font = 
-      gfx::Font::load(
-        @this.style.font, 
-        *ui->assetmgr, 
-        *ui->renderer);
-  }
-}
-
-/* ----------------------------------------------------------------------------
- */
-void InputText::generate(UI* ui)
-{
-  $ local this = ui.createItemContext("InputText", "this")
-
-  @@this.style:lookup(font_height, text_color, cursor_color)
-
-  String str = text.asStr();
-
-  vec2i text_counts = s32(str.countCharacters()) * gfx::putFilledRectCounts();
-  auto [vp, ip] = drawcmds.text->realloc(ui, text_counts);
-  drawcmds.text->tex = font->texture->gfx_texture;
-  
-  drawcmds.text->counts_used = {};
-  drawcmds.cursor->counts_used = {};
-  drawcmds.selection->counts_used = {};
-
-  vec2f cursor = {};
- 
-  const gfx::FontData& font_data = font->getData();
-
-  auto drawCursor = [&]()
-  {
-    if (ui->focused == this)
+    String instr = ctx.tryConsumeCharInput();
+    if (notnil(instr) && !iscntrl(instr.ptr[0]))
     {
-      auto [vp, ip] = drawcmds.cursor->getPtrs(ui);
+      u32 insert_len = text_edit.insertString(instr);
 
-      drawcmds.cursor->counts_used +=
-        gfx::putFilledRect(
-          vp, ip,
-          drawcmds.cursor->counts_used,
-          cursor,
-          vec2f(1.f, @this.style.font_height),
-          @this.style.cursor_color);
+      if (insert_len == 0)
+        buffer_too_small = true;
+      else
+        text_changed = true;
     }
-  };
+  } 
 
-  while (!str.isEmpty())
+  String display = text_edit.asStr();
+  if (display.isEmpty())
+    display = preview;
+
+  f32 cursor_offset = 0.f;
+  if (focused)
   {
-    if (str.ptr - text.ptr == text.cursor.pos)
-      drawCursor();
+    // Compute where the cursor will be and set the x offset of the 
+    // drawn text. This offset is used to scroll the text so that the cursor
+    // stays visible when editing long stuff.
+    String cscan = display;
+    const f32 text_width = bounds.contractedX(skin.horizontal_padding).w;
+    for (;;)
+    {
+      if (text_edit.cursor.pos == display.len - cscan.len ||
+          cscan.isEmpty())
+      {
+        if (cursor_offset < text_x_offset)
+          text_x_offset = cursor_offset;
+        else if (cursor_offset > text_x_offset + text_width)
+          text_x_offset = cursor_offset - text_width;
+        break;
+      }
 
-    utf8::Codepoint cp = str.advance();
+      gfx::PackedChar pc;
+      skin.text.font->getPackedChar(&pc, cscan.advance().codepoint);
 
-    gfx::PackedChar pc;
-    font->getPackedChar(&pc, cp.codepoint);
+      cursor_offset += pc.xadvance;
+    }
+  }
 
-    auto uv0 = 
-      vec2f(f32(pc.x0) / font_data.size_x, f32(pc.y0) / font_data.size_y);
+  Rect text_bounds = bounds;
+  text_bounds.x -= text_x_offset;
+  text_bounds.x += skin.horizontal_padding;
+  text_bounds.y += 0.5f * (bounds.h - skin.text.font_height);
 
-    auto uv1 = 
-      vec2f(f32(pc.x1) / font_data.size_x, f32(pc.y1) / font_data.size_y);
-
-    drawcmds.text->counts_used +=
-      gfx::putFilledRect(
-        vp, ip,
-        drawcmds.text->counts_used,
-        cursor,
-        vec2f(pc.x1 - pc.x0, pc.y1 - pc.y0),
-        { uv0.x, uv1.y },
-        { uv1.x, uv1.y },
-        { uv1.x, uv0.y },
-        { uv0.x, uv0.y },
-        @this.style.text_color);
+  text_bounds.floorPos();
   
-    cursor.x += pc.xadvance;
+  text.clear();
+  text.draw(ctx.ui, text_edit.asStr(), text_bounds, skin.text);
+
+  if (focused)
+  {
+    auto [vp, ip] = decor->getPtrs(&ctx.ui);
+
+    gfx::putFilledRect(
+      vp, ip,
+      &decor->counts_used,
+      vec2f(text_bounds.x + cursor_offset, text_bounds.y),
+      vec2f(1.f, skin.text.font_height),
+      skin.cursor_color);
   }
 
-  if (text.cursor.pos == text.len)
-    drawCursor();
+  UpdateResult result = UpdateResult::Idle;
+  if (text_changed)
+    result = UpdateResult::TextChanged;
+  else if (buffer_too_small)
+    result = UpdateResult::OutOfSpace;
+  else if (cursor_moved)
+    result = UpdateResult::CursorMoved;
+  
+  return result;
 }
 
 /* ----------------------------------------------------------------------------
  */
-void InputText::update(UI* ui, UpdateReason reason)
+void InputText::reportDrawCmds(UI& ui, DrawCmdLists& lists)
 {
-  if (reason == UpdateReason::FocusGained ||
-      reason == UpdateReason::FocusLost)
-  {
-    dirty = true;
-    return;
-  }
-
-  InputMgr& input = *ui->input;
-
-  if (input.wasKeyPressed(Key::Right))
-  {
-    if (input.isKeyDown(Key::LCtrl) || input.isKeyDown(Key::RCtrl))
-      text.cursorMoveRightWord();
-    else if (input.isKeyDown(Key::LAlt) || input.isKeyDown(Key::RAlt))
-      text.cursorMoveRightWordPart();
-    else
-      text.cursorMoveRight();
-  }
-
-  if (input.wasKeyPressed(Key::Left))
-  {
-    if (input.isKeyDown(Key::LCtrl) || input.isKeyDown(Key::RCtrl))
-      text.cursorMoveLeftWord();
-    else if (input.isKeyDown(Key::LAlt) || input.isKeyDown(Key::RAlt))
-      text.cursorMoveLeftWordPart();
-    else
-      text.cursorMoveLeft();
-  }
-
-  if (input.wasKeyPressed(Key::Backspace))
-  {
-    if (input.isKeyDown(Key::LCtrl) || input.isKeyDown(Key::RCtrl))
-      text.deleteLeftWord();
-    else if (input.isKeyDown(Key::LAlt) || input.isKeyDown(Key::RAlt))
-      text.deleteLeftWordPart();
-    else
-      text.deleteLeft();
-  }
-
-  if (input.wasKeyPressed(Key::Delete))
-  {
-    if (input.isKeyDown(Key::LCtrl) || input.isKeyDown(Key::RCtrl))
-      text.deleteRightWord();
-    else if (input.isKeyDown(Key::LAlt) || input.isKeyDown(Key::RAlt))
-      text.deleteRightWordPart();
-    else
-      text.deleteRight();
-  }
-
-  if (input.char_count != 0 && !iscntrl(input.chars[0]))
-  {
-    text.insertString(String::from(input.chars, input.char_count));
-  }
-
-  dirty = true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-void InputText::cleanup()
-{
-
+  lists.pre_children.push(decor);
+  lists.pre_children.push(text.dc);
 }
 
 }

@@ -1,0 +1,207 @@
+/*
+ *  Some state of user input. These are used to control what inputs systems
+ *  around the codebase see as well as coordinating the consumption of 
+ *  inputs inside and between systems.
+ */
+
+$ require "common"
+
+#include "input/Keys.h"
+#include "math/vec.h"
+
+#include "iro/containers/BitArray.h"
+
+using namespace iro;
+
+struct InputMgr;
+
+typedef EnumBitArray<Key> KeyMap;
+typedef EnumBitArray<MouseButton> MouseButtonMap;
+
+/* ============================================================================
+ */
+struct InputState
+{
+  b8 isKeyDown(Key key) const { return keys_down.test(key); }
+  b8 wasKeyPressed(Key key) const { return keys_pressed.test(key); }
+  b8 wasKeyReleased(Key key) const { return keys_released.test(key); }
+
+  b8 isMouseButtonDown(MouseButton button) const
+    { return mouse_down.test(button); }
+
+  b8 wasMouseButtonPressed(MouseButton button) const
+    { return mouse_pressed.test(button); }
+
+  b8 wasMouseButtonReleased(MouseButton button) const
+    { return mouse_released.test(button); }
+
+  b8 isAnyKeyDown() const { return keys_down.testAny(); }
+  b8 wasAnyKeyPressed() const { return keys_pressed.testAny(); }
+  b8 wasAnyKeyReleased() const { return keys_released.testAny(); }
+
+  b8 isAnyMouseButtonDown() const { return mouse_down.testAny(); }
+  b8 wasAnyMouseButtonPressed() const { return mouse_pressed.testAny(); }
+  b8 wasAnyMouseButtonReleased() const { return mouse_released.testAny(); } 
+
+  vec2f getCursorPos() const { return cursor_pos; }
+  vec2f getCursorDelta() const { return cursor_delta; }
+  b8 didCursorMove() const { return cursor_delta != vec2f(0.f,0.f); }
+
+  f32 getScroll() const { return scroll; }
+
+  b8 hasCharInput() const { return char_count != 0; }
+
+  String getCharInput() const
+  {
+    if (hasCharInput())
+      return String::from((u8*)chars, char_count);
+    return nil;
+  }
+
+  void consumeAllKeys() { keys_consumed.setAll(); }
+  void consumeKey(Key key) { keys_consumed.set(key); }
+  
+  b8 wasKeyConsumed(Key key)
+  {
+    return keys_consumed.test(key);
+  }
+
+  b8 tryConsumePressedKey(Key key)
+  {
+    if (!wasKeyConsumed(key) && keys_pressed.test(key))
+    {
+      consumeKey(key);
+      return true;
+    }
+    return false;
+  }
+
+  b8 tryConsumeReleasedKey(Key key)
+  {
+    if (!wasKeyConsumed(key) && keys_released.test(key))
+    {
+      consumeKey(key);
+      return true;
+    }
+    return false;
+  }
+
+  b8 tryConsumeDownKey(Key key)
+  {
+    if (!wasKeyConsumed(key) && keys_down.test(key))
+    {
+      consumeKey(key);
+      return true;
+    }
+    return false;
+  }
+
+  void consumeAllMouseButtons() { mouse_consumed.setAll(); }
+  void consumeMouseButton(MouseButton button) { mouse_consumed.set(button); }
+
+  b8 wasMouseButtonConsumed(MouseButton button) const
+  {
+    return mouse_consumed.test(button);
+  }
+
+  b8 tryConsumePressedMouseButton(MouseButton button)
+  {
+    if (!wasMouseButtonConsumed(button) && mouse_pressed.test(button))
+    {
+      consumeMouseButton(button);
+      return true;
+    }
+    return false;
+  }
+
+  b8 tryConsumeReleasedMouseButton(MouseButton button)
+  {
+    if (!wasMouseButtonConsumed(button) && mouse_released.test(button))
+    {
+      consumeMouseButton(button);
+      return true;
+    }
+    return false;
+  }
+
+  b8 tryConsumeDownMouseButton(MouseButton button)
+  {
+    if (!wasMouseButtonConsumed(button) && mouse_down.test(button))
+    {
+      consumeMouseButton(button);
+      return true;
+    }
+    return false;
+  }
+
+  // Note that the returned string is only valid while this 
+  // InputState is alive as it will point to the char buffer stored in it.
+  // In the case of the InputMgr's real state, it is valid until the next
+  // time char input is given to the input mgr (though, nothing should
+  // ever use real char inputs!).
+  // If you need to keep whatever is output here (idk why you would)
+  // copy it elsewhere.
+  String consumeCharInputs()
+  {
+    auto out = String::from(chars, char_count);
+    char_count = 0;
+    return out;
+  }
+
+  void consumeScroll()
+  {
+    scroll = 0.f;
+  }
+
+  // Clears all inputs. 
+  void clear()
+  {
+    keys_down.clear();
+    keys_pressed.clear();
+    keys_released.clear();
+    keys_consumed.clear();
+
+    mouse_down.clear();
+    mouse_pressed.clear();
+    mouse_released.clear();
+    mouse_consumed.clear();
+
+    consumeCharInputs();
+    consumeScroll();
+  }
+
+  enum
+  {
+    CharsLen = 8,
+  };
+
+  // I'm making the actual data private here because its likely the internals
+  // of this will change while the api will not, so I don't want to 
+  // accidentally use these things and have to clean it up later.
+private:
+  friend InputMgr;
+
+  // TODO(sushi) these states can prob be compressed into a single 
+  //             enum bit array!
+  KeyMap keys_down;
+  KeyMap keys_pressed;
+  KeyMap keys_released;
+  KeyMap keys_consumed;
+
+  MouseButtonMap mouse_down;
+  MouseButtonMap mouse_pressed;
+  MouseButtonMap mouse_released;
+  MouseButtonMap mouse_consumed;
+  
+  // Character input state.
+  u8 chars[CharsLen];
+  u8 char_count;
+
+  // Cursor position.
+  vec2f cursor_pos;
+
+  // The change in the cursor position since the last frame.
+  vec2f cursor_delta;
+
+  f32 scroll;
+};

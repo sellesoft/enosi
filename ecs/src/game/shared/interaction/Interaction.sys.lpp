@@ -8,10 +8,8 @@ $ require "common"
 @@lpp.import "game/shared/Transform.comp.lh"
 
 @@lpp.import "game/shared/map/Map.sys.lh"
-@@lpp.import "game/shared/Eye.sys.lh"
-@@lpp.import "game/shared/Input.sys.lh"
 
-@@lpp.import "input/InputMgr.lh"
+@@lpp.import "game/shared/input/Input.events.lh"
 
 #include "input/Keys.h"
 
@@ -23,41 +21,38 @@ $ require "common"
  */
 b8 InteractionSys::update()
 {
-  if (!input->mgr->wasMouseButtonPressed(MouseButton::Left))
-    return true;
+  return true;
+}
 
-  vec2f mouse_world = eye->screenToWorld(input->mgr->mouse.window);
+/* ----------------------------------------------------------------------------
+ */
+void InteractionSys::onUsePrimary(UsePrimaryInputEvent& ev)
+{
+  if (ev.released)
+    return;
 
-  INFO(mouse_world, "\n");
-
-  Layer* mouse_layer;
-  Tile*  mouse_tile;
-  if (!map->getTileAndLayerAtPos(&mouse_layer, &mouse_tile, mouse_world))
-    return true;
-
-  DEBUG(map->getTilePos(*mouse_layer, *mouse_tile), "\n");
+  Layer* cursor_layer;
+  Tile*  cursor_tile;
+  if (!map->getTileAndLayerAtPos(&cursor_layer, &cursor_tile, ev.pos))
+    return;
 
   for (auto& interactable : iterateComp<Interactable>())
   {
     auto* transform = tryComp<Transform>(interactable.owner);
 
     const Layer& transform_layer = map->layers[transform->placement_layer];
-    vec2f interactable_pos = 
-      transform_layer.pos + 
+    vec2f interactable_pos =
+      transform_layer.pos +
       transform->pos;
 
     Layer* layer;
     Tile* tile;
     if (map->getTileAndLayerAtPos(&layer, &tile, interactable_pos))
     {
-      DEBUG(mouse_tile, " ", tile, " ", transform->pos, " ", 
-           interactable_pos, "\n");
-      if (tile == mouse_tile)
-      {
+      // TODO(sushi) we need to properly choose the topmost item and
+      //             also hit test the visual size of the thing and yeah 
+      if (tile == cursor_tile)
         raise(interactable.owner, Interact{});
-      }
     }
   }
-
-  return true;
 }

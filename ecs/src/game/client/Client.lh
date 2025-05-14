@@ -19,6 +19,7 @@ $ require "common"
 @@lpp.import "input/InputMgr.lh"
 @@lpp.import "graphics/Renderer.lh"
 @@lpp.import "game/client/editor/Editor.lh"
+@@lpp.import "ui/widgets/TextSkin.defs.lh"
 
 /* ============================================================================
  */
@@ -37,9 +38,13 @@ struct Client
 
   gfx::Texture white_texture;
 
+  ui::TextSkinRef test_skin;
+
   b8 init(Engine* engine);
 
   b8 update();
 
   b8 compileRequiredAssets(AssetMgr& assetmgr);
+
+  b8 wantHotReload();
 };

@@ -7,28 +7,30 @@ $ local ui = require "ui.UI"
 
 @@lpp.import "ui/Item.lh"
 @@lpp.import "ui/TextEdit.lh"
+@@lpp.import "ui/widgets/Text.lh"
 
 @@lpp.import "graphics/Font.lh"
 
 namespace ui
 {
 
+struct InputTextSkinDef;
+
 /* ============================================================================
  *  The actual state and functionality of an InputText to help reusability.
  */
-struct InputTextState
+struct InputText
 {
-  TextEdit text;
+  TextEdit text_edit;
+  Text text;
 
   String preview; // Owned.
 
   f32 text_x_offset = 0.f;
 
-  struct 
-  {
-    DrawCmd* text;
-    DrawCmd* quads;
-  } drawcmds;
+  b8 focused;
+
+  DrawCmd* decor;
 
   b8 init(UI& ui, String init = nil, String preview = nil);
   void deinit(UI& ui);
@@ -50,44 +52,49 @@ struct InputTextState
     gfx::Font*   font;
     b8           is_focused;
     f32          font_height;
-    UpdateReason reason;
+    ItemUpdateContext& ctx;
   };
   
-  enum class StateChange
+  enum class UpdateResult
   {
-    None,
+    // The widget didn't do anything.
+    Idle,
+
+    // The cursor was moved in some way.
     CursorMoved,
+
+    // Text was inserted or deleted.
     TextChanged,
+
+    // An attempt was made to change the text, but the buffer is too small.
+    OutOfSpace,
   };
 
-  StateChange update(UI& ui, const UpdateParams& params);
+  UpdateResult update(
+    ItemUpdateContext& ctx, 
+    Rect bounds,
+    TextEdit::Buffer buffer,
+    const InputTextSkinDef& skin);
 
-  void reportDrawCmds(UI& ui, DrawCmdLists& lists, b8 is_focused);
+  void reportDrawCmds(UI& ui, DrawCmdLists& lists);
 
   void set(String s)
   {
-    text.clear();
-    text.insertString(s);
+    text_edit.clear();
+    text_edit.insertString(s);
   }
 
   String asStr() const
   {
-    return text.asStr();
+    return text_edit.asStr();
   }
 };
 
+$ if false then
+
 /* ============================================================================
  */
-@ui.widget(InputText,
-schema
-{
-  font        = inherit;
-  font_height = inherit;
-  text_color  = inherit;
-
-  cursor_color: Color = 0xaaaaaaff;
-},
-struct
+struct InputText : Item
 {
   TextEdit text;
 
@@ -131,6 +138,8 @@ struct
 
   virtual void onTextChanged() {}
   virtual void onFocusLost() {}
-})
+};
+
+$ end
 
 }

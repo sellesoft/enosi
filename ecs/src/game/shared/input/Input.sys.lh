@@ -1,0 +1,19 @@
+/*
+ *  Input system.
+ */
+
+$ require "common"
+
+@@lpp.import "game/shared/entity/EntitySys.lh"
+
+/* ============================================================================
+ */
+struct SharedInputSys : EntitySys
+{
+  b8 init()
+  {
+    return true;
+  }
+
+  virtual void attach(EntityId ent) {}
+};

@@ -53,7 +53,12 @@ struct SharedGameSim
   /* --------------------------------------------------------------------------
    *  Performs a single step of the simulation.
    */
-  b8 update() { return true; }
+  struct UpdateParams
+  {
+    
+  };
+
+  b8 update(UpdateParams& params) { return true; }
 
   /* --------------------------------------------------------------------------
    *  Renders the current state of the simulation.

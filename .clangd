@@ -34,7 +34,8 @@ Diagnostics:
         'modernize-use-std-numbers',
         'modernize-raw-string-literal',
         'modernize-use-designated-initializers',
-        'modernize-use-nodiscard'
+        'modernize-use-nodiscard',
+        'modernize-use-using'
       ]
     FastCheckFilter: None
 

@@ -13,21 +13,23 @@ $ local ui = require "ui.UI"
 namespace ui
 {
 
+$ if false then
+
 /* ============================================================================
  */
-@ui.widget(Separator,
-struct
+struct Separator : Item
 {
   DrawCmd* dc;
 
   static Separator* make(UI& ui, String name = nil);
   
-  void generate(UI* ui) override;
-  void reportDrawCmds(UI* ui, DrawCmdLists& lists) override 
+  void reportDrawCmds(UI& ui, DrawCmdLists& lists) override 
   { 
     lists.pre_children.push(dc); 
   }
-})
+};
+
+$ end
 
 }
 

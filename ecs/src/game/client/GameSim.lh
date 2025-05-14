@@ -28,7 +28,6 @@ struct GameSim : SharedGameSim
 
     gfx::Renderer& renderer;
     AssetMgr& assetmgr;
-    InputMgr& input;
     SourceDataFileReg& sfilereg;
 
     gfx::Texture white_texture;
@@ -42,7 +41,12 @@ struct GameSim : SharedGameSim
   b8 init(InitParams& params);
   void deinit();
 
-  b8 update();
+  struct UpdateParams : SharedGameSim::UpdateParams
+  {
+    InputState& input;
+  };
+
+  b8 update(UpdateParams& params);
   b8 render(gfx::Renderer& renderer);
 
   void setViewport(Rect viewport) 

@@ -14,44 +14,22 @@ namespace ui
 
 /* ----------------------------------------------------------------------------
  */
-b8 TextEdit::init(String init)
+void TextEdit::setBuffer(Buffer buffer)
 {
-  if (notnil(init))
-  {
-    len = init.len;
-    space = max<u32>(len, unit::kilobytes(1));
-    ptr = (u8*)mem::stl_allocator.allocate(space);
-    mem::copy(ptr, init.ptr, len);
-  }
-  else
-  {
-    len = 0;
-    space = unit::kilobytes(1);
-    ptr = (u8*)mem::stl_allocator.allocate(space);
-  }
+  assert(buffer.len && buffer.ptr);
 
-  cursor.pos = cursor.len = 0;
+  // Ensure cursor has a valid position for new buffer.
+  if (*buffer.len < cursor.pos)
+    cursor.pos = *buffer.len;
 
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-void TextEdit::deinit()
-{
-  mem::stl_allocator.free(ptr);
-
-  ptr = 0;
-  len = 0;
-  space = 0;
-  cursor.pos = cursor.len = 0;
+  this->buffer = buffer;
 }
 
 /* ----------------------------------------------------------------------------
  */
 u32 TextEdit::cursorMoveRight(b8 select)
 {
-  if (cursor.pos == len)
+  if (cursorAtEnd())
     return 0;
 
   Codepoint codepoint = getCodepointAtCursor();
@@ -70,7 +48,7 @@ u32 TextEdit::cursorMoveRight(b8 select)
  */
 u32 TextEdit::cursorMoveRightWord(b8 select)
 {
-  if (cursor.pos == len)
+  if (cursorAtEnd())
     return 0;
 
   s32 start = cursor.pos;
@@ -83,7 +61,7 @@ u32 TextEdit::cursorMoveRightWord(b8 select)
 
   for (;;)
   {
-    if (0 == cursorMoveRight(select) || cursor.pos == len)
+    if (0 == cursorMoveRight(select) || cursorAtEnd())
       break;
 
     cp = getCodepointAtCursor();
@@ -104,7 +82,7 @@ u32 TextEdit::cursorMoveRightWord(b8 select)
  */
 u32 TextEdit::cursorMoveRightWordPart(b8 select)
 {
-  if (cursor.pos == len)
+  if (cursorAtEnd())
     return 0;
 
   s32 start = cursor.pos;
@@ -117,7 +95,7 @@ u32 TextEdit::cursorMoveRightWordPart(b8 select)
 
     for (;;)
     {
-      if (0 == cursorMoveRight(select) || cursor.pos == len)
+      if (0 == cursorMoveRight(select) || cursorAtEnd())
         break;
 
       cp = getCodepointAtCursor();
@@ -130,7 +108,7 @@ u32 TextEdit::cursorMoveRightWordPart(b8 select)
   {
     for (;;)
     {
-      if (0 == cursorMoveRight(select) || cursor.pos == len)
+      if (0 == cursorMoveRight(select) || cursorAtEnd())
         break;
 
       cp = getCodepointAtCursor();
@@ -143,7 +121,7 @@ u32 TextEdit::cursorMoveRightWordPart(b8 select)
   {
     for (;;)
     {
-      if (0 == cursorMoveRight(select) || cursor.pos == len)
+      if (0 == cursorMoveRight(select) || cursorAtEnd())
         break;
 
       cp = getCodepointAtCursor();
@@ -160,12 +138,12 @@ u32 TextEdit::cursorMoveRightWordPart(b8 select)
  */
 u32 TextEdit::cursorMoveLeft(b8 select)
 {
-  if (0 == cursor.pos)
+  if (cursorAtStart())
     return 0;
 
   s32 start = cursor.pos;
 
-  while (cursor.pos > 0 && isContinuationByte(*(ptr + cursor.pos)))
+  while (!cursorAtStart() && isContinuationByte(*(buffer.ptr + cursor.pos)))
     cursor.pos -= 1;
 
   cursor.pos -= 1;
@@ -184,7 +162,7 @@ u32 TextEdit::cursorMoveLeft(b8 select)
  */
 u32 TextEdit::cursorMoveLeftWord(b8 select)
 {
-  if (0 == cursor.pos)
+  if (cursorAtStart())
     return 0;
 
   s32 start = cursor.pos;
@@ -229,7 +207,7 @@ u32 TextEdit::cursorMoveLeftWord(b8 select)
  */
 u32 TextEdit::cursorMoveLeftWordPart(b8 select)
 {
-  if (0 == cursor.pos)
+  if (cursorAtStart())
     return 0;
 
   s32 start = cursor.pos;
@@ -301,12 +279,12 @@ u32 TextEdit::cursorMoveToStart(b8 select)
  */
 u32 TextEdit::cursorMoveToEnd(b8 select)
 {
-  u32 dist = len - cursor.len;
+  u32 dist = *buffer.len - cursor.len;
 
   if (select)
     cursor.len = -dist;
 
-  cursor.pos = len;
+  cursor.pos = *buffer.len;
 
   return dist;
 }
@@ -324,13 +302,13 @@ u32 TextEdit::deleteSelection()
     cursor.len = -cursor.len;
   }
 
-  u8* selection_start = ptr + cursor.pos;
+  u8* selection_start = buffer.ptr + cursor.pos;
   u8* selection_end   = selection_start + cursor.len;
-  u32 tail_len = (ptr + len) - selection_end;
+  u32 tail_len = (buffer.ptr + *buffer.len) - selection_end;
 
   mem::move(selection_start, selection_end, tail_len);
 
-  len = cursor.pos + tail_len;
+  *buffer.len = cursor.pos + tail_len;
 
   u32 delta = cursor.len;
   cursor.len = 0;
@@ -344,7 +322,7 @@ u32 TextEdit::deleteRight()
   if (cursor.len != 0)
     return deleteSelection();
 
-  if (cursor.pos == len)
+  if (cursorAtEnd())
     return 0;
 
   // Move the cursor right with selection then delete it.
@@ -361,7 +339,7 @@ u32 TextEdit::deleteRightWord()
   if (cursor.len != 0)
     return deleteSelection();
 
-  if (cursor.pos == len)
+  if (cursorAtEnd())
     return 0;
 
   cursorMoveRightWord(true);
@@ -375,7 +353,7 @@ u32 TextEdit::deleteRightWordPart()
   if (cursor.len != 0)
     return deleteSelection();
 
-  if (cursor.pos == len)
+  if (cursorAtEnd())
     return 0;
 
   cursorMoveRightWordPart(true);
@@ -389,7 +367,7 @@ u32 TextEdit::deleteLeft()
   if (cursor.len != 0)
     return deleteSelection();
 
-  if (cursor.pos == 0)
+  if (cursorAtStart())
     return 0;
 
   cursorMoveLeft(true);
@@ -403,7 +381,7 @@ u32 TextEdit::deleteLeftWord()
   if (cursor.len != 0)
     return deleteSelection();
 
-  if (cursor.pos == 0)
+  if (cursorAtStart())
     return 0;
 
   cursorMoveLeftWord(true);
@@ -417,7 +395,7 @@ u32 TextEdit::deleteLeftWordPart()
   if (cursor.len != 0)
     return deleteSelection();
 
-  if (cursor.pos == 0)
+  if (cursorAtStart())
     return 0;
 
   cursorMoveLeftWordPart(true);
@@ -428,38 +406,35 @@ u32 TextEdit::deleteLeftWordPart()
  */
 u32 TextEdit::insertString(String str)
 {
-  s32 initial_len = len;
+  s32 initial_len = *buffer.len;
   if (cursor.len != 0)
     deleteSelection();
 
-  u32 space_needed = len + str.len;
+  u32 space_needed = *buffer.len + str.len;
 
-  if (space_needed > space)
-  {
-    while (space_needed > space)
-      space *= 2;
+  // If the current buffer does not have enough space to place this text,
+  // just report that we didn't insert anything.
+  if (space_needed > buffer.space)
+    return 0;
 
-    ptr = (u8*)mem::stl_allocator.reallocate(ptr, space);
-  }
-
-  u8* src = ptr + cursor.pos;
+  u8* src = buffer.ptr + cursor.pos;
   u8* dst = src + str.len;
-  u32 move_len = (ptr + len) - src;
+  u32 move_len = (buffer.ptr + *buffer.len) - src;
 
   mem::move(dst, src, move_len);
   mem::copy(src, str.ptr, str.len);
 
   cursor.pos += str.len;
-  len += str.len;
+  *buffer.len += str.len;
 
-  return (u32)abs(initial_len - (s32)len);
+  return (u32)abs(initial_len - (s32)*buffer.len);
 }
 
 /* ----------------------------------------------------------------------------
  */
 void TextEdit::clear()
 {
-  len = 0;
+  *buffer.len = 0;
   cursor.pos = cursor.len = 0;
 }
 
@@ -467,7 +442,7 @@ void TextEdit::clear()
  */
 utf8::Codepoint TextEdit::getCodepointAtCursor()
 {
-  return decodeCharacter(ptr + cursor.pos, len - cursor.pos);
+  return decodeCharacter(buffer.ptr + cursor.pos, *buffer.len - cursor.pos);
 }
 
 /* ----------------------------------------------------------------------------

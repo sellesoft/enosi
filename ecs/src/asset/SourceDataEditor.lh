@@ -22,14 +22,7 @@ struct DatumState;
 
 /* ============================================================================
  */
-@ui.widget(SourceDataEditor,
-schema
-{
-  font        = inherit;
-  font_height = inherit;
-  text_color  = inherit;
-},
-struct
+struct SourceDataEditor : Item
 {
   // The SourceData we are editing. This is not owned by the editor, and 
   // so is not cleaned up when setSourceData is called, and is expected to
@@ -72,9 +65,9 @@ struct
     vec2f pos;
     vec2f size;
 
-    InputTextState input_text;
+    // InputTextState input_text;
 
-    void update(UI& ui, UpdateReason reason, SourceDataEditor* editor);
+    void update(ItemUpdateContext& ctx, SourceDataEditor* editor);
 
     void onFocusLost(SourceDataEditor* editor);
   };
@@ -100,10 +93,9 @@ struct
       SourceDataFile* file, 
       u64 type_id = 0);
 
-  void evaluate(UI* ui) override;
-  void generate(UI* ui) override;
-  void update(UI* ui, UpdateReason reason) override;
-  void reportDrawCmds(UI* ui, DrawCmdLists& lists) override;
+  void evaluate(UI& ui) override;
+  void update(ItemUpdateContext& ctx) override;
+  void reportDrawCmds(UI& ui, DrawCmdLists& lists) override;
   b8 onHitTest(vec2f local_cursor) override;
 
   // Used by datum states during 'update' to report some area that if clicked
@@ -136,7 +128,7 @@ struct
 
   void notifyExternalChange()
   {
-    dirty = true;
+    setDirty();
   }
 
   SourceData* parseDefaultData(String s);
@@ -144,6 +136,6 @@ struct
 private:
   
   void placeSourceDataItems(UI& ui, SourceData* sdata);
-})
+};
 
 }

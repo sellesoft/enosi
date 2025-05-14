@@ -4,6 +4,7 @@ $ local ui = require "ui.UI"
 @@lpp.import "ui/widgets/Text.lh"
 @@lpp.import "ui/UI.lh"
 @@lpp.import "Engine.lh"
+@@lpp.import "ui/widgets/TextSkin.defs.lh"
 
 #include "iro/containers/SmallArray.h"
 #include "iro/Logger.h"
@@ -13,6 +14,226 @@ static Logger logger =
 
 namespace ui
 {
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Text::init(UI& ui)
+{
+  dc = ui.drawcmds.add();
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Text::deinit(UI& ui)
+{
+  dc->remove(&ui);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Text::setScissor(Rect bounds)
+{
+  dc->scissor.x = bounds.x;
+  dc->scissor.y = bounds.y;
+  dc->scissor.z = bounds.w;
+  dc->scissor.w = bounds.h;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static void findTextBreaks(
+    TextBreaks* breaks, 
+    String text, 
+    f32 max_width,
+    f32 font_height,
+    f32 tab_spaces,
+    TextWrap wrap,
+    const gfx::Font* font,
+    vec2f* size)
+{
+  breaks->push({0, {0.f, 0.f}});
+
+  String scan = text;
+  String last_ws = scan;
+
+  gfx::PackedChar pc_space;
+  font->getPackedChar(&pc_space, ' ');
+  f32 space_width = pc_space.xadvance;
+
+  f32 width_since_last_word = 0.f;
+  vec2f offset = {};
+
+  while (!scan.isEmpty())
+  {
+    utf8::Codepoint cp = scan.advance();
+    switch (cp.codepoint)
+    {
+    case '\n':
+      width_since_last_word = 0.f;
+      offset.y += font_height;
+      offset.x = 0.f;
+      breaks->push({scan.ptr - text.ptr, offset});
+      break;
+
+    case '\t':
+      width_since_last_word = 0.f;
+      offset.x += tab_spaces * space_width;
+      last_ws = scan;
+      breaks->push({scan.ptr - text.ptr, offset});
+      break;
+
+    case ' ':
+      width_since_last_word = 0.f;
+      last_ws = scan;
+      offset.x += space_width;
+      break;
+
+    default:
+      {
+        gfx::PackedChar pc;
+        font->getPackedChar(&pc, cp.codepoint);
+        width_since_last_word += pc.xadvance;
+        offset.x += pc.xadvance;
+      }
+      break;
+    }
+
+    if (offset.x > max_width)
+    {
+      if (wrap == TextWrap::Char)
+      {
+        offset.x = 0.f;
+        offset.y += font_height;
+
+        if (cp.codepoint == '\t')
+        {
+          breaks->last()->placement = {0.f, offset.y};
+        }
+        else
+        {
+          s64 prev_offset = scan.ptr - cp.advance - text.ptr;
+          if (prev_offset > breaks->last()->offset)
+          {
+            breaks->push({prev_offset, offset});
+          }
+          else if (prev_offset == breaks->last()->offset)
+          {
+            breaks->last()->placement = {0.f, offset.y};
+          }
+        }
+
+        gfx::PackedChar pc;
+        font->getPackedChar(&pc, cp.codepoint);
+        offset.x = pc.xadvance;
+      }
+      else if (wrap == TextWrap::Word)
+      {
+        offset.x = 0.f;
+        offset.y += font_height;
+        s64 offset_from_last_ws = last_ws.ptr - text.ptr;
+        if (offset_from_last_ws == breaks->last()->offset)
+        {
+          breaks->last()->placement = offset;
+        }
+        else if (offset_from_last_ws > breaks->last()->offset)
+        {
+          breaks->push({offset_from_last_ws, offset});
+        }
+        offset.x = width_since_last_word;
+      }
+      else
+      {
+        assert(!"unhandled TextWrap");
+      }
+    }
+
+    size->x = max(size->x, offset.x);
+    size->y = offset.y + font_height;
+  }
+
+  breaks->push({s64(text.len), offset});
+}
+
+/* ----------------------------------------------------------------------------
+ */
+vec2f Text::draw(UI& ui, String text, Rect bounds, const TextSkinDef& skin)
+{
+  u32 nchars = text.countCharacters();
+  vec2i nucounts = gfx::putFilledRectCounts() * nchars;
+
+  auto [vp, ip] = dc->realloc(&ui, dc->counts_used + nucounts);
+  dc->tex = skin.font->texture->gfx_texture;
+
+  vec2f size;
+  if (skin.wrap == TextWrap::None)
+  {
+    // Just draw the text normally.
+    gfx::putText(
+      vp, ip,
+      &dc->counts_used,
+      bounds.pos(),
+      text,
+      &*skin.font,
+      skin.font_height,
+      skin.tab_spaces,
+      skin.color,
+      &size);
+  }
+  else
+  {
+    TextBreaks breaks;
+    findTextBreaks(
+      &breaks, 
+      text,
+      bounds.w,
+      skin.font_height,
+      skin.tab_spaces,
+      skin.wrap,
+      &*skin.font,
+      &size);
+
+    vec2f cursor = bounds.pos();
+    const gfx::FontData& data = skin.font->getData();
+
+    for (s32 bi = 0; bi < breaks.len - 1; ++bi)
+    {
+      auto this_break = breaks[bi];
+      auto next_break = breaks[bi+1];
+      cursor = this_break.placement + bounds.pos();
+
+      for (s32 ci = 0; ci < next_break.offset - this_break.offset; ++ci)
+      {
+        gfx::PackedChar pc;
+        skin.font->getPackedChar(&pc, *(text.ptr + this_break.offset + ci));
+
+        vec2f glyph_size;
+        gfx::putGlyph(
+          vp, ip,
+          &dc->counts_used,
+          pc,
+          vec2f(data.size_x, data.size_y),
+          cursor,
+          &glyph_size,
+          skin.color);
+
+        cursor.x += glyph_size.x;
+      }
+    }
+  }
+
+  return size;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Text::clear()
+{
+  dc->counts_used = {};
+}
+
+$ if false then
 
 /* ----------------------------------------------------------------------------
  *  Search for locations in the text buffer where we need to perform line 
@@ -377,5 +598,7 @@ void Text::cleanup()
 {
   state.deinit();
 }
+
+$ end
 
 }

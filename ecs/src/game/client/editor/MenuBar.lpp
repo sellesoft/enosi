@@ -16,10 +16,6 @@ EditorMenuBar* EditorMenuBar::create(UI& ui, cl::Editor* editor)
 
   menubar->editor = editor;
 
-  @ui.style(menubar, EditorMenuBar, 
-  | size: 100% 20
-  | background_color: 0x000000ff)
-
   menubar->layout.sizing = ItemLayout::Sizing::PercentX;
   menubar->size = {100.f, 20.f};
 
@@ -28,7 +24,7 @@ EditorMenuBar* EditorMenuBar::create(UI& ui, cl::Editor* editor)
 
 /* ----------------------------------------------------------------------------
  */
-void EditorMenuBar::update(UI* ui, UpdateReason reason)
+void EditorMenuBar::update(ItemUpdateContext& ctx)
 {
 
 }
@@ -42,21 +38,14 @@ void EditorMenuBar::destroy()
 
 /* ----------------------------------------------------------------------------
  */
-void EditorMenuBar::evaluate(UI* ui)
+void EditorMenuBar::evaluate(UI& ui)
 {
   
 }
 
 /* ----------------------------------------------------------------------------
  */
-void EditorMenuBar::generate(UI* ui)
-{
-  
-}
-
-/* ----------------------------------------------------------------------------
- */
-void EditorMenuBar::reportDrawCmds(UI* ui, DrawCmdLists& lists)
+void EditorMenuBar::reportDrawCmds(UI& ui, DrawCmdLists& lists)
 {
   
 }

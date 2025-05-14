@@ -24,6 +24,8 @@ struct Vertex
   u32   color;
 };
 
+struct PackedChar;
+
 typedef u32 Index;
 
 /* ----------------------------------------------------------------------------
@@ -193,6 +195,35 @@ static vec2i putFilledRect(
   vp[3] = { bl, uv3, col };
 
   return putFilledRectCounts();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static void putFilledRect(
+    Vertex* vp,
+    Index*  ip,
+    vec2i*  offsets,
+    vec2f   pos,
+    vec2f   dim,
+    vec2f   uv0,
+    vec2f   uv1,
+    vec2f   uv2,
+    vec2f   uv3,
+    Color   color)
+{
+  vec2i counts = 
+    putFilledRect(
+      vp,
+      ip,
+      *offsets,
+      pos,
+      dim,
+      uv0,
+      uv1,
+      uv2,
+      uv3,
+      color);
+  *offsets += counts;
 }
 
 /* ----------------------------------------------------------------------------
@@ -612,6 +643,18 @@ void putGlyph(
 
 /* ----------------------------------------------------------------------------
  */
+void putGlyph(
+  Vertex* vp,
+  Index* ip,
+  vec2i* counts,
+  const PackedChar& pc,
+  vec2f font_size,
+  vec2f pos,
+  vec2f* size,
+  Color color);
+
+/* ----------------------------------------------------------------------------
+ */
 static void putGlyph(
   Vertex* vp,
   Index*  ip,
@@ -627,34 +670,23 @@ static void putGlyph(
 /* ----------------------------------------------------------------------------
  */
 vec2f measureText(
-  String text,
-  Font*  font,
-  f32    font_height,
-  f32    tab_spaces);
+  String      text,
+  const Font* font,
+  f32         font_height,
+  f32         tab_spaces);
 
 /* ----------------------------------------------------------------------------
  */
 void putText(
-  Vertex* putverts,
-  Index*  putindices,
-  vec2i*  offsets,
-  vec2f   pos,
-  String  text,
-  Font*   font,
-  f32     font_height,
-  f32     tab_spaces,
-  Color   color,
-  vec2f*  size);
-
-/* ----------------------------------------------------------------------------
- */
-/*enum class TextWrapping*/
-/*{*/
-/*  None,*/
-/*  Word,*/
-/*  Char,*/
-/*};*/
-
-
+  Vertex*     putverts,
+  Index*      putindices,
+  vec2i*      offsets,
+  vec2f       pos,
+  String      text,
+  const Font* font,
+  f32         font_height,
+  f32         tab_spaces,
+  Color       color,
+  vec2f*      size);
 
 }

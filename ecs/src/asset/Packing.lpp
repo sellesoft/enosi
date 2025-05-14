@@ -220,6 +220,8 @@ b8 Packer::pack(const SourceData& data, $(name)* out)
   if (data.children.isEmpty())
     return true;
 
+  mem::zero(out, sizeof($(name)));
+
   BitArray<$(decl:getFieldCount())> found_fields = {};
 
   for (const SourceData* child : data.children)
@@ -247,6 +249,11 @@ $ for field,i in decl:eachFieldWithIndex() do
 $   if field.metadata.default and not field.metadata.hidden then
   if (!found_fields.test($(i)))
   {
+    // TODO(sushi) this does not handle default values inside of 
+    //             unspecified members. We could probably handle this by
+    //             recursively defining an empty object SourceData to
+    //             pass to struct field packers.
+
     // TODO(sushi) this can absolutely be done better, given that we know this 
     //             information at compile time, but I'm just wanting to get 
     //             this working for now. In the future, we should be able to 

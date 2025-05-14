@@ -7,17 +7,21 @@ $ require "common"
 
 @@lpp.import "game/shared/entity/EntitySys.lh"
 
-struct InputSys;
-struct EyeSys;
 struct MapSys;
+struct InputSys;
+struct UsePrimaryInputEvent;
 
 struct InteractionSys : EntitySys
 {
-  InputSys* input;
-  EyeSys*   eye;
-  MapSys*   map;
-  
-  b8 init() { return true; }
+  MapSys* map;
+
+  b8 init() 
+  { 
+    subscribeTo<UsePrimaryInputEvent>(&InteractionSys::onUsePrimary);
+    return true; 
+  }
 
   b8 update();
+
+  void onUsePrimary(UsePrimaryInputEvent&);
 };

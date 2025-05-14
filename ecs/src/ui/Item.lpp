@@ -5,6 +5,7 @@ $ local ui = require "ui.UI"
 @@lpp.import "ui/DrawCmd.lh"
 @@lpp.import "ui/UI.lh"
 @@lpp.import "Engine.lh"
+@@lpp.import "ui/ItemSkin.defs.lh"
 
 #include "iro/Logger.h"
 #include "math/util.h"
@@ -17,13 +18,183 @@ namespace ui
 
 /* ----------------------------------------------------------------------------
  */
+b8 ItemUpdateContext::isPointInRect(Rect bounds, vec2f point)
+{
+  return math::pointInRect(
+      point,
+      item.pos_screen + bounds.pos(),
+      vec2f(bounds.size()));
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 ItemUpdateContext::isCursorInRect(Rect bounds)
+{
+  return isPointInRect(bounds, input.getCursorPos());
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 ItemUpdateContext::isCursorInHoverableRect(Rect bounds)
+{
+  if (ui.hovered != &item)
+    return false;
+
+  return isCursorInRect(bounds);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 ItemUpdateContext::didCursorEnterRectThisFrame(Rect bounds)
+{
+  return isPointInRect(bounds, input.getCursorPos()) &&
+         !isPointInRect(bounds, input.getCursorPos() - input.getCursorDelta());
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 ItemUpdateContext::didCursorExitRectThisFrame(Rect bounds)
+{
+  return !isPointInRect(bounds, input.getCursorPos()) &&
+         isPointInRect(bounds, input.getCursorPos() - input.getCursorDelta());
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 ItemUpdateContext::wasMouseButtonPressedInRect(
+    Rect bounds, 
+    MouseButton button)
+{
+  return input.wasMouseButtonPressed(button) && 
+         isCursorInHoverableRect(bounds);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 ItemUpdateContext::wasMouseButtonReleasedInRect(
+    Rect bounds,
+    MouseButton button)
+{
+  return input.wasMouseButtonReleased(button) &&
+         isCursorInHoverableRect(bounds);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 ItemUpdateContext::isMouseButtonDownInRect(
+    Rect bounds,
+    MouseButton button)
+{
+  return input.isMouseButtonDown(button) &&
+         isCursorInHoverableRect(bounds);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 ItemUpdateContext::tryConsumeMousePress(MouseButton button)
+{
+  return input.tryConsumePressedMouseButton(button);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 ItemUpdateContext::tryConsumeMousePressInRect(
+    Rect bounds,
+    MouseButton button)
+{
+  if (isCursorInRect(bounds))
+    return input.tryConsumePressedMouseButton(button);
+  return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 ItemUpdateContext::tryConsumeMouseRelease(MouseButton button)
+{
+  return input.tryConsumeReleasedMouseButton(button);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 ItemUpdateContext::tryConsumeMouseReleaseInRect(
+    Rect bounds,
+    MouseButton button)
+{
+  if (isCursorInRect(bounds))
+    return input.tryConsumeReleasedMouseButton(button);
+  return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 ItemUpdateContext::tryConsumeMouseDown(MouseButton button)
+{
+  return input.tryConsumeDownMouseButton(button);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 ItemUpdateContext::tryConsumeMouseDownInRect(
+    Rect bounds,
+    MouseButton button)
+{
+  if (isCursorInRect(bounds))
+    return input.tryConsumeDownMouseButton(button);
+  return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+String ItemUpdateContext::tryConsumeCharInput()
+{
+  if (input.hasCharInput())
+    return input.consumeCharInputs();
+  return nil;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+f32 ItemUpdateContext::tryConsumeScroll()
+{
+  f32 scroll = input.getScroll();
+  ui.frame_input.consumeScroll();
+  return scroll;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void ItemUpdateContext::drawDebugBorder(Rect bounds, Color color)
+{
+  bounds.x += item.pos_screen.x;
+  bounds.y += item.pos_screen.y;
+
+  auto [vp, ip] = 
+    ui.dbg_cmd->realloc(
+      &ui, ui.dbg_cmd->counts_used + gfx::putBordersCounts());
+
+  gfx::putBorders(
+    vp, ip,
+    &ui.dbg_cmd->counts_used,
+    {1.f,1.f,1.f,1.f},
+    bounds.pos(),
+    bounds.size(),
+    color);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 ItemUpdateContext::wasEvaluated() const
+{
+  return item.flags.test(ItemFlag::Evaluated);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 Item::init(UI& ui, String name)
 {
   this->name = name;
-  if (!style.init())
-    return false;
   node = &ui.item_tree.addLast(ui.item_stack.head->data->node, this);
-  dirty = true;
+  setDirty();
   return true;
 }
 
@@ -45,146 +216,40 @@ Item* Item::begin(UI& ui, String name)
 
 /* ----------------------------------------------------------------------------
  */
-void Item::generate(UI* ui) {}
+void Item::drawBackground(
+    UI& ui, 
+    Rect bounds,
+    DrawCmd* dc, 
+    const ItemSkinDef& skin)
+{
+  auto [vp, ip] = dc->realloc(&ui, gfx::putFilledRectCounts());
+  dc->counts_used = {};
+
+  if (skin.texture.isValid())
+    dc->tex = skin.texture->gfx_texture;
+
+  gfx::putFilledRect(
+    vp, ip,
+    &dc->counts_used,
+    bounds.pos(),
+    bounds.size(),
+    vec2f(skin.uv.x,             skin.uv.y),
+    vec2f(skin.uv.x + skin.uv.w, skin.uv.y),
+    vec2f(skin.uv.x + skin.uv.w, skin.uv.y + skin.uv.h),
+    vec2f(skin.uv.x,             skin.uv.y + skin.uv.h),
+    skin.color);
+}
 
 /* ----------------------------------------------------------------------------
  */
 b8 Item::containsPoint(vec2f point)
 {
-  $ local this = ui.createItemContext("Item", "this")
-  @@this.style:lookup(margin)
-
   vec2f visual_area = calcVisualArea();
 
-  vec2f tl = pos_screen + @this.style.margin.top_left;
-  vec2f br = pos_screen + visual_area - @this.style.margin.bottom_right;
+  vec2f tl = pos_screen + layout.margin.tl();
+  vec2f br = pos_screen + visual_area - layout.margin.br();
 
   return math::pointInRect(point, tl, br - tl);
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 Item::isHovered(UI* ui, HoverKind kind)
-{
-  switch (kind)
-  {
-  case HoverKind::Topmost: 
-    return ui->hovered == this;
-
-  case HoverKind::Area:
-    return containsPoint(ui->input->mouse.window);
-
-  case HoverKind::Child:
-    {
-      Item* i = ui->hovered;
-      while (i)
-      {
-        if (i == this)
-          return true;
-        if (i == ui->root)
-          return false;
-        i = i->node->parent->data;
-      }
-    }
-    break;
-  }
-  return false;
-}
-
-/* ----------------------------------------------------------------------------
- */
-void Item::calcVerticalScrollBar(
-    UI* ui,
-    vec2f* bar_pos,
-    vec2f* bar_size,
-    vec2f* handle_pos,
-    vec2f* handle_size)
-{
-  $ local this = ui.createItemContext("Item", "this")
-  @@this.style:lookup(
-    margin,
-    border,
-    vertical_scrollbar_width, 
-    horizontal_scrollbar_height)
-  
-  // HACK(sushi) this is not the appropriate function to call but in order
-  //             to properly position and size the scroll bar for 
-  //             collapsible headers we need to check this. This should
-  //             probably be changed to a more general function that 
-  //             allows the widget to tell us where its content starts
-  //             and its size.
-  vec2f content_start = adjustCursorStart(ui, vec2f(0,0));
-
-  if (max_scroll.y != 0.f)
-  {
-    bar_size->y = size.y - content_start.y;
-  }
-
-  if (max_scroll.x != 0.f)
-  {
-    bar_size->y -= @this.style.horizontal_scrollbar_height;
-  }
-
-  bar_pos->x = 
-    size.x - 
-    @this.style.margin.right - 
-    @this.style.border.right -
-    @this.style.vertical_scrollbar_width;
-  bar_pos->y = content_start.y;
-
-  bar_size->x = @this.style.vertical_scrollbar_width;
-  handle_size->x = @this.style.vertical_scrollbar_width;
-
-  f32 total_height = size.y - max_scroll.y;
-  handle_size->y = bar_size->y * size.y / total_height;
-
-  handle_pos->x = bar_pos->x;
-  handle_pos->y = 
-    bar_pos->y + (scroll.y / max_scroll.y) * (bar_size->y - handle_size->y);
-}
-
-/* ----------------------------------------------------------------------------
- */
-void Item::calcHorizontalScrollBar(
-    UI* ui,
-    vec2f* bar_pos,
-    vec2f* bar_size,
-    vec2f* handle_pos,
-    vec2f* handle_size)
-{
-  $ local this = ui.createItemContext("Item", "this")
-  @@this.style:lookup(
-    margin,
-    border,
-    vertical_scrollbar_width, 
-    horizontal_scrollbar_height)
-
-  if (max_scroll.x != 0.f)
-  {
-    bar_size->x = size.x;
-  }
-
-  if (max_scroll.y != 0.f)
-  {
-    bar_size->x -= @this.style.vertical_scrollbar_width;
-  }
-
-  bar_pos->x = 0.f;
-  bar_pos->y = 
-    size.y - 
-    @this.style.margin.bottom -
-    @this.style.border.bottom -
-    @this.style.horizontal_scrollbar_height;
-
-  bar_size->y = @this.style.horizontal_scrollbar_height;
-  handle_size->y = @this.style.horizontal_scrollbar_height;
-
-  f32 total_width = size.x - max_scroll.x;
-  handle_size->x = bar_size->x * size.x / total_width;
-
-  handle_pos->y = bar_pos->y;
-  handle_pos->x = 
-    bar_pos->x + (scroll.x / max_scroll.x) * (bar_size->x - handle_size->x);
 }
 
 }

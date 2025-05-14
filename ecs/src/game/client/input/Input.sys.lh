@@ -1,0 +1,47 @@
+/*
+ *  Central system for game input.
+ */
+
+$ require "common"
+
+@@lpp.import "game/shared/input/Input.sys.lh"
+@@lpp.import "input/InputState.lh"
+
+#include "iro/Flags.h"
+
+struct EyeSys;
+
+namespace cl
+{
+
+/* ============================================================================
+ */
+struct InputSys : SharedInputSys
+{
+  // The entity we are currently emitting input to.
+  // This should be moved elsewhere eventually, once we have a represenation
+  // for a player session.
+  // Also note that this can be different from what the EyeSys is attached to.
+  // This represents the entity the player is acting as, the entity on EyeSys
+  // is just the entity their view is following.
+  EntityId attached_entity;
+
+  // TODO(sushi) this needs to be a special game input state where we 
+  //             properly adjust the cursor into the viewport of the game
+  //             (when its no longer just taking up the whole window eg.
+  //             editor is open).
+  InputState frame_input;
+
+  EyeSys* eye;
+
+  b8 init() { return true; }
+
+  void update();
+
+  void attach(EntityId ent) override
+  {
+    attached_entity = ent;
+  }
+};
+
+}

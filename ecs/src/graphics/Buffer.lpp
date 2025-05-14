@@ -29,6 +29,8 @@ b8 Buffer::init(
 
   mapped_data = nullptr;
 
+  INFO(index, "\n");
+
   if (index != 0)
     return ERROR("failed to initialize a buffer because the buffer"
       " is already initialized\n");

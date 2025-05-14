@@ -14,7 +14,7 @@ $ local ui = require "ui.UI"
 @@lpp.import "game/client/graphics/Sprite.comp.lh"
 
 @@lpp.import "game/shared/Eye.sys.lh"
-@@lpp.import "game/shared/Input.sys.lh"
+@@lpp.import "game/client/input/Input.sys.lh"
 @@lpp.import "game/shared/Movement.comp.lh"
 @@lpp.import "game/shared/Transform.comp.lh"
 
@@ -43,8 +43,6 @@ b8 GameMgr::init(InitParams& params)
   if (!entsysmgr.init({sim->entmgr}))
     return @log.error("failed to initialize entsysmgr\n");
 
-  entsysmgr.get<InputSys>().mgr = &params.input;
-
   RenderSys::InitParams render_params = 
   {
     .renderer = params.renderer,
@@ -66,8 +64,10 @@ void GameMgr::deinit()
 
 /* ----------------------------------------------------------------------------
  */
-b8 GameMgr::update()
+b8 GameMgr::update(UpdateParams& params)
 {
+  entsysmgr.get<cl::InputSys>().frame_input = params.input;
+
   if (!entsysmgr.update())
     return ERROR("failed to update entity systems\n");
 

@@ -16,9 +16,14 @@ namespace ui
  */
 struct TextEdit
 {
-  u8* ptr;
-  u32 len;
-  u32 space;
+  struct Buffer
+  {
+    u8*  ptr;
+    s32* len;
+    s32  space;
+  };
+
+  Buffer buffer;
 
   struct
   {
@@ -29,14 +34,15 @@ struct TextEdit
     s32 len;
   } cursor;
 
-
-  b8 init(String init = nil);
-  void deinit();
+  void setBuffer(Buffer buffer);
 
   String asStr() const
   {
-    return String::from(ptr, len);
+    return String::from(buffer.ptr, *buffer.len);
   }
+
+  b8 cursorAtEnd() const { return cursor.pos == *buffer.len; }
+  b8 cursorAtStart() const { return cursor.pos == 0; }
   
   // Cursor manipulation functions.
   //

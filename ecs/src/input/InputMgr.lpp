@@ -16,77 +16,79 @@ b8 InputMgr::init()
 
 /* ----------------------------------------------------------------------------
  */
+void InputMgr::onKeyPress(Key key)
+{
+  real_state.keys_pressed.set(key);
+  real_state.keys_down.set(key);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void InputMgr::onKeyRelease(Key key)
+{
+  real_state.keys_released.set(key);
+  real_state.keys_down.unset(key);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void InputMgr::onMButtonPress(MouseButton mbutton)
+{
+  real_state.mouse_pressed.set(mbutton);
+  real_state.mouse_down.set(mbutton);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void InputMgr::onMButtonRelease(MouseButton mbutton)
+{
+  real_state.mouse_released.set(mbutton);
+  real_state.mouse_down.unset(mbutton);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void InputMgr::onCursorMove(vec2f new_pos)
+{
+  real_state.cursor_delta = new_pos - real_state.cursor_pos;
+  real_state.cursor_pos = new_pos;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void InputMgr::onCharInput(String chars)
+{
+  s32 can_place = 
+    min<s32>(chars.len, InputState::CharsLen - real_state.char_count);
+  if (can_place)
+  {
+    mem::copy(
+      real_state.chars + real_state.char_count, 
+      chars.ptr, 
+      can_place);
+
+    real_state.char_count += can_place;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void InputMgr::onAddScroll(f32 scroll)
+{
+  real_state.scroll += scroll;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 InputMgr::update()
 {
-  keys_old = keys_new;
-  mouse_old = mouse_new;
-  keys_new = keys_real;
-  mouse_new = mouse_real;
-
-  char_count = real_char_count;
-  real_char_count = 0;
-
-$ if false then
-$ local function forEachKey()
-  for (Key key = Key::A; (u32)key < (u32)Key::COUNT; key = (Key)((u32)key + 1))
-$ end
-
-  if (anyKeyDown())
-  {
-    @log.info("DOWN: ");
-    @forEachKey
-    {
-      if (isKeyDown(key))
-        @log.info(getKeyStr(key), ' ');
-    }
-    @log.info('\n');
-  }
-
-  if (anyKeyPressed())
-  {
-    @log.info("PRESSED: ");
-    @forEachKey
-    {
-      if (wasKeyPressed(key))
-        @log.info(getKeyStr(key), ' ');
-    }
-    @log.info('\n');
-  }
-
-  if (anyKeyReleased())
-  {
-    @log.info("RELEASED: ");
-    @forEachKey
-    {
-      if (wasKeyReleased(key))
-        @log.info(getKeyStr(key), ' ');
-    } 
-    @log.info('\n');
-  }
-
-$ end
+  real_state.keys_pressed.clear();
+  real_state.keys_released.clear();
+  real_state.mouse_pressed.clear();
+  real_state.mouse_released.clear();
+  real_state.scroll = 0.f;
+  real_state.char_count = 0;
+  real_state.cursor_delta = {};
 
   return true;  
-}
-
-/* ----------------------------------------------------------------------------
- */
-void InputMgr::consumeMouseInput()
-{
-  mouse_old.clear();
-  mouse_new.clear();
-
-  scroll = 0.f;
-}
-
-/* ----------------------------------------------------------------------------
- */
-void InputMgr::consumeKeyInput()
-{
-  keys_old.clear();
-  keys_new.clear();
-
-  mem::zero(chars, sizeof(chars));
-
-  char_count = 0;
 }

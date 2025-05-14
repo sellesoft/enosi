@@ -10,6 +10,165 @@ $ local ui = require "ui.UI"
 namespace ui
 {
 
+@log.ger(ui.cbox, Info)
+
+/* ----------------------------------------------------------------------------
+ */
+b8 ComboBox::init(UI& ui)
+{
+  if (!text.init(ui))
+    return false;
+
+  decor = ui.drawcmds.add();
+  decor->alloc(&ui, gfx::putFilledRectCounts());
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void ComboBox::deinit(UI& ui)
+{
+  decor->remove(&ui);
+  text.deinit(ui);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 ComboBox::update(
+    ItemUpdateContext& ctx,
+    Rect bounds, 
+    const Options& options,
+    const ComboBoxSkinDef& skin)
+{
+  const f32 option_stride = skin.text.font_height + skin.option_spacing;
+
+  Rect visual_bounds = bounds;
+  if (open)
+    visual_bounds.h += 
+      (options.len - (hasSelection()? 1 : 0)) * option_stride - 
+      skin.option_spacing;
+
+  ctx.drawDebugBorder(visual_bounds, {255,0,0,255});
+
+  b8 clicked = 
+    ctx.tryConsumeMouseReleaseInRect(visual_bounds, MouseButton::Left);
+
+  b8 can_select;
+  b8 draw_options;
+
+  auto text_pos = bounds.pos() + skin.padding;
+  auto text_size = vec2f(bounds.w - 2 * skin.padding.x, skin.text.font_height);
+
+  auto decor_pos = vec2f(bounds.x, bounds.y);
+  auto decor_size = vec2f(bounds.w, bounds.h);
+
+  if (clicked)
+  {
+    if (open)
+    {
+      // If the box is clicked while open, we can select an option
+      // and we do not draw options (since the box will close).
+      can_select = true;
+      draw_options = false;
+      open = false;
+    }
+    else
+    {
+      // Otherwise we're opening the box, so draw its open state.
+      draw_options = true;
+      decor_size.y +=  
+        (options.len - (hasSelection()? 1 : 0)) * option_stride - 
+        skin.option_spacing;
+      open = true;
+    }
+  }
+  else if (open && ctx.input.wasAnyMouseButtonReleased())
+  {
+    // If we weren't clicked and are open, close without any selection.
+    can_select = false;
+    draw_options = false;
+    open = false;
+  }
+  else if (ctx.wasEvaluated())
+  {
+    can_select = false;
+    draw_options = open;
+  }
+  else
+  {
+    // If nothing significant happened, just return early.
+    return false;
+  }
+
+  @log.info "<<-END
+    ---------------
+         clicked: $(clicked)
+            open: $(open)
+      can_select: $(can_select)
+    draw_options: $(draw_options)
+    END";
+
+  // Ensure cached selection respects changing options.
+  selected = min<u64>(options.len, selected);
+
+  // Clear any previously drawn text.
+  text.clear();
+
+  f32 y = text_pos.y;
+
+  for (s32 i = 0; i < options.len; ++i)
+  {
+    if (!isSelection(i))
+    {
+      y += option_stride;
+
+      auto text_bounds = 
+        Rect::from(vec2f(text_pos.x, y), text_size);
+
+      if (draw_options)
+        text.draw(
+          ctx.ui,
+          options[i],
+          text_bounds,
+          skin.text);
+
+      if (can_select && ctx.isCursorInRect(text_bounds))
+      {
+        INFO("select ", i, "\n");
+        setSelection(i);
+        break;
+      }
+    }
+  }
+
+  String selection = getSelection(options);
+  if (notnil(selection))
+  {
+    text.draw(
+      ctx.ui,
+      selection,
+      Rect::from(text_pos, text_size),
+      skin.text);
+  }
+
+  {
+    auto [vp, ip] = decor->getPtrs(&ctx.ui);
+    decor->counts_used = {};
+
+    gfx::putFilledRect(
+      vp, ip,
+      &decor->counts_used,
+      decor_pos,
+      decor_size,
+      skin.background_color);
+  }
+
+  return clicked;
+}
+
+$ if false then
+
 @defFileLogger(ui.combobox, Info);
 
 /* ----------------------------------------------------------------------------
@@ -214,6 +373,8 @@ vec2f ComboBox::calcVisualArea()
   else
     return size;
 }
+
+$ end
 
 }
 

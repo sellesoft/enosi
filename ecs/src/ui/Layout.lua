@@ -139,7 +139,7 @@ return function(var, text, offset)
       elseif x.kind == "auto" then
         callMethod("sizing", "set", "Sizing::AutoX")
       end
-      setVar("sizing.x", x.val)
+      setVar("bounds.w", x.val)
 
       if y.kind == "flex" then
         callMethod("sizing", "set", qualify "Sizing::Flex")
@@ -148,7 +148,7 @@ return function(var, text, offset)
       elseif y.kind == "auto" then
         callMethod("sizing", "set", "Sizing::AutoY")
       end
-      setVar("sizing.y", y.val)
+      setVar("bounds.h", y.val)
     end
   end
 

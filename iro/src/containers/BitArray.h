@@ -52,6 +52,12 @@ struct BitArray
     words[word] &= ~(1 << bit);
   }
 
+  void setAll()
+  {
+    for (u32 i = 0; i < WordCount; ++i)
+      words[i] = MAX_U32;
+  }
+
   b8 test(u32 offset) const
   {
     u32 word = offset >> BitsPerWordLog2;

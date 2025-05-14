@@ -16,6 +16,8 @@ using namespace iro;
 namespace ui
 {
 
+struct TextSkinDef;
+
 /* ============================================================================
  */
 struct TextBreak
@@ -133,19 +135,29 @@ struct TextState
 
 /* ============================================================================
  */
-// struct Text
-// {
-//   DrawCmd* dc;
-//
-//   b8 init(UI& ui);
-//   void deinit(UI& ui);
-//
-//   void draw(UI& ui, String text, Rect bounds, const TextSkinDef& skin);
-// };
+struct Text
+{
+  DrawCmd* dc;
+
+  b8 init(UI& ui);
+  void deinit(UI& ui);
+
+  // Draws text *incrementally*, as this widget is meant to be used to 
+  // batch several strings that may be separated. clear() may be used to 
+  // clear the currently cached text.
+  vec2f draw(UI& ui, String text, Rect bounds, const TextSkinDef& skin);
+
+  void setScissor(Rect bounds);
+
+  // Clears any currently drawn text.
+  void clear();
+};
+
+$ if false then
 
 /* ============================================================================
  */
-@ui.widget(Text,
+@ui.widget(TextItem,
 schema
 {
   terminal;
@@ -190,6 +202,8 @@ struct
       lists.pre_children.push(state.dc); 
   }
 })
+
+$ end
 
 }
 

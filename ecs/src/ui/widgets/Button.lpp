@@ -2,8 +2,9 @@ $ local cmn = require "common"
 $ local ui = require "ui.UI"
 
 @@lpp.import "ui/widgets/Button.lh"
+@@lpp.import "ui/widgets/ButtonSkin.defs.lh"
+@@lpp.import "ui/widgets/TextSkin.defs.lh"
 @@lpp.import "ui/UI.lh"
-@@lpp.import "Engine.lh"
 
 #include "iro/containers/SmallArray.h"
 #include "iro/Logger.h"
@@ -16,58 +17,85 @@ namespace ui
 
 /* ----------------------------------------------------------------------------
  */
-Button* Button::make(UI& ui, void* data, Action action, String name)
+b8 Button::init(UI& ui)
 {
-  auto* button = ui.allocateAndInitItem<Button>(name);
-  if (button == nullptr)
-    return nullptr;
+  background = ui.drawcmds.add();
+  background->alloc(&ui, gfx::putFilledRectCounts());
 
-  button->action = action;
-  button->userdata = data;
+  if (!text.init(ui))
+    return ERROR("failed to init button text\n");
 
-  button->update_triggers = 
-      UpdateReason::MousePressed
-    | UpdateReason::MouseReleased;
-
-  return button;
+  return true;
 }
 
 /* ----------------------------------------------------------------------------
  */
-Button* Button::begin(UI& ui, void* data, Action action, String name)
+void Button::deinit(UI& ui)
 {
-  Button* button = make(ui, data, action, name);
-  ui.beginItem(button);
-  return button;
+  background->remove(&ui);
+  text.deinit(ui);
 }
 
 /* ----------------------------------------------------------------------------
  */
-void Button::update(UI* ui, UpdateReason reason)
+Button::State Button::update(
+    ItemUpdateContext& ctx,
+    Rect bounds, 
+    String str, 
+    const ButtonSkinDef& skin)
 {
-  if (!action)
-    return;
+  text.clear();
 
-  $ local this = ui.createItemContext("Button", "this")
+  State state = State::None;
+  const TextItemSkinDef* state_skin = &skin.normal;
 
-  @@this.style:lookup(triggers)
-
-  switch (reason)
+  if (ctx.isCursorInHoverableRect(bounds))
   {
-  case UpdateReason::MousePressed:
-    if (@this.style.triggers.test(Pressed))
+    if (ctx.tryConsumeMousePress(MouseButton::Left) ||
+        ctx.tryConsumeMouseDown(MouseButton::Left))
     {
-      action(this, userdata, ButtonActivation::Pressed);
+      state_skin = &skin.pressed;
+      state = State::Pressed;
     }
-    break;
-
-  case UpdateReason::MouseReleased:
-    if (@this.style.triggers.test(Released))
+    else if (ctx.tryConsumeMouseRelease(MouseButton::Left))
     {
-      action(this, userdata, ButtonActivation::Released);
+      state = State::Released;
+      state_skin = &skin.hovered;
     }
-    break;
+    else
+    {
+      state_skin = &skin.hovered;
+      state = State::Hovered;
+    }
   }
+
+  if (state_skin->text.font.isValid() && notnil(str))
+  {
+    // NOTE(sushi) we dont check if the item was evaluated here because 
+    //             the text is given each update, so we don't know if it
+    //             will have changed. It would be nice to avoid this somehow
+    //             but its probably fine.
+    auto text_size = 
+      gfx::measureText(
+        str,
+        &*state_skin->text.font,
+        state_skin->text.font_height,
+        state_skin->text.tab_spaces);
+
+    auto text_pos = bounds.pos() + vec2f(
+      skin.text_align.x * (bounds.w - text_size.x),
+      skin.text_align.y * (bounds.h - text_size.y));
+
+    text.draw(
+      ctx.ui,
+      str,
+      Rect::from(text_pos, text_size),
+      state_skin->text);
+  }
+  
+  Item::drawBackground(ctx.ui, bounds, background, state_skin->item);
+
+  return state;
 }
 
 }

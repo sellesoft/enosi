@@ -15,6 +15,8 @@ $ local ui = require "ui.UI"
 @@lpp.import "graphics/Shader.lh"
 @@lpp.import "graphics/Pipeline.defs.lh"
 
+@@lpp.import "input/InputState.lh"
+
 #include "iro/containers/List.h"
 #include "iro/containers/Pool.h"
 #include "iro/containers/LinkedPool.h"
@@ -82,12 +84,15 @@ struct UI
   Item* scrolling_item;
   b8 horizontal_scroll;
 
-  gfx::Font* gohu_font;
-  gfx::Texture gohu_font_texture;
-
   gfx::Texture white_texture;
 
   mem::LenientBump temp_alloc;
+
+  DrawCmd* dbg_cmd;
+
+  static const s32 cursor_track_len = 30;
+  vec2f cursor_track[cursor_track_len];
+  s32 cursor_track_pos = 0;
 
   // NOTE(sushi) don't like doing this, but currently moving UI to be under
   //             Client and removing it just storing whatever stores it 
@@ -103,7 +108,6 @@ struct UI
   //             style structures, where each asset we use is known there
   //             and loaded all at one time.
   AssetMgr* assetmgr;
-  InputMgr* input;
   gfx::Renderer* renderer;
 
   Rect viewport;
@@ -112,7 +116,6 @@ struct UI
   {
     AssetMgr& assetmgr;
     gfx::Renderer& renderer;
-    InputMgr& input;
 
     gfx::Texture white_texture;
 
@@ -124,7 +127,12 @@ struct UI
   b8   init(InitParams& params);
   void deinit();
 
-  b8 update();
+  struct UpdateParams
+  {
+    InputState input;
+  };
+
+  b8 update(const UpdateParams& params);
 
   // Helper for widgets to allocate themselves and initialize base Item
   // stuff.
@@ -151,23 +159,18 @@ struct UI
   template<typename TItem>
   void end() { endItem(); }
 
-  // In Items which perform custom drawing, this helper can be used to 
-  // test if a region of the Item was clicked during its update callback.
-  b8 testFocusableRegion(vec2f pos, vec2f size);
-
-  b8 testHoverableRegion(vec2f pos, vec2f size);
-
   void setViewport(Rect viewport)
   {
     this->viewport = viewport;
-    root->dirty = true;
+    root->setDirty();
   }
 
 private:
+  friend ItemUpdateContext;
 
-  b8 focus_consumed = false;
-  Item* updating_item = nullptr;
-  UpdateReason update_reason = UpdateReason::Fin;
+  // The input state of an 'update'. Inputs may be consumed from this 
+  // state by either UI or Items.
+  InputState frame_input;
 
   Item* eval_break;
 
@@ -216,7 +219,6 @@ private:
   };
 
   void evalItemBranch(ItemNode* node, FlexContext* flex);
-  void genItemBranch(ItemNode* node);
 
   void emitDrawCmd(
     DrawCmd* drawcmd, 

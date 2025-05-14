@@ -171,8 +171,6 @@ b8 Window::init(String title, InputMgr& inputmgr)
  */
 b8 Window::update(InputMgr& input)
 {
-  input.scroll = 0.f;
-
   XEvent event;
   for (;;)
   {
@@ -199,25 +197,27 @@ b8 Window::update(InputMgr& input)
     case KeyPress:
       {
         KeySym ks = XLookupKeysym(&event.xkey, 0);
-        Key key = keysymToKey(ks);
-        input.keys_real.set(key);
+        input.onKeyPress(keysymToKey(ks));
 
         KeySym unused;
-        input.real_char_count += 
+        u8 chars[InputState::CharsLen];
+
+        s32 char_count = 
           XLookupString(
             &event.xkey, 
-            (char*)input.chars + input.real_char_count,
-            sizeof(input.chars) - input.real_char_count,
+            (char*)chars,
+            InputState::CharsLen,
             &unused,
             0);
+
+        input.onCharInput(String::from(chars, char_count));
       }
       break;
 
     case KeyRelease:
       {
         KeySym ks = XLookupKeysym(&event.xkey, 0);
-        Key key = keysymToKey(ks);
-        input.keys_real.unset(key);
+        input.onKeyRelease(keysymToKey(ks));
       } 
       break;
 
@@ -229,9 +229,9 @@ b8 Window::update(InputMgr& input)
         {
 $ local map = function(x, y)
         case $(x):
-          (event.type == ButtonPress?
-            input.mouse_real.set(MouseButton::$(y)) :
-            input.mouse_real.unset(MouseButton::$(y)));
+          (event.type == ButtonPress
+            ? input.onMButtonPress(MouseButton::$(y))
+            : input.onMButtonRelease(MouseButton::$(y)));
             break;
 $ end
         @map(Button1, Left)
@@ -239,8 +239,8 @@ $ end
         @map(Button3, Right)
 $ map = nil
 
-        case Button4: input.scroll += 1.f; break;
-        case Button5: input.scroll -= 1.f; break;
+        case Button4: input.onAddScroll(1.f); break;
+        case Button5: input.onAddScroll(-1.f); break;
         default:
             WARN("unhandled button given by XButtonEvent: ", bev.button, 
                  "\n");
@@ -252,8 +252,7 @@ $ map = nil
     case MotionNotify:
       {
         XMotionEvent motion = event.xmotion;
-        input.mouse.window = vec2f(motion.x, motion.y);
-        input.mouse.screen = vec2f(motion.x_root, motion.y_root);
+        input.onCursorMove(vec2f(motion.x, motion.y));
       }
       break;
 

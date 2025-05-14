@@ -5,10 +5,14 @@ $ local metadata = require "reflect.Metadata"
 
 #include "math/vec.h"
 
+// TODO(sushi) put this in a general location
+enum class Dir { Left, Right, Up, Down, COUNT };
+typedef Flags<Dir> Dirs;
+
 struct Movement : Component
 {
   @metadata.data_field
   f32 speed = 0.1f;
 
-  vec2f input = {0,0};
+  Dirs held_dirs;
 };

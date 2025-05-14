@@ -1,0 +1,73 @@
+$ require "common"
+
+@@lpp.import "game/client/input/Input.sys.lh"
+@@lpp.import "game/shared/input/Input.events.lh"
+@@lpp.import "game/shared/Eye.sys.lh"
+
+namespace cl
+{
+
+/* ----------------------------------------------------------------------------
+ */
+void InputSys::update()
+{
+  if (isnil(attached_entity))
+    return;
+
+  MoveInputStates move_input;
+
+$ local function checkKey(key, move)
+  if (frame_input.wasKeyPressed(Key::$(key)))
+    move_input.set(MoveInput::$(move)Pressed);
+  else if (frame_input.wasKeyReleased(Key::$(key)))
+    move_input.set(MoveInput::$(move)Released);
+$ end
+
+  @checkKey(A, Left)
+  @checkKey(D, Right)
+  @checkKey(W, Up)
+  @checkKey(S, Down)
+
+  if (!move_input.isNone())
+  {
+    raise(MoveInputEvent
+    {
+      .entity = attached_entity,
+      .input = move_input,
+    });
+  }
+
+  vec2f mouse_world = eye->screenToWorld(frame_input.getCursorPos());
+
+  if (frame_input.wasMouseButtonPressed(MouseButton::Left))
+    raise(UsePrimaryInputEvent
+    {
+      .entity = attached_entity,
+      .pos = mouse_world,
+      .released = false,
+    });
+  else if (frame_input.wasMouseButtonReleased(MouseButton::Left))
+    raise(UsePrimaryInputEvent
+    {
+      .entity = attached_entity,
+      .pos = mouse_world,
+      .released = true,
+    });
+
+  if (frame_input.wasMouseButtonPressed(MouseButton::Right))
+    raise(UseSecondaryInputEvent
+    {
+      .entity = attached_entity,
+      .pos = mouse_world,
+      .released = false,
+    });
+  else if (frame_input.wasMouseButtonReleased(MouseButton::Right))
+    raise(UseSecondaryInputEvent
+    {
+      .entity = attached_entity,
+      .pos = mouse_world,
+      .released = true,
+    });
+}
+
+}

@@ -9,9 +9,70 @@ $ local ui = require "ui.UI"
 
 @@lpp.import "ui/Item.lh"
 @@lpp.import "ui/widgets/Text.lh"
+@@lpp.import "ui/widgets/ComboBoxSkin.defs.lh"
+
+#include "math/Rect.h"
 
 namespace ui
 {
+
+struct ComboBox
+{
+  typedef Slice<String> Options;
+
+  Text text;
+  DrawCmd* decor;
+
+  b8 open;
+
+  // This is 0 when no selection is active, and indexes the options 
+  // array starting at 1!
+  u32 selected;
+
+  Rect bounds;
+
+  b8 init(UI& ui);
+  void deinit(UI& ui);
+
+  b8 update(
+    ItemUpdateContext& ctx,
+    Rect bounds,
+    const Options& options,
+    const ComboBoxSkinDef& skin);
+
+  void reportDrawCmds(UI& ui, DrawCmdLists& lists)
+  {
+    DrawCmdList* list = open? &lists.top_most : &lists.pre_children;
+    list->push(decor);
+    list->push(text.dc);
+  }
+
+  b8 hasSelection() const { return selected != 0; }
+
+  String getSelection(const Options& options) const
+  {
+    if (hasSelection())
+      return options[selected-1];
+    return nil;
+  }
+
+  void setSelection(u32 i)
+  {
+    selected = i + 1;
+  }
+
+  void clearSelection() 
+  {
+    selected = 0;
+  }
+
+  b8 isSelection(u32 i) const
+  {
+    return i + 1 == selected;
+  }
+};
+
+$ if false then
 
 /* ============================================================================
  */
@@ -97,5 +158,7 @@ struct
     }
   }
 })
+
+$ end
 
 }

@@ -21,7 +21,6 @@ b8 GameSim::init(InitParams& params)
     .sim = this,
     .renderer = params.renderer,
     .assetmgr = params.assetmgr,
-    .input = params.input,
     .white_texture = params.white_texture,
     .loader = params.loader,
   };
@@ -49,12 +48,17 @@ void GameSim::deinit()
 
 /* ----------------------------------------------------------------------------
  */
-b8 GameSim::update()
+b8 GameSim::update(UpdateParams& params)
 {
-  if (!SharedGameSim::update())
+  if (!SharedGameSim::update(params))
     return false;
 
-  return gamemgr.update();
+  GameMgr::UpdateParams gamemgr_params = 
+  {
+    .input = params.input,
+  };
+
+  return gamemgr.update(gamemgr_params);
 }
 
 /* ----------------------------------------------------------------------------

@@ -4,114 +4,37 @@
 
 $ require "common"
 
-#include "input/Keys.h"
-#include "math/vec.h"
-
-#include "iro/containers/BitArray.h"
-
-using namespace iro;
-
-struct Engine;
+@@lpp.import "input/InputState.lh"
 
 /* ============================================================================
  */
 struct InputMgr
 {
-  typedef EnumBitArray<Key> KeyMap;
-  typedef EnumBitArray<MouseButton> MouseButtonMap;
-  
-  KeyMap keys_old;
-  KeyMap keys_new;
-  KeyMap keys_real;
-
-  MouseButtonMap mouse_old;
-  MouseButtonMap mouse_new;
-  MouseButtonMap mouse_real;
-
-  struct
-  {
-    vec2f screen;
-    vec2f window;
-  } mouse;
-
-  f32 scroll;
-
-  u8 chars[8];
-  u8 char_count;
-  u8 real_char_count;
+  InputState real_state;
 
   b8   init();
   void deinit();
 
+  // Prepares input for next frame. This will clear any pressed/released
+  // keys and reset scroll and char input states.
   b8 update();
 
-  // TODO(sushi) do this better. This is used to allow the UI system to 
-  //             consume input so that when we are, say, typing into an 
-  //             input text widget we dont also send those inputs to the
-  //             game. Later on we should instead send a different set of 
-  //             input bits to the game systems, but at the moment I'm
-  //             not completely sure how I want input for the game to work,
-  //             so we'll stick with this for now.
-  // NOTE(sushi) ok never mind, this doesn't actually work. We need to 
-  //             do what I suggested above, where we send to the game a 
-  //             different input state entirely, I don't want to focus on 
-  //             that at the moment though.
-  void consumeMouseInput();
-  void consumeKeyInput();
+  // TODO(sushi) maybe would be useful to include filters in this api, 
+  //             but that might be annoying so for now things just 
+  //             modify the input state manually.
+  void cloneInputState(InputState* state)
+  {
+    *state = real_state;
+  }
 
-  b8 isKeyDown(Key key)
-  {
-    return keys_new.test(key);
-  }
-  b8 anyKeyDown()
-  {
-    return keys_new.testAny();
-  }
-  b8 wasKeyPressed(Key key)
-  {
-    return keys_new.test(key) && !keys_old.test(key);
-  }
-  b8 anyKeyPressed()
-  {
-    return char_count != 0 || keys_new.bitAnd(keys_old.bitNot()).testAny();
-  }
-  b8 wasKeyReleased(Key key)
-  {
-    return !keys_new.test(key) && keys_old.test(key);
-  }
-  b8 anyKeyReleased()
-  {
-    return keys_new.bitNot().bitAnd(keys_old).testAny();
-  }
-  b8 isMouseButtonDown(MouseButton button) 
-  {
-    return mouse_new.test(button);
-  }
-  b8 wasMouseButtonPressed(MouseButton button)
-  {
-    return mouse_new.test(button) && !mouse_old.test(button);
-  }
-  b8 wasMouseButtonReleased(MouseButton button)
-  {
-    return !mouse_new.test(button) && mouse_old.test(button);
-  }
-  b8 anyMouseButtonPressed()
-  {
-    return wasMouseButtonPressed(MouseButton::Left) ||
-           wasMouseButtonPressed(MouseButton::Right) ||
-           wasMouseButtonPressed(MouseButton::Middle);
-  }
-  b8 anyMouseButtonReleased()
-  {
-    return wasMouseButtonReleased(MouseButton::Left) ||
-           wasMouseButtonReleased(MouseButton::Right) ||
-           wasMouseButtonReleased(MouseButton::Middle);
-  }
-  b8 anyMouseButtonDown()
-  {
-    return isMouseButtonDown(MouseButton::Left) ||
-           isMouseButtonDown(MouseButton::Right) ||
-           isMouseButtonDown(MouseButton::Middle);
-  }
+  // API for notifying the mgr about inputs, which it uses to update its
+  // real state. This is primarily for use by Window right now.
+  void onKeyPress(Key key);
+  void onKeyRelease(Key key);
+  void onMButtonPress(MouseButton mbutton);
+  void onMButtonRelease(MouseButton mbutton);
+  void onCursorMove(vec2f new_pos);
+  void onCharInput(String chars);
+  void onAddScroll(f32 scroll);
 };  
  

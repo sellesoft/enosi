@@ -1,5 +1,7 @@
 $ require "common"
+$ local m = require "reflect.Metadata"
 
+@@lpp.import "asset/Asset.lh"
 @@lpp.import "ui/ItemSkin.defs.lh"
 @@lpp.import "graphics/Ref.defs.lh"
 
@@ -18,22 +20,32 @@ enum class TextWrap
 /* ============================================================================
  *  A set of properties for styling some text. 
  */
+@m.def
+@m.source_types(skin)
 struct TextSkinDef
 {
   gfx::FontRef font;
-
-  f32 font_height;
-  TextWrap wrap;
+  TextWrap     wrap;
+  @m.default "{r=255,g=255,b=255,a=255}"
+  Color        color;
+  f32          font_height;
+  f32          tab_spaces;
 };
+
+typedef TypedSourceAssetRef<TextSkinDef> TextSkinRef;
 
 /* ============================================================================
  *  A set of properties for styling some text that is visually displayed 
  *  as its own Item (eg. a Button).
  */
+@m.def
+@m.source_types(skin)
 struct TextItemSkinDef
 {
   TextSkinDef text;
   ItemSkinDef item;
 };
+
+typedef TypedSourceAssetRef<TextItemSkinDef> TextItemSkinRef;
 
 }

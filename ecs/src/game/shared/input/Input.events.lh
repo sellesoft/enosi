@@ -1,0 +1,57 @@
+/*
+ *  Game input events and definitions.
+ */
+
+$ require "common"
+$ local m = require "reflect.Metadata"
+
+#include "iro/Flags.h"
+
+using namespace iro;
+
+/* ============================================================================
+ */
+enum class MoveInput
+{
+  LeftPressed,
+  RightPressed,
+  UpPressed,
+  DownPressed,
+
+  LeftReleased,
+  RightReleased,
+  UpReleased,
+  DownReleased,
+
+  COUNT
+};
+typedef Flags<MoveInput> MoveInputStates;
+
+/* ============================================================================
+ */
+@m.event(entity)
+struct MoveInputEvent
+{
+  EntityId entity;
+  MoveInputStates input;
+};
+
+/* ============================================================================
+ */
+@m.event(entity)
+struct UsePrimaryInputEvent
+{
+  EntityId entity;
+  vec2f pos;
+  b8 released;
+};  
+
+/* ============================================================================
+ */
+@m.event(entity)
+struct UseSecondaryInputEvent
+{
+  EntityId entity;
+  vec2f pos;
+  b8 released;
+};  

@@ -3,12 +3,20 @@ $ require "common"
 #include "iro/Common.h"
 
 @@lpp.import "game/shared/entity/EntitySys.lh"
+@@lpp.import "game/shared/input/Input.events.lh"
+@@lpp.import "game/shared/Movement.comp.lh"
 
 struct GameMgr;
 
 struct MovementSys : EntitySys
 {
-  b8 init() { return true; }
+  b8 init() 
+  { 
+    subscribeTo<MoveInputEvent>(&MovementSys::onMoveInput);
+    return true; 
+  }
 
   b8 update();
+
+  void onMoveInput(MoveInputEvent& ev);
 };

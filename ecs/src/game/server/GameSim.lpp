@@ -47,7 +47,8 @@ void GameSim::deinit()
  */
 b8 GameSim::update()
 {
-  if (!SharedGameSim::update())
+  UpdateParams blahblahblah = {};
+  if (!SharedGameSim::update(blahblahblah))
     return false;
 
   if (!this->entsysmgr.update())

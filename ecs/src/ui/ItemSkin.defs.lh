@@ -1,4 +1,5 @@
 $ require "common"
+$ local m = require "reflect.Metadata"
 
 @@lpp.import "graphics/Ref.defs.lh"
 
@@ -11,10 +12,16 @@ namespace ui
 /* ============================================================================
  *  A basic set of properties for styling a plain Item.
  */
+@m.def
+@m.source_types(skin)
 struct ItemSkinDef
 {
   gfx::TextureRef texture;
+
+  @m.default "{x=0,y=0,w=1,h=1}"
   Rect uv;
+
+  @m.default "{r=25,g=25,b=25,a=255}"
   Color color;
 };
 

@@ -13,6 +13,7 @@ namespace ui
  */
 struct ButtonSkinDef
 {
+  vec2f text_align;
   TextItemSkinDef normal;
   TextItemSkinDef hovered;
   TextItemSkinDef pressed;

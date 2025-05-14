@@ -6,6 +6,7 @@
  */
 
 $ require "common"
+$ local ui = require "ui.UI"
 
 @@lpp.import "game/client/Client.lh"
 
@@ -17,8 +18,83 @@ $ require "common"
 @@lpp.import "graphics/Renderer.lh"
 @@lpp.import "input/InputMgr.lh"
 @@lpp.import "graphics/Ref.defs.lh"
+@@lpp.import "ui/widgets/Text.lh"
+@@lpp.import "ui/widgets/ComboBox.lh"
+@@lpp.import "ui/widgets/Button.lh"
+@@lpp.import "ui/widgets/InputText.lh"
+@@lpp.import "game/client/TestSkin.defs.lh"
 
 @log.ger(client, Debug)
+
+struct Test : ui::Item
+{
+  ui::Button button;
+  ui::ComboBox cbox;
+  ui::InputText itext;
+  TestSkinDef* skin;
+
+  u8 text_buffer[255];
+  s32 text_len = 0;
+
+  ui::DrawCmd* bg;
+
+  static void create(ui::UI& ui, AssetLoader& loader)
+  {
+    using namespace ui;
+    using namespace item_layout_typedefs;
+
+    auto* test = ui.allocateAndInitItem<Test>("test"_str);
+
+    test->button.init(ui);
+    test->cbox.init(ui);
+    test->itext.init(ui);
+    test->bg = ui.drawcmds.add();
+
+    @ui.layout(test, size: 100 100);
+
+    TestSkinRef skinref;
+    loader.load(&skinref, "assets/skins/Test"_str);
+
+    test->skin = &*skinref;
+  }
+
+  void update(ui::ItemUpdateContext& ctx) override
+  {
+    button.update(
+      ctx, Rect::from(10, 10, 30, 30), "hi"_str, skin->button);
+
+    String opts[] = 
+    {
+      "bleh"_str,
+      "blah"_str,
+      "bloh"_str,
+    };
+
+    cbox.update(
+      ctx, Rect::from(10, 45, 30, 30), ui::ComboBox::Options::from(opts),
+      skin->combo_box);
+
+    ui::ItemSkinDef bgskin = {};
+    bgskin.color = {255,155, 155, 255};
+
+    ui::Item::drawBackground(
+      ctx.ui, Rect::from(0, 0, size.x, size.y), bg, bgskin);
+
+    itext.update(
+      ctx, 
+      Rect::from(10, 80, 80, 30), 
+      {text_buffer, &text_len, 255},
+      skin->input_text);
+  }
+
+  void reportDrawCmds(ui::UI& ui, ui::DrawCmdLists& lists) override
+  {
+    lists.pre_children.push(bg);
+    button.reportDrawCmds(ui, lists);
+    cbox.reportDrawCmds(ui, lists);
+    itext.reportDrawCmds(ui, lists);
+  }
+};
 
 /* ----------------------------------------------------------------------------
  */
@@ -43,13 +119,43 @@ $ end
 
   gfx::Renderer::InitParams renderer_params = 
   {
-    .assetmgr = engine->assetmgr,
-    .window = window,
+    .assetmgr  = engine->assetmgr,
+    .window    = window,
     .allocator = mem::stl_allocator,
   };
   @init(renderer.init(renderer_params), Renderer);
 
-  // compileRequiredAssets(engine->assetmgr);
+  // TODO(sushi) this is dumb, get rid of it by just making the texture
+  //             manually through gfx::Texture.
+  gfx::CompiledTexture::CompileParams white_texture_params =
+  {
+    .name         = "assets/textures/white"_str,
+    .width        = 2,
+    .height       = 2,
+    .format       = gfx::ImageFormat::BW,
+    .usage        = gfx::ImageUsage::Sampled,
+    .filter       = gfx::ImageFilter::Nearest,
+    .address_mode = gfx::ImageAddressMode::ClampToWhite,
+    .allocator    = &mem::stl_allocator,
+    .assetmgr     = &engine->assetmgr,
+  };
+
+  u8 pixels[16] =
+  {
+    0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff,
+  };
+
+  gfx::CompiledTexture::compileFromMemory(pixels, white_texture_params);
+
+  auto* white_texture_compiled =
+    gfx::CompiledTexture::load(
+      "assets/textures/white"_str, engine->assetmgr, renderer);
+  if (white_texture_compiled == nullptr)
+    return ERROR("failed to load white texture\n");
+  white_texture = white_texture_compiled->gfx_texture;
 
   AssetLoader asset_loader = 
   {
@@ -62,26 +168,28 @@ $ end
   {
     .assetmgr = engine->assetmgr,
     .renderer = renderer,
-    .input = input,
+    
+    .white_texture = white_texture,
 
     .viewport = Rect::from({0,0}, window.size),
 
-    .loader = asset_loader,
+    .loader   = asset_loader,
   };
   @init(ui.init(ui_params), UI);
 
   cl::GameSim::InitParams sim_params = 
   {
-    .loader = asset_loader,
+    .loader   = asset_loader,
     .viewport = Rect::from({0,0}, window.size),
     .renderer = renderer,
     .assetmgr = engine->assetmgr,
     .sfilereg = engine->source_data_file_reg,
-    .input = input,
   };
   @init(sim.init(sim_params), cl::GameSim);
 
   @init(editor.init(this), Editor);
+
+  Test::create(ui, asset_loader);
 
   return true;
 }
@@ -90,6 +198,12 @@ $ end
  */
 b8 Client::update()
 {
+  // Prepares input state for this frame.
+  if (!input.update())
+    return ERROR("failed to update input\n");
+
+  // Handles OS window events and notifies the inputmgr about any input 
+  // events.
   if (!window.update(input))
     return ERROR("failed to update window\n");
 
@@ -101,17 +215,30 @@ b8 Client::update()
   if (!renderer.update(renderer_params))
     return ERROR("failed to update renderer\n");
 
-  if (!input.update())
-    return ERROR("failed to update input\n");
+  InputState sim_input = {};
+  input.cloneInputState(&sim_input);
+  
+  cl::GameSim::UpdateParams sim_params = 
+  {
+    .input = sim_input,
+  };
 
-  if (!sim.update())
+  if (!sim.update(sim_params))
     return ERROR("failed to update game sim\n");
-
-  if (!ui.update())
-    return ERROR("failed to update ui\n");
 
   if (!sim.render(renderer))
     return ERROR("failed to render game sim\n");
+
+  InputState ui_input = {};
+  input.cloneInputState(&ui_input);
+
+  ui::UI::UpdateParams ui_params =
+  {
+    .input = ui_input,
+  };
+
+  if (!ui.update(ui_params))
+    return ERROR("failed to update ui\n");
 
   return true;
 }
@@ -126,37 +253,7 @@ b8 Client::compileRequiredAssets(AssetMgr& assetmgr)
     if (!texture_compile_allocator.init())
       return ERROR("failed to initialize texture compile allocator\n");
     defer { texture_compile_allocator.deinit(); };
-
-    gfx::CompiledTexture::CompileParams white_texture_params =
-    {
-      .name         = "assets/textures/white"_str,
-      .width        = 2,
-      .height       = 2,
-      .format       = gfx::ImageFormat::BW,
-      .usage        = gfx::ImageUsage::Sampled,
-      .filter       = gfx::ImageFilter::Nearest,
-      .address_mode = gfx::ImageAddressMode::ClampToWhite,
-      .allocator    = &texture_compile_allocator,
-      .assetmgr     = &assetmgr,
-    };
-
-    u8 pixels[16] =
-    {
-      0xff, 0xff, 0xff, 0xff,
-      0xff, 0xff, 0xff, 0xff,
-      0xff, 0xff, 0xff, 0xff,
-      0xff, 0xff, 0xff, 0xff,
-    };
-
-    gfx::CompiledTexture::compileFromMemory(pixels, white_texture_params);
-
-    auto* white_texture_compiled =
-      gfx::CompiledTexture::load(
-        "assets/textures/white"_str,assetmgr, renderer);
-    if (white_texture_compiled == nullptr)
-      return ERROR("failed to load white texture\n");
-    white_texture = white_texture_compiled->gfx_texture;
-
+  
     gfx::CompiledTexture::CompileParams null_texture_params =
     {
       .name         = "assets/textures/null"_str,
@@ -206,7 +303,6 @@ b8 Client::compileRequiredAssets(AssetMgr& assetmgr)
 
     if (!compile("assets/shaders/Stars.frag"_str))
       return false;
-
 
     gfx::CompiledShader::CompileParams scene_vertex_shader_params =
     {
@@ -283,4 +379,13 @@ b8 Client::compileRequiredAssets(AssetMgr& assetmgr)
   }
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Client::wantHotReload()
+{
+  if (input.real_state.wasKeyPressed(Key::R))
+    return true;
+  return false;
 }

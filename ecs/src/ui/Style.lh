@@ -4,6 +4,8 @@
  *  This can be thought of as the CSS of the ui system.
  */
 
+$ if false then
+
 $ local cmn = require "common"
 
 $ local ctx = cmn.reflect.ctx
@@ -126,3 +128,5 @@ struct StyleMap
 
 
 }
+
+$ end

@@ -5,6 +5,7 @@
 $ local cmn = require "common"
 $ local ui = require "ui.UI"
 
+#include "iro/Flags.h"
 #include "iro/Unicode.h"
 #include "iro/containers/Tree.h"
 #include "iro/containers/Array.h"
@@ -14,16 +15,22 @@ $ local ui = require "ui.UI"
 #include "math/mat.h"
 #include "math/Rect.h"
 
-@@lpp.import "ui/Style.lh"
+#include "Color.h"
+
+#include "input/Keys.h"
+
 
 using namespace iro;
+
+struct InputState;
 
 namespace ui
 {
 
+struct UI;
 struct Item;
 struct DrawCmd;
-struct UI;
+struct ItemSkinDef;
 
 typedef Tree<Item> ItemTree;
 typedef ItemTree::Node ItemNode;
@@ -80,35 +87,6 @@ struct DrawCmdLists
   // Item tree, eg. drawn over all Items.
   DrawCmdList top_most;
 };
-
-/* ============================================================================
- *  The reason an update callback was called on an item.
- */
-enum class UpdateReason
-{
-  // Called before anything happens on this Item.
-  Start,
-
-  MouseHover,
-  MouseHoverChild,
-
-  MousePressed,
-  MouseReleased,
-  MouseDown,
-  MouseScroll,
-
-  FocusGained,
-  FocusLost,
-
-  FocusedKeyPress,
-
-  // Last update callback ever invoked on an Item.
-  Fin,
-
-  COUNT
-};
-typedef Flags<UpdateReason> UpdateReasonFlags;
-DefineFlagsOrOp(UpdateReasonFlags, UpdateReason);
 
 /* ============================================================================
  */
@@ -197,6 +175,9 @@ struct ItemLayout
   vec2f alignment;
 };
 
+/* ============================================================================
+ *  Convenience typedefs.
+ */
 namespace item_layout_typedefs
 {
   using Positioning = ItemLayout::Positioning;
@@ -207,243 +188,108 @@ namespace item_layout_typedefs
 }
 
 /* ============================================================================
+ *  Flags relevant to some Item. I'm not a huge fan of this as the 'lifetime'
+ *  of the flags vary and some are meant to be used by UI while some are 
+ *  used by UI to inform an Item about stuff during its update. I don't really 
+ *  feel like splitting that stuff into *another* enum right now but 
+ *  eventually we prob should.
  */
-@ui.widget(Item,
-schema
+enum class ItemFlag
 {
-  pos: vec2f = 0 0;
+  // This Item needs to be reevaluated in the next UI update.
+  Dirty,
 
-  positioning: enum
-  {
-    static,
-    relative,
-    absolute,
-    fixed,
-  } = static;
+  // If the item was evaluated this frame.
+  Evaluated,
 
-  size: vec2f = 0 0
-    accessors
-      width = "%.x",
-      height = "%.y"
-    parseValue
-    {
-      -- Special because we could encounter a percentage or keyword.
-      local sizing = ""
+  // If the item is focused, eg. the last item to be clicked and what not.
+  Focused,
 
-      local addSizing = function(s)
-        if 0 ~= #sizing then
-          sizing = sizing.."|"
-        end
-        sizing = sizing..s
-      end
+  // If the item gained/lost focus this frame.
+  GainedFocus,
+  LostFocus,
 
-      local x, xperc, xflex
-      if parser:checkToken "auto" then
-        addSizing "auto_x"
-      elseif parser:checkToken "flex" then
-        x = parser:expectPattern "%b()" :sub(2,-2)
-        addSizing "flex"
-      else
-        x = parser:expectNumber()
-        if parser:checkToken "%%" then
-          addSizing "percent_x"
-        end
-      end
+  // If the item is the topmost hovered item.
+  Hovered,
 
-      local y, yperc
-      if parser:checkToken "auto" then
-        addSizing "auto_y"
-      elseif parser:checkToken "flex" then
-        y = parser:expectPattern "%b()" :sub(2,-2)
-        addSizing "flex"
-      else
-        y = parser:expectNumber()
-        if parser:checkToken "%%" then
-          addSizing "percent_y"
-        end
-      end
+  // If the item gained/lost hover this frame.
+  GainedHover,
+  LostHover,
 
-      if #sizing ~= 0 then
-        style.set.sizing(sizing)
-      end
+  COUNT
+};
+typedef Flags<ItemFlag> ItemFlags;
 
-      return "{"..(x or 0)..","..(y or 0).."}"
-    };
+/* ============================================================================
+ */
+struct ItemUpdateContext
+{
+  UI& ui;
+  Item& item;
+  InputState& input;
+  
+  // Tests if the given point is with the given bounds. The positioning 
+  // of these two params is local to the Item's position on the screen.
+  b8 isPointInRect(Rect bounds, vec2f point);
 
-  sizing: flags
-  {
-    normal,
-    auto_x,
-    auto_y,
-    percent_x,
-    percent_y,
-    square,
-    flex,
-  } = normal
-    values
-      auto = "auto_x | auto_y",
-      percent = "percent_x | percent_y";
+  // Works regardless of if this Item is the top-most item.
+  b8 isCursorInRect(Rect bounds);
 
-  margin: vec4f = 0
-    accessors
-      top_left     = "%.xy()",
-      bottom_right = "%.zw()",
-      top          = "%.y",
-      left         = "%.x",
-      right        = "%.z",
-      bottom       = "%.w";
+  // The following mouse related functions only work if the item is the 
+  // top-most hovered item.
+  b8 isCursorInHoverableRect(Rect bounds);
 
-  padding: vec4f = 0
-    accessors
-      top_left     = "%.xy()",
-      bottom_right = "%.zw()",
-      top          = "%.y",
-      left         = "%.x",
-      right        = "%.z",
-      bottom       = "%.w";
+  // NOTE(sushi) these really do not work well as they are based on the 
+  //             cursor delta stored in the input state and should be 
+  //             fixed next time we find a use for this if ever.
+  b8 didCursorEnterRectThisFrame(Rect bounds);
+  b8 didCursorExitRectThisFrame(Rect bounds);
 
-  display: flags
-  {
-    horizontal,
-    flex,
-    reverse,
-    hidden,
-  };
+  b8 wasMouseButtonPressedInRect(Rect bounds, MouseButton button);
+  b8 wasMouseButtonReleasedInRect(Rect bounds, MouseButton button);
+  b8 isMouseButtonDownInRect(Rect bounds, MouseButton button);
+  
+  b8 tryConsumeMousePress(MouseButton button);
+  b8 tryConsumeMouseRelease(MouseButton button);
+  b8 tryConsumeMouseDown(MouseButton button);
 
-  anchor: enum
-  {
-    top_left,
-    top_right,
-    bottom_right,
-    bottom_left,
-  } = top_left;
+  b8 tryConsumeMousePressInRect(Rect bounds, MouseButton button);
+  b8 tryConsumeMouseReleaseInRect(Rect bounds, MouseButton button);
+  b8 tryConsumeMouseDownInRect(Rect bounds, MouseButton button);
 
-  border: vec4f = 0
-    accessors
-      top_left     = "%.xy()",
-      bottom_right = "%.zw()",
-      top          = "%.y",
-      left         = "%.x",
-      right        = "%.z",
-      bottom       = "%.w";
+  // Should maybe only use when focused! Not a requirement though but I feel
+  // like that not being enforced may cause issues. We'll see :3.
+  String tryConsumeCharInput();
 
-  border_color: Color = 0x45262dff;
+  f32 tryConsumeScroll();
 
-  background_color: Color = 0x00000000;
+  b8 wasEvaluated() const;
 
-  font:        String = "assets/fonts/gohu";
-  font_height: f32    = 11;
-  text_color:  Color  = 0xc5c9c5ff;
+  void drawDebugBorder(Rect bounds, Color color);
+};
 
-  alignment: vec2f = 0 0;
-
-  func hasBorder 
-  {
-    %.border.left ||
-    %.border.right ||
-    %.border.top ||
-    %.border.bottom
-  }
-
-  vertical_scrollbar_width:    f32 = 7;
-  horizontal_scrollbar_height: f32 = 7;
-
-  vertical_scrollbar_handle_width:    f32 = 5;
-  horizontal_scrollbar_handle_height: f32 = 5;
-
-  scrollbar_color:        Color = 0x16161dff;
-  scrollbar_handle_color: Color = 0x717c7c;
-
-  overflow: enum
-  {
-    scroll,
-    clip,
-    visible,
-  } = scroll;
-
-  func getMarginedWidth 
-    { $.size.x - %.margin.left - %.margin.right }
-  func getMarginedHeight 
-    { $.size.y - %.margin.top - %.margin.bottom }
-  func getMarginedArea 
-    { { $.getMarginedWidth, $.getMarginedHeight } }
-
-  func getMarginedStyleWidth 
-    { %.size.width - %.margin.left - %.margin.right }
-  func getMarginedStyleHeight 
-    { %.size.height - %.margin.top - %.margin.bottom }
-  func getMarginedStyleArea 
-    { { $.getMarginedStyleWidth, $.getMarginedStyleHeight } }
-
-  func getBorderedWidth
-    { $.getMarginedWidth - %.border.left - %.border.right }
-  func getBorderedHeight
-    { $.getMarginedHeight - %.border.top - %.border.bottom } 
-  func getBorderedArea
-    { { $.getBorderedWidth, $.getBorderedHeight } }
-
-  func getBorderedStyleWidth 
-    { %.size.width - %.border.left - %.border.right } 
-  func getBorderedStyleHeight
-    { %.size.height - %.border.top - %.border.bottom }
-  func getBorderedStyleArea
-    { { $.getBorderedStyleWidth, $.getBorderedStyleHeight } }
-
-  func getPaddedWidth
-    { $.getBorderedWidth - %.padding.left - %.padding.right }
-  func getPaddedHeight
-    { $.getBorderedHeight - %.padding.top - %.padding.bottom }
-  func getPaddedArea
-    { { $.getPaddedWidth, $.getPaddedHeight } }
-
-  func getPaddedStyleWidth
-    { %.size.width - %.padding.left - %.padding.right }
-  func getPaddedStyleHeight
-    { %.size.height - %.padding.top - %.padding.bottom }
-  func getPaddedStyleArea
-    { { $.getPaddedStyleWidth, $.getPaddedStyleHeight } }
-},
-struct
+/* ============================================================================
+ */
+struct Item
 {
   String name;
-  StyleMap style;
-
   ItemLayout layout;
 
   ItemNode* node;
 
-  UpdateReasonFlags update_triggers;
-
-  // I would like to not do this, but since these properties are a part of 
-  // all Items I feel it is appropriate to force being able to use them
-  // on any of them whether the widget specifies it or not. Ideally these
-  // aren't cached on the Item itself as we want to keep Item small, but 
-  // I don't have anywhere else to put them atm. Once we get to caching 
-  // off drawcmds into a linear list that we feed to the Renderer (if 
-  // possible) then these should ideally be moved off.
-  struct 
-  {
-    // Always draws over anything the Item draws.
-    DrawCmd* borders;
-    DrawCmd* scrollbars;
-
-    // Always draws below anything the Item draws.
-    DrawCmd* background;
-
-    DrawCmd* debug;
-    DrawCmd* debug_text;
-  } builtin;
+  ItemFlags flags;
 
   operator ItemNode*() { return node; }
 
   vec2f scroll;
   vec2f max_scroll;
 
-  // TODO(sushi) much of the following data is not necessary to cache on the
-  //             Item as it is used only during evaluation and drawing.
-  //             We should move towards temporarily allocating 'working data'
-  //             during the entire process of eval/draw instead to reduce 
-  //             the size of this struct as much as possible.
+  // TODO(sushi) I originally thought that much of this info is not needed
+  //             and had a huge note here about getting rid of it. However,
+  //             I don't think we can get rid of most of it like I originally
+  //             thought. BUT, I think we can definitely get rid of pos_screen
+  //             as we keep track of this while updating the item tree.
+  //             Remove that eventually please :).
 
   vec2f pos_local;
   vec2f pos_screen;
@@ -454,24 +300,25 @@ struct
   vec2f visible_start;
   vec2f visible_size;
 
-  // TODO(sushi) even this guy can probably be eliminated by just storing a 
-  //             list of dirty Items on UI that we check every update.
-  b8 dirty;
-
   b8 init(UI& ui, String name);
   void deinit();
 
+  void setDirty() { flags.set(ItemFlag::Dirty); }
+  b8 isDirty() const { return flags.test(ItemFlag::Dirty); }
+
   static Item* make(UI& ui, String name = nil);
   static Item* begin(UI& ui, String name = nil);
+
+  static void drawBackground(
+      UI& ui, 
+      Rect bounds,
+      DrawCmd* dc, 
+      const ItemSkinDef& skin);
   
-  // Called according to the update_trigger style property.
-  virtual void update(UI* ui, UpdateReason reason) {}
+  virtual void update(ItemUpdateContext& ctx) {}
 
   // Determines how this item is sized and positioned relative to other items.
-  virtual void evaluate(UI* ui) {}
-
-  // Generates draw information for rendering this item.
-  virtual void generate(UI* ui);
+  virtual void evaluate(UI& ui) {}
 
   // Cleans up any dynamic memory this item may have allocated in its lifetime.
   virtual void cleanup() {}
@@ -479,7 +326,7 @@ struct
   // Implemented by Items that perform custom drawing via DrawCmds. DrawCmds
   // can be emitted in various ways. See DrawCmdLists for an explanation of
   // each list.
-  virtual void reportDrawCmds(UI* ui, DrawCmdLists& lists) { }
+  virtual void reportDrawCmds(UI& ui, DrawCmdLists& lists) { }
 
   // Allows a widget to tell evaluate if it should place children or not.
   virtual b8 shouldPlaceChildren() { return true; }
@@ -492,11 +339,11 @@ struct
   // TODO(sushi) this could really just be a postEvaluation callback, as it is
   //             called at the very end. If we wind up having a lot of 
   //             callbacks at that point; consolidate them.
-  virtual vec2f getMinSize(UI* ui) { return {0.f, 0.f}; }
+  virtual vec2f getMinSize(UI& ui) { return {0.f, 0.f}; }
 
   // Adjusts where the cursor for placing the children of this item should
   // start relative to where the item is placed.
-  virtual vec2f adjustCursorStart(UI* ui, vec2f norm) { return norm; }
+  virtual vec2f adjustCursorStart(UI& ui, vec2f norm) { return norm; }
   
   // Adjusts the size of this item as seen by its children. Intended to be used
   // in combination with adjustCursorStart() to tell children what they are 
@@ -506,7 +353,7 @@ struct
   // is the size of the content rect below the header, not the entire 
   // header item's area (as that would cause an Item with, say, sizing &
   // percent_y and size.y == 100 to draw beyond the content rect).
-  virtual vec2f adjustItemContentSize(UI* ui, vec2f norm) { return norm; }
+  virtual vec2f adjustItemContentSize(UI& ui, vec2f norm) { return norm; }
 
   // Adjusts the size of this item just after its initial size evaluation.
   // The Item's internal 'size' variable will be set before this function is
@@ -519,7 +366,7 @@ struct
     b8 disable_auto_y;
   };
   virtual AdjustedSize adjustItemSize(
-      UI* ui,
+      UI& ui,
       b8 is_auto_x,
       b8 is_auto_y) 
   { 
@@ -570,34 +417,6 @@ struct
   virtual b8 onHitTest(vec2f local_cursor) { return false; }
   
   b8 containsPoint(vec2f point);
-
-  enum class HoverKind
-  {
-    // The topmost hovered item.
-    Topmost,
-
-    // The mouse is over this item, no matter if it is topmost.
-    Area,
-    
-    // This item or one of its children are hovered.
-    Child,
-  };
-
-  b8 isHovered(UI* ui, HoverKind kind);
-
-  void calcVerticalScrollBar(
-    UI* ui,
-    vec2f* bar_pos,
-    vec2f* bar_size,
-    vec2f* handle_pos,
-    vec2f* handle_size);
-
-  void calcHorizontalScrollBar(
-    UI* ui,
-    vec2f* bar_pos,
-    vec2f* bar_size,
-    vec2f* handle_pos,
-    vec2f* handle_size);
 
   f32 getMarginedWidth() const 
     { return size.x - layout.margin.hsum(); }
@@ -652,6 +471,6 @@ struct
 
   vec2f getPaddedStyleArea() const 
     { return { getPaddedStyleWidth(), getPaddedStyleHeight() }; }
-})
+};
 
 }

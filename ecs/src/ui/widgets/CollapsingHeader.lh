@@ -12,6 +12,8 @@ $ local ui = require "ui.UI"
 namespace ui
 {
 
+$ if false then
+
 /* ============================================================================
  */
 @ui.widget(CollapsingHeader,
@@ -64,4 +66,8 @@ struct
   }
 })
 
+$ end
+
 }
+
+

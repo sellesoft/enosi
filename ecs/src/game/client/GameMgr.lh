@@ -12,7 +12,7 @@ $ local cmn = require "common"
 @@lpp.import "game/client/entity/EntitySysMgr.lh"
 @@lpp.import "game/client/graphics/RenderSys.lh"
 
-struct InputMgr;
+struct InputState;
 
 namespace cl
 {
@@ -34,7 +34,6 @@ struct GameMgr
 
     gfx::Renderer& renderer;
     AssetMgr& assetmgr;
-    InputMgr& input;
 
     gfx::Texture white_texture;
 
@@ -44,7 +43,12 @@ struct GameMgr
   b8 init(InitParams& params);
   void deinit();
 
-  b8 update();
+  struct UpdateParams
+  { 
+    InputState& input;
+  };
+
+  b8 update(UpdateParams& params);
   b8 render(gfx::Renderer& renderer);
 
   /* --------------------------------------------------------------------------
