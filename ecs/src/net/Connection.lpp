@@ -144,10 +144,13 @@ $ if IRO_WIN32 then
     return @log.error("Failed to make the IPv6 socket non-blocking"
                       " due to error: ", WSAGetLastError(), "\n");
 $ else -- if IRO_WIN32
-  if (-1 == ioctl(s_ipv4_socket, F_SETFL, O_NONBLOCK, non_blocking))
+  
+  if (-1 == fcntl(
+      s_ipv4_socket, F_SETFL, fcntl(s_ipv4_socket, F_GETFL, 0) | O_NONBLOCK))
     return @log.error("Failed to make the IPv4 socket non-blocking"
                       " due to error: ", strerror(errno), "\n");
-  if (-1 == ioctl(s_ipv6_socket, F_SETFL, O_NONBLOCK, non_blocking))
+  if (-1 == fcntl(
+      s_ipv6_socket, F_SETFL, fcntl(s_ipv6_socket, F_GETFL, 0) | O_NONBLOCK))
     return @log.error("Failed to make the IPv6 socket non-blocking"
                       " due to error: ", strerror(errno), "\n");
 $ end -- if not IRO_WIN32
@@ -196,6 +199,18 @@ $ end -- if not IRO_WIN32
     else
       s_ipv4_socket_is_bound = true;
   }
+
+$ if IRO_LINUX then
+  i = 1;
+  if (-1 == setsockopt(
+      s_ipv6_socket, 
+      IPPROTO_IPV6, 
+      IPV6_V6ONLY, 
+      (char*)&i,
+      sizeof(i)))
+    return @log.error("Failed to set ipv6 socket to v6 only: ", 
+                      strerror(errno), "\n");
+$ end
 
   // bind the ipv6 socket to the server port
   {
@@ -272,7 +287,7 @@ $ else -- if IRO_WIN32
     {
       if (EWOULDBLOCK != errno)
          @log.error("Failed to receive an IPv4 packet due to error: ",
-                    strerror(errno), "\n")
+                    strerror(errno), "\n");
     }
 $ end -- if not IRO_WIN32
     else if (bytes_received >= sizeof(FragmentHeader))
@@ -307,7 +322,7 @@ $ else -- if IRO_WIN32
     {
       if (EWOULDBLOCK != errno)
          @log.error("Failed to receive an IPv6 packet due to error: ",
-                    strerror(errno), "\n")
+                    strerror(errno), "\n");
       return false;
     }
 $ end -- if not IRO_WIN32
@@ -414,7 +429,7 @@ $ else -- if IRO_WIN32
       return false;
     else
       return @log.error("Failed to send a packet due to error: ",
-                        strerror(errno), "\n")
+                        strerror(errno), "\n");
   }
 $ end -- if not IRO_WIN32
 
