@@ -25,6 +25,8 @@ b8 Button::init(UI& ui)
   if (!text.init(ui))
     return ERROR("failed to init button text\n");
 
+  ui.registerFocusableId(&fid);
+
   return true;
 }
 
@@ -49,15 +51,17 @@ Button::State Button::update(
   State state = State::None;
   const TextItemSkinDef* state_skin = &skin.normal;
 
-  if (ctx.isCursorInHoverableRect(bounds))
+  FocusFlags focus = 
+    ctx.testFocus(&fid, bounds, MouseButton::Left, KeyState::Released);
+
+  if (focus.test(FocusFlag::Hovered))
   {
-    if (ctx.tryConsumeMousePress(MouseButton::Left) ||
-        ctx.tryConsumeMouseDown(MouseButton::Left))
+    if (ctx.input.isMouseButtonDown(MouseButton::Left))
     {
       state_skin = &skin.pressed;
       state = State::Pressed;
     }
-    else if (ctx.tryConsumeMouseRelease(MouseButton::Left))
+    else if (ctx.input.wasMouseButtonReleased(MouseButton::Left))
     {
       state = State::Released;
       state_skin = &skin.hovered;

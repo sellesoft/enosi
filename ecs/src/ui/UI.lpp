@@ -93,12 +93,22 @@ void UI::endItem()
 
 /* ----------------------------------------------------------------------------
  */
+void UI::registerFocusableId(FocusableId* id)
+{
+  assert(!id->isValid() && "attempt to register a focusable id twice");
+  id->val = next_focusable_id++;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 UI::init(InitParams& params)
 {
   assetmgr      = &params.assetmgr;
   renderer      = &params.renderer;
   viewport      = params.viewport;
   white_texture = params.white_texture;
+
+  next_focusable_id = 1;
 
   if (!item_stack.init())
     return ERROR("failed to init item stack\n");
@@ -230,7 +240,7 @@ b8 UI::update(const UpdateParams& params)
     Item* prev_focused = focused;
     focused = hovered;
 
-    if (prev_focused != hovered)
+    if (hovered != nullptr && prev_focused != hovered)
     {
       hovered->flags.set(ItemFlag::GainedFocus);
       if (prev_focused)
@@ -238,21 +248,18 @@ b8 UI::update(const UpdateParams& params)
     }
   }
 
-  // for (s32 i = 0; i < cursor_track_len - 1; ++i)
-  // {
-  //   s32 idx = (cursor_track_pos + i) % cursor_track_len;
-  //
-  //   auto [vp, ip] = 
-  //     dbg_cmd->realloc(this, dbg_cmd->counts_used + gfx::putLineCounts());
-  //
-  //   gfx::putLine(
-  //     vp, ip,
-  //     &dbg_cmd->counts_used,
-  //     cursor_track[idx],
-  //     cursor_track[(idx+1) % cursor_track_len],
-  //     2.f,
-  //     {0,0,255,255});
-  // }
+  // If nothing was focused this frame and no mouse input occurred, 
+  // copy over the focused item.
+  if (!next_focus_state.focused.isValid())
+  {
+    if (!frame_input.wasAnyMouseButtonPressed() &&
+        !frame_input.wasAnyMouseButtonReleased())
+      next_focus_state.focused = focus_state.focused;
+  }
+
+  prev_focus_state = focus_state;
+  focus_state = next_focus_state;
+  next_focus_state = {};
 
   if (dbg_cmd->counts_used.y != 0)
   {
@@ -359,7 +366,14 @@ void UI::updateTree(ItemNode* node, UpdateTreeContext& ctx)
       ctx.current_transform->getTranslation() + item->pos_local;
   else
     item->pos_screen = {};
-                  
+
+  FocusableBoundsList focusable_bounds;
+
+  LayerList layers;
+
+  Layer* root_layer = layers.push();
+  root_layer->parent = nullptr;
+  root_layer->bounds = Rect::from(0, 0, item->size.x, item->size.y);
 
   // Update the item. This is where it draws its contents and also handles
   // any input that it needs to.
@@ -368,9 +382,36 @@ void UI::updateTree(ItemNode* node, UpdateTreeContext& ctx)
     .ui = *this,
     .item = *item,
     .input = frame_input,
+    .layers = &layers,
   };
 
   item->update(item_update_context);
+
+  for (FocusableBounds& fbs : focusable_bounds)
+  {
+    Rect screen_bounds = fbs.bounds;
+    screen_bounds.addPos(item->pos_screen);
+
+    if (item->flags.test(ItemFlag::Hovered) && 
+        !next_focus_state.hovered.isValid())
+    {
+      if (screen_bounds.containsPoint(frame_input.getCursorPos()))
+      {
+        next_focus_state.hovered = fbs.id;
+        if (focus_state.hovered != next_focus_state.hovered)
+          INFO("hover ", fbs.id.val, "\n");
+
+        if (focus_state.focused == fbs.id ||
+            frame_input.isMouseButtonInState(
+              fbs.focus_button, fbs.focus_state))
+        {
+          next_focus_state.focused = fbs.id;
+          if (focus_state.focused != next_focus_state.focused)
+            INFO("focus ", fbs.id.val, "\n");
+        }
+      }
+    }
+  }
 
   item->flags.unset(ItemFlag::Focused);
   item->flags.unset(ItemFlag::GainedFocus);

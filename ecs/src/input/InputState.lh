@@ -20,11 +20,32 @@ typedef EnumBitArray<MouseButton> MouseButtonMap;
 
 /* ============================================================================
  */
+enum class KeyState
+{
+  Pressed,
+  Released,
+  Down,
+};
+
+/* ============================================================================
+ */
 struct InputState
 {
   b8 isKeyDown(Key key) const { return keys_down.test(key); }
   b8 wasKeyPressed(Key key) const { return keys_pressed.test(key); }
   b8 wasKeyReleased(Key key) const { return keys_released.test(key); }
+
+  b8 isKeyInState(Key key, KeyState state)
+  {
+    switch (state)
+    {
+    case KeyState::Pressed: return wasKeyPressed(key);
+    case KeyState::Released: return wasKeyReleased(key);
+    case KeyState::Down: return isKeyDown(key);
+    }
+    assert(false);
+    return false;
+  }
 
   b8 isMouseButtonDown(MouseButton button) const
     { return mouse_down.test(button); }
@@ -34,6 +55,18 @@ struct InputState
 
   b8 wasMouseButtonReleased(MouseButton button) const
     { return mouse_released.test(button); }
+
+  b8 isMouseButtonInState(MouseButton button, KeyState state)
+  {
+    switch (state)
+    {
+    case KeyState::Pressed: return wasMouseButtonPressed(button);
+    case KeyState::Released: return wasMouseButtonReleased(button);
+    case KeyState::Down: return isMouseButtonDown(button);
+    }
+    assert(false);
+    return false;
+  }
 
   b8 isAnyKeyDown() const { return keys_down.testAny(); }
   b8 wasAnyKeyPressed() const { return keys_pressed.testAny(); }

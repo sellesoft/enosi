@@ -8,6 +8,7 @@
 #define _ecs_math_util_h
 
 #include "math/vec.h"
+#include "math/Rect.h"
 
 namespace math
 {
@@ -31,6 +32,13 @@ inline b8 pointInRect(vec2<T> p, vec2<T> rect_pos, vec2<T> rect_dim)
     p.y >= rect_pos.y &&
     p.x <= rect_pos.x + rect_dim.x && 
     p.y <= rect_pos.y + rect_dim.y;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+inline b8 pointInRect(vec2f p, Rect rect)
+{
+  return pointInRect(p, rect.pos(), rect.size());
 }
 
 /* ----------------------------------------------------------------------------

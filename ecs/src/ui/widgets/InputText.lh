@@ -21,6 +21,8 @@ struct InputTextSkinDef;
  */
 struct InputText
 {
+  FocusableId fid;
+
   TextEdit text_edit;
   Text text;
 
@@ -28,52 +30,62 @@ struct InputText
 
   f32 text_x_offset = 0.f;
 
-  b8 focused;
-
   DrawCmd* decor;
+  DrawCmd* cursor;
 
   b8 init(UI& ui, String init = nil, String preview = nil);
   void deinit(UI& ui);
 
-  struct DrawParams
+  enum class EditResult
   {
-    vec4f      bounds;
-    gfx::Font* font;
-    b8         is_focused;
-    f32        font_height;
-    Color      cursor_color;
-    Color      text_color;
-  };
-  void draw(UI& ui, const DrawParams& params);
-
-  struct UpdateParams
-  {
-    vec2f        local_mouse;
-    gfx::Font*   font;
-    b8           is_focused;
-    f32          font_height;
-    ItemUpdateContext& ctx;
-  };
-  
-  enum class UpdateResult
-  {
-    // The widget didn't do anything.
+    // Nothing changed.
     Idle,
 
-    // The cursor was moved in some way.
+    // The cursor was moved.
     CursorMoved,
 
-    // Text was inserted or deleted.
+    // The text was changed.
     TextChanged,
 
-    // An attempt was made to change the text, but the buffer is too small.
+    // An attempt was made to edit the text, but the provided buffer is too
+    // small.
     OutOfSpace,
+
+    // The commit key (Enter) was pressed.
+    Commit,
+  };
+
+  struct UpdateResult
+  {
+    EditResult edit;
+    FocusFlags focus;
   };
 
   UpdateResult update(
     ItemUpdateContext& ctx, 
     Rect bounds,
     TextEdit::Buffer buffer,
+    const InputTextSkinDef& skin);
+
+  // Variant in which the provided text is a view over some non-editable
+  // text. This is used when we want to display some text as if it were in 
+  // an InputText box, but when the text we are displaying is not in memory 
+  // we can change. It should be common that when multiple InputTexts are 
+  // used, they all edit the same buffer when active to reduce the amount of 
+  // buffers we store for editing.
+  // A concrete example of this is the SourceDataEditor. There are tons
+  // of text boxes in it, but it only stores one buffer for editing text. 
+  // So when an InputText is not focused, the DatumStates simply point 
+  // InputText to the SourceData's actual string, then when an InputText is 
+  // focused, it passes the editor's central editable buffer.
+  // This will still report the gained/lost focus results, but will never 
+  // consume inputs or return any result that indicates the buffer was edited.
+  // If this InputText is focused and this update is used, it will simply 
+  // do nothing and will not show the cursor!
+  UpdateResult update(
+    ItemUpdateContext& ctx, 
+    Rect bounds,
+    String text,
     const InputTextSkinDef& skin);
 
   void reportDrawCmds(UI& ui, DrawCmdLists& lists);
@@ -88,7 +100,10 @@ struct InputText
   {
     return text_edit.asStr();
   }
+
+  b8 isFocused(UI& ui) const;
 };
+
 
 $ if false then
 

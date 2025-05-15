@@ -1,0 +1,61 @@
+$ require "common"
+$ local m = require "reflect.Metadata"
+
+@@lpp.import "ui/widgets/TextSkin.defs.lh"
+@@lpp.import "ui/widgets/ButtonSkin.defs.lh"
+@@lpp.import "ui/widgets/InputTextSkin.defs.lh"
+
+/* ============================================================================
+ */
+struct SourceDataEditorRowSkin
+{
+  // The height of each datum row that is collapsed or only has a collapsed 
+  // value.
+  f32 height;
+
+  // The padding of some data's name from the left edge.
+  f32 name_padding;
+
+  // The minimum width of the name column.
+  f32 min_name_width;
+
+  // The separation between the name and value columns.
+  f32 name_value_spacing;
+
+  // The background color of data falling in even data rows.
+  Color even_color;
+
+  // The background color of data falling in odd data rows.
+  Color odd_color;
+};
+
+/* ============================================================================
+ */
+struct SourceDataEditorVectorSkin
+{
+  // The minimum width of component text boxes.
+  f32 min_comp_width;
+
+  // The spacing between component text boxes.
+  f32 comp_spacing;
+
+  // The spacing between a component name and its value text box.
+  f32 comp_name_value_spacing;
+};
+
+/* ============================================================================
+ */
+@m.def
+struct SourceDataEditorSkinDef
+{
+  ui::TextSkinDef datum_name;
+
+  ui::InputTextSkinDef input_text;
+
+  SourceDataEditorRowSkin row;
+
+  SourceDataEditorVectorSkin vec2_data;
+  SourceDataEditorVectorSkin color_data;
+
+  Color missing_data_color;
+};

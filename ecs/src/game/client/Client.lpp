@@ -50,7 +50,7 @@ struct Test : ui::Item
     test->itext.init(ui);
     test->bg = ui.drawcmds.add();
 
-    @ui.layout(test, size: 100 100);
+    @ui.layout(test, size: 100 300);
 
     TestSkinRef skinref;
     loader.load(&skinref, "assets/skins/Test"_str);

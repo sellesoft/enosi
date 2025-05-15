@@ -1,0 +1,566 @@
+$ local cmn = require "common"
+$ local ui = require "ui.UI"
+$ local glob = require "Glob"
+$ local Processor = require "reflect.Processor"
+$ local ast = require "reflect.AST"
+$ local List = require "List"
+
+$ if false then
+
+$$$
+local importer = require "reflect.Importer"
+{
+  patterns = 
+  {
+    "src/**/*.defs.lh",
+    "src/**/*.comp.lh",
+  },
+
+  filter = function(p, decl)
+    if decl.metadata.def then
+      return true
+    end
+
+    local TComponent = p.processed_clang_objs["struct Component"]
+    if TComponent and decl:is(ast.Record) and decl:isDerivedFrom(TComponent)
+    then
+      return true
+    end
+  end,
+}
+$$$
+@importer:get
+
+@@lpp.import "asset/SourceDataEditor.lh"
+
+@@lpp.import "Engine.lh"
+
+@@lpp.import "asset/SourceData.lh"
+@@lpp.import "asset/SourceDataParser.lh"
+
+@@lpp.import "ui/UI.lh"
+@@lpp.import "ui/widgets/InputText.lh"
+@@lpp.import "ui/widgets/CollapsingHeader.lh"
+
+#include "math/util.h"
+
+namespace ui
+{
+
+$ local placed = {}
+$ local place_queue = List{}
+$ local putPacker
+$ local putTypePacker
+$ local TAssetRef = importer.p:lookupDecl "struct AssetRef"
+$ local TResourceRef = importer.p:lookupDecl "struct gfx::ResourceRef"
+
+/* ============================================================================
+ */
+struct DatumState
+{
+  DatumState* parent = nullptr;
+  SourceData* data = nullptr;
+  b8 is_missing_data = false;
+
+  DrawCmd* bg = nullptr;
+
+  Text text;
+
+  u32 datum_idx = 0;
+
+  struct InitParams
+  {
+    DatumState* parent;
+    SourceData* data;
+    SourceDataEditor* editor;
+
+    String name;
+    String default_data;
+  };
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 init(UI& ui, const InitParams& params)
+  {
+    if (!text.init(ui))
+      return false;
+
+    parent = params.parent;
+    data = params.data;
+
+    if (!datum_init(ui, params))
+      return false;
+
+    return true;
+  }
+
+
+  /* --------------------------------------------------------------------------
+   */
+  void deinit(UI& ui)
+  {
+    text.deinit(ui);
+    datum_deinit(ui);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  struct UpdateParams
+  {
+    String name;
+    String default_data;
+    Rect bounds;
+    const SourceDataEditorSkinDef& skin;
+    SourceDataEditor& editor;
+    ItemUpdateContext& ctx;
+  };
+
+  void update(const UpdateParams& params)
+  {
+    Rect bounds = params.bounds;
+    const auto& skin = params.skin;
+
+    // Draw the datum's name.
+    Rect name_bounds = bounds;
+    name_bounds.x += skin.row.name_padding + getNameXOffset();
+    
+    // TODO(sushi) figure out if we can determine when to not do this.
+    text.clear();
+
+    if (parent == nullptr || !parent->embedsChildren())
+      text.draw(
+        params.ctx.ui, params.name, name_bounds, skin.datum_name);
+
+    // Update derived stuff.
+    f32 height = datum_update(params);
+
+    Color bg_color = 
+      datum_idx % 2 
+      ? skin.row.odd_color
+      : skin.row.even_color;
+
+    if (is_missing_data)
+      bg_color = skin.missing_data_color;
+
+    vec2f bg_pos = bounds.pos();
+    vec2f bg_size = vec2f(bounds.w, height);
+
+    Item::drawBackground(
+      params.ctx.ui, 
+      Rect::from(bg_pos, bg_size),
+      bg,
+      { .color = bg_color });
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  f32 calcInlineValueX(const UpdateParams& params) const
+  {
+    Rect bounds = params.bounds;
+    auto& skin = params.skin;
+
+    f32 minned = skin.row.min_name_width - bounds.x;
+    f32 maxxed = 
+      (params.editor.max_name_width - bounds.x) + skin.row.name_value_spacing;
+
+    return max(minned, maxxed);
+  }
+
+  //
+  // Interface to behavior defined by derivations of this type. This is set
+  // up this way so that we can always call into DatumState first, then
+  // call down into the more specific behaviors that other types implement,
+  // allowing us to wrap code around that behavior as needed. Each of the 
+  // derived types that may also be derived from use this pattern as well.
+  // 
+
+  virtual b8 datum_init(UI& ui, const InitParams& params);
+  virtual void datum_deinit(UI& ui);
+  virtual f32 datum_update(const UpdateParams& params);
+
+  // Allows adjusting where the name is placed, eg. Object states need 
+  // to place a +/- before the name to indicate opened state.
+  virtual f32 getNameXOffset() const { return 0.f; }
+
+  // Whether or not this datum state embeds its children.
+  // TODO(sushi) this is a bit scuffed and I would like for it to be removed
+  //             in favor of something else. It exists because TypedPtrStates
+  //             allocate a 'subdatum' of the proper type and when that is 
+  //             an ObjectState, we don't want it to double nest the chilren.
+  virtual b8 embedsChildren() const { return false; }
+
+  // Whether or not this datum state is open.
+  // NOTE(sushi) this, like the above function, also sucks and is just a 
+  //             hacky way to handle typed pointer stuff. Really need 
+  //             to figure out a better way to handle this.
+  virtual b8 isOpen() const { return false; }
+};
+
+/* ============================================================================
+ *  A helper for managing the state of a text box used to edit some part 
+ *  of SourceData.
+ */
+struct DatumTextBox
+{
+  enum class Part
+  {
+    Name,
+    Value,
+    Type,
+  };  
+
+  InputText textbox;
+
+  b8 init(UI& ui, const DatumState::InitParams& params)
+  {
+    if (!textbox.init(ui))
+      return false;
+    return true;
+  }
+
+  b8 update(
+    const DatumState::UpdateParams& params,
+    Rect bounds,
+    Part part,
+    SourceData* data)
+  {
+    // TODO(sushi) add something to InputText's api that makes it more 
+    //             explicit when we are passing an editable buffer or 
+    //             just a view over some text.
+    TextEdit::Buffer edit_buffer = {};
+    if (textbox.focused)
+      edit_buffer = params.editor.getTextEditBuffer();
+    else
+      edit_buffer = { data->val.str.ptr, &data->val.str.len, 0 };
+
+    using Result = InputText::UpdateResult;
+
+    Result result = 
+      textbox.update(
+        params.ctx,
+        Rect::from(
+          vec2f(bounds.x + inline_x, bounds.y),
+          vec2f(bounds.w - inline_x, skin.row.height)),
+        edit_buffer,
+        skin.input_text);
+
+    switch (result)
+    {
+    case Result::Idle:
+      break;
+    case Result::GainedFocus:
+      // Prepare the central text buffer for editing this value.
+      params.editor.beginEditText(data->val.str);
+      break;
+    case Result::LostFocus:
+    case Result::Commit:
+      // Give the new text to the source data file.
+      data->val.str = params.editor.copyTextEditBuffer();
+      break;
+    }
+
+    return true;
+  }
+};
+
+/* ============================================================================
+ */
+struct ValueState : DatumState
+{
+  DatumTextBox textbox;
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 datum_init(UI& ui, const InitParams& params) override
+  {
+    if (!textbox.init(ui, params))
+      return false;
+
+    return true;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  f32 datum_update(const UpdateParams& params) override
+  {
+    Rect bounds = params.bounds;
+    const SourceDataEditorSkinDef& skin = params.skin;
+
+    f32 inline_x = calcInlineValueX(params);
+
+    auto value_pos = vec2f(bounds.x - inline_x, bounds.y);
+    auto value_size = vec2f(bounds.w - inline_x, skin.row.height);
+
+    textbox.update(
+      params, 
+      Rect::from(value_pos, value_size), 
+      DatumTextBox::Part::Value,
+      data);
+
+    return bounds.h;
+  }
+};
+
+/* ============================================================================
+ */
+struct Vec2State : DatumState
+{
+  DatumTextBox x_box;
+  DatumTextBox y_box;
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 datum_init(UI& ui, const InitParams& params)
+  {
+    if (!x_box.init(ui, params))
+      return false;
+    if (!y_box.init(ui, params))
+      return false;
+
+    return true;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 datum_deinit(UI& ui)
+  {
+    x_box.deinit(ui);
+    y_box.deinit(ui);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  f32 datum_update(const UpdateParams& params) override
+  {
+    Rect bounds = params.bounds;
+    const auto& skin = params.skin;
+
+    f32 pos_x = calcInlineValueX(params);
+    
+    SourceData* x_data = data->findChildByName("x"_str);
+    SourceData* y_data = data->findChildByName("y"_str);
+
+    pos_x += 
+      text.draw(
+        params.ctx.ui, 
+        "x"_str,
+        Rect::from(pos_x, 0.f, bounds.w - pos_x, bounds.h),
+        skin.datum_name).x;
+
+    pos_x += skin.vec2_data.comp_name_value_spacing;
+    x_box.update(
+      params, 
+      Rect::from(pos_x, 0.f, bounds.w - pos_x, bounds.h),
+      DatumTextBox::Part::Value,
+      x_data);
+
+    pos_x += skin.vec2_data.min_comp_width + skin.vec2_data.comp_spacing;
+    
+    pos_x += 
+      text.draw(
+        params.ctx.ui,
+        "y"_str,
+        Rect::from(pos_x, 0.f, bounds.w - pos_x, bounds.h),
+        skin.datum_name);
+
+    pos_x += skin.vec2_data.comp_name_value_spacing;
+
+    y_box.update(
+      params,
+      Rect::from(pos_x, 0.f, bounds.w - pos_x, bounds.h),
+      DatumTextBox::Part::Value,
+      y_data);
+  }
+};
+
+/* ============================================================================
+ */
+struct ObjectState : DatumState
+{
+  b8 open = false;
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 datum_init(UI& ui, const InitParams& params) override
+  {
+    // The top-level datum is always open.
+    if (parent == nullptr)
+      open = true;
+
+    return obj_init(ui, params);
+  }
+
+  virtual b8 obj_init(UI& ui, const InitParams& params) { return true; }
+
+  /* --------------------------------------------------------------------------
+   */
+  void datum_deinit(UI& ui) override
+  {
+    obj_deinit(ui);
+  }
+
+  virtual void obj_deinit(UI& ui) { }
+
+  /* --------------------------------------------------------------------------
+   */
+  f32 datum_update(const UpdateParams& params) override
+  {
+    Rect bounds = params.bounds;
+    const SourceDataEditorSkinDef& skin = params.skin;
+
+    if (parent == nullptr)
+      open = true;
+    else if (parent->embedsChildren())
+      open = parent->isOpen();
+
+    if (parent != nullptr && !parent->embedsChildren())
+    {
+      auto hit_bounds = Rect::from(
+        bounds.pos(), 
+        {calcInlineValueX(params), skin.row.height});
+
+      if (params.ctx.tryConsumeMouseReleasedInRect(
+            hit_bounds, MouseButton::Left))
+      {
+        if (params.ctx.input.isKeyDown(Key::LAlt))
+          data->dump();
+        else
+          open = !open;
+      }
+    }
+
+    if (parent == nullptr || !parent->embedsChildren())
+    {
+      Rect text_bounds = bounds;
+      text_bounds.x += skin.row.name_padding;
+      text_bounds.h = skin.row.height;
+
+      // TODO(sushi) make a cute texture
+      text.draw(params.ctx.ui, (open? "-"_str : "+"_str), 
+        text_bounds, skin.datum_name);
+    }
+
+    return obj_update(params);
+  }
+
+  virtual f32 obj_update(const UpdateParams& params) { return 0.f; }
+
+  /* --------------------------------------------------------------------------
+   */
+  virtual void embedInParent() const { return false; }
+
+  /* --------------------------------------------------------------------------
+   */
+  virtual b8 parentIsOpen() const { return true; }
+
+  /* --------------------------------------------------------------------------
+   */
+  f32 getNameXOffset() const override
+  {
+    return 12.f;
+  }
+};  
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putStructState(name, decl)
+template<>
+struct StructState<$(name)> : ObjectState
+{
+
+};
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putRecordDatumState(name, decl)
+$   if decl:is(ast.Struct) then
+$     putStructState(name, decl)
+$   end
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putDatumState(decl)
+$   if placed[decl.name] then return end
+$   
+$   if decl:is(ast.TagDecl) then
+$     if decl:is(ast.Record) then
+$       putRecordDatumState(importer.removeTag(decl.name), name)
+$     elseif decl:is(ast.Enum) then
+$       putEnumDatumState(importer.removeTag(decl.name), name)
+$     end
+$   end
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ importer:eachDecl(function(name, decl)
+$ end)
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SourceDataEditor::init(UI& ui, const InitParams& params)
+{
+  if (!datum_allocator.init())
+    return ERROR("failed to initialize datum allocator\n");
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SourceDataEditor::setSourceData(
+    UI& ui, 
+    SourceData* sdata, 
+    SourceDataFile* sfile, 
+    u64 type_id)
+{
+  
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SourceDataEditor::update(
+    ItemUpdateContext& ctx, 
+    Rect bounds,
+    const SourceDataEditorSkinDef& skin)
+{
+  if (current_datum)
+  {
+    DatumState::UpdateParams params = 
+    {
+      .name = nil,
+      .default_data = nil,
+      .bounds = bounds,
+      .skin = skin,
+      .editor = *this,
+      .ctx = ctx,
+    };
+
+    current_datum->update(params);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+TextEdit::Buffer SourceDataEditor::beginEditText(String text)
+{
+  if (text.len > input_text_buffer_size)
+  {
+    // TODO(sushi) handle this better somehow
+    WARN("beginning text edit with length greater than "
+          "SourceDataEditor::input_text_buffer_size (", text.len, " > ",
+          input_text_buffer_size, ")\nThe text will be cut off\n");
+    text.len = input_text_buffer_size;
+  }
+
+  mem::copy(input_text_buffer, text.ptr, text.len);
+  input_text_len = text.len;
+
+  return getTextEditBuffer();
+}
+
+}
+
+$ end

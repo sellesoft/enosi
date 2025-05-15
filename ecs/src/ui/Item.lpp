@@ -190,6 +190,86 @@ b8 ItemUpdateContext::wasEvaluated() const
 
 /* ----------------------------------------------------------------------------
  */
+b8 ItemUpdateContext::isFocusedId(FocusableId id)
+{
+  return ui.isFocusedId(id);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 ItemUpdateContext::isFocusedId(FocusableId* id)
+{
+  if (!id->isValid())
+    ui.registerFocusableId(id);
+  return isFocusedId(*id);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void ItemUpdateContext::unfocus(FocusableId id)
+{
+  ui.unfocus(id);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+FocusFlags ItemUpdateContext::testFocus(
+    FocusableId* pid,
+    Rect bounds,
+    MouseButton focus_button,
+    KeyState focus_state)
+{
+  if (!pid->isValid())
+    ui.registerFocusableId(pid);
+
+  FocusableId id = *pid;
+
+  focusable_bounds->push({id, bounds, focus_button, focus_state});
+
+  FocusFlags flags = {};
+  
+  auto& pfs = ui.prev_focus_state;
+  auto& fs = ui.focus_state;
+
+  if (id == fs.hovered)
+  {
+    flags.set(FocusFlag::Hovered);
+    drawDebugBorder(bounds, {255,0,0,255});
+
+    if (id != pfs.hovered)
+    {
+      flags.set(FocusFlag::GainedHover);
+      INFO("hover gain ", id.val, "\n");
+    }
+  }
+  else if (id == pfs.hovered)
+  {
+    flags.set(FocusFlag::LostHover);
+    INFO("hover loss ", id.val, "\n");
+  }
+
+  if (id == fs.focused)
+  {
+    flags.set(FocusFlag::Focused);
+    drawDebugBorder(bounds, {0,255,0,255});
+
+    if (id != pfs.focused)
+    {
+      flags.set(FocusFlag::GainedFocus);
+      INFO("focus gain ", id.val, "\n");
+    }
+  }
+  else if (id == pfs.focused)
+  {
+    flags.set(FocusFlag::LostFocus);
+    INFO("focus loss ", id.val, "\n");
+  }
+
+  return flags;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 Item::init(UI& ui, String name)
 {
   this->name = name;

@@ -6,12 +6,11 @@ $ require "common"
 $ local ui = require "ui.UI"
 
 @@lpp.import "ui/Item.lh"
-
 @@lpp.import "ui/widgets/InputText.lh"
-
 @@lpp.import "graphics/Font.lh"
-
 @@lpp.import "asset/SourceDataFile.lh"
+
+#include "iro/memory/Bump.h"
 
 struct SourceData;
 
@@ -22,7 +21,7 @@ struct DatumState;
 
 /* ============================================================================
  */
-struct SourceDataEditor : Item
+struct SourceDataEditor
 {
   // The SourceData we are editing. This is not owned by the editor, and 
   // so is not cleaned up when setSourceData is called, and is expected to
@@ -32,6 +31,8 @@ struct SourceDataEditor : Item
 
   SourceDataFile default_data;
 
+  mem::Bump datum_allocator;
+
   u64 type_id;
 
   f32 max_name_width;
@@ -39,40 +40,23 @@ struct SourceDataEditor : Item
   DatumState* current_datum;
   DatumState* hovered;
 
-  gfx::Font* font;
-  gfx::Texture font_texture;
+  static const s32 input_text_buffer_size = 255;
+  u8 input_text_buffer[input_text_buffer_size];
+  s32 input_text_buffer_len = 0;
 
-  /* ==========================================================================
-   *  State relevant for a Datum being edited textually. This is used to 
-   *  reduce some of the overhead of datum states having to store and manage
-   *  their own input text states as well as to reduce the amount of 
-   *  input text states we store to 1.
-   */
-  struct DatumTextEdit
+  TextEdit::Buffer beginEditText(String text);
+
+  TextEdit::Buffer getTextEditBuffer()
   {
-    enum class Kind
-    {
-      Name,
-      Type,
-      Value,
-    };
+    return 
+      { input_text_buffer, &input_text_buffer_len, input_text_buffer_size };
+  }
 
-    Kind kind;
-
-    DatumState* datum;
-    SourceData* sdata;
-
-    vec2f pos;
-    vec2f size;
-
-    // InputTextState input_text;
-
-    void update(ItemUpdateContext& ctx, SourceDataEditor* editor);
-
-    void onFocusLost(SourceDataEditor* editor);
-  };
-
-  DatumTextEdit datum_text_edit;
+  String copyTextEditBuffer() const
+  {
+    return String::from((u8*)input_text_buffer, input_text_buffer_len)
+      .allocateCopy(&sfile->string_cache);
+  }
 
   // An interface for recieving notifications when the source data editor does
   // certain things.
@@ -84,8 +68,8 @@ struct SourceDataEditor : Item
 
   Interface* interface;
 
-  static SourceDataEditor* create(UI& ui, Interface* interface = nullptr);
-  void destroy();
+  b8 init(UI& ui);
+  void deinit(UI& ui);
 
   void setSourceData(
       UI& ui, 
@@ -93,49 +77,10 @@ struct SourceDataEditor : Item
       SourceDataFile* file, 
       u64 type_id = 0);
 
-  void evaluate(UI& ui) override;
-  void update(ItemUpdateContext& ctx) override;
-  void reportDrawCmds(UI& ui, DrawCmdLists& lists) override;
-  b8 onHitTest(vec2f local_cursor) override;
-
-  // Used by datum states during 'update' to report some area that if clicked
-  // will begin textually editing some data. This should only be used during
-  // an update in which the reason == MouseReleased (unless in the future 
-  // we have some other way to focus text boxes), as if this finds that the
-  // cursor is contained in the provided rect, it will set the current 
-  // text edit state to the provided information.
-  void beginEditDatumText(
-    UI& ui,
-    DatumState* datum,
-    SourceData* sdata, 
-    DatumTextEdit::Kind kind,
-    vec2f pos,
-    vec2f size);
-
-  b8 isEditingDatumText(
-    SourceData* sdata, 
-    DatumTextEdit::Kind kind) const;
-
-  void endEditDatumText(SourceData* sdata, DatumTextEdit::Kind kind);
-
-  void onEdit(SourceData* data)
-  {
-    if (interface)
-      interface->onEdit(data);
-  }
-
-  void onSourceDataReplaced(SourceData* old_data, SourceData* new_data);
-
-  void notifyExternalChange()
-  {
-    setDirty();
-  }
+  void update(ItemUpdateContext& ctx, Rect bounds);
+  void reportDrawCmds(UI& ui, DrawCmdLists& lists);
 
   SourceData* parseDefaultData(String s);
-
-private:
-  
-  void placeSourceDataItems(UI& ui, SourceData* sdata);
 };
 
 }

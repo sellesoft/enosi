@@ -165,14 +165,39 @@ struct UI
     root->setDirty();
   }
 
+  void registerFocusableId(FocusableId* id);
+
+  b8 isFocusedId(FocusableId id) const
+  {
+    return id == focus_state.focused;
+  }
+
+  void unfocus(FocusableId id)
+  {
+    if (id == focus_state.focused)
+      focus_state.focused.invalidate();
+  }
+
 private:
   friend ItemUpdateContext;
 
-  // The input state of an 'update'. Inputs may be consumed from this 
+  // The input state of an update. Inputs may be consumed from this 
   // state by either UI or Items.
   InputState frame_input;
 
   Item* eval_break;
+
+  u64 next_focusable_id;
+
+  struct FocusState
+  {
+    FocusableId focused;
+    FocusableId hovered;
+  };
+
+  FocusState prev_focus_state;
+  FocusState focus_state;
+  FocusState next_focus_state;
 
   // A type storing a DrawCmd to be drawn later than when it was reported.
   // This happens in cases like top-most drawcmds.

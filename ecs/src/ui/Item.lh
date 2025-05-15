@@ -18,7 +18,7 @@ $ local ui = require "ui.UI"
 #include "Color.h"
 
 #include "input/Keys.h"
-
+@@lpp.import "input/InputState.lh"
 
 using namespace iro;
 
@@ -220,6 +220,76 @@ enum class ItemFlag
 };
 typedef Flags<ItemFlag> ItemFlags;
 
+/* ============================================================================ 
+ *  Flags that determine the 'focus state' of a focusable widget.
+ */
+enum class FocusFlag
+{
+  // The widget may be considered hovered by the cursor.
+  Hovered,
+  
+  // The widget gained/lost hover this frame.
+  GainedHover,
+  LostHover,
+
+  // The widget may be considered focused. In this state it may consume input
+  // without worrying if other widgets will as well.
+  Focused,
+
+  // The widget lost/gained focus this frame.
+  GainedFocus,
+  LostFocus,
+
+  COUNT
+};
+typedef Flags<FocusFlag> FocusFlags;
+
+/* ============================================================================ 
+ */
+struct FocusableId
+{
+  u64 val = 0;
+
+  b8 isValid() const { return val != 0; }
+  void invalidate() { val = 0; }
+
+  bool operator == (const FocusableId& rhs) const
+  {
+    return val == rhs.val;
+  }
+};
+
+/* ============================================================================
+ */
+struct FocusableBounds
+{
+  FocusableId id;
+  Rect bounds;
+  MouseButton focus_button;
+  KeyState focus_state;
+};
+typedef SmallArray<FocusableBounds, 8> FocusableBoundsList;
+
+/* ============================================================================
+ */
+enum class LayerFlag
+{
+  // Layer will be drawn and have its focusable bounds evaluated in the 
+  // top most layer of UI, after all Items have been updated.
+  TopMost,
+};
+
+/* ============================================================================
+ */
+struct Layer
+{
+  Layer* parent;
+  Rect bounds;
+  DrawCmdList drawcmds;
+  FocusableBoundsList fbounds;
+};
+typedef SmallArray<Layer, 8> LayerList;
+
 /* ============================================================================
  */
 struct ItemUpdateContext
@@ -227,7 +297,8 @@ struct ItemUpdateContext
   UI& ui;
   Item& item;
   InputState& input;
-  
+  LayerList* layers;
+
   // Tests if the given point is with the given bounds. The positioning 
   // of these two params is local to the Item's position on the screen.
   b8 isPointInRect(Rect bounds, vec2f point);
@@ -263,9 +334,22 @@ struct ItemUpdateContext
 
   f32 tryConsumeScroll();
 
+  FocusFlags testFocus(
+    FocusableId* pid, 
+    Rect bounds, 
+    MouseButton focus_button,
+    KeyState focus_state);
+
   b8 wasEvaluated() const;
 
   void drawDebugBorder(Rect bounds, Color color);
+
+  b8 isFocusedId(FocusableId id);
+  b8 isFocusedId(FocusableId* id);
+
+  
+
+  void unfocus(FocusableId id);
 };
 
 /* ============================================================================

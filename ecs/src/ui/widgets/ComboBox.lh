@@ -20,6 +20,8 @@ struct ComboBox
 {
   typedef Slice<String> Options;
 
+  FocusableId fid;
+
   Text text;
   DrawCmd* decor;
 
@@ -40,12 +42,10 @@ struct ComboBox
     const Options& options,
     const ComboBoxSkinDef& skin);
 
-  void reportDrawCmds(UI& ui, DrawCmdLists& lists)
-  {
-    DrawCmdList* list = open? &lists.top_most : &lists.pre_children;
-    list->push(decor);
-    list->push(text.dc);
-  }
+  b8 begin(ItemUpdateContext& ctx, Rect bounds, const ComboBoxSkinDef);
+  void end(ItemUpdateContext& ctx);
+
+  void reportDrawCmds(UI& ui, DrawCmdLists& lists);
 
   b8 hasSelection() const { return selected != 0; }
 
@@ -144,20 +144,9 @@ struct
   void evaluate(UI* ui) override;
   void generate(UI* ui) override;
 
-  vec2f calcVisualArea() override;
-
   void reportDrawCmds(UI* ui, DrawCmdLists& lists) override
-  {
-    lists.pre_children.push(selected_option.dc);
-    if (open)
-    {
-      lists.top_most.push(options_background);
-      
-      for (const Option& option : options)
-        lists.top_most.push(option.drawcmd);
-    }
-  }
-})
+
+ })
 
 $ end
 

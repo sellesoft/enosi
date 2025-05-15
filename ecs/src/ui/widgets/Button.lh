@@ -29,6 +29,7 @@ enum class ButtonActivation
  */
 struct Button
 {
+  FocusableId fid;
   DrawCmd* background;
   Text text;
 
