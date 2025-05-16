@@ -15,7 +15,7 @@ namespace iro::utf8
 
 Logger logger = Logger::create("utf8"_str, Logger::Verbosity::Notice);
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 u8 bytesNeededToEncodeCharacter(u32 c)
 {
@@ -30,14 +30,14 @@ u8 bytesNeededToEncodeCharacter(u32 c)
   return 0; // do not encode this character !!
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 b8 isContinuationByte(u8 c)
 {
   return ((c) & 0xc0) == 0x80;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 Char encodeCharacter(u32 codepoint)
 {
@@ -48,11 +48,11 @@ Char encodeCharacter(u32 codepoint)
   switch (c.count)
   {
     default:
-      ERROR("utf8::encodeCharacter(): could not resolve a proper number of bytes needed to "
-          "encode codepoint: ", codepoint, "\n");
+      ERROR("utf8::encodeCharacter(): could not resolve a proper number of"
+            " bytes needed to encode codepoint: ", codepoint, "\n");
       return Char::invalid();
 
-    case 1: 
+    case 1:
       c.bytes[0] = (u8)codepoint;
       return c;
 
@@ -61,9 +61,9 @@ Char encodeCharacter(u32 codepoint)
       c.bytes[1] = (u8)(0b10000000 + (codepoint & 0b00111111));
       return c;
 
-    // NOTE(sushi) just like the lib I'm referencing, utf8proc, the range 
-    //             0xd800 - 0xdfff is encoded here, but this is not valid utf8 as it is 
-    //             reserved for utf16.
+    // NOTE(sushi) just like the lib I'm referencing, utf8proc, the range
+    //             0xd800 - 0xdfff is encoded here, but this is not valid utf8
+    //             as it is reserved for utf16.
     //             MAYBE ill fix this later if its a problem
     case 3:
       c.bytes[0] = (u8)(0b11100000 + (codepoint >> 12));
@@ -80,7 +80,7 @@ Char encodeCharacter(u32 codepoint)
   }
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 Codepoint decodeCharacter(u8* s, s32 slen)
 {
@@ -117,7 +117,8 @@ Codepoint decodeCharacter(u8* s, s32 slen)
 
     if (!isContinuationByte(s[1]))
     {
-      FERROR("encountered 2 byte character but byte 2 is not a continuation byte\n");
+      FERROR("encountered 2 byte character but byte 2 is not a"
+             " continuation byte\n");
       return nil;
     }
 
@@ -135,8 +136,8 @@ Codepoint decodeCharacter(u8* s, s32 slen)
 
     if (!isContinuationByte(s[1]) || !isContinuationByte(s[2]))
     {
-      FERROR("encountered 3 byte character but one of the trailing bytes is not a "
-           "continuation character\n");
+      FERROR("encountered 3 byte character but one of the trailing bytes"
+             " is not a continuation character\n");
       return nil;
     }
 
@@ -146,16 +147,16 @@ Codepoint decodeCharacter(u8* s, s32 slen)
       return nil;
     }
 
-    u32 c = ((s[0] & 0x0f) << 18) | 
-          ((s[1] & 0x3f) << 12) | 
+    u32 c = ((s[0] & 0x0f) << 18) |
+          ((s[1] & 0x3f) << 12) |
         ((s[2] & 0x3f));
 
     if (c< 0x800)
     {
       // TODO(sushi) look into why this is wrong
-      FERROR("c->codepoint wound up being < 0x800 which is wrong for some reason idk yet "
-           "look into it maybe???\n");
-      return nil; 
+      FERROR("c->codepoint wound up being < 0x800 which is wrong for some"
+             " reason idk yet look into it maybe???\n");
+      return nil;
     }
 
     return {c, 3};
@@ -167,10 +168,12 @@ Codepoint decodeCharacter(u8* s, s32 slen)
     return nil;
   }
 
-  if (!isContinuationByte(s[1]) || !isContinuationByte(s[2]) || !isContinuationByte(s[3]))
+  if (   !isContinuationByte(s[1])
+      || !isContinuationByte(s[2])
+      || !isContinuationByte(s[3]))
   {
-    FERROR("encountered 4 byte character but one of the trailing bytes is not a continuation "
-         "character\n");
+    FERROR("encountered 4 byte character but one of the trailing bytes is"
+           " not a continuation character\n");
     return nil;
   }
 
@@ -178,17 +181,17 @@ Codepoint decodeCharacter(u8* s, s32 slen)
   {
     if (s[1] < 0x90)
     {
-      FERROR("encountered a 4 byte character but the codepoint is less than the valid range "
-           "(0x10000 - 0x10ffff)");
+      FERROR("encountered a 4 byte character but the codepoint is less"
+             " than the valid range (0x10000 - 0x10ffff)");
       return nil;
-    } 
+    }
   }
   else if (s[0] == 0xf4)
   {
     if (s[1] > 0x8f)
     {
-      FERROR("encountered a 4 byte character but the codepoint is greater than the valid "
-          "range (0x10000 - 0x10ffff)");
+      FERROR("encountered a 4 byte character but the codepoint is greater"
+             " than the valid range (0x10000 - 0x10ffff)");
       return nil;
     }
   }
@@ -204,7 +207,7 @@ Codepoint decodeCharacter(u8* s, s32 slen)
 }
 
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 String String::fromCStr(const char* s)
 {
@@ -219,7 +222,7 @@ String String::fromCStr(const char* s)
   return out;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 Codepoint String::advance(s32 n)
 {
@@ -237,13 +240,13 @@ Codepoint String::advance(s32 n)
   return c;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 bool String::operator==(String s) const
 {
   if (len != s.len)
     return false;
-  
+
   for (s32 i = 0; i < len; i++)
   {
     if (ptr[i] != s.ptr[i])
@@ -253,7 +256,7 @@ bool String::operator==(String s) const
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 String String::subFromFirst(u8 c) const
 {
@@ -263,7 +266,7 @@ String String::subFromFirst(u8 c) const
   return nil;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 String String::subToFirst(u8 c) const
 {
@@ -273,7 +276,7 @@ String String::subToFirst(u8 c) const
   return nil;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 String String::subFromLast(u8 c) const
 {
@@ -283,7 +286,7 @@ String String::subFromLast(u8 c) const
   return nil;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 String String::subToLast(u8 c) const
 {
@@ -293,7 +296,7 @@ String String::subToLast(u8 c) const
   return nil;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 String String::subFromLastNot(u8 c) const
 {
@@ -303,7 +306,7 @@ String String::subFromLastNot(u8 c) const
   return nil;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 String String::subToLastNot(u8 c) const
 {
@@ -313,7 +316,34 @@ String String::subToLastNot(u8 c) const
   return nil;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
+ */
+String String::trimLeft()
+{
+  auto pos = findFirstNot(' ');
+  if (pos.found())
+    return sub(pos.x);
+  return {};
+}
+
+/* ----------------------------------------------------------------------------
+ */
+String String::trimRight()
+{
+  auto pos = findLastNot(' ');
+  if (pos.found())
+    return sub(0, pos.x+1);
+  return *this;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+String String::trim()
+{
+  return trimLeft().trimRight();
+}
+
+/* ----------------------------------------------------------------------------
  */
 b8 String::nullTerminate(u8* buffer, s32 buffer_len) const
 {
@@ -325,7 +355,7 @@ b8 String::nullTerminate(u8* buffer, s32 buffer_len) const
   return true;
 }
 
-/* ------------------------------------------------------------------------------------------------
+/* ----------------------------------------------------------------------------
  */
 String String::nullTerminate(mem::Allocator* allocator) const
 {
@@ -337,7 +367,7 @@ String String::nullTerminate(mem::Allocator* allocator) const
   return out;
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
 u64 String::countCharacters() const
 {
@@ -353,9 +383,9 @@ u64 String::countCharacters() const
   return accum;
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
-String::pos String::findFirst(u8 c) const 
+String::pos String::findFirst(u8 c) const
 {
   for (s32 i = 0; i < len; i++)
   {
@@ -365,9 +395,9 @@ String::pos String::findFirst(u8 c) const
   return pos::notFound();
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
-String::pos String::findLast(u8 c) const 
+String::pos String::findLast(u8 c) const
 {
   for (s32 i = len-1; i >= 0; i--)
   {
@@ -377,9 +407,9 @@ String::pos String::findLast(u8 c) const
   return pos::notFound();
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
-String::pos String::findFirstNot(u8 c) const 
+String::pos String::findFirstNot(u8 c) const
 {
   for (s32 i = 0; i < len; ++i)
   {
@@ -389,11 +419,11 @@ String::pos String::findFirstNot(u8 c) const
   return pos::notFound();
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
-String::pos String::findLastNot(u8 c) const 
+String::pos String::findLastNot(u8 c) const
 {
-  for (s32 i = len+1; i >= 0; --i)
+  for (s32 i = len-1; i >= 0; --i)
   {
     if (ptr[i] != c)
       return pos::found(i);
@@ -401,9 +431,9 @@ String::pos String::findLastNot(u8 c) const
   return pos::notFound();
 }
 
-/* ------------------------------------------------------------------------------------------------ 
+/* ----------------------------------------------------------------------------
  */
-b8 String::startsWith(String s) const 
+b8 String::startsWith(String s) const
 {
   if (s.len > len)
     return false;
@@ -417,7 +447,7 @@ b8 String::startsWith(String s) const
 
 /* ----------------------------------------------------------------------------
  */
-b8 String::endsWith(String s) const 
+b8 String::endsWith(String s) const
 {
   if (s.len > len)
     return false;

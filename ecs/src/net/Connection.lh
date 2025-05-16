@@ -67,7 +67,7 @@ struct Connection
   iro::mem::Allocator* allocator;
 
 
-  b8 init(Source source, Address address, iro::mem::Allocator* allocator);
+  b8 init(Address address, iro::mem::Allocator* allocator);
 
   // priority messages are sent out-of-sequence
   // returns true if the message was sent, fragmented, or queued

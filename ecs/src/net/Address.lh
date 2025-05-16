@@ -7,7 +7,8 @@
 
 #include "iro/Common.h"
 #include "iro/Unicode.h"
-#include "iro/io/IO.h"
+
+namespace iro::io { struct IO; }
 
 namespace net
 {
@@ -45,12 +46,14 @@ struct Address
   Address(u32 ipv4, u16 port);
   Address(u8 ipv4a, u8 ipv4b, u8 ipv4c, u8 ipv4d, u16 port);
   Address(const u8* ipv6, u16 port);
-  Address(iro::utf8::String address_string);
+  Address(iro::String address_string);
 
   static Address createOffline();
-  iro::io::StaticBuffer<64> toString() const;
+  static Address createLocalHost(u16 port);
   u32 getIPv4() const;
   b8 isIPv4() const;
 };
+
+s64 format(iro::io::IO* io, Address address);
 
 }

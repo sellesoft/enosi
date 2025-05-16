@@ -54,8 +54,8 @@ void Message::writeBits(u64 value)
   static_assert(BITS > 0 && BITS <= 64);
   if constexpr (BITS != 64)
     assert(value < ((1ULL << BITS) - 1ULL));
-  @log.trace("writing bits to message\n");
-  @log.debug("offset: ", this->size, ", value: ", value,
+  @log.trace("writing bits to message\n"
+             "offset: ", this->size, ", value: ", value,
              ", bits: ", BITS, "\n");
 
   if ((Message::MAX_SIZE - this->size) / 8 < BITS)
@@ -205,7 +205,7 @@ u64 Message::readBits()
   if ((this->size - byte_cursor) < (BITS * 8))
   {
     @log.warn("message overflow\n");
-    this->cursor = this->size;
+    this->cursor = this->size * 8;
     return 0;
   }
 
@@ -237,7 +237,7 @@ u64 Message::readBits()
   {
     static_assert(!"arbitrary bit size reading not setup yet");
   }
-  @log.debug("offset: ", this->cursor, ", value: ", value,
+  @log.trace("offset: ", this->cursor, ", value: ", value,
              ", bits: ", BITS, "\n");
 
   return value;

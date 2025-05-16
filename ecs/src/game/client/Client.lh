@@ -1,11 +1,11 @@
 /*
- *  Functions for creating a Client, which contains the client-side systems 
+ *  Functions for creating a Client, which contains the client-side systems
  *  and memory needed when the game is running as a client.
  *
  *  It's probably more appropriate for this to be an engine level interface
  *  as well, that simply hooks into the game (as I would like this project
- *  to try and keep the Engine agnostic of the Game running in it for 
- *  possible reuse in future projects), but for now I'm going to keep it 
+ *  to try and keep the Engine agnostic of the Game running in it for
+ *  possible reuse in future projects), but for now I'm going to keep it
  *  under game/ to simplify implementing it, as it avoids needing to design
  *  the Client and Server to be modular in what they run.
  */
@@ -20,6 +20,8 @@ $ require "common"
 @@lpp.import "graphics/Renderer.lh"
 @@lpp.import "game/client/editor/Editor.lh"
 @@lpp.import "ui/widgets/TextSkin.defs.lh"
+@@lpp.import "net/Address.lh"
+@@lpp.import "net/Connection.lh"
 
 /* ============================================================================
  */
@@ -27,6 +29,8 @@ struct Client
 {
   cl::GameSim sim;
   Engine* engine;
+
+  net::Connection connection;
 
   // Client only systems.
   gfx::Renderer renderer;
@@ -47,4 +51,6 @@ struct Client
   b8 compileRequiredAssets(AssetMgr& assetmgr);
 
   b8 wantHotReload();
+
+  b8 connectToServer(net::Address address);
 };

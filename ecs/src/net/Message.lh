@@ -20,7 +20,9 @@ struct Message
 
 
   void init(u8* data, u16 size);
-  inline b8 overflowed() { return this->cursor >= this->size; }
+
+  inline b8 readOverflowed() { return this->cursor >= this->size * 8; }
+  inline b8 writeOverflowed() { return this->size >= MAX_SIZE; }
 
   template<u64 BITS> void writeBits(u64 value);
   void writeU8(u8 value);

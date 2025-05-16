@@ -1,7 +1,7 @@
 /*
  *  Definition of the Client, as well as its interface.
- *  
- *  TODO(sushi) move the client-specific stuff from Engine into here, such 
+ *
+ *  TODO(sushi) move the client-specific stuff from Engine into here, such
  *              as the Renderer, since the server should never use it.
  */
 
@@ -38,7 +38,9 @@ struct Test : ui::Item
 
   ui::DrawCmd* bg;
 
-  static void create(ui::UI& ui, AssetLoader& loader)
+  Client* client;
+
+  static void create(ui::UI& ui, AssetLoader& loader, Client* client)
   {
     using namespace ui;
     using namespace item_layout_typedefs;
@@ -56,6 +58,7 @@ struct Test : ui::Item
     loader.load(&skinref, "assets/skins/Test"_str);
 
     test->skin = &*skinref;
+    test->client = client;
   }
 
   void update(ui::ItemUpdateContext& ctx) override
@@ -63,7 +66,7 @@ struct Test : ui::Item
     button.update(
       ctx, Rect::from(10, 10, 30, 30), "hi"_str, skin->button);
 
-    String opts[] = 
+    String opts[] =
     {
       "bleh"_str,
       "blah"_str,
@@ -81,10 +84,29 @@ struct Test : ui::Item
       ctx.ui, Rect::from(0, 0, size.x, size.y), bg, bgskin);
 
     itext.update(
-      ctx, 
-      Rect::from(10, 80, 80, 30), 
+      ctx,
+      Rect::from(10, 80, 80, 30),
       {text_buffer, &text_len, 255},
       skin->input_text);
+
+    String input_text = itext.asStr();
+    if (   itext.focused && input_text.len > 0
+        && client->input.real_state.wasKeyPressed(Key::Enter))
+    {
+      if (input_text == "connect offline"_str)
+      {
+        client->connectToServer(net::Address::createOffline());
+      }
+      else if (input_text == "connect localhost"_str)
+      {
+        client->connectToServer(net::Address::createLocalHost(0));
+      }
+      else if (input_text.startsWith("connect "_str))
+      {
+        client->connectToServer(
+          net::Address(input_text.subFromFirst(' ').trim()));
+      }
+    }
   }
 
   void reportDrawCmds(ui::UI& ui, ui::DrawCmdLists& lists) override
@@ -102,6 +124,8 @@ b8 Client::init(Engine* engine)
 {
   this->engine = engine;
 
+  connection.address.type = net::AddressType::Invalid;
+
 $ local function init(act, name)
   {
     auto start = TimePoint::monotonic();
@@ -117,7 +141,7 @@ $ end
   @init(Window::initializeBackend(), Window backend);
   @init(window.init("ecs"_str, input), Window);
 
-  gfx::Renderer::InitParams renderer_params = 
+  gfx::Renderer::InitParams renderer_params =
   {
     .assetmgr  = engine->assetmgr,
     .window    = window,
@@ -157,18 +181,18 @@ $ end
     return ERROR("failed to load white texture\n");
   white_texture = white_texture_compiled->gfx_texture;
 
-  AssetLoader asset_loader = 
+  AssetLoader asset_loader =
   {
     .renderer = renderer,
     .assetmgr = engine->assetmgr,
     .sfilereg = engine->source_data_file_reg,
   };
 
-  ui::UI::InitParams ui_params = 
+  ui::UI::InitParams ui_params =
   {
     .assetmgr = engine->assetmgr,
     .renderer = renderer,
-    
+
     .white_texture = white_texture,
 
     .viewport = Rect::from({0,0}, window.size),
@@ -177,7 +201,7 @@ $ end
   };
   @init(ui.init(ui_params), UI);
 
-  cl::GameSim::InitParams sim_params = 
+  cl::GameSim::InitParams sim_params =
   {
     .loader   = asset_loader,
     .viewport = Rect::from({0,0}, window.size),
@@ -189,7 +213,7 @@ $ end
 
   @init(editor.init(this), Editor);
 
-  Test::create(ui, asset_loader);
+  Test::create(ui, asset_loader, this);
 
   return true;
 }
@@ -202,12 +226,50 @@ b8 Client::update()
   if (!input.update())
     return ERROR("failed to update input\n");
 
-  // Handles OS window events and notifies the inputmgr about any input 
+  // Handles OS window events and notifies the inputmgr about any input
   // events.
   if (!window.update(input))
     return ERROR("failed to update window\n");
 
-  gfx::Renderer::UpdateParams renderer_params = 
+  // check for incoming packets and parse messages from the server
+  if (connection.address.type != net::AddressType::Invalid)
+  {
+    net::Address packet_address;
+    StackArray<u8, net::MAX_FRAGMENT_SIZE> packet_data;
+    while (net::checkForPackets(packet_address, packet_data))
+    {
+      // range validated in net::checkForPackets
+      assertrange(packet_data.len,
+        sizeof(net::FragmentHeader), net::MAX_FRAGMENT_SIZE);
+
+      if (!mem::equal(connection.address, packet_address))
+        continue;
+
+      connection.receive(net::Source::Server, packet_data);
+      if (connection.incoming_message_pending_fragments)
+        continue;
+
+      net::Message message;
+      message.init(connection.incoming_message_data,
+                   connection.incoming_message_size);
+
+      // TODO(delle) implement client packet parsing
+      u16 netevent = message.readU16();
+      if (netevent == 2) // TODO(delle) non-hardcoded netevent
+      {
+        u16 string_length = message.readU16();
+        if (string_length > 0 && string_length < 513)
+        {
+          u8 string_buffer[512];
+          message.readData(string_buffer, string_length);
+          iro::String string = {string_buffer, string_length};
+          @log.info("Message Received: \"", string, "\"\n");
+        }
+      }
+    }
+  }
+
+  gfx::Renderer::UpdateParams renderer_params =
   {
     .window = window,
   };
@@ -217,8 +279,8 @@ b8 Client::update()
 
   InputState sim_input = {};
   input.cloneInputState(&sim_input);
-  
-  cl::GameSim::UpdateParams sim_params = 
+
+  cl::GameSim::UpdateParams sim_params =
   {
     .input = sim_input,
   };
@@ -240,6 +302,25 @@ b8 Client::update()
   if (!ui.update(ui_params))
     return ERROR("failed to update ui\n");
 
+  // send messages to the server
+  if (connection.address.type != net::AddressType::Invalid)
+  {
+    u8 message_data[net::Message::MAX_SIZE];
+    net::Message message;
+    message.init(message_data, 0);
+
+    // TODO(delle) implement client packet creation
+    message.writeU16(2); // TODO(delle) non-hardcoded netevent
+    message.writeU16(12);
+    message.writeData((u8*)"hello server", 12);
+
+    connection.send(net::Source::Client, message, false);
+    if (connection.outgoing_message_pending_fragments)
+    {
+      connection.sendNextFragment();
+    }
+  }
+
   return true;
 }
 
@@ -253,7 +334,7 @@ b8 Client::compileRequiredAssets(AssetMgr& assetmgr)
     if (!texture_compile_allocator.init())
       return ERROR("failed to initialize texture compile allocator\n");
     defer { texture_compile_allocator.deinit(); };
-  
+
     gfx::CompiledTexture::CompileParams null_texture_params =
     {
       .name         = "assets/textures/null"_str,
@@ -276,7 +357,7 @@ b8 Client::compileRequiredAssets(AssetMgr& assetmgr)
 
   TRACE("compiling shaders\n");
   {
-    Ref::LoadParams load_params = 
+    Ref::LoadParams load_params =
     {
       .renderer = renderer,
       .assetmgr = engine->assetmgr,
@@ -388,4 +469,32 @@ b8 Client::wantHotReload()
   if (input.real_state.wasKeyPressed(Key::R))
     return true;
   return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Client::connectToServer(net::Address address)
+{
+  if (address.type == net::AddressType::Invalid)
+    return @log.error("invalid address\n");
+
+
+  // TODO(delle) client allocators
+  if(!connection.init(address, &mem::stl_allocator))
+    return @log.error("failed to initialize connection\n");
+
+  u8 message_data[256];
+  net::Message message;
+  message.init(message_data, 0);
+  message.writeU16(1); // TODO(delle) non-hardcoded netevent
+  message.writeData((u8*)"player", 6);
+  message.writeU8(6);
+  if (message.writeOverflowed())
+    return @log.error("message overflowed\n");
+
+  if (!connection.send(net::Source::Client, message, true))
+    return @log.error("failed to send challenge message\n");
+
+  @log.info("CHALLENGE [", connection.address, "]\n");
+  return true;
 }

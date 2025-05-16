@@ -41,7 +41,34 @@ $ end -- if not IRO_WIN32
 
 using namespace iro;
 
-@log.ger(net.connection, Debug)
+@log.ger(net.connection, Info)
+
+/* ----------------------------------------------------------------------------
+ */
+$ if IRO_WIN32 then
+static thread_local LPSTR win32_error_msg = nullptr;
+static String makeWin32ErrorMsg(DWORD error)
+{
+	DWORD win32_error_msg_len =
+    FormatMessageA(
+          FORMAT_MESSAGE_ALLOCATE_BUFFER
+        | FORMAT_MESSAGE_FROM_SYSTEM
+        | FORMAT_MESSAGE_IGNORE_INSERTS,
+        NULL,
+        error,
+        MAKELANGID(LANG_NEUTRAL,SUBLANG_DEFAULT),
+        (LPSTR)&win32_error_msg,
+        0,
+        NULL);
+
+  return String::from((u8*)win32_error_msg, (u64)win32_error_msg_len);
+}
+
+static void cleanupWin32ErrorMsg()
+{
+  LocalFree(win32_error_msg);
+}
+$ end -- if IRO_WIN32
 
 namespace net
 {
@@ -57,9 +84,7 @@ static constexpr u16 FRAGMENT_BIT = (1 << 15);
 
 /* ============================================================================
  */
-static int s_ipv4_socket = 0;
 static int s_ipv6_socket = 0;
-static b8 s_ipv4_socket_is_bound = false;
 static b8 s_ipv6_socket_is_bound = false;
 
 /* ============================================================================
@@ -89,43 +114,25 @@ b8 init()
 
 $ if IRO_WIN32 then
   WSADATA wsa_data;
-  return NO_ERROR == WSAStartup(MAKEWORD(2,2), &wsa_data);
+  if (NO_ERROR != WSAStartup(MAKEWORD(2,2), &wsa_data))
+    return @log.error("Failed to startup WSA due to error: ",
+      makeWin32ErrorMsg(WSAGetLastError()));
 $ end -- if IRO_WIN32
-
-  // create the ipv4 socket
-  s_ipv4_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-$ if IRO_WIN32 then
-  if (s_ipv4_socket == INVALID_SOCKET)
-    return @log.error("Failed to open the IPv4 socket due to error: ",
-                      WSAGetLastError(), "\n");
-$ else -- if IRO_WIN32
-  if (s_ipv4_socket < 0)
-    return @log.error("Failed to open the IPv4 socket due to error: ",
-                      strerror(errno), "\n");
-$ end -- if not IRO_WIN32
-
-  auto close_ipv4_socket_if_failure = deferWithCancel
-  {
-$ if IRO_WIN32 then
-    closesocket(s_ipv4_socket);
-$ else -- if IRO_WIN32
-    close(s_ipv4_socket);
-$ end -- if not IRO_WIN32
-  };
 
   // create the ipv6 socket
   s_ipv6_socket = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
 $ if IRO_WIN32 then
   if (s_ipv6_socket == INVALID_SOCKET)
     return @log.error("Failed to open the IPv6 socket due to error: ",
-                      WSAGetLastError(), "\n");
+                      makeWin32ErrorMsg(WSAGetLastError()));
 $ else -- if IRO_WIN32
   if (s_ipv6_socket < 0)
     return @log.error("Failed to open the IPv6 socket due to error: ",
                       strerror(errno), "\n");
 $ end -- if not IRO_WIN32
+  @log.debug("Opened the IPv6 socket\n");
 
-  auto close_s_ipv6_socket_if_failure = deferWithCancel
+  auto close_ipv6_socket_if_failure = deferWithCancel
   {
 $ if IRO_WIN32 then
     closesocket(s_ipv6_socket);
@@ -137,84 +144,51 @@ $ end -- if not IRO_WIN32
   // set the sockets to non-blocking
   u_long non_blocking = true;
 $ if IRO_WIN32 then
-  if (SOCKET_ERROR == ioctlsocket(s_ipv4_socket, FIONBIO, &non_blocking))
-    return @log.error("Failed to make the IPv4 socket non-blocking"
-                      " due to error: ", WSAGetLastError(), "\n");
   if (SOCKET_ERROR == ioctlsocket(s_ipv6_socket, FIONBIO, &non_blocking))
-    return @log.error("Failed to make the IPv6 socket non-blocking"
-                      " due to error: ", WSAGetLastError(), "\n");
+    return @log.error("Failed to make the IPv6 socket non-blocking due to"
+                      " error: ", makeWin32ErrorMsg(WSAGetLastError()));
 $ else -- if IRO_WIN32
-  
-  if (-1 == fcntl(
-      s_ipv4_socket, F_SETFL, fcntl(s_ipv4_socket, F_GETFL, 0) | O_NONBLOCK))
-    return @log.error("Failed to make the IPv4 socket non-blocking"
-                      " due to error: ", strerror(errno), "\n");
   if (-1 == fcntl(
       s_ipv6_socket, F_SETFL, fcntl(s_ipv6_socket, F_GETFL, 0) | O_NONBLOCK))
     return @log.error("Failed to make the IPv6 socket non-blocking"
                       " due to error: ", strerror(errno), "\n");
 $ end -- if not IRO_WIN32
+  @log.debug("Setting the IPv6 socket to non-blocking\n");
 
-  // set the sockets to be broadcast capable
+  // set the socket to be broadcast capable
   int i = 1;
 $ if IRO_WIN32 then
-  if (SOCKET_ERROR == setsockopt(s_ipv4_socket, SOL_SOCKET, SO_BROADCAST,
-                                 (char*)&i, sizeof(i)))
-    return @log.error("Failed to make the IPv4 socket broadcast capable"
-                      " due to error: ", WSAGetLastError(), "\n");
   if (SOCKET_ERROR == setsockopt(s_ipv6_socket, SOL_SOCKET, SO_BROADCAST,
                                  (char*)&i, sizeof(i)))
     return @log.error("Failed to make the IPv6 socket broadcast capable"
-                      " due to error: ", WSAGetLastError(), "\n");
+                      " due to error: ", makeWin32ErrorMsg(WSAGetLastError()));
 $ else -- if IRO_WIN32
-  if (-1 == setsockopt(s_ipv4_socket, SOL_SOCKET, SO_BROADCAST,
-                       (char*)&i, sizeof(i)))
-    return @log.error("Failed to make the IPv4 socket broadcast capable"
-                      " due to error: ", strerror(errno), "\n");
   if (-1 == setsockopt(s_ipv6_socket, SOL_SOCKET, SO_BROADCAST,
                        (char*)&i, sizeof(i)))
     return @log.error("Failed to make the IPv6 socket broadcast capable"
                       " due to error: ", strerror(errno), "\n");
 $ end -- if not IRO_WIN32
+  @log.debug("Setting the IPv6 socket to be broadcast capable\n");
 
-  // bind the ipv4 socket to the server port
-  {
-    sockaddr_in ipv4_socket_address;
-    ipv4_socket_address.sin_family = AF_INET;
-    ipv4_socket_address.sin_port = htons(SERVER_PORT);
-    ipv4_socket_address.sin_addr.s_addr = INADDR_ANY;
-
-    int ipv4_bind_result = bind(s_ipv4_socket,
-                                (sockaddr*)&ipv4_socket_address,
-                                sizeof(ipv4_socket_address));
+  // disable IPv6-only mode to allow IPv4 connections
+  i = 0;
 $ if IRO_WIN32 then
-    if (SOCKET_ERROR == ipv4_bind_result)
-      return @log.error("Failed to bind the IPv4 socket due to error: ",
-                        WSAGetLastError(), "\n");
+  if (SOCKET_ERROR == setsockopt(s_ipv6_socket, IPPROTO_IPV6, IPV6_V6ONLY, 
+                                 (char*)&i, sizeof(i)))
+    return @log.error("Failed to disable IPv6-only mode due to error: ",
+                      makeWin32ErrorMsg(WSAGetLastError()));
 $ else -- if IRO_WIN32
-    if (-1 == ipv4_bind_result)
-      return @log.error("Failed to bind the IPv4 socket due to error: ",
-                        strerror(errno), "\n");
-$ end -- if not IRO_WIN32
-    else
-      s_ipv4_socket_is_bound = true;
-  }
-
-$ if IRO_LINUX then
-  i = 1;
-  if (-1 == setsockopt(
-      s_ipv6_socket, 
-      IPPROTO_IPV6, 
-      IPV6_V6ONLY, 
-      (char*)&i,
-      sizeof(i)))
-    return @log.error("Failed to set ipv6 socket to v6 only: ", 
+  if (-1 == setsockopt(s_ipv6_socket, IPPROTO_IPV6, IPV6_V6ONLY,
+                       (char*)&i, sizeof(i)))
+    return @log.error("Failed to disable IPv6-only mode due to error: ",
                       strerror(errno), "\n");
-$ end
+$ end -- if not IRO_WIN32
+  @log.debug("Disabled IPv6-only mode\n");
 
   // bind the ipv6 socket to the server port
   {
     sockaddr_in6 ipv6_socket_address;
+    memset(&ipv6_socket_address, 0, sizeof(ipv6_socket_address));
     ipv6_socket_address.sin6_family = AF_INET6;
     ipv6_socket_address.sin6_port = htons(SERVER_PORT);
     ipv6_socket_address.sin6_addr = in6addr_any;
@@ -225,16 +199,16 @@ $ end
 $ if IRO_WIN32 then
     if (SOCKET_ERROR == ipv6_bind_result)
       return @log.error("Failed to bind the IPv6 socket due to error: ",
-                        WSAGetLastError(), "\n");
+                        makeWin32ErrorMsg(WSAGetLastError()));
 $ else -- if IRO_WIN32
     if (-1 == ipv6_bind_result)
       return @log.error("Failed to bind the IPv6 socket due to error: ",
                         strerror(errno), "\n");
 $ end -- if not IRO_WIN32
+    @log.debug("Bound the IPv6 socket to the [", SERVER_PORT, "] port\n");
   }
 
-  close_ipv4_socket_if_failure.cancel();
-  close_s_ipv6_socket_if_failure.cancel();
+  close_ipv6_socket_if_failure.cancel();
   return true;
 }
 
@@ -245,11 +219,9 @@ void deinit()
   @log.trace("deinitializing net\n");
 
 $ if IRO_WIN32 then
-  closesocket(s_ipv4_socket);
   closesocket(s_ipv6_socket);
   WSACleanup();
 $ else -- if IRO_WIN32
-  close(s_ipv4_socket);
   close(s_ipv6_socket);
 $ end -- if not IRO_WIN32
 }
@@ -266,40 +238,6 @@ $ if IRO_WIN32 then
   typedef int socklen_t;
 $ end -- if IRO_WIN32
 
-  // check for ipv4 packets
-  if (s_ipv4_socket)
-  {
-    sockaddr_in from;
-    socklen_t from_len = sizeof(from);
-    int bytes_received = recvfrom(s_ipv4_socket, (char*)data.arr,
-                                  MAX_FRAGMENT_SIZE, 0,
-                                  (sockaddr*)&from, &from_len);
-$ if IRO_WIN32 then
-    if (SOCKET_ERROR == bytes_received)
-    {
-      int error = WSAGetLastError();
-      if (WSAEWOULDBLOCK != error)
-        @log.error("Failed to receive an IPv4 packet due to WSA error: ",
-                   error, "\n");
-    }
-$ else -- if IRO_WIN32
-    if (-1 == bytes_received)
-    {
-      if (EWOULDBLOCK != errno)
-         @log.error("Failed to receive an IPv4 packet due to error: ",
-                    strerror(errno), "\n");
-    }
-$ end -- if not IRO_WIN32
-    else if (bytes_received >= sizeof(FragmentHeader))
-    {
-      from_address = Address(ntohl(from.sin_addr.s_addr),
-                           ntohs(ntohl(from.sin_port)));
-
-      data.len = (u64)bytes_received;
-      return true;
-    }
-  }
-
   // check for ipv6 packets
   if (s_ipv6_socket)
   {
@@ -314,7 +252,7 @@ $ if IRO_WIN32 then
       int error = WSAGetLastError();
       if (WSAEWOULDBLOCK != error)
         @log.error("Failed to receive an IPv6 packet due to WSA error: ",
-                   error, "\n");
+                   makeWin32ErrorMsg(error));
       return false;
     }
 $ else -- if IRO_WIN32
@@ -344,15 +282,15 @@ $ end -- if not IRO_WIN32
 
 /* ----------------------------------------------------------------------------
  */
-b8 Connection::init(
-  Source source,
-  Address address,
-  iro::mem::Allocator* allocator)
+b8 Connection::init(Address address, iro::mem::Allocator* allocator)
 {
   assertpointer(allocator);
   @log.trace("initializing a connection\n");
 
   this->address = address;
+  if (this->address.port == 0)
+    this->address.port = SERVER_PORT;
+
   this->acknowledged_sequence = 0;
   this->acknowledged_bitfield = 0;
   this->incoming_message_sequence = 0;
@@ -374,43 +312,25 @@ b8 Connection::init(
  */
 static b8 sendPacket(const Address& address, void* data, u16 size)
 {
-  @log.trace("sending a packet of ", size, "bytes\n");
+  @log.trace("sending a packet of ", size, " bytes\n");
 
-  int bytes_sent;
+  sockaddr_in6 socket_address;
+  memset(&socket_address, 0, sizeof(socket_address));
+  socket_address.sin6_family = AF_INET6;
+  socket_address.sin6_port = htons(address.port);
   if (address.type == AddressType::Local)
   {
-    sockaddr_in socket_address;
-    socket_address.sin_family = AF_INET;
-    socket_address.sin_port = htons(address.port);
-    socket_address.sin_addr.s_addr = INADDR_ANY;
-
-    bytes_sent = sendto(s_ipv4_socket, (const char*)data, size, 0,
-                        (sockaddr*)&socket_address, sizeof(socket_address));
-    @log.debug("Sent ", bytes_sent, " bytes to: ", address.toString(), "\n");
-  }
-  else if (address.isIPv4())
-  {
-    sockaddr_in socket_address;
-    socket_address.sin_family = AF_INET;
-    socket_address.sin_port = htons(address.port);
-    socket_address.sin_addr.s_addr = htonl(address.getIPv4());
-
-    bytes_sent = sendto(s_ipv4_socket, (const char*)data, size, 0,
-                        (sockaddr*)&socket_address, sizeof(socket_address));
-    @log.debug("Sent ", bytes_sent, " bytes to: ", address.toString(), "\n");
+    // IPv6 loopback address (::1)
+    socket_address.sin6_addr.s6_addr[15] = 1;
   }
   else
   {
-    sockaddr_in6 socket_address;
-    socket_address.sin6_family = AF_INET6;
-    socket_address.sin6_port = htons(address.port);
     memcpy(&socket_address.sin6_addr, &address.ipv6,
            sizeof(socket_address.sin6_addr));
-
-    bytes_sent = sendto(s_ipv6_socket, (const char*)data, size, 0,
-                        (sockaddr*)&socket_address, sizeof(socket_address));
-    @log.debug("Sent ", bytes_sent, " bytes to: ", address.toString(), "\n");
   }
+
+  int bytes_sent = sendto(s_ipv6_socket, (const char*)data, size, 0,
+                         (sockaddr*)&socket_address, sizeof(socket_address));
 
 $ if IRO_WIN32 then
   if (SOCKET_ERROR == bytes_sent)
@@ -420,7 +340,7 @@ $ if IRO_WIN32 then
       return false;
     else
       return @log.error("Failed to send a packet due to WSA error: ",
-                        error, "\n");
+                        makeWin32ErrorMsg(error));
   }
 $ else -- if IRO_WIN32
   if (-1 == bytes_sent)
@@ -433,6 +353,7 @@ $ else -- if IRO_WIN32
   }
 $ end -- if not IRO_WIN32
 
+  @log.debug("Sent ", bytes_sent, " bytes to: ", address, "\n");
   assert(size == (u16)bytes_sent);
   return true;
 }
@@ -480,8 +401,7 @@ b8 Connection::sendNextFragment()
     if (this->message_queue_start)
     {
       @log.debug("Popping a message of [", this->message_queue_start->size,
-                 "] bytes off the message queue for [",
-                 this->address.toString(), "].\n");
+                 "] bytes off the message queue for [", this->address, "].\n");
 
       this->outgoing_message_pending_offset = 0;
       this->outgoing_message_size = this->message_queue_start->size;
@@ -492,8 +412,7 @@ b8 Connection::sendNextFragment()
       this->message_queue_start = this->message_queue_start->next;
       if (this->message_queue_start == nullptr)
       {
-        @log.debug("Emptied the message queue for [",
-                   this->address.toString(), "].\n");
+        @log.debug("Emptied the message queue for [", this->address, "].\n");
         this->message_queue_end = &this->message_queue_start;
       }
     }
@@ -522,7 +441,9 @@ b8 Connection::send(Source source, const Message& message, b8 priority)
     return true;
   }
 
-  assert(s_ipv4_socket != 0 || s_ipv6_socket != 0);
+  if (s_ipv6_socket == 0)
+    return @log.error("Attempted to send a message with an unbound socket.");
+
   @log.trace("sending a message to a remote connection\n");
 
   // queue message if there are pending fragments
@@ -533,8 +454,7 @@ b8 Connection::send(Source source, const Message& message, b8 priority)
       this->allocator->allocate(sizeof(QueuedMessage));
     if (queued_message == nullptr)
       return @log.error("Failed to allocate a queued message when attempting"
-                        " to send a message to [",
-                        this->address.toString(), "].\n");
+                        " to send a message to [", this->address, "].\n");
 
     queued_message->size = message.size;
     mem::copy(queued_message->data, message.data, message.size);
@@ -646,8 +566,8 @@ void Connection::receive(
   // discard invalid protocol packets
   if (protocol != PROTOCOL_ID)
   {
-    @log.debug("Incorrect protocol [", protocol, "] from [",
-               this->address.toString(), "]; expected [", PROTOCOL_ID, "].\n");
+    @log.debug("Incorrect protocol [", protocol, "] from [", this->address,
+               "]; expected [", PROTOCOL_ID, "].\n");
     return;
   }
 
@@ -656,8 +576,8 @@ void Connection::receive(
   if (sequence <= this->incoming_message_sequence)
   {
     @log.debug("Out of order or duplicate sequence [", sequence, "] from [",
-               this->address.toString(), "]; expected [",
-               this->incoming_message_sequence, "].\n");
+               this->address, "]; expected [", this->incoming_message_sequence,
+               "].\n");
     return;
   }
 
@@ -666,7 +586,7 @@ void Connection::receive(
   if (dropped > 0)
   {
     @log.debug("Dropped [", dropped, "] packets at sequence [", sequence,
-               "] from [", this->address.toString(), "].\n");
+               "] from [", this->address, "].\n");
   }
 
   // check if this is a message fragment
@@ -686,7 +606,7 @@ void Connection::receive(
     {
       @log.debug("Dropped a message fragment with offset [", fragment_offset,
                  "] and sequence [", sequence, "] from [",
-                 this->address.toString(), "].\n");
+                 this->address, "].\n");
       return;
     }
 
@@ -695,9 +615,8 @@ void Connection::receive(
     if (new_message_size > Message::MAX_SIZE)
     {
       @log.debug("Fragments with sequence [", sequence, "] from [",
-                 this->address.toString(), "] are too large [",
-                 new_message_size, "] to fit in a message [",
-                 Message::MAX_SIZE, "].\n");
+                 this->address, "] are too large [", new_message_size,
+                 "] to fit in a message [", Message::MAX_SIZE, "].\n");
       return;
     }
 
