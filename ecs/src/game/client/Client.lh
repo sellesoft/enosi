@@ -23,6 +23,8 @@ $ require "common"
 @@lpp.import "net/Address.lh"
 @@lpp.import "net/Connection.lh"
 
+#include "iro/time/Time.h"
+
 /* ============================================================================
  */
 struct Client
@@ -31,6 +33,8 @@ struct Client
   Engine* engine;
 
   net::Connection connection;
+  b8 waiting_for_challenge_response;
+  TimePoint last_challenge_time;
 
   // Client only systems.
   gfx::Renderer renderer;

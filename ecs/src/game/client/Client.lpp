@@ -249,6 +249,9 @@ b8 Client::update()
       if (connection.incoming_message_pending_fragments)
         continue;
 
+      waiting_for_challenge_response = false;
+      @log.debug("received packet from ", packet_address, "\n");
+
       net::Message message;
       message.init(connection.incoming_message_data,
                    connection.incoming_message_size);
@@ -305,19 +308,43 @@ b8 Client::update()
   // send messages to the server
   if (connection.address.type != net::AddressType::Invalid)
   {
-    u8 message_data[net::Message::MAX_SIZE];
-    net::Message message;
-    message.init(message_data, 0);
-
-    // TODO(delle) implement client packet creation
-    message.writeU16(2); // TODO(delle) non-hardcoded netevent
-    message.writeU16(12);
-    message.writeData((u8*)"hello server", 12);
-
-    connection.send(net::Source::Client, message, false);
-    if (connection.outgoing_message_pending_fragments)
+    if (waiting_for_challenge_response)
     {
-      connection.sendNextFragment();
+      auto time_since_challenge = TimePoint::monotonic() - last_challenge_time;
+      if (time_since_challenge.toMilliseconds() > 1000)
+      {
+        u8 message_data[256];
+        net::Message message;
+        message.init(message_data, 0);
+        message.writeU16(1); // TODO(delle) non-hardcoded netevent
+        message.writeData((u8*)"player", 6);
+        message.writeU8(6);
+        if (message.writeOverflowed())
+          return @log.error("message overflowed\n");
+
+        if (!connection.send(net::Source::Client, message, true))
+          return @log.error("failed to send challenge message\n");
+
+        last_challenge_time = TimePoint::monotonic();
+        @log.info("CHALLENGE [", connection.address, "]\n");
+      }
+    }
+    else
+    {
+      u8 message_data[net::Message::MAX_SIZE];
+      net::Message message;
+      message.init(message_data, 0);
+
+      // TODO(delle) implement client packet creation
+      message.writeU16(2); // TODO(delle) non-hardcoded netevent
+      message.writeU16(12);
+      message.writeData((u8*)"hello server", 12);
+
+      connection.send(net::Source::Client, message, false);
+      if (connection.outgoing_message_pending_fragments)
+      {
+        connection.sendNextFragment();
+      }
     }
   }
 
@@ -478,7 +505,6 @@ b8 Client::connectToServer(net::Address address)
   if (address.type == net::AddressType::Invalid)
     return @log.error("invalid address\n");
 
-
   // TODO(delle) client allocators
   if(!connection.init(address, &mem::stl_allocator))
     return @log.error("failed to initialize connection\n");
@@ -495,6 +521,9 @@ b8 Client::connectToServer(net::Address address)
   if (!connection.send(net::Source::Client, message, true))
     return @log.error("failed to send challenge message\n");
 
+  waiting_for_challenge_response = true;
+  last_challenge_time = TimePoint::monotonic();
+  
   @log.info("CHALLENGE [", connection.address, "]\n");
   return true;
 }
