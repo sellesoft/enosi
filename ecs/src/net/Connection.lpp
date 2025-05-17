@@ -49,7 +49,7 @@ $ if IRO_WIN32 then
 static thread_local LPSTR win32_error_msg = nullptr;
 static String makeWin32ErrorMsg(DWORD error)
 {
-	DWORD win32_error_msg_len =
+  DWORD win32_error_msg_len =
     FormatMessageA(
           FORMAT_MESSAGE_ALLOCATE_BUFFER
         | FORMAT_MESSAGE_FROM_SYSTEM
@@ -79,7 +79,6 @@ namespace net
 static constexpr u32 PROTOCOL_VERSION = 0;
 static constexpr u32 PROTOCOL_ID = 0x33422400 + PROTOCOL_VERSION;
 static constexpr u32 PRIORITY_SEQUENCE = -1;
-static constexpr u16 SERVER_PORT = 40230;
 static constexpr u16 FRAGMENT_BIT = (1 << 15);
 
 /* ============================================================================
@@ -185,29 +184,6 @@ $ else -- if IRO_WIN32
 $ end -- if not IRO_WIN32
   @log.debug("Disabled IPv6-only mode\n");
 
-  // bind the ipv6 socket to the server port
-  {
-    sockaddr_in6 ipv6_socket_address;
-    memset(&ipv6_socket_address, 0, sizeof(ipv6_socket_address));
-    ipv6_socket_address.sin6_family = AF_INET6;
-    ipv6_socket_address.sin6_port = htons(SERVER_PORT);
-    ipv6_socket_address.sin6_addr = in6addr_any;
-
-    int ipv6_bind_result = bind(s_ipv6_socket,
-                                (sockaddr*)&ipv6_socket_address,
-                                sizeof(ipv6_socket_address));
-$ if IRO_WIN32 then
-    if (SOCKET_ERROR == ipv6_bind_result)
-      return @log.error("Failed to bind the IPv6 socket due to error: ",
-                        makeWin32ErrorMsg(WSAGetLastError()));
-$ else -- if IRO_WIN32
-    if (-1 == ipv6_bind_result)
-      return @log.error("Failed to bind the IPv6 socket due to error: ",
-                        strerror(errno), "\n");
-$ end -- if not IRO_WIN32
-    @log.debug("Bound the IPv6 socket to the [", SERVER_PORT, "] port\n");
-  }
-
   close_ipv6_socket_if_failure.cancel();
   return true;
 }
@@ -269,9 +245,10 @@ $ end -- if not IRO_WIN32
       return false;
 
     u8 ipv6[16];
-    for (int i = 0; i < 8; i++)
-      ((u16*)ipv6)[i] = ntohs(((u16*)&from.sin6_addr)[i]);
-    from_address = Address(ipv6, ntohl(from.sin6_port));
+    //for (int i = 0; i < 8; i++)
+    //  ((u16*)ipv6)[i] = ntohs(((u16*)&from.sin6_addr)[i]);
+    mem::copy(ipv6, &from.sin6_addr, 16);
+    from_address = Address(ipv6, ntohs(from.sin6_port));
 
     data.len = (u64)bytes_received;
     return true;
@@ -503,9 +480,9 @@ b8 Connection::send(Source source, const Message& message, b8 priority)
   header->ack_bitfield = this->acknowledged_bitfield;
   header->fragment_offset = 0;
   header->data_size = message.size;
-  mem::copy(this->outgoing_message_data + sizeof(header), message.data,
+  mem::copy(this->outgoing_message_data + sizeof(*header), message.data,
             message.size);
-  this->outgoing_message_size = sizeof(header) + message.size;
+  this->outgoing_message_size = sizeof(*header) + message.size;
 
   // send the packet
   if (!sendPacket(this->address, this->outgoing_message_data,
@@ -641,6 +618,35 @@ void Connection::receive(
 
   this->incoming_message_pending_fragments = false;
   this->incoming_message_sequence = sequence;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 bind(u16 port)
+{
+  @log.trace("binding socket to port ", port, "\n");
+
+  sockaddr_in6 ipv6_socket_address;
+  memset(&ipv6_socket_address, 0, sizeof(ipv6_socket_address));
+  ipv6_socket_address.sin6_family = AF_INET6;
+  ipv6_socket_address.sin6_port = htons(port);
+  ipv6_socket_address.sin6_addr = in6addr_any;
+
+  int ipv6_bind_result = bind(s_ipv6_socket,
+                             (sockaddr*)&ipv6_socket_address,
+                             sizeof(ipv6_socket_address));
+$ if IRO_WIN32 then
+  if (SOCKET_ERROR == ipv6_bind_result)
+    return @log.error("Failed to bind the IPv6 socket due to error: ",
+                      makeWin32ErrorMsg(WSAGetLastError()));
+$ else -- if IRO_WIN32
+  if (-1 == ipv6_bind_result)
+    return @log.error("Failed to bind the IPv6 socket due to error: ",
+                      strerror(errno), "\n");
+$ end -- if not IRO_WIN32
+
+  @log.debug("Bound the IPv6 socket to port [", port, "]\n");
+  return true;
 }
 
 } // namespace net

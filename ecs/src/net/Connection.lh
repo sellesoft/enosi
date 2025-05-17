@@ -40,6 +40,7 @@ struct FragmentHeader
 static constexpr u16 MAX_FRAGMENT_SIZE = 1200;
 static constexpr u16 MAX_FRAGMENT_DATA_SIZE =
   MAX_FRAGMENT_SIZE - sizeof(FragmentHeader);
+static constexpr u16 SERVER_PORT = 40230;
 
 /* ============================================================================
  */
@@ -84,6 +85,11 @@ b8 init();
 /* ----------------------------------------------------------------------------
  */
 void deinit();
+
+/* ----------------------------------------------------------------------------
+ * Binds the socket to a specific port. Should only be called by servers.
+ */
+b8 bind(u16 port);
 
 /* ----------------------------------------------------------------------------
  */

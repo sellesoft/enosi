@@ -18,32 +18,14 @@ namespace sv
  * TODO(delle) investigate chunking server allocations and only committing
  *   memory as necessary
  */
-b8 ServerAllocator::init(u64 size)
+b8 ServerAllocator::init(void* backing, u64 size)
 {
   TRACE("initializing a server allocator with ", size, " bytes\n");
 
-  this->backing = (u8*)platform::reserveMemory(size);
-  if (this->backing == nullptr)
-    return false;
-  if (!platform::commitMemory(this->backing, size))
-    return false;
-
+  this->backing = (u8*)backing;
   this->size = size;
   this->used = 0;
-
   return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-void ServerAllocator::deinit()
-{
-  TRACE("deinitializing a server allocator\n");
-  if(this->backing == nullptr)
-    return;
-
-  platform::decommitMemory(this->backing, this->size);
-  platform::releaseMemory(this->backing, this->size);
 }
 
 /* ----------------------------------------------------------------------------

@@ -202,7 +202,7 @@ u64 Message::readBits()
   @log.trace("reading bits to message\n");
 
   u32 byte_cursor = this->cursor / 8;
-  if ((this->size - byte_cursor) < (BITS * 8))
+  if ((((u32)this->size * 8) - this->cursor) < BITS)
   {
     @log.warn("message overflow\n");
     this->cursor = this->size * 8;

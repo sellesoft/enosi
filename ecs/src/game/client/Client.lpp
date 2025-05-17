@@ -12,6 +12,8 @@ $ local ui = require "ui.UI"
 
 @@lpp.import "game/client/GameSim.lh"
 
+@@lpp.import "game/server/Server.lh"
+
 @@lpp.import "Engine.lh"
 
 @@lpp.import "ui/UI.lh"
@@ -232,7 +234,13 @@ b8 Client::update()
     return ERROR("failed to update window\n");
 
   // check for incoming packets and parse messages from the server
-  if (connection.address.type != net::AddressType::Invalid)
+  if (connection.address.type == net::AddressType::Offline)
+  {
+    // TODO(delle) better offline connection handling
+    StackArray<u8, net::MAX_FRAGMENT_SIZE> packet_data;
+    connection.receive(net::Source::Server, packet_data);
+  }
+  else if (connection.address.type != net::AddressType::Invalid)
   {
     net::Address packet_address;
     StackArray<u8, net::MAX_FRAGMENT_SIZE> packet_data;
@@ -263,10 +271,10 @@ b8 Client::update()
         u16 string_length = message.readU16();
         if (string_length > 0 && string_length < 513)
         {
-          u8 string_buffer[512];
-          message.readData(string_buffer, string_length);
-          iro::String string = {string_buffer, string_length};
-          @log.info("Message Received: \"", string, "\"\n");
+          io::StaticBuffer<512> string_buffer;
+          string_buffer.len = string_length;
+          message.readData(string_buffer.buffer, string_length);
+          @log.info("Message Received: \"", string_buffer, "\"\n");
         }
       }
     }
@@ -505,6 +513,24 @@ b8 Client::connectToServer(net::Address address)
   if (address.type == net::AddressType::Invalid)
     return @log.error("invalid address\n");
 
+  if (address.type == net::AddressType::Offline)
+  {
+    sv::CreateParams server_params =
+    {
+      .engine = *this->engine,
+      .global_allocation_size = unit::megabytes(1),
+      .match_allocation_size = unit::megabytes(1),
+      .tick_allocation_size = unit::megabytes(2),
+      .target_tickrate_ms = 48,
+      .publicity = sv::ServerPublicity::Offline,
+      .max_sessions = 1,
+      .password = {},
+    };
+    engine->server_thread = sv::create(server_params);
+    if (engine->server_thread == nullptr)
+      return FATAL("failed to create server thread\n");
+  }
+
   // TODO(delle) client allocators
   if(!connection.init(address, &mem::stl_allocator))
     return @log.error("failed to initialize connection\n");
@@ -513,8 +539,8 @@ b8 Client::connectToServer(net::Address address)
   net::Message message;
   message.init(message_data, 0);
   message.writeU16(1); // TODO(delle) non-hardcoded netevent
-  message.writeData((u8*)"player", 6);
   message.writeU8(6);
+  message.writeData((u8*)"player", 6);
   if (message.writeOverflowed())
     return @log.error("message overflowed\n");
 

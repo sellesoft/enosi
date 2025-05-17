@@ -17,12 +17,17 @@ $ require "common"
 #include "iro/containers/StackArray.h"
 #include "iro/Logger.h"
 #include "iro/time/Time.h"
+#include "iro/Thread.h"
+#include "iro/io/IO.h"
+
+#include <atomic>
 
 @log.ger(server, Debug)
 
 using namespace iro;
 
 struct MapDef;
+static void* updateServer(thread::Context* context);
 
 namespace sv
 {
@@ -36,14 +41,15 @@ enum struct ServerState : u8
 };
 
 /* ============================================================================
+ * The server's view of a client.
  */
-struct ServerClient
+struct Session
 {
   net::Connection connection;
   u64 last_packet_tick_index;
 
-  static constexpr u32 MAX_NAME_LENGTH = 63;
-  StackArray<u8, MAX_NAME_LENGTH + 1> name;
+  static constexpr u64 MAX_NAME_LENGTH = 64;
+  io::StaticBuffer<MAX_NAME_LENGTH-1> name;
 };
 
 } // namespace sv
@@ -60,12 +66,11 @@ struct Server
   u64 tick_index;
 
   sv::ServerState state;
-  b8 dedicated;
   sv::ServerPublicity publicity;
-  StackArray<u8, 64> password;
+  io::StaticBuffer<sv::MAX_PASSWORD_LENGTH-1> password;
 
-  u16 max_clients;
-  Array<sv::ServerClient> clients;
+  u16 max_sessions;
+  Array<sv::Session> sessions;
 
   Engine* engine;
   sv::GameSim sim;
@@ -74,92 +79,53 @@ struct Server
 namespace sv
 {
 
+static std::atomic_bool server_running = std::atomic_bool(false);
+
 /* ----------------------------------------------------------------------------
  */
-Server* create(const CreateParams& params)
+void* create(CreateParams& params)
 {
+  assert(thread::isMainThread());
   @log.info("Creating server...\n");
 
-  ServerAllocator global_allocator;
-  if(!global_allocator.init(params.global_allocation_size))
+  void* params_copy = mem::stl_allocator.allocate(sizeof(CreateParams));
+  if (params_copy == nullptr)
   {
-    @log.error("failed to init the global server allocator\n");
-    return nullptr;
+    @log.error("failed to allocate params copy\n");
+    return thread::INVALID_HANDLE;
+  }
+  mem::copy(params_copy, &params, sizeof(CreateParams));
+
+  u64 thread_memory_size =  params.global_allocation_size
+                          + params.match_allocation_size
+                          + params.tick_allocation_size;
+  void* server_thread = thread::create(updateServer, params_copy,
+                                       thread_memory_size);
+  if (server_thread == thread::INVALID_HANDLE)
+  {
+    @log.error("failed to create the server thread\n");
+    return thread::INVALID_HANDLE;
   }
 
-  Server* server = global_allocator.construct<Server>();
-  if (server == nullptr)
-  {
-    global_allocator.deinit();
-    @log.error("failed to construct the server object\n");
-    return nullptr;
-  }
-  server->global_allocator = global_allocator;
-  auto deinit_global_allocator_if_failure = deferWithCancel
-    { server->global_allocator.deinit(); };
-
-  if(!server->match_allocator.init(params.match_allocation_size))
-  {
-    @log.error("failed to init the match server allocator\n");
-    return nullptr;
-  }
-  auto deinit_match_allocator_if_failure = deferWithCancel
-    { server->match_allocator.deinit(); };
-
-  if(!server->tick_allocator.init(params.tick_allocation_size))
-  {
-    @log.error("failed to init the tick server allocator\n");
-    return nullptr;
-  }
-  auto deinit_tick_allocator_if_failure = deferWithCancel
-    { server->tick_allocator.deinit(); };
-
-  server->target_timespan =
-    TimeSpan::fromMilliseconds(params.target_tickrate_ms);
-  server->tick_index = 0;
-  server->state = ServerState::Lobby;
-  server->dedicated = params.dedicated;
-  server->publicity = params.publicity;
-  server->password = params.password;
-  server->max_clients = params.max_clients;
-  if (!server->clients.init(params.max_clients, &server->global_allocator))
-  {
-    @log.error("failed to init the server clients array\n");
-    return nullptr;
-  }
-  server->engine = &params.engine;
-
-  if (server->publicity == ServerPublicity::Offline)
-  {
-    ServerClient* offline_client = server->clients.push();
-    offline_client->connection.init(net::Address::createOffline(),
-                                    &server->global_allocator);
-    mem::copy(offline_client->name.arr, (void*)"offlineplayer", 13);
-    offline_client->name.len = 13;
-  }
-
-  deinit_global_allocator_if_failure.cancel();
-  deinit_match_allocator_if_failure.cancel();
-  deinit_tick_allocator_if_failure.cancel();
-  return server;
+  return server_thread;
 }
 
 /* ----------------------------------------------------------------------------
  */
-void destroy(Server* server)
+void destroy(void* server_thread)
 {
-  assertpointer(server);
+  assert(thread::isMainThread());
   @log.trace("destroying server\n");
 
-  server->tick_allocator.deinit();
-  server->match_allocator.deinit();
-  server->global_allocator.deinit();
+  server_running.store(false);
+  thread::detach(server_thread);
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 startMatch(Server* server, String map_name, b8 existing)
+static b8 startMatch(Server* server, String map_name, b8 existing)
 {
+  assert(!thread::isMainThread());
   assertpointer(server);
   @log.trace("starting server match\n");
 
@@ -197,8 +163,9 @@ b8 startMatch(Server* server, String map_name, b8 existing)
 
 /* ----------------------------------------------------------------------------
  */
-void stopMatch(Server* server)
+static void stopMatch(Server* server)
 {
+  assert(!thread::isMainThread());
   assertpointer(server);
   @log.trace("stopping server match\n");
 
@@ -207,158 +174,295 @@ void stopMatch(Server* server)
   server->state = ServerState::Lobby;
 }
 
+} // namespace sv
+
 /* ----------------------------------------------------------------------------
  */
-b8 update(Server* server)
+static Server* createServer(thread::Context* ctx, sv::CreateParams* params)
 {
-  assertpointer(server);
-  iro::TimePoint start_timepoint = iro::TimePoint::monotonic();
-  @log.trace("updating the server\n");
+  assert(!thread::isMainThread());
+  using namespace sv;
 
-  server->tick_allocator.clear();
+  defer { mem::stl_allocator.free(params); };
 
-  // check for incoming packets
+  void* global_memory = ctx->allocator.allocate(params->global_allocation_size);
+  if (global_memory == nullptr)
+  {
+    @log.error("failed to allocate global memory for the server\n");
+    return nullptr;
+  }
+
+   ServerAllocator global_allocator;
+  if(!global_allocator.init(global_memory, params->global_allocation_size))
+  {
+    @log.error("failed to init the global server allocator\n");
+    return nullptr;
+  }
+
+  Server* server = global_allocator.construct<Server>();
+  if (server == nullptr)
+  {
+    @log.error("failed to construct the server object\n");
+    return nullptr;
+  }
+  server->global_allocator = global_allocator;
+
+  void* match_memory = ctx->allocator.allocate(params->match_allocation_size);
+  if (match_memory == nullptr)
+  {
+    @log.error("failed to allocate match memory for the server\n");
+    return nullptr;
+  }
+
+  if(!server->match_allocator.init(match_memory, params->match_allocation_size))
+  {
+    @log.error("failed to init the match server allocator\n");
+    return nullptr;
+  }
+
+  void* tick_memory = ctx->allocator.allocate(params->tick_allocation_size);
+  if (tick_memory == nullptr)
+  {
+    @log.error("failed to allocate tick memory for the server\n");
+    return nullptr;
+  }
+
+  if(!server->tick_allocator.init(tick_memory, params->tick_allocation_size))
+  {
+    @log.error("failed to init the tick server allocator\n");
+    return nullptr;
+  }
+
+  server->target_timespan =
+    TimeSpan::fromMilliseconds(params->target_tickrate_ms);
+  server->tick_index = 0;
+  server->state = ServerState::Lobby;
+  server->publicity = params->publicity;
+  server->password = params->password;
+  server->max_sessions = params->max_sessions;
+  if (!server->sessions.init(params->max_sessions, &server->global_allocator))
+  {
+    @log.error("failed to init the server sessions array\n");
+    return nullptr;
+  }
+  server->engine = &params->engine;
+
   if (server->publicity == ServerPublicity::Offline)
   {
-    assert(server->clients.len() > 0);
-
-    // TODO(delle) better offline connection handling
-    StackArray<u8, net::MAX_FRAGMENT_SIZE> packet_data;
-    server->clients[0].connection.receive(net::Source::Client, packet_data);
+    Session* offline_session = server->sessions.push();
+    offline_session->connection.init(net::Address::createOffline(),
+                                    &server->global_allocator);
+    offline_session->name.write("offlineplayer"_str);
   }
   else
   {
-    net::Address packet_address;
-    StackArray<u8, net::MAX_FRAGMENT_SIZE> packet_data;
-    while (net::checkForPackets(packet_address, packet_data))
+    if (!net::bind(net::SERVER_PORT))
     {
-      // range validated in net::checkForPackets
-      assertrange(packet_data.len,
-        sizeof(net::FragmentHeader), net::MAX_FRAGMENT_SIZE);
-
-      for (ServerClient& client : server->clients)
-      {
-        if (mem::equal(client.connection.address, packet_address))
-        {
-          client.connection.receive(net::Source::Client, packet_data);
-          client.last_packet_tick_index = server->tick_index;
-          break;
-        }
-      }
-
-      // check for connection requests
-      net::Message message;
-      message.init(packet_data.arr, packet_data.len);
-      u32 protocol = message.readU32();
-      u32 sequence = message.readU32();
-      u32 ack_index = message.readU32();
-      u32 ack_bitfield = message.readU32();
-      u16 fragment_offset = message.readU16();
-      u16 data_size = message.readU16();
-      u16 netevent = message.readU16();
-      if (netevent == 1) // TODO(delle) non-hardcoded netevent
-      {
-        ServerClient* new_client = server->clients.push();
-        new_client->connection.init(packet_address, &server->global_allocator);
-        new_client->last_packet_tick_index = server->tick_index;
-        message.readData(new_client->name.arr, ServerClient::MAX_NAME_LENGTH);
-        new_client->name.len = message.readU8();
-
-        @log.info("CONNECTED [", String::from(new_client->name.asSlice()),
-          "] from [", packet_address, "]\n");
-      }
-    }
-
-    // ping the server list
-    // TODO(delle) server list
-  }
-
-  if (server->state == ServerState::Ingame)
-  {
-    // parse messages from clients
-    for (ServerClient& client : server->clients)
-    {
-      if (client.connection.incoming_message_pending_fragments)
-        continue;
-
-      net::Message message;
-      message.init(client.connection.incoming_message_data,
-                   client.connection.incoming_message_size);
-
-      // TODO(delle) implement server packet parsing
-      u16 netevent = message.readU16();
-      if (netevent == 2) // TODO(delle) non-hardcoded netevent
-      {
-        u16 string_length = message.readU16();
-        if (string_length > 0 && string_length < 513)
-        {
-          u8 string_buffer[512];
-          message.readData(string_buffer, string_length);
-          iro::String string = {string_buffer, string_length};
-          @log.info("Message Received: \"", string, "\"\n");
-        }
-      }
-    }
-
-    // simulate
-    if(!server->sim.update())
-      return @log.error("failed to update server sim\n");
-
-    // send messages to clients
-    u8 message_data[net::Message::MAX_SIZE];
-    for (ServerClient& client : server->clients)
-    {
-      net::Message message;
-      message.init(message_data, 0);
-
-      // TODO(delle) implement server packet creation
-      message.writeU16(2); // TODO(delle) non-hardcoded netevent
-      message.writeU16(12);
-      message.writeData((u8*)"hello client", 12);
-
-      client.connection.send(net::Source::Server, message, false);
-      if (client.connection.outgoing_message_pending_fragments)
-      {
-        client.connection.sendNextFragment();
-      }
-    }
-
-    // sleep if we're under tickrate budget
-    {
-      TimeSpan current_timespan = TimePoint::monotonic() - start_timepoint;
-      TimeSpan wait_timespan = TimeSpan::fromNanoseconds(
-        server->target_timespan.ns - current_timespan.ns);
-      if (wait_timespan.ns > 0)
-      {
-        platform::sleep(wait_timespan);
-      }
-      else
-      {
-        // TODO: trigger profiler export
-      }
-    }
-  }
-  else
-  {
-    // sleep if we're under tickrate budget
-    // NOTE: hardcoded 200ms tickrate in the lobby
-    {
-      TimeSpan current_timespan = TimePoint::monotonic() - start_timepoint;
-      TimeSpan wait_timespan = TimeSpan::fromNanoseconds(
-        TimeSpan::fromMilliseconds(200).ns - current_timespan.ns);
-      if (wait_timespan.ns > 0)
-      {
-        platform::sleep(wait_timespan);
-      }
-      else
-      {
-        // TODO: trigger profiler export
-      }
+      @log.error("failed to bind server port\n");
+      return nullptr;
     }
   }
 
-  server->tick_index++;
-  return true;
+  server_running.store(true);
+  return server;
 }
 
-} // namespace sv
+/* ----------------------------------------------------------------------------
+ */
+static void* updateServer(thread::Context* ctx)
+{
+  assert(!thread::isMainThread());
+  using namespace sv;
+
+  CreateParams* params = (CreateParams*)ctx->data;
+  Server* server = createServer(ctx, params);
+  if (server == nullptr)
+    return (void*)1;
+
+  while (server_running.load())
+  {
+    assertpointer(server);
+
+    iro::TimePoint start_timepoint = iro::TimePoint::monotonic();
+    @log.trace("updating the server\n");
+
+    server->tick_allocator.clear();
+
+    // check for incoming packets
+    if (server->publicity == ServerPublicity::Offline)
+    {
+      assert(server->sessions.len() > 0);
+
+      // TODO(delle) better offline connection handling
+      StackArray<u8, net::MAX_FRAGMENT_SIZE> packet_data;
+      server->sessions[0].connection.receive(net::Source::Client, packet_data);
+      
+      //check for connection requests
+      if (!server->sessions[0].connection.incoming_message_pending_fragments)
+      {
+        net::Message message;
+        message.init(packet_data.arr, packet_data.len);
+        u16 netevent = message.readU16();
+        if (netevent == 1) // TODO(delle) non-hardcoded netevent
+        {
+          net::Address packet_address = net::Address::createOffline();
+
+          Session* new_session = server->sessions.push();
+          new_session->connection.init(packet_address,
+                                      &server->global_allocator);
+          new_session->last_packet_tick_index = server->tick_index;
+          new_session->name.len = message.readU8();
+          message.readData(new_session->name.buffer,
+                          min(sv::Session::MAX_NAME_LENGTH,
+                              (u64)new_session->name.len));
+
+          @log.info("CONNECTED [", new_session->name, "] from [",
+                    packet_address, "]\n");
+        }
+      }
+    }
+    else
+    {
+      net::Address packet_address;
+      StackArray<u8, net::MAX_FRAGMENT_SIZE> packet_data;
+      while (net::checkForPackets(packet_address, packet_data))
+      {
+        // range validated in net::checkForPackets
+        assertrange(packet_data.len,
+          sizeof(net::FragmentHeader), net::MAX_FRAGMENT_SIZE);
+
+        b8 packet_handled = false;
+        for (Session& session : server->sessions)
+        {
+          if (mem::equal(session.connection.address, packet_address))
+          {
+            session.connection.receive(net::Source::Client, packet_data);
+            session.last_packet_tick_index = server->tick_index;
+            packet_handled = true;
+            break;
+          }
+        }
+        if (packet_handled)
+          continue;
+
+        // check for connection requests
+        net::Message message;
+        message.init(packet_data.arr, packet_data.len);
+        u32 protocol = message.readU32();
+        u32 sequence = message.readU32();
+        u32 ack_index = message.readU32();
+        u32 ack_bitfield = message.readU32();
+        u16 fragment_offset = message.readU16();
+        u16 data_size = message.readU16();
+        u16 netevent = message.readU16();
+        if (netevent == 1) // TODO(delle) non-hardcoded netevent
+        {
+          Session* new_session = server->sessions.push();
+          new_session->connection.init(packet_address, &server->global_allocator);
+          new_session->last_packet_tick_index = server->tick_index;
+          new_session->name.len = message.readU8();
+          message.readData(new_session->name.buffer,
+                          min(sv::Session::MAX_NAME_LENGTH,
+                              (u64)new_session->name.len));
+
+          @log.info("CONNECTED [", new_session->name, "] from [",
+                    packet_address, "]\n");
+        }
+      }
+
+      // ping the server list
+      // TODO(delle) server list
+    }
+
+    if (server->state == ServerState::Ingame)
+    {
+      // parse messages from clients
+      for (Session& session : server->sessions)
+      {
+        if (session.connection.incoming_message_pending_fragments)
+          continue;
+
+        net::Message message;
+        message.init(session.connection.incoming_message_data,
+                    session.connection.incoming_message_size);
+
+        // TODO(delle) implement server packet parsing
+        u16 netevent = message.readU16();
+        if (netevent == 2) // TODO(delle) non-hardcoded netevent
+        {
+          u16 string_length = message.readU16();
+          if (string_length > 0 && string_length < 513)
+          {
+            io::StaticBuffer<512> string_buffer;
+            string_buffer.len = string_length;
+            message.readData(string_buffer.buffer, string_length);
+            @log.info("Message Received: \"", string_buffer, "\"\n");
+          }
+        }
+      }
+
+      // simulate
+      if(!server->sim.update())
+      {
+        @log.error("failed to update server sim\n");
+        return (void*)1;
+      }
+
+      // send messages to clients
+      u8 message_data[net::Message::MAX_SIZE];
+      for (Session& session : server->sessions)
+      {
+        net::Message message;
+        message.init(message_data, 0);
+
+        // TODO(delle) implement server packet creation
+        message.writeU16(2); // TODO(delle) non-hardcoded netevent
+        message.writeU16(12);
+        message.writeData((u8*)"hello client", 12);
+
+        session.connection.send(net::Source::Server, message, false);
+        if (session.connection.outgoing_message_pending_fragments)
+        {
+          session.connection.sendNextFragment();
+        }
+      }
+
+      // sleep if we're under tickrate budget
+      {
+        TimeSpan current_timespan = TimePoint::monotonic() - start_timepoint;
+        TimeSpan wait_timespan = TimeSpan::fromNanoseconds(
+          server->target_timespan.ns - current_timespan.ns);
+        if (wait_timespan.ns > 0)
+        {
+          platform::sleep(wait_timespan);
+        }
+        else
+        {
+          // TODO: trigger profiler export
+        }
+      }
+    }
+    else
+    {
+      // sleep if we're under tickrate budget
+      // NOTE: hardcoded 200ms tickrate in the lobby
+      {
+        TimeSpan current_timespan = TimePoint::monotonic() - start_timepoint;
+        TimeSpan wait_timespan = TimeSpan::fromNanoseconds(
+          TimeSpan::fromMilliseconds(200).ns - current_timespan.ns);
+        if (wait_timespan.ns > 0)
+        {
+          platform::sleep(wait_timespan);
+        }
+        else
+        {
+          // TODO: trigger profiler export
+        }
+      }
+    }
+
+    server->tick_index++;
+  }
+
+  return (void*)0;
+}
