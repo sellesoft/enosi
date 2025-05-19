@@ -325,8 +325,16 @@ f32 Message::readAngle16()
 void Message::readData(u8* data, u16 bytes)
 {
   constexpr u32 max_cursor = (u32)Message::MAX_SIZE * 8;
-  for (u16 i = 0; i < bytes && this->cursor < max_cursor; i++)
-    data[i] = this->readBits<8>();
+  if (data == nullptr)
+  {
+    for (u16 i = 0; i < bytes && this->cursor < max_cursor; i++)
+      this->readBits<8>();
+  }
+  else
+  {
+    for (u16 i = 0; i < bytes && this->cursor < max_cursor; i++)
+      data[i] = this->readBits<8>();
+  }
 }
 
 /* ----------------------------------------------------------------------------

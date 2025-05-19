@@ -292,32 +292,33 @@ static void* updateServer(thread::Context* ctx)
     if (server->publicity == ServerPublicity::Offline)
     {
       assert(server->sessions.len() > 0);
+      Session& session = server->sessions[0];
+
+      session.connection.lock(net::Source::Client);
+      defer { session.connection.unlock(net::Source::Client); };
 
       // TODO(delle) better offline connection handling
       StackArray<u8, net::MAX_FRAGMENT_SIZE> packet_data;
-      server->sessions[0].connection.receive(net::Source::Client, packet_data);
-      
-      //check for connection requests
-      if (!server->sessions[0].connection.incoming_message_pending_fragments)
+      session.connection.receive(net::Source::Client, packet_data);
+      session.last_packet_tick_index = server->tick_index;
+
+      // check for connection requests
+      if (session.connection.state == net::Connection::State::Disconnected)
       {
+        session.connection.state = net::Connection::State::Challenging;
+
         net::Message message;
-        message.init(packet_data.arr, packet_data.len);
+        message.init(session.connection.incoming_message_data,
+                    session.connection.incoming_message_size);
         u16 netevent = message.readU16();
-        if (netevent == 1) // TODO(delle) non-hardcoded netevent
+        assert(netevent == 1); // TODO(delle) non-hardcoded netevent
         {
-          net::Address packet_address = net::Address::createOffline();
-
-          Session* new_session = server->sessions.push();
-          new_session->connection.init(packet_address,
-                                      &server->global_allocator);
-          new_session->last_packet_tick_index = server->tick_index;
-          new_session->name.len = message.readU8();
-          message.readData(new_session->name.buffer,
-                          min(sv::Session::MAX_NAME_LENGTH,
-                              (u64)new_session->name.len));
-
-          @log.info("CONNECTED [", new_session->name, "] from [",
-                    packet_address, "]\n");
+          session.name.len = message.readU8();
+          message.readData(session.name.buffer,
+                            min(sv::Session::MAX_NAME_LENGTH,
+                                (u64)session.name.len));
+          @log.info("CONNECTED [", session.name, "] from [",
+                    session.connection.address, "]\n");
         }
       }
     }
@@ -358,8 +359,12 @@ static void* updateServer(thread::Context* ctx)
         if (netevent == 1) // TODO(delle) non-hardcoded netevent
         {
           Session* new_session = server->sessions.push();
-          new_session->connection.init(packet_address, &server->global_allocator);
+
+          new_session->connection.init(packet_address,
+                                       &server->global_allocator);
+          new_session->connection.state = net::Connection::State::Challenging;
           new_session->last_packet_tick_index = server->tick_index;
+
           new_session->name.len = message.readU8();
           message.readData(new_session->name.buffer,
                           min(sv::Session::MAX_NAME_LENGTH,
@@ -374,21 +379,27 @@ static void* updateServer(thread::Context* ctx)
       // TODO(delle) server list
     }
 
-    if (server->state == ServerState::Ingame)
+    // parse messages from clients
+    for (Session& session : server->sessions)
     {
-      // parse messages from clients
-      for (Session& session : server->sessions)
+      if (session.connection.incoming_message_pending_fragments)
+        continue;
+
+      net::Message message;
+      message.init(session.connection.incoming_message_data,
+                  session.connection.incoming_message_size);
+
+      u16 netevent = message.readU16();
+      while (true)
       {
-        if (session.connection.incoming_message_pending_fragments)
-          continue;
-
-        net::Message message;
-        message.init(session.connection.incoming_message_data,
-                    session.connection.incoming_message_size);
-
-        // TODO(delle) implement server packet parsing
-        u16 netevent = message.readU16();
-        if (netevent == 2) // TODO(delle) non-hardcoded netevent
+        if (netevent == 1) // TODO(delle) non-hardcoded netevent
+        {
+          // already handled
+          message.readU8();
+          message.readData(nullptr, min(sv::Session::MAX_NAME_LENGTH,
+                                        (u64)session.name.len));
+        }
+        else if (netevent == 2) // TODO(delle) non-hardcoded netevent
         {
           u16 string_length = message.readU16();
           if (string_length > 0 && string_length < 513)
@@ -399,65 +410,76 @@ static void* updateServer(thread::Context* ctx)
             @log.info("Message Received: \"", string_buffer, "\"\n");
           }
         }
+        else
+        {
+          @log.error("unknown netevent: ", netevent, "\n");
+          break;
+        }
+
+        if (!message.readComplete())
+          netevent = message.readU16();
+        else
+          break;
       }
 
+      assert(message.readComplete());
+      assert(!message.readOverflowed());
+    }
+
+    if (server->state == ServerState::Ingame)
+    {
       // simulate
       if(!server->sim.update())
       {
         @log.error("failed to update server sim\n");
         return (void*)1;
       }
+    }
 
-      // send messages to clients
-      u8 message_data[net::Message::MAX_SIZE];
-      for (Session& session : server->sessions)
+    // send messages to clients
+    u8 message_data[net::Message::MAX_SIZE];
+    for (Session& session : server->sessions)
+    {
+      session.connection.lock(net::Source::Server);
+      defer { session.connection.unlock(net::Source::Server); };
+
+      net::Message message;
+      message.init(message_data, 0);
+
+      if (session.connection.state == net::Connection::State::Challenging)
       {
-        net::Message message;
-        message.init(message_data, 0);
-
-        // TODO(delle) implement server packet creation
-        message.writeU16(2); // TODO(delle) non-hardcoded netevent
-        message.writeU16(12);
-        message.writeData((u8*)"hello client", 12);
-
-        session.connection.send(net::Source::Server, message, false);
-        if (session.connection.outgoing_message_pending_fragments)
-        {
-          session.connection.sendNextFragment();
-        }
+        session.connection.state = net::Connection::State::Connected;
+        message.writeU16(1); // TODO(delle) non-hardcoded netevent
       }
 
-      // sleep if we're under tickrate budget
+      // TODO(delle) implement server packet creation
+      message.writeU16(2); // TODO(delle) non-hardcoded netevent
+      message.writeU16(12);
+      message.writeData((u8*)"hello client", 12);
+
+      session.connection.send(net::Source::Server, message, false);
+      if (session.connection.outgoing_message_pending_fragments)
       {
-        TimeSpan current_timespan = TimePoint::monotonic() - start_timepoint;
-        TimeSpan wait_timespan = TimeSpan::fromNanoseconds(
-          server->target_timespan.ns - current_timespan.ns);
-        if (wait_timespan.ns > 0)
-        {
-          platform::sleep(wait_timespan);
-        }
-        else
-        {
-          // TODO: trigger profiler export
-        }
+        session.connection.sendNextFragment();
       }
     }
-    else
+
+    // sleep if we're under tickrate budget
+    // NOTE: hardcoded 200ms tickrate in the lobby
     {
-      // sleep if we're under tickrate budget
-      // NOTE: hardcoded 200ms tickrate in the lobby
+      TimeSpan current_timespan = TimePoint::monotonic() - start_timepoint;
+      TimeSpan target_timespan = (server->state == ServerState::Ingame)
+                                 ? server->target_timespan
+                                 : TimeSpan::fromMilliseconds(200);
+      TimeSpan wait_timespan = TimeSpan::fromNanoseconds(
+        target_timespan.ns - current_timespan.ns);
+      if (wait_timespan.ns > 0)
       {
-        TimeSpan current_timespan = TimePoint::monotonic() - start_timepoint;
-        TimeSpan wait_timespan = TimeSpan::fromNanoseconds(
-          TimeSpan::fromMilliseconds(200).ns - current_timespan.ns);
-        if (wait_timespan.ns > 0)
-        {
-          platform::sleep(wait_timespan);
-        }
-        else
-        {
-          // TODO: trigger profiler export
-        }
+        platform::sleep(wait_timespan);
+      }
+      else
+      {
+        // TODO: trigger profiler export since we're over budget
       }
     }
 

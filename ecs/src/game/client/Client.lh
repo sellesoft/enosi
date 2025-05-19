@@ -33,7 +33,6 @@ struct Client
   Engine* engine;
 
   net::Connection connection;
-  b8 waiting_for_challenge_response;
   TimePoint last_challenge_time;
 
   // Client only systems.

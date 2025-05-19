@@ -222,6 +222,53 @@ $ end
 
 /* ----------------------------------------------------------------------------
  */
+static void parseIncomingMessage(net::Connection& connection)
+{
+  if (connection.incoming_message_pending_fragments)
+    return;
+
+  @log.trace("received packet from ", connection.address, "\n");
+  net::Message message;
+  message.init(connection.incoming_message_data,
+               connection.incoming_message_size);
+
+  u16 netevent = message.readU16();
+  while (true)
+  {
+    if (netevent == 1) // TODO(delle) non-hardcoded netevent
+    {
+      connection.state = net::Connection::State::Connected;
+      @log.info("CONNECTED [", connection.address, "]\n");
+    }
+    else if (netevent == 2) // TODO(delle) non-hardcoded netevent
+    {
+      u16 string_length = message.readU16();
+      if (string_length > 0 && string_length < 513)
+      {
+        io::StaticBuffer<512> string_buffer;
+        string_buffer.len = string_length;
+        message.readData(string_buffer.buffer, string_length);
+        @log.info("Message Received: \"", string_buffer, "\"\n");
+      }
+    }
+    else
+    {
+      @log.error("unknown netevent: ", netevent, "\n");
+      break;
+    }
+
+    if (!message.readComplete())
+      netevent = message.readU16();
+    else
+      break;
+  }
+
+  assert(message.readComplete());
+  assert(!message.readOverflowed());
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 Client::update()
 {
   // Prepares input state for this frame.
@@ -233,12 +280,16 @@ b8 Client::update()
   if (!window.update(input))
     return ERROR("failed to update window\n");
 
-  // check for incoming packets and parse messages from the server
+  // Check for and parse incoming packets.
   if (connection.address.type == net::AddressType::Offline)
   {
+    connection.lock(net::Source::Server);
+    defer { connection.unlock(net::Source::Server); };
+
     // TODO(delle) better offline connection handling
     StackArray<u8, net::MAX_FRAGMENT_SIZE> packet_data;
     connection.receive(net::Source::Server, packet_data);
+    parseIncomingMessage(connection);
   }
   else if (connection.address.type != net::AddressType::Invalid)
   {
@@ -254,29 +305,7 @@ b8 Client::update()
         continue;
 
       connection.receive(net::Source::Server, packet_data);
-      if (connection.incoming_message_pending_fragments)
-        continue;
-
-      waiting_for_challenge_response = false;
-      @log.debug("received packet from ", packet_address, "\n");
-
-      net::Message message;
-      message.init(connection.incoming_message_data,
-                   connection.incoming_message_size);
-
-      // TODO(delle) implement client packet parsing
-      u16 netevent = message.readU16();
-      if (netevent == 2) // TODO(delle) non-hardcoded netevent
-      {
-        u16 string_length = message.readU16();
-        if (string_length > 0 && string_length < 513)
-        {
-          io::StaticBuffer<512> string_buffer;
-          string_buffer.len = string_length;
-          message.readData(string_buffer.buffer, string_length);
-          @log.info("Message Received: \"", string_buffer, "\"\n");
-        }
-      }
+      parseIncomingMessage(connection);
     }
   }
 
@@ -313,10 +342,13 @@ b8 Client::update()
   if (!ui.update(ui_params))
     return ERROR("failed to update ui\n");
 
-  // send messages to the server
+  // Send messages to the server.
   if (connection.address.type != net::AddressType::Invalid)
   {
-    if (waiting_for_challenge_response)
+    connection.lock(net::Source::Client);
+    defer { connection.unlock(net::Source::Client); };
+
+    if (connection.state == net::Connection::State::Challenging)
     {
       auto time_since_challenge = TimePoint::monotonic() - last_challenge_time;
       if (time_since_challenge.toMilliseconds() > 1000)
@@ -510,6 +542,7 @@ b8 Client::wantHotReload()
  */
 b8 Client::connectToServer(net::Address address)
 {
+  @log.trace("connecting to server at\n");
   if (address.type == net::AddressType::Invalid)
     return @log.error("invalid address\n");
 
@@ -535,19 +568,21 @@ b8 Client::connectToServer(net::Address address)
   if(!connection.init(address, &mem::stl_allocator))
     return @log.error("failed to initialize connection\n");
 
+  connection.lock(net::Source::Client);
+  defer { connection.unlock(net::Source::Client); };
+
   u8 message_data[256];
   net::Message message;
   message.init(message_data, 0);
   message.writeU16(1); // TODO(delle) non-hardcoded netevent
   message.writeU8(6);
   message.writeData((u8*)"player", 6);
-  if (message.writeOverflowed())
-    return @log.error("message overflowed\n");
+  assert(!message.writeOverflowed());
 
   if (!connection.send(net::Source::Client, message, true))
     return @log.error("failed to send challenge message\n");
 
-  waiting_for_challenge_response = true;
+  connection.state = net::Connection::State::Challenging;
   last_challenge_time = TimePoint::monotonic();
   
   @log.info("CHALLENGE [", connection.address, "]\n");

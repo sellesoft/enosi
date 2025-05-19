@@ -17,10 +17,7 @@ $ if IRO_WIN32 then
 #define WIN32_LEAN_AND_MEAN
 #include <Winsock2.h>
 #include <Ws2ipdef.h>
-#undef ERROR
-#undef max
-#undef min
-#undef interface
+#include "iro/Platform_Win32.h"
 $ else -- if IRO_WIN32
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -39,36 +36,11 @@ $ end -- if not IRO_WIN32
 #include "iro/Logger.h"
 #include "iro/memory/Allocator.h"
 
+#include <mutex>
+
 using namespace iro;
 
 @log.ger(net.connection, Info)
-
-/* ----------------------------------------------------------------------------
- */
-$ if IRO_WIN32 then
-static thread_local LPSTR win32_error_msg = nullptr;
-static String makeWin32ErrorMsg(DWORD error)
-{
-  DWORD win32_error_msg_len =
-    FormatMessageA(
-          FORMAT_MESSAGE_ALLOCATE_BUFFER
-        | FORMAT_MESSAGE_FROM_SYSTEM
-        | FORMAT_MESSAGE_IGNORE_INSERTS,
-        NULL,
-        error,
-        MAKELANGID(LANG_NEUTRAL,SUBLANG_DEFAULT),
-        (LPSTR)&win32_error_msg,
-        0,
-        NULL);
-
-  return String::from((u8*)win32_error_msg, (u64)win32_error_msg_len);
-}
-
-static void cleanupWin32ErrorMsg()
-{
-  LocalFree(win32_error_msg);
-}
-$ end -- if IRO_WIN32
 
 namespace net
 {
@@ -90,7 +62,8 @@ static b8 s_ipv6_socket_is_bound = false;
  */
 struct OfflineMessage
 {
-  u16 size;
+  std::mutex mutex;
+  volatile u16 size;
   u8 data[Message::MAX_SIZE];
 };
 
@@ -115,7 +88,7 @@ $ if IRO_WIN32 then
   WSADATA wsa_data;
   if (NO_ERROR != WSAStartup(MAKEWORD(2,2), &wsa_data))
     return @log.error("Failed to startup WSA due to error: ",
-      makeWin32ErrorMsg(WSAGetLastError()));
+      platform::Win32ErrMsg(WSAGetLastError()));
 $ end -- if IRO_WIN32
 
   // create the ipv6 socket
@@ -123,7 +96,7 @@ $ end -- if IRO_WIN32
 $ if IRO_WIN32 then
   if (s_ipv6_socket == INVALID_SOCKET)
     return @log.error("Failed to open the IPv6 socket due to error: ",
-                      makeWin32ErrorMsg(WSAGetLastError()));
+                      platform::Win32ErrMsg(WSAGetLastError()));
 $ else -- if IRO_WIN32
   if (s_ipv6_socket < 0)
     return @log.error("Failed to open the IPv6 socket due to error: ",
@@ -145,7 +118,7 @@ $ end -- if not IRO_WIN32
 $ if IRO_WIN32 then
   if (SOCKET_ERROR == ioctlsocket(s_ipv6_socket, FIONBIO, &non_blocking))
     return @log.error("Failed to make the IPv6 socket non-blocking due to"
-                      " error: ", makeWin32ErrorMsg(WSAGetLastError()));
+                      " error: ", platform::Win32ErrMsg(WSAGetLastError()));
 $ else -- if IRO_WIN32
   if (-1 == fcntl(
       s_ipv6_socket, F_SETFL, fcntl(s_ipv6_socket, F_GETFL, 0) | O_NONBLOCK))
@@ -159,8 +132,8 @@ $ end -- if not IRO_WIN32
 $ if IRO_WIN32 then
   if (SOCKET_ERROR == setsockopt(s_ipv6_socket, SOL_SOCKET, SO_BROADCAST,
                                  (char*)&i, sizeof(i)))
-    return @log.error("Failed to make the IPv6 socket broadcast capable"
-                      " due to error: ", makeWin32ErrorMsg(WSAGetLastError()));
+    return @log.error("Failed to make the IPv6 socket broadcast capable due"
+                      " to error: ", platform::Win32ErrMsg(WSAGetLastError()));
 $ else -- if IRO_WIN32
   if (-1 == setsockopt(s_ipv6_socket, SOL_SOCKET, SO_BROADCAST,
                        (char*)&i, sizeof(i)))
@@ -175,7 +148,7 @@ $ if IRO_WIN32 then
   if (SOCKET_ERROR == setsockopt(s_ipv6_socket, IPPROTO_IPV6, IPV6_V6ONLY, 
                                  (char*)&i, sizeof(i)))
     return @log.error("Failed to disable IPv6-only mode due to error: ",
-                      makeWin32ErrorMsg(WSAGetLastError()));
+                      platform::Win32ErrMsg(WSAGetLastError()));
 $ else -- if IRO_WIN32
   if (-1 == setsockopt(s_ipv6_socket, IPPROTO_IPV6, IPV6_V6ONLY,
                        (char*)&i, sizeof(i)))
@@ -204,6 +177,35 @@ $ end -- if not IRO_WIN32
 
 /* ----------------------------------------------------------------------------
  */
+b8 bind(u16 port)
+{
+  @log.trace("binding socket to port ", port, "\n");
+
+  sockaddr_in6 ipv6_socket_address;
+  memset(&ipv6_socket_address, 0, sizeof(ipv6_socket_address));
+  ipv6_socket_address.sin6_family = AF_INET6;
+  ipv6_socket_address.sin6_port = htons(port);
+  ipv6_socket_address.sin6_addr = in6addr_any;
+
+  int ipv6_bind_result = bind(s_ipv6_socket,
+                             (sockaddr*)&ipv6_socket_address,
+                             sizeof(ipv6_socket_address));
+$ if IRO_WIN32 then
+  if (SOCKET_ERROR == ipv6_bind_result)
+    return @log.error("Failed to bind the IPv6 socket due to error: ",
+                      platform::Win32ErrMsg(WSAGetLastError()));
+$ else -- if IRO_WIN32
+  if (-1 == ipv6_bind_result)
+    return @log.error("Failed to bind the IPv6 socket due to error: ",
+                      strerror(errno), "\n");
+$ end -- if not IRO_WIN32
+
+  @log.debug("Bound the IPv6 socket to port [", port, "]\n");
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 checkForPackets(
   Address& from_address,
   StackArray<u8, MAX_FRAGMENT_SIZE>& data)
@@ -228,7 +230,7 @@ $ if IRO_WIN32 then
       int error = WSAGetLastError();
       if (WSAEWOULDBLOCK != error)
         @log.error("Failed to receive an IPv6 packet due to WSA error: ",
-                   makeWin32ErrorMsg(error));
+                   platform::Win32ErrMsg(error));
       return false;
     }
 $ else -- if IRO_WIN32
@@ -264,10 +266,10 @@ b8 Connection::init(Address address, iro::mem::Allocator* allocator)
   assertpointer(allocator);
   @log.trace("initializing a connection\n");
 
+  this->state = State::Disconnected;
   this->address = address;
   if (this->address.port == 0)
     this->address.port = SERVER_PORT;
-
   this->acknowledged_sequence = 0;
   this->acknowledged_bitfield = 0;
   this->incoming_message_sequence = 0;
@@ -317,7 +319,7 @@ $ if IRO_WIN32 then
       return false;
     else
       return @log.error("Failed to send a packet due to WSA error: ",
-                        makeWin32ErrorMsg(error));
+                        platform::Win32ErrMsg(error));
   }
 $ else -- if IRO_WIN32
   if (-1 == bytes_sent)
@@ -622,31 +624,16 @@ void Connection::receive(
 
 /* ----------------------------------------------------------------------------
  */
-b8 bind(u16 port)
+void Connection::lock(Source source)
 {
-  @log.trace("binding socket to port ", port, "\n");
+  if (this->address.type == AddressType::Offline)
+    s_offline_messages[(int)source].mutex.lock();
+}
 
-  sockaddr_in6 ipv6_socket_address;
-  memset(&ipv6_socket_address, 0, sizeof(ipv6_socket_address));
-  ipv6_socket_address.sin6_family = AF_INET6;
-  ipv6_socket_address.sin6_port = htons(port);
-  ipv6_socket_address.sin6_addr = in6addr_any;
-
-  int ipv6_bind_result = bind(s_ipv6_socket,
-                             (sockaddr*)&ipv6_socket_address,
-                             sizeof(ipv6_socket_address));
-$ if IRO_WIN32 then
-  if (SOCKET_ERROR == ipv6_bind_result)
-    return @log.error("Failed to bind the IPv6 socket due to error: ",
-                      makeWin32ErrorMsg(WSAGetLastError()));
-$ else -- if IRO_WIN32
-  if (-1 == ipv6_bind_result)
-    return @log.error("Failed to bind the IPv6 socket due to error: ",
-                      strerror(errno), "\n");
-$ end -- if not IRO_WIN32
-
-  @log.debug("Bound the IPv6 socket to port [", port, "]\n");
-  return true;
+void Connection::unlock(Source source)
+{
+  if (this->address.type == AddressType::Offline)
+    s_offline_messages[(int)source].mutex.unlock();
 }
 
 } // namespace net

@@ -46,6 +46,13 @@ static constexpr u16 SERVER_PORT = 40230;
  */
 struct Connection
 {
+  enum struct State
+  {
+    Disconnected,
+    Challenging,
+    Connected,
+  } state;
+
   Address address;
 
   u32 acknowledged_sequence;
@@ -76,6 +83,10 @@ struct Connection
   b8 sendNextFragment();
 
   void receive(Source source, iro::StackArray<u8, MAX_FRAGMENT_SIZE>& data);
+
+  // locks the connection on the thread for offline messages
+  void lock(Source source);
+  void unlock(Source source);
 };
 
 /* ----------------------------------------------------------------------------
