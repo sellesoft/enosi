@@ -10,7 +10,9 @@ $ require "common"
 @@lpp.import "game/server/ServerAllocator.lh"
 @@lpp.import "game/shared/entity/EntityId.lh"
 @@lpp.import "net/Connection.lh"
+@@lpp.import "net/EventBus.lh"
 @@lpp.import "net/Message.lh"
+@@lpp.import "net/Net.events.lh"
 
 #include "iro/Common.h"
 #include "iro/containers/Array.h"
@@ -74,6 +76,7 @@ struct Server
 
   Engine* engine;
   sv::GameSim sim;
+  net::EventBus net_event_bus;
 };
 
 namespace sv
@@ -178,6 +181,35 @@ static void stopMatch(Server* server)
 
 /* ----------------------------------------------------------------------------
  */
+static void handleConnectionEvent(void* server_ptr, ConnectionNetEvent& event)
+{
+  using namespace sv;
+
+  Server* server = (Server*)server_ptr;
+  Session* session = (Session*)event.session;
+
+  session->name.len = event.name_length;
+  mem::copy(session->name.buffer, event.name, event.name_length);
+  session->connection.state = net::Connection::State::Connected;
+  @log.info("CONNECTED [", session->name, "] from [",
+            session->connection.address, "]\n");
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static void handleMessageEvent(void* server_ptr, MessageNetEvent& event)
+{
+  using namespace sv;
+
+  if (event.message_length > 0 && event.message_length < 513)
+  {
+    @log.info("Message Received: \"",
+              String::from(event.message, event.message_length), "\"\n");
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
 static Server* createServer(thread::Context* ctx, sv::CreateParams* params)
 {
   assert(!thread::isMainThread());
@@ -263,8 +295,168 @@ static Server* createServer(thread::Context* ctx, sv::CreateParams* params)
     }
   }
 
+  server->net_event_bus.init(&server->global_allocator);
+  server->net_event_bus.subscribeTo<ConnectionNetEvent>(server, handleConnectionEvent);
+  server->net_event_bus.subscribeTo<MessageNetEvent>(server, handleMessageEvent);
+
   server_running.store(true);
   return server;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static void receiveNetMessages(Server* server)
+{
+  assert(!thread::isMainThread());
+  assertpointer(server);
+  using namespace sv;
+
+  if (server->publicity == ServerPublicity::Offline)
+  {
+    assert(server->sessions.len() > 0);
+    Session& session = server->sessions[0];
+
+    session.connection.lock(net::Source::Client);
+    defer { session.connection.unlock(net::Source::Client); };
+
+    // TODO(delle) better offline connection handling
+    StackArray<u8, net::MAX_FRAGMENT_SIZE> packet_data;
+    session.connection.receive(net::Source::Client, packet_data);
+    session.last_packet_tick_index = server->tick_index;
+
+    // check for connection requests
+    if (session.connection.state == net::Connection::State::Disconnected)
+    {
+      session.connection.state = net::Connection::State::Challenging;
+
+      net::Message message;
+      message.init(session.connection.incoming_message_data,
+                  session.connection.incoming_message_size);
+      u16 netevent = message.readU16();
+      assert(netevent == 1); // TODO(delle) non-hardcoded netevent
+      {
+        session.name.len = message.readU8();
+        message.readData(session.name.buffer,
+                          min(sv::Session::MAX_NAME_LENGTH,
+                              (u64)session.name.len));
+        @log.info("CONNECTED [", session.name, "] from [",
+                  session.connection.address, "]\n");
+      }
+    }
+  }
+  else
+  {
+    net::Address packet_address;
+    StackArray<u8, net::MAX_FRAGMENT_SIZE> packet_data;
+    while (net::checkForPackets(packet_address, packet_data))
+    {
+      // range validated in net::checkForPackets
+      assertrange(packet_data.len,
+        sizeof(net::FragmentHeader), net::MAX_FRAGMENT_SIZE);
+
+      b8 packet_handled = false;
+      for (Session& session : server->sessions)
+      {
+        if (mem::equal(session.connection.address, packet_address))
+        {
+          session.connection.receive(net::Source::Client, packet_data);
+          session.last_packet_tick_index = server->tick_index;
+          packet_handled = true;
+          break;
+        }
+      }
+      if (packet_handled)
+        continue;
+
+      // check for connection requests
+      net::Message message;
+      message.init(packet_data.arr, packet_data.len);
+      u32 protocol = message.readU32();
+      u32 sequence = message.readU32();
+      u32 ack_index = message.readU32();
+      u32 ack_bitfield = message.readU32();
+      u16 fragment_offset = message.readU16();
+      u16 data_size = message.readU16();
+      u16 netevent = message.readU16();
+      if (netevent == 1) // TODO(delle) non-hardcoded netevent
+      {
+        Session* new_session = server->sessions.push();
+
+        new_session->connection.init(packet_address,
+                                      &server->global_allocator);
+        new_session->connection.state = net::Connection::State::Challenging;
+        new_session->last_packet_tick_index = server->tick_index;
+
+        new_session->name.len = message.readU8();
+        message.readData(new_session->name.buffer,
+                        min(sv::Session::MAX_NAME_LENGTH,
+                            (u64)new_session->name.len));
+
+        @log.info("CONNECTED [", new_session->name, "] from [",
+                  packet_address, "]\n");
+      }
+    }
+
+    // ping the server list
+    // TODO(delle) server list
+  }
+
+  // parse messages from clients
+  for (Session& session : server->sessions)
+  {
+    if (session.connection.incoming_message_pending_fragments)
+      continue;
+
+    net::Message message;
+    message.init(session.connection.incoming_message_data,
+                session.connection.incoming_message_size);
+
+    if (!server->net_event_bus.parseMessage(message, &session))
+      @log.error("failed to parse network message\n");
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static void sendNetMessages(Server* server)
+{
+  assert(!thread::isMainThread());
+  assertpointer(server);
+  using namespace sv;
+
+  u8 message_data[net::Message::MAX_SIZE];
+  for (Session& session : server->sessions)
+  {
+    session.connection.lock(net::Source::Server);
+    defer { session.connection.unlock(net::Source::Server); };
+
+    net::Message message;
+    message.init(message_data, 0);
+
+    if (session.connection.state == net::Connection::State::Challenging)
+    {
+      session.connection.state = net::Connection::State::Connected;
+      
+      ConnectionNetEvent event = {};
+      event.session = &session;
+      server->net_event_bus.queue(event);
+    }
+
+    // pack pending events into the message
+    server->net_event_bus.packEvents(message, &session);
+    if (!message.writeOverflowed())
+    {
+      session.connection.send(net::Source::Server, message, false);
+      if (session.connection.outgoing_message_pending_fragments)
+      {
+        session.connection.sendNextFragment();
+      }
+    }
+    else
+    {
+      @log.error("message overflow when packing events\n");
+    }
+  }
 }
 
 /* ----------------------------------------------------------------------------
@@ -281,154 +473,17 @@ static void* updateServer(thread::Context* ctx)
 
   while (server_running.load())
   {
-    assertpointer(server);
-
     iro::TimePoint start_timepoint = iro::TimePoint::monotonic();
     @log.trace("updating the server\n");
 
     server->tick_allocator.clear();
 
-    // check for incoming packets
-    if (server->publicity == ServerPublicity::Offline)
-    {
-      assert(server->sessions.len() > 0);
-      Session& session = server->sessions[0];
+    // Receive messages from clients.
+    receiveNetMessages(server);
 
-      session.connection.lock(net::Source::Client);
-      defer { session.connection.unlock(net::Source::Client); };
-
-      // TODO(delle) better offline connection handling
-      StackArray<u8, net::MAX_FRAGMENT_SIZE> packet_data;
-      session.connection.receive(net::Source::Client, packet_data);
-      session.last_packet_tick_index = server->tick_index;
-
-      // check for connection requests
-      if (session.connection.state == net::Connection::State::Disconnected)
-      {
-        session.connection.state = net::Connection::State::Challenging;
-
-        net::Message message;
-        message.init(session.connection.incoming_message_data,
-                    session.connection.incoming_message_size);
-        u16 netevent = message.readU16();
-        assert(netevent == 1); // TODO(delle) non-hardcoded netevent
-        {
-          session.name.len = message.readU8();
-          message.readData(session.name.buffer,
-                            min(sv::Session::MAX_NAME_LENGTH,
-                                (u64)session.name.len));
-          @log.info("CONNECTED [", session.name, "] from [",
-                    session.connection.address, "]\n");
-        }
-      }
-    }
-    else
-    {
-      net::Address packet_address;
-      StackArray<u8, net::MAX_FRAGMENT_SIZE> packet_data;
-      while (net::checkForPackets(packet_address, packet_data))
-      {
-        // range validated in net::checkForPackets
-        assertrange(packet_data.len,
-          sizeof(net::FragmentHeader), net::MAX_FRAGMENT_SIZE);
-
-        b8 packet_handled = false;
-        for (Session& session : server->sessions)
-        {
-          if (mem::equal(session.connection.address, packet_address))
-          {
-            session.connection.receive(net::Source::Client, packet_data);
-            session.last_packet_tick_index = server->tick_index;
-            packet_handled = true;
-            break;
-          }
-        }
-        if (packet_handled)
-          continue;
-
-        // check for connection requests
-        net::Message message;
-        message.init(packet_data.arr, packet_data.len);
-        u32 protocol = message.readU32();
-        u32 sequence = message.readU32();
-        u32 ack_index = message.readU32();
-        u32 ack_bitfield = message.readU32();
-        u16 fragment_offset = message.readU16();
-        u16 data_size = message.readU16();
-        u16 netevent = message.readU16();
-        if (netevent == 1) // TODO(delle) non-hardcoded netevent
-        {
-          Session* new_session = server->sessions.push();
-
-          new_session->connection.init(packet_address,
-                                       &server->global_allocator);
-          new_session->connection.state = net::Connection::State::Challenging;
-          new_session->last_packet_tick_index = server->tick_index;
-
-          new_session->name.len = message.readU8();
-          message.readData(new_session->name.buffer,
-                          min(sv::Session::MAX_NAME_LENGTH,
-                              (u64)new_session->name.len));
-
-          @log.info("CONNECTED [", new_session->name, "] from [",
-                    packet_address, "]\n");
-        }
-      }
-
-      // ping the server list
-      // TODO(delle) server list
-    }
-
-    // parse messages from clients
-    for (Session& session : server->sessions)
-    {
-      if (session.connection.incoming_message_pending_fragments)
-        continue;
-
-      net::Message message;
-      message.init(session.connection.incoming_message_data,
-                  session.connection.incoming_message_size);
-
-      u16 netevent = message.readU16();
-      while (true)
-      {
-        if (netevent == 1) // TODO(delle) non-hardcoded netevent
-        {
-          // already handled
-          message.readU8();
-          message.readData(nullptr, min(sv::Session::MAX_NAME_LENGTH,
-                                        (u64)session.name.len));
-        }
-        else if (netevent == 2) // TODO(delle) non-hardcoded netevent
-        {
-          u16 string_length = message.readU16();
-          if (string_length > 0 && string_length < 513)
-          {
-            io::StaticBuffer<512> string_buffer;
-            string_buffer.len = string_length;
-            message.readData(string_buffer.buffer, string_length);
-            @log.info("Message Received: \"", string_buffer, "\"\n");
-          }
-        }
-        else
-        {
-          @log.error("unknown netevent: ", netevent, "\n");
-          break;
-        }
-
-        if (!message.readComplete())
-          netevent = message.readU16();
-        else
-          break;
-      }
-
-      assert(message.readComplete());
-      assert(!message.readOverflowed());
-    }
-
+    // Update the game simulation.
     if (server->state == ServerState::Ingame)
     {
-      // simulate
       if(!server->sim.update())
       {
         @log.error("failed to update server sim\n");
@@ -436,35 +491,10 @@ static void* updateServer(thread::Context* ctx)
       }
     }
 
-    // send messages to clients
-    u8 message_data[net::Message::MAX_SIZE];
-    for (Session& session : server->sessions)
-    {
-      session.connection.lock(net::Source::Server);
-      defer { session.connection.unlock(net::Source::Server); };
+    // Send messages to clients.
+    sendNetMessages(server);
 
-      net::Message message;
-      message.init(message_data, 0);
-
-      if (session.connection.state == net::Connection::State::Challenging)
-      {
-        session.connection.state = net::Connection::State::Connected;
-        message.writeU16(1); // TODO(delle) non-hardcoded netevent
-      }
-
-      // TODO(delle) implement server packet creation
-      message.writeU16(2); // TODO(delle) non-hardcoded netevent
-      message.writeU16(12);
-      message.writeData((u8*)"hello client", 12);
-
-      session.connection.send(net::Source::Server, message, false);
-      if (session.connection.outgoing_message_pending_fragments)
-      {
-        session.connection.sendNextFragment();
-      }
-    }
-
-    // sleep if we're under tickrate budget
+    // Sleep if we're under tickrate budget.
     // NOTE: hardcoded 200ms tickrate in the lobby
     {
       TimeSpan current_timespan = TimePoint::monotonic() - start_timepoint;

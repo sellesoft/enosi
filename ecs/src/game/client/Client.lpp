@@ -25,6 +25,7 @@ $ local ui = require "ui.UI"
 @@lpp.import "ui/widgets/Button.lh"
 @@lpp.import "ui/widgets/InputText.lh"
 @@lpp.import "game/client/TestSkin.defs.lh"
+@@lpp.import "net/Net.events.lh"
 
 @log.ger(client, Debug)
 
@@ -119,6 +120,29 @@ struct Test : ui::Item
     itext.reportDrawCmds(ui, lists);
   }
 };
+
+/* ----------------------------------------------------------------------------
+ */
+static void handleConnectionEvent(void* client_ptr, ConnectionNetEvent& event)
+{
+  Client* client = (Client*)client_ptr;
+  client->connection.state = net::Connection::State::Connected;
+  @log.info("CONNECTED [", client->connection.address, "]\n");
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static void handleMessageEvent(void* client_ptr, MessageNetEvent& event)
+{
+  if (event.message_length > 0 && event.message_length < 513)
+  {
+    io::StaticBuffer<512> string_buffer;
+    string_buffer.len = event.message_length;
+    mem::copy(string_buffer.buffer, event.message, event.message_length);
+    @log.info("Message Received: \"", string_buffer, "\"\n");
+  }
+}
+
 
 /* ----------------------------------------------------------------------------
  */
@@ -217,54 +241,119 @@ $ end
 
   Test::create(ui, asset_loader, this);
 
+  this->net_event_bus.init(&mem::stl_allocator);
+  this->net_event_bus.subscribeTo<ConnectionNetEvent>(this,
+                                                      handleConnectionEvent);
+  this->net_event_bus.subscribeTo<MessageNetEvent>(this, handleMessageEvent);
+
   return true;
 }
 
 /* ----------------------------------------------------------------------------
  */
-static void parseIncomingMessage(net::Connection& connection)
+static void receiveNetMessages(Client* client)
 {
-  if (connection.incoming_message_pending_fragments)
-    return;
+  assertpointer(client);
 
-  @log.trace("received packet from ", connection.address, "\n");
-  net::Message message;
-  message.init(connection.incoming_message_data,
-               connection.incoming_message_size);
-
-  u16 netevent = message.readU16();
-  while (true)
+  net::Connection& connection = client->connection;
+  if (connection.address.type == net::AddressType::Offline)
   {
-    if (netevent == 1) // TODO(delle) non-hardcoded netevent
-    {
-      connection.state = net::Connection::State::Connected;
-      @log.info("CONNECTED [", connection.address, "]\n");
-    }
-    else if (netevent == 2) // TODO(delle) non-hardcoded netevent
-    {
-      u16 string_length = message.readU16();
-      if (string_length > 0 && string_length < 513)
-      {
-        io::StaticBuffer<512> string_buffer;
-        string_buffer.len = string_length;
-        message.readData(string_buffer.buffer, string_length);
-        @log.info("Message Received: \"", string_buffer, "\"\n");
-      }
-    }
-    else
-    {
-      @log.error("unknown netevent: ", netevent, "\n");
-      break;
-    }
+    connection.lock(net::Source::Server);
+    defer { connection.unlock(net::Source::Server); };
 
-    if (!message.readComplete())
-      netevent = message.readU16();
-    else
-      break;
+    // TODO(delle) better offline connection handling
+    StackArray<u8, net::MAX_FRAGMENT_SIZE> packet_data;
+    connection.receive(net::Source::Server, packet_data);
+    if (connection.incoming_message_pending_fragments)
+      return;
+    @log.trace("received packet from [offline]\n");
+
+    net::Message message;
+    message.init(connection.incoming_message_data,
+                connection.incoming_message_size);
+    if (!this->net_event_bus.parseMessage(message))
+      @log.error("failed to parse network message\n");
   }
+  else
+  {
+    net::Address packet_address;
+    StackArray<u8, net::MAX_FRAGMENT_SIZE> packet_data;
+    while (net::checkForPackets(packet_address, packet_data))
+    {
+      // range validated in net::checkForPackets
+      assertrange(packet_data.len,
+        sizeof(net::FragmentHeader), net::MAX_FRAGMENT_SIZE);
 
-  assert(message.readComplete());
-  assert(!message.readOverflowed());
+      if (!mem::equal(connection.address, packet_address))
+        continue;
+
+      connection.receive(net::Source::Server, packet_data);
+      if (connection.incoming_message_pending_fragments)
+        continue;
+      @log.trace("received packet from ", connection.address, "\n");
+
+      net::Message message;
+      message.init(connection.incoming_message_data,
+                  connection.incoming_message_size);
+      if (!this->net_event_bus.parseMessage(message))
+        @log.error("failed to parse network message\n");
+    }
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static void sendNetMessages(Client* client)
+{
+  assertpointer(client);
+
+  net::Connection& connection = client->connection;
+  connection.lock(net::Source::Client);
+  defer { connection.unlock(net::Source::Client); };
+
+  if (connection.state == net::Connection::State::Challenging)
+  {
+    auto time_since_challenge = TimePoint::monotonic() 
+                               - client->last_challenge_time;
+    if (time_since_challenge.toMilliseconds() > 1000)
+    {
+      u8 message_data[256];
+      net::Message message;
+      message.init(message_data, 0);
+      
+      ConnectionNetEvent event;
+      event.name = (u8*)"player";
+      event.name_length = 6;
+      client->net_event_bus.queue(event);
+
+      client->net_event_bus.packEvents(message);
+      if (!connection.send(net::Source::Client, message, true))
+      {
+        @log.error("failed to send challenge message\n");
+        return;
+      }
+
+      client->last_challenge_time = TimePoint::monotonic();
+      @log.info("CHALLENGE [", connection.address, "]\n");
+    }
+  }
+  else
+  {
+    u8 message_data[net::Message::MAX_SIZE];
+    net::Message message;
+    message.init(message_data, 0);
+    client->net_event_bus.packEvents(message);
+    if (!message.writeOverflowed())
+    {
+      connection.send(net::Source::Client, message, false);
+      if (connection.outgoing_message_pending_fragments)
+        connection.sendNextFragment();
+    }
+    else
+    {
+      @log.error("message overflow when packing events\n");
+    }
+  }
 }
 
 /* ----------------------------------------------------------------------------
@@ -281,33 +370,8 @@ b8 Client::update()
     return ERROR("failed to update window\n");
 
   // Check for and parse incoming packets.
-  if (connection.address.type == net::AddressType::Offline)
-  {
-    connection.lock(net::Source::Server);
-    defer { connection.unlock(net::Source::Server); };
-
-    // TODO(delle) better offline connection handling
-    StackArray<u8, net::MAX_FRAGMENT_SIZE> packet_data;
-    connection.receive(net::Source::Server, packet_data);
-    parseIncomingMessage(connection);
-  }
-  else if (connection.address.type != net::AddressType::Invalid)
-  {
-    net::Address packet_address;
-    StackArray<u8, net::MAX_FRAGMENT_SIZE> packet_data;
-    while (net::checkForPackets(packet_address, packet_data))
-    {
-      // range validated in net::checkForPackets
-      assertrange(packet_data.len,
-        sizeof(net::FragmentHeader), net::MAX_FRAGMENT_SIZE);
-
-      if (!mem::equal(connection.address, packet_address))
-        continue;
-
-      connection.receive(net::Source::Server, packet_data);
-      parseIncomingMessage(connection);
-    }
-  }
+  if (connection.address.type != net::AddressType::Invalid)
+    receiveNetMessages(this);
 
   gfx::Renderer::UpdateParams renderer_params =
   {
@@ -344,49 +408,7 @@ b8 Client::update()
 
   // Send messages to the server.
   if (connection.address.type != net::AddressType::Invalid)
-  {
-    connection.lock(net::Source::Client);
-    defer { connection.unlock(net::Source::Client); };
-
-    if (connection.state == net::Connection::State::Challenging)
-    {
-      auto time_since_challenge = TimePoint::monotonic() - last_challenge_time;
-      if (time_since_challenge.toMilliseconds() > 1000)
-      {
-        u8 message_data[256];
-        net::Message message;
-        message.init(message_data, 0);
-        message.writeU16(1); // TODO(delle) non-hardcoded netevent
-        message.writeData((u8*)"player", 6);
-        message.writeU8(6);
-        if (message.writeOverflowed())
-          return @log.error("message overflowed\n");
-
-        if (!connection.send(net::Source::Client, message, true))
-          return @log.error("failed to send challenge message\n");
-
-        last_challenge_time = TimePoint::monotonic();
-        @log.info("CHALLENGE [", connection.address, "]\n");
-      }
-    }
-    else
-    {
-      u8 message_data[net::Message::MAX_SIZE];
-      net::Message message;
-      message.init(message_data, 0);
-
-      // TODO(delle) implement client packet creation
-      message.writeU16(2); // TODO(delle) non-hardcoded netevent
-      message.writeU16(12);
-      message.writeData((u8*)"hello server", 12);
-
-      connection.send(net::Source::Client, message, false);
-      if (connection.outgoing_message_pending_fragments)
-      {
-        connection.sendNextFragment();
-      }
-    }
-  }
+    sendNetMessages(this);
 
   return true;
 }
@@ -542,7 +564,7 @@ b8 Client::wantHotReload()
  */
 b8 Client::connectToServer(net::Address address)
 {
-  @log.trace("connecting to server at\n");
+  @log.trace("connecting to a server\n");
   if (address.type == net::AddressType::Invalid)
     return @log.error("invalid address\n");
 

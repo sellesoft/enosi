@@ -22,6 +22,7 @@ $ require "common"
 @@lpp.import "ui/widgets/TextSkin.defs.lh"
 @@lpp.import "net/Address.lh"
 @@lpp.import "net/Connection.lh"
+@@lpp.import "net/EventBus.lh"
 
 #include "iro/time/Time.h"
 
@@ -34,6 +35,7 @@ struct Client
 
   net::Connection connection;
   TimePoint last_challenge_time;
+  net::EventBus net_event_bus;
 
   // Client only systems.
   gfx::Renderer renderer;

@@ -1,0 +1,185 @@
+/*
+ *  Network event bus.
+ */
+$ require "common"
+$ local clog = require "Logger" ("net.eventbus", Verbosity.Info)
+
+$$$
+local importer = require "reflect.Importer"
+{
+  patterns = { "src/**/*.events.lh" },
+  filter = function(p, decl)
+    return decl.metadata.netevent ~= nil
+  end,
+}
+$$$
+@@importer:get
+
+$$$
+local event_count = 1
+local function eachEvent(f)
+  importer:eachDecl(function(name, decl)
+    local args = loadstring("return " .. decl.metadata.netevent)()
+    local priority = args.priority and 1 or 0
+    f(name, decl, priority, args.broadcast, event_count)
+    event_count = event_count + 1
+  end)
+end
+$$$
+
+#include "net/EventBus.h"
+#include "net/Message.h"
+#include "iro/Common.h"
+#include "iro/containers/List.h"
+#include "iro/containers/Pool.h"
+
+namespace net
+{
+
+struct EventBusData
+{
+$ eachEvent(function(name, decl, priority, broadcast, id)
+  struct $(name)Subscriber
+  {
+    static constexpr b8 PRIORITY = $(priority);
+    void* subscriber;
+    void (*callback)(void*, $(name)& event);
+  };
+  SList<$(name)Subscriber> $(name)Subscriber_list;
+  Pool<$(name)> $(name)_pool;
+$ end)
+};
+
+b8 EventBus::init(iro::mem::Allocator* allocator)
+{
+  data = allocator->allocateType<NetEventBusData>();
+$ eachEvent(function(name, decl, priority, id)
+  if (!data->$(name)Subscriber_list.init(allocator)) return false;
+  if (!data->$(name)_pool.init(allocator, 16)) return false;
+$ end)
+  return true;
+}
+
+$ eachEvent(function(name, decl, priority, broadcast, id)
+template<>
+void EventBus::subscribeTo<$(name)>(
+  void* subscriber,
+  void (*callback)(void*, $(name)&))
+{
+  auto* sub = data->$(name)Subscriber_list.push();
+  sub->data->subscriber = subscriber;
+  sub->data->callback = callback;
+}
+
+template<>
+void EventBus::queue<$(name)>($(name)& event) const
+{
+  auto* queued = data->$(name)_pool.allocate();
+  *queued = event;
+
+  for (auto& sub : data->$(name)Subscriber_list)
+    sub.callback(sub.subscriber, event);
+}
+$ end)
+
+void EventBus::packEvents(Message& message, void* session) const
+{
+$ eachEvent(function(name, decl, priority, broadcast, id)
+
+  for (auto& event : data->$(name)_pool)
+  {
+
+$   if broadcast == false then
+$     local found_session_field = false
+$     for _, field in ipairs(decl.fields) do
+$       if field.name == "session" then
+
+    if (event.session == nullptr)
+      @log.error("A queued $(name) did not specify a session despite"
+                 " being non-broadcast event.\n");
+      continue;
+
+    if (session != event.session)
+      continue;
+
+$         found_session_field = true
+$         break
+$       end
+$     end
+$     if not found_session_field then
+$       clog:error("non-broadcast netevent $(name) has no session field\n")
+$     end
+$   end
+
+    message.writeU16($(id));
+
+$   for _, field in ipairs(decl.fields) do
+$     if not field.metadata.netfield_ignore then
+$       if field.metadata.netfield_blob then
+
+    message.writeU16(event.$(field.name)_length);
+    message.writeData(event.$(field.name), event.$(field.name)_length);
+
+$       else
+$         local type = field.type:gsub("([us])(%d+)", "%1%2")
+
+    message.write$(type:gsub("^%l", string.upper))(event.$(field.name));
+
+$       end
+$     end
+$   end
+  }
+
+  data->$(name)_pool.clear();
+
+$ end)
+}
+
+b8 EventBus::parseMessage(Message& message, void* session) const
+{
+  while (!message.readComplete())
+  {
+    u16 event_id = message.readU16();
+    switch (event_id)
+    {
+
+$ eachEvent(function(name, decl, priority, id)
+
+    case $(id):
+    {
+      $(name) event;
+      event.session = session;
+
+$   for _, field in ipairs(decl.fields) do
+$     if not field.metadata.netfield_ignore then
+$       if field.metadata.netfield_blob then
+
+      message.readData(event.$(field.name), $(field.metadata.netfield_blob));
+
+$       else
+$         local type = field.type:gsub("([us])(%d+)", "%1%2")
+
+      event.$(field.name) = message.read$(type:gsub("^%l", string.upper))();
+
+$       end
+$     end
+$   end
+
+      for (auto& sub : data->$(name)Subscriber_list)
+        sub.callback(sub.subscriber, event);
+    }
+    break;
+
+$ end)
+
+    default:
+      return @log.error("unknown netevent: ", event_id, "\n");
+    }
+  }
+
+  assert(message.readComplete());
+  assert(!message.readOverflowed());
+  return true;
+}
+
+} // namespace net
