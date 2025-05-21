@@ -112,7 +112,7 @@ struct FixedPool
   T* atIndex(s32 index)
   {
     assert(index >= 0 && index < N_slots
-      && "invalid index passed to at_index");
+      && "invalid index passed to atIndex");
 
     if (index < 0 || index >= N_slots)
       return nullptr;

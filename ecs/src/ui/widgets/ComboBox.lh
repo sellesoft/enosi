@@ -1,3 +1,5 @@
+$ if false then
+
 /*
  *  A box containing a list of selectable options.
  */
@@ -151,3 +153,5 @@ struct
 $ end
 
 }
+
+$ end

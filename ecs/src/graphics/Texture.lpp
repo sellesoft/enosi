@@ -508,7 +508,7 @@ Texture Texture::create(
   deallocate_if_failure.cancel();
   destroy_view_if_failure.cancel();
   destroy_sampler_if_failure.cancel();
-  return {(u32)ri.texture_pool.index_of(texture)};
+  return {(u32)ri.texture_pool.indexOf(texture)};
 }
 
 /* ----------------------------------------------------------------------------
@@ -521,7 +521,7 @@ b8 Texture::deinit(Renderer& renderer)
   if (index == 0)
     return true;
 
-  RendererTexture* texture = ri.texture_pool.at_index(index);
+  RendererTexture* texture = ri.texture_pool.atIndex(index);
   if (texture == nullptr)
     return ERROR("attempted to destroy a texture at index ", index,
       " which is out of bounds\n");

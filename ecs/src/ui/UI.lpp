@@ -2,14 +2,10 @@ $ local cmn = require "common"
 $ local ui = require "ui.UI"
 
 @@lpp.import "ui/UI.lh"
-@@lpp.import "Engine.lh"
-@@lpp.import "Engine.events.lh"
 @@lpp.import "graphics/CompiledShader.lh"
 @@lpp.import "graphics/Renderer.lh"
-@@lpp.import "window/Window.lh"
-@@lpp.import "window/Window.events.lh"
+@@lpp.import "graphics/Geo.lh"
 @@lpp.import "math/util.h"
-@@lpp.import "game/client/Client.lh"
 
 #include "iro/Logger.h"
 #include "iro/containers/SmallArray.h"
@@ -25,7 +21,7 @@ namespace ui
 
 /* ----------------------------------------------------------------------------
  */
-b8 UI::init(const InitParams& params)
+b8 UI::init(InitParams& params)
 {
   renderer = &params.renderer;
 
@@ -39,6 +35,8 @@ b8 UI::init(const InitParams& params)
     return ERROR("failed to initialize UI pipeline\n");
 
   if (!vertex_buffer.init(
+        *renderer,
+        nullptr,
         sizeof(gfx::Vertex) * c_MaxVertices,
         gfx::Buffer::Usage::VertexBuffer,
         gfx::Buffer::MemoryProperty::DeviceMappable,
@@ -46,6 +44,8 @@ b8 UI::init(const InitParams& params)
     return ERROR("failed to initialize ui vertex buffer\n");
 
   if (!index_buffer.init(
+        *renderer,
+        nullptr,
         sizeof(gfx::Index) * c_MaxIndices,
         gfx::Buffer::Usage::IndexBuffer,
         gfx::Buffer::MemoryProperty::DeviceMappable,
@@ -70,6 +70,56 @@ void UI::beginFrame(const FrameParams& params)
   // Reset draw info counts.
   vertex_count = 0;
   index_count = 0;
+
+  current_layer = frame_allocator.allocateType<Layer>();
+
+  current_layer->groups = frame_allocator.allocateType<Group>();
+  current_group = current_layer->groups;
+
+  current_group->bounds = viewport;
+
+  top_layer = current_layer;
+
+  
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::endFrame()
+{
+  
+
+
+  frame_allocator.deinit();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::putQuad(Rect bounds, gfx::Texture texture, Rect uv, Color color)
+{
+  auto* cmd = frame_allocator.allocateType<QuadDrawCmd>();
+
+  cmd->next = current_group->drawcmds;
+  current_group->drawcmds = cmd;
+
+  cmd->texture = texture;
+  cmd->bounds = bounds;
+  cmd->uv = uv;
+  cmd->color = color;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::putQuad(Rect bounds, gfx::Texture texture, Color color)
+{
+  putQuad(bounds, texture, Rect::from(0,0,1,1), color); 
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::putQuad(Rect bounds, Color color)
+{
+  putQuad(bounds, white_texture, color);
 }
 
 }

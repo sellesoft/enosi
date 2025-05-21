@@ -1,3 +1,5 @@
+$ if false then
+
 $ local cmn = require "common"
 $ local ui = require "ui.UI"
 
@@ -105,3 +107,5 @@ Button::State Button::update(
 }
 
 }
+
+$ end

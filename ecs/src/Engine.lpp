@@ -14,26 +14,16 @@ using namespace iro;
 @@lpp.import "asset/CompiledData.lh"
 @@lpp.import "asset/SourceDataFile.lh"
 @@lpp.import "asset/SourceDataParser.lh"
-@@lpp.import "asset/SourceDataEditor.lh"
 @@lpp.import "event/BroadcastEventBus.lh"
 @@lpp.import "graphics/Font.lh"
 @@lpp.import "graphics/CompiledShader.lh"
 @@lpp.import "net/Connection.lh"
-@@lpp.import "ui/Inspector.lh"
-@@lpp.import "ui/widgets/Text.lh"
-@@lpp.import "ui/widgets/Button.lh"
-@@lpp.import "ui/widgets/Separator.lh"
-@@lpp.import "ui/widgets/InputText.lh"
-@@lpp.import "ui/widgets/CollapsingHeader.lh"
 
 @@lpp.import "game/client/Client.lh"
 @@lpp.import "game/server/Server.lh"
 
 static Logger logger =
   Logger::create("ecs.eng"_str, Logger::Verbosity::Info);
-
-ui::Item* base;
-ui::SourceDataEditor* sdata_edit_test;
 
 /* ----------------------------------------------------------------------------
  */

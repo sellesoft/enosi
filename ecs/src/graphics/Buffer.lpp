@@ -321,7 +321,7 @@ b8 Buffer::init(
   buffer->buffer = buffer_handle;
   buffer->allocation = allocation;
   buffer->descriptor_set = descriptor_set;
-  index = ri.buffer_pool.index_of(buffer);
+  index = ri.buffer_pool.indexOf(buffer);
   ri.buffer_count++;
 
   debugSetObjectName(renderer, VK_OBJECT_TYPE_BUFFER, buffer_handle,

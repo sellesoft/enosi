@@ -5,9 +5,6 @@ $ local cmn = require "common"
 #include "iro/Unicode.h"
 
 @@lpp.import "window/Window.lh"
-@@lpp.import "graphics/Renderer.lh"
-@@lpp.import "graphics/Texture.lh"
-@@lpp.import "ui/UI.lh"
 
 @@lpp.import "asset/AssetMgr.lh"
 @@lpp.import "asset/SourceDataFileReg.lh"

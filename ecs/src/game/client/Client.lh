@@ -18,8 +18,6 @@ $ require "common"
 @@lpp.import "window/Window.lh"
 @@lpp.import "input/InputMgr.lh"
 @@lpp.import "graphics/Renderer.lh"
-@@lpp.import "game/client/editor/Editor.lh"
-@@lpp.import "ui/widgets/TextSkin.defs.lh"
 
 /* ============================================================================
  */
@@ -34,11 +32,9 @@ struct Client
   InputMgr input;
   Window window;
 
-  cl::Editor editor;
+  // cl::Editor editor;
 
   gfx::Texture white_texture;
-
-  ui::TextSkinRef test_skin;
 
   b8 init(Engine* engine);
 

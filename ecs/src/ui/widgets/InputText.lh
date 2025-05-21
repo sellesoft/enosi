@@ -1,3 +1,5 @@
+$ if false then
+
 /*
  *  Widget for creating a text box that supports typing.
  */
@@ -158,3 +160,5 @@ struct InputText : Item
 $ end
 
 }
+
+$ end

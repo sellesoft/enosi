@@ -17,6 +17,7 @@ $ require "common"
 #include "iro/containers/StackArray.h"
 #include "iro/Logger.h"
 #include "iro/time/Time.h"
+#include "iro/Platform.h"
 
 @log.ger(server, Debug)
 

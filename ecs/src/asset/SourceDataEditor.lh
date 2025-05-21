@@ -1,3 +1,5 @@
+$ if false then
+
 /*
  *  Widget for editing some source data.
  */
@@ -84,3 +86,5 @@ struct SourceDataEditor
 };
 
 }
+
+$ end

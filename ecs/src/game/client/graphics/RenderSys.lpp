@@ -8,6 +8,7 @@ $ require "common"
 
 @@lpp.import "graphics/CompiledShader.lh"
 @@lpp.import "graphics/Renderer.lh"
+@@lpp.import "graphics/Geo.lh"
 
 @@lpp.import "game/client/GameMgr.lh"
 @@lpp.import "game/shared/Transform.comp.lh"

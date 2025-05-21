@@ -32,6 +32,8 @@ struct InputMgr;
 namespace ui
 {
 
+struct TextSkinDef;
+
 /* ============================================================================
  */
 enum class FocusFlag
@@ -52,20 +54,88 @@ enum class FocusFlag
 
   COUNT
 };
-typedef Flags<ItemFlag> FocusFlags;
+typedef Flags<FocusFlag> FocusFlags;
 
 /* ============================================================================
  */
 struct FocusableId
 {
   u64 val = 0;
+
+  bool operator == (const FocusableId& rhs) const
+  {
+    return val == rhs.val;
+  }
+
+  DefineNilTrait(FocusableId, {0}, x.val == 0);
 };
+
+/* ============================================================================
+ */
+struct FocusableBounds
+{
+  FocusableId id = {};
+  Rect bounds = {};
+
+  FocusableBounds* next = nullptr;
+};
+
+/* ============================================================================
+ */
+struct DrawCmd
+{
+  // The next command in a group's drawcmd list.
+  DrawCmd* next;
+
+  virtual void draw(gfx::Renderer& renderer);
+};
+
+/* ============================================================================
+ */
+struct QuadDrawCmd : DrawCmd
+{
+  gfx::Texture texture;
+  Rect uv;
+  Color color;
+  Rect bounds;
+
+  void draw(gfx::Renderer& renderer) override;
+};
+
+/* ============================================================================
+ */
+struct Group
+{
+  Group* prev = nullptr;
+
+  Rect bounds = {};
+  
+  FocusableBounds* fbounds = nullptr;
+
+  DrawCmd* drawcmds = nullptr;
+};
+
+/* ============================================================================
+ */
+enum class LayerFlag
+{
+  TopMost,
+
+  COUNT
+};
+typedef Flags<LayerFlag> LayerFlags;
 
 /* ============================================================================
  */
 struct Layer
 {
+  FocusableId id = nil;
+  Group* groups = nullptr;
 
+  Layer* prev = nullptr;
+  Layer* next = nullptr;
+
+  b8 minor = false;
 };
 
 /* ============================================================================
@@ -92,6 +162,9 @@ struct UI
 
   gfx::Texture white_texture;
 
+  gfx::Buffer vertex_buffer;
+  gfx::Buffer index_buffer;
+
   struct InitParams
   {
     AssetMgr& assetmgr;
@@ -104,7 +177,7 @@ struct UI
     AssetLoader loader;
   };
 
-  b8   init(const InitParams& params);
+  b8   init(InitParams& params);
   void deinit();
 
   struct FrameParams
@@ -119,6 +192,7 @@ struct UI
   void beginFrame(const FrameParams& params);
   void endFrame();
 
+  void putQuad(Rect bounds, gfx::Texture texture, Rect uv, Color color);
   void putQuad(Rect bounds, gfx::Texture texture, Color color);
   void putQuad(Rect bounds, Color color);
 

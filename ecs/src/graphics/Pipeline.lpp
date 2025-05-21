@@ -201,13 +201,13 @@ b8 Pipeline::init(
   };
 
   RendererShader* vert_renderer_shader =
-    ri.shader_pool.at_index(vert_shader.index);
+    ri.shader_pool.atIndex(vert_shader.index);
   if (vert_renderer_shader == nullptr)
     return ERROR("attempted to initialize a pipeline with an invalid"
       " vertex shader\n");
 
   RendererShader* frag_renderer_shader =
-    ri.shader_pool.at_index(frag_shader.index);
+    ri.shader_pool.atIndex(frag_shader.index);
   if (frag_renderer_shader == nullptr)
     return ERROR("attempted to initialize a pipeline with an invalid"
       " fragment shader\n");
@@ -250,11 +250,11 @@ b8 Pipeline::init(
     &pipeline_create_info, &ri.allocator, &pipeline_handle))
     return ERROR("failed to create the graphics pipeline\n");
 
-  RendererPipeline* pipeline = ri.pipeline_pool.at_index(ri.pipeline_count);
+  RendererPipeline* pipeline = ri.pipeline_pool.atIndex(ri.pipeline_count);
   pipeline->pipeline = pipeline_handle;
   pipeline->layout = pipeline_layout;
   pipeline->push_constant_size = push_constant_size;
-  index = ri.pipeline_pool.index_of(pipeline);
+  index = ri.pipeline_pool.indexOf(pipeline);
   ri.pipeline_count++;
 
   debugSetObjectName(renderer, VK_OBJECT_TYPE_PIPELINE, pipeline_handle,
@@ -276,7 +276,7 @@ b8 Pipeline::deinit(Renderer& renderer)
   if (index == 0)
     return true;
 
-  RendererPipeline* pipeline = ri.pipeline_pool.at_index(index);
+  RendererPipeline* pipeline = ri.pipeline_pool.atIndex(index);
   if (pipeline == nullptr)
     return ERROR("attempted to destroy a pipeline at index ", index,
       " which is out of bounds\n");

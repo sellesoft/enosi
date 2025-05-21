@@ -18,106 +18,9 @@ $ local ui = require "ui.UI"
 @@lpp.import "graphics/Renderer.lh"
 @@lpp.import "input/InputMgr.lh"
 @@lpp.import "graphics/Ref.defs.lh"
-@@lpp.import "ui/widgets/Text.lh"
-@@lpp.import "ui/widgets/ComboBox.lh"
-@@lpp.import "ui/widgets/Button.lh"
-@@lpp.import "ui/widgets/InputText.lh"
 @@lpp.import "game/client/TestSkin.defs.lh"
 
 @log.ger(client, Debug)
-
-struct Test : ui::Item
-{
-  ui::Button button;
-  ui::Button button2;
-  ui::ComboBox cbox;
-  ui::InputText itext;
-  TestSkinDef* skin;
-
-  u8 text_buffer[255];
-  s32 text_len = 0;
-
-  ui::DrawCmd* bg;
-
-  ui::FocusableId testid;
-
-  static void create(ui::UI& ui, AssetLoader& loader)
-  {
-    using namespace ui;
-    using namespace item_layout_typedefs;
-
-    auto* test = ui.allocateAndInitItem<Test>("test"_str);
-
-    test->button.init(ui);
-    test->button2.init(ui);
-    test->cbox.init(ui);
-    test->itext.init(ui);
-    test->bg = ui.drawcmds.add();
-
-    @ui.layout(test, size: 100 300);
-
-    TestSkinRef skinref;
-    loader.load(&skinref, "assets/skins/Test"_str);
-
-    test->skin = &*skinref;
-
-    test->testid = FocusableId::fromString("test"_str);
-  }
-
-  void update(ui::ItemUpdateContext& ctx) override
-  {
-    //
-    // String opts[] = 
-    // {
-    //   "bleh"_str,
-    //   "blah"_str,
-    //   "bloh"_str,
-    // };
-    //
-    // cbox.update(
-    //   ctx, Rect::from(10, 45, 30, 30), ui::ComboBox::Options::from(opts),
-    //   skin->combo_box);
-    //
-     ui::ItemSkinDef bgskin = {};
-     bgskin.color = {255,155, 155, 255};
-    //
-     ui::Item::drawBackground(
-       ctx.ui, Rect::from(0, 0, size.x, size.y), bg, bgskin);
-    //
-    // itext.update(
-    //   ctx, 
-    //   Rect::from(10, 80, 80, 30), 
-    //   {text_buffer, &text_len, 255},
-    //   skin->input_text);
-
-    Rect left_bounds = ctx.getBounds();
-    left_bounds.w *= 0.5f;
-
-    Rect right_bounds = left_bounds;
-    right_bounds.x += left_bounds.w;
-
-    ctx.pushLayer("left"_fid, left_bounds);
-    {
-      button.update(ctx, ctx.getBounds(), "hello"_str, skin->button);
-    }
-    ctx.popLayer();
-
-    ctx.pushLayer("right"_fid, right_bounds);
-    {
-      button2.update(ctx, ctx.getBounds(), "bye"_str, skin->button);
-    }
-    ctx.popLayer();
-  }
-
-  void reportDrawCmds(ui::UI& ui, ui::DrawCmdLists& lists) override
-  {
-    lists.pre_children.push(bg);
-    button.reportDrawCmds(ui, lists);
-    button2.reportDrawCmds(ui, lists);
-    cbox.reportDrawCmds(ui, lists);
-    itext.reportDrawCmds(ui, lists);
-  }
-};
 
 /* ----------------------------------------------------------------------------
  */
@@ -187,18 +90,18 @@ $ end
     .sfilereg = engine->source_data_file_reg,
   };
 
-  ui::UI::InitParams ui_params = 
-  {
-    .assetmgr = engine->assetmgr,
-    .renderer = renderer,
-    
-    .white_texture = white_texture,
-
-    .viewport = Rect::from({0,0}, window.size),
-
-    .loader   = asset_loader,
-  };
-  @init(ui.init(ui_params), UI);
+  // ui::UI::InitParams ui_params = 
+  // {
+  //   .assetmgr = engine->assetmgr,
+  //   .renderer = renderer,
+  //
+  //   .white_texture = white_texture,
+  //
+  //   .viewport = Rect::from({0,0}, window.size),
+  //
+  //   .loader   = asset_loader,
+  // };
+  // \@init(ui.init(ui_params), UI);
 
   cl::GameSim::InitParams sim_params = 
   {
@@ -210,9 +113,7 @@ $ end
   };
   @init(sim.init(sim_params), cl::GameSim);
 
-  @init(editor.init(this), Editor);
-
-  Test::create(ui, asset_loader);
+  // \@init(editor.init(this), Editor);
 
   return true;
 }
@@ -254,14 +155,6 @@ b8 Client::update()
 
   InputState ui_input = {};
   input.cloneInputState(&ui_input);
-
-  ui::UI::UpdateParams ui_params =
-  {
-    .input = ui_input,
-  };
-
-  if (!ui.update(ui_params))
-    return ERROR("failed to update ui\n");
 
   return true;
 }

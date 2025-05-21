@@ -2,6 +2,7 @@
  *  The basis of all things in the UI system.
  */ 
 
+$ if false then
 $ local cmn = require "common"
 $ local ui = require "ui.UI"
 
@@ -575,3 +576,5 @@ consteval ui::FocusableId operator ""_fid (const char* s, size_t len)
 { 
   return ui::FocusableId{operator ""_hashed(s, len)};
 }
+
+$ end

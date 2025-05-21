@@ -101,7 +101,7 @@ b8 Framebuffer::init(
     .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
     .renderPass = renderpass_handle,
     .attachmentCount = 1,
-    .pAttachments = &ri.texture_pool.at_index(texture.index)->view,
+    .pAttachments = &ri.texture_pool.atIndex(texture.index)->view,
     .width = width,
     .height = height,
     .layers = 1,
@@ -115,11 +115,11 @@ b8 Framebuffer::init(
   RendererFramebuffer* framebuffer = ri.framebuffer_pool.add();
   framebuffer->framebuffer = framebuffer_handle;
   framebuffer->renderpass = renderpass_handle;
-  framebuffer->texture = ri.texture_pool.at_index(texture.index);
+  framebuffer->texture = ri.texture_pool.atIndex(texture.index);
   framebuffer->width = width;
   framebuffer->height = height;
   framebuffer->clear_color = clear_color;
-  index = ri.framebuffer_pool.index_of(framebuffer);
+  index = ri.framebuffer_pool.indexOf(framebuffer);
   ri.framebuffer_count++;
 
   debugSetObjectName(renderer, VK_OBJECT_TYPE_FRAMEBUFFER, framebuffer_handle,
@@ -140,7 +140,7 @@ b8 Framebuffer::deinit(Renderer& renderer)
   if (index == 0)
     return true;
 
-  RendererFramebuffer* framebuffer = ri.framebuffer_pool.at_index(index);
+  RendererFramebuffer* framebuffer = ri.framebuffer_pool.atIndex(index);
   if (framebuffer == nullptr)
     return ERROR("attempted to destroy a framebuffer at index ", index,
       " which is out of bounds\n");

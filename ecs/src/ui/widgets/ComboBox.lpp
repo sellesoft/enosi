@@ -1,3 +1,5 @@
+$ if false then
+
 $ require "common"
 $ local ui = require "ui.UI"
 
@@ -374,3 +376,4 @@ $ end
 
 }
 
+$ end
