@@ -48,18 +48,12 @@ struct Slice
   const T* end()   const { return ptr + len; }
 
   T& operator[](u64 i) const { return ptr[i]; }
+
+  DefineNilTrait(Slice<T>, {nullptr}, x.ptr == nullptr);
 };
 
 typedef Slice<u8> Bytes;
 
-
 }
-
-template<typename T>
-struct NilValue<iro::Slice<T>>
-{
-  constexpr static const iro::Slice<T> Value = {nullptr};
-  inline static b8 isNil(const iro::Slice<T>& x) { return x.ptr == nullptr; }
-};
 
 #endif // _iro_slice_h

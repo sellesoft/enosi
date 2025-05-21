@@ -37,10 +37,9 @@ b8 isContinuationByte(u8 c);
 struct Char
 {
   u8 bytes[4];
-  u8 count;
+  u8 count = 0;
 
-  static Char invalid() { return {{},0}; }
-  b8 isValid() { return count != 0; }
+  DefineNilTrait(Char, {}, x.count == 0);
 };
 
 // Encodes the given codepoint into 'ch'.
@@ -63,6 +62,8 @@ struct Codepoint
   bool operator !=(u32  x) { return codepoint != x; }
   bool operator ==(char x) { return codepoint == x; }
   bool operator !=(char x) { return codepoint != x; }
+
+  DefineNilTrait(Codepoint, {(u32)-1}, x.codepoint == (u32)-1);
 };
 
 // Attempt to decode the character at 's' into 'codepoint'.
@@ -234,6 +235,8 @@ struct String
     mem::copy(out.ptr, ptr, len);
     return out;
   }
+
+  DefineNilTrait(String, {nullptr}, x.ptr == nullptr);
 };
 
 inline u64 stringHash(const String* x)
@@ -261,10 +264,6 @@ static String operator ""_str (const char* s, size_t len)
 }
 
 }
-
-DefineNilValue(iro::utf8::String, {nullptr}, { return x.ptr == nullptr; });
-DefineNilValue(iro::utf8::Codepoint, {(u32)-1}, 
-    { return x.codepoint == (u32)-1; });
 
 #endif // _iro_unicode_h
 

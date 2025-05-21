@@ -664,6 +664,21 @@ public:
   {
     return RangeIterator{ nullptr };
   }
+
+  // Manually written because the comma in macro args causes an issue 
+  // cause C++ is great and awesome!
+  struct NilTrait
+  {
+    static constexpr T getValue() 
+    {
+      return {};
+    }
+
+    static b8 isNil(const T& x)
+    {
+      return isnil(x.pool);
+    }
+  };
 };
 
 /* ============================================================================
@@ -749,13 +764,5 @@ struct StringSet
 };
 
 }
-
-template<typename T, u64 (*GetKey)(const T*)>
-struct NilValue<iro::AVL<T, GetKey>>
-{
-  constexpr static iro::AVL<T, GetKey> Value = {};
-  inline static bool isNil(const iro::AVL<T, GetKey>& x) 
-    { return isnil(x.pool); }
-};
 
 #endif

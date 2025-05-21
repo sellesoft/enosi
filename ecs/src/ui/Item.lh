@@ -257,38 +257,49 @@ struct FocusableId
   {
     return val == rhs.val;
   }
+
+  // TODO(sushi) make a compile time version
+  static FocusableId fromString(String s)
+  {
+    return FocusableId{s.hash()};
+  }
 };
 
 /* ============================================================================
  */
 struct FocusableBounds
 {
-  FocusableId id;
-  Rect bounds;
-  MouseButton focus_button;
-  KeyState focus_state;
+  FocusableId id = {};
+  Rect bounds = {};
+
+  FocusableBounds* next = nullptr;
 };
-typedef SmallArray<FocusableBounds, 8> FocusableBoundsList;
 
 /* ============================================================================
  */
-enum class LayerFlag
+struct Group
 {
-  // Layer will be drawn and have its focusable bounds evaluated in the 
-  // top most layer of UI, after all Items have been updated.
-  TopMost,
+  Group* prev = nullptr;
+
+  Rect bounds = {};
+
+  FocusableBounds* fbounds = nullptr;
 };
 
 /* ============================================================================
  */
 struct Layer
 {
-  Layer* parent;
-  Rect bounds;
-  DrawCmdList drawcmds;
-  FocusableBoundsList fbounds;
+  FocusableId fid = {};
+  Group* groups = nullptr;
+
+  Layer* prev = nullptr;
+  Layer* next = nullptr;
+
+  u32 next_id;
+
+  b8 minor = false;
 };
-typedef SmallArray<Layer, 8> LayerList;
 
 /* ============================================================================
  */
@@ -297,7 +308,17 @@ struct ItemUpdateContext
   UI& ui;
   Item& item;
   InputState& input;
-  LayerList* layers;
+
+  Layer* current_layer;
+  Group* current_group;
+  Layer* top_layer;
+
+  void pushLayer(FocusableId fid, Rect bounds);
+  void popLayer();
+
+  void takeNextLayerId(FocusableId* pid);
+
+  Rect getBounds();
 
   // Tests if the given point is with the given bounds. The positioning 
   // of these two params is local to the Item's position on the screen.
@@ -335,7 +356,7 @@ struct ItemUpdateContext
   f32 tryConsumeScroll();
 
   FocusFlags testFocus(
-    FocusableId* pid, 
+    FocusableId id, 
     Rect bounds, 
     MouseButton focus_button,
     KeyState focus_state);
@@ -346,8 +367,6 @@ struct ItemUpdateContext
 
   b8 isFocusedId(FocusableId id);
   b8 isFocusedId(FocusableId* id);
-
-  
 
   void unfocus(FocusableId id);
 };
@@ -367,13 +386,6 @@ struct Item
 
   vec2f scroll;
   vec2f max_scroll;
-
-  // TODO(sushi) I originally thought that much of this info is not needed
-  //             and had a huge note here about getting rid of it. However,
-  //             I don't think we can get rid of most of it like I originally
-  //             thought. BUT, I think we can definitely get rid of pos_screen
-  //             as we keep track of this while updating the item tree.
-  //             Remove that eventually please :).
 
   vec2f pos_local;
   vec2f pos_screen;
@@ -557,4 +569,9 @@ struct Item
     { return { getPaddedStyleWidth(), getPaddedStyleHeight() }; }
 };
 
+}
+
+consteval ui::FocusableId operator ""_fid (const char* s, size_t len)
+{ 
+  return ui::FocusableId{operator ""_hashed(s, len)};
 }

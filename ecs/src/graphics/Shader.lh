@@ -40,8 +40,8 @@ struct Shader
   {
     return index != other.index;
   }
+
+  DefineNilTrait(Shader, {0}, x.index == 0);
 };
 
 }
-
-DefineNilValue(gfx::Shader, { 0 }, { return x.index == 0; });

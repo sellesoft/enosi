@@ -102,14 +102,14 @@ struct FixedPool
   
   /* --------------------------------------------------------------------------
    */
-  s32 index_of(T* x)
+  s32 indexOf(T* x)
   {
     return (s32)(x - (T*)slots);
   }
   
   /* --------------------------------------------------------------------------
    */
-  T* at_index(s32 index)
+  T* atIndex(s32 index)
   {
     assert(index >= 0 && index < N_slots
       && "invalid index passed to at_index");
@@ -119,17 +119,22 @@ struct FixedPool
 
     return (T*)(slots + index);
   }
+
+  // Manually written because C++ is very cool.
+  struct NilTrait
+  {
+    static constexpr FixedPool<T, N_slots> getValue()
+    {
+      return {};
+    }
+
+    static inline bool isNil(const FixedPool<T, N_slots>& x)
+    {
+      return x.free_slot == nullptr;
+    }
+  };
 };
 
 }
-
-template<typename T, s32 N>
-struct NilValue<iro::FixedPool<T, N>>
-{
-  constexpr static iro::FixedPool<T, N> Value = {};
-
-  static inline bool isNil(const iro::FixedPool<T, N>& x)
-    { return x.free_slot == nullptr; }
-};
 
 #endif // #ifndef _iro_FixedPool_h 

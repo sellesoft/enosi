@@ -50,7 +50,7 @@ b8 ComboBox::update(
       skin.option_spacing;
 
   FocusFlags focus = 
-    ctx.testFocus(&fid, visual_bounds, MouseButton::Left, KeyState::Released);
+    ctx.testFocus(fid, visual_bounds, MouseButton::Left, KeyState::Released);
 
   b8 clicked = false;
   b8 can_select = false;
@@ -230,7 +230,7 @@ void ComboBox::update(UI* ui, UpdateReason reason)
 
   if (open && 
       ui->testFocusableRegion(
-        {0.f,0.f}, 
+        {0.f, 0.f}, 
         size.yadd(@this.style.option_height * options.len())))
   {
     vec2f cursor_local = ui->input->mouse.window - pos_screen;

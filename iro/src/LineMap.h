@@ -42,11 +42,15 @@ struct LineMap
   void touchedBuffer() { cached = false; }
 
   LineOffset getLine(u64 offset);
+
+  DefineNilTrait(LineMap, {nil}, isnil(x.line_offsets));
+  DefineMoveTrait(LineMap, 
+    { 
+      to.cached = from.cached; 
+      move(from.line_offsets, to.line_offsets); 
+    });
 };
 
 }
-
-DefineNilValue(LineMap, {nil}, { return isnil(x.line_offsets); });
-DefineMove(LineMap, { to.cached = from.cached; move(from.line_offsets, to.line_offsets); });
 
 #endif // _iro_linemap_h

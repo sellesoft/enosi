@@ -218,6 +218,9 @@ struct Memory : public IO
 
   u8& operator[](u32 x) { assert(x <= len); return ptr[x]; }
 
+  DefineNilTrait(Memory, {}, x.ptr == nullptr);
+  DefineMoveTrait(Memory, { mem::copy(&to, &from, sizeof(Memory)); });
+
 private: 
   
   void growIfNeeded(s64 space);
@@ -398,9 +401,5 @@ s64 format(IO* io, StaticBuffer<N>& x)
 }
 
 }
-
-DefineMove(iro::io::Memory, 
-    { iro::mem::copy(&to, &from, sizeof(iro::io::Memory)); });
-DefineNilValue(iro::io::Memory, {}, { return x.ptr == nullptr; });
 
 #endif // _iro_io_h

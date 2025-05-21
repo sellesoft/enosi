@@ -213,28 +213,105 @@ void ItemUpdateContext::unfocus(FocusableId id)
 
 /* ----------------------------------------------------------------------------
  */
+void ItemUpdateContext::pushLayer(FocusableId fid, Rect bounds)
+{
+  auto* layer = ui.temp_alloc.construct<Layer>();
+  auto* group = ui.temp_alloc.construct<Group>();
+
+  group->bounds = bounds;
+
+  layer->groups = group;
+
+  Layer* next_layer = current_layer->next;
+  if (next_layer)
+  {
+    while (next_layer->minor)
+      next_layer = next_layer->next;
+
+    layer->prev = next_layer;
+
+    if (next_layer->next)
+    {
+      next_layer->next->prev = layer;
+      layer->next = next_layer->next;
+    }
+
+    next_layer->next = layer;
+    next_layer->minor = true;
+
+    if (next_layer == top_layer)
+      top_layer = layer;
+  }
+  else
+  {
+    top_layer = layer;
+    layer->prev = current_layer;
+    current_layer->next = layer;
+  }
+
+  current_layer = layer;
+  current_group = group;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void ItemUpdateContext::popLayer()
+{
+  assert(current_layer->prev != nullptr);
+
+  Layer* prev_major = current_layer->prev;
+  while(prev_major->minor)
+    prev_major = prev_major->prev;
+
+  current_layer = prev_major;
+  current_group = current_layer->groups;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void ItemUpdateContext::takeNextLayerId(FocusableId* pid)
+{
+  if (!pid->isValid())
+  {
+    pid->val = current_layer->next_id;
+    current_layer->next_id += 1;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Rect ItemUpdateContext::getBounds()
+{
+  return current_group->bounds;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 FocusFlags ItemUpdateContext::testFocus(
-    FocusableId* pid,
+    FocusableId id,
     Rect bounds,
     MouseButton focus_button,
     KeyState focus_state)
 {
-  if (!pid->isValid())
-    ui.registerFocusableId(pid);
+  assert(id.isValid());
 
-  FocusableId id = *pid;
+  auto* fb = 
+    ui.temp_alloc.construct<FocusableBounds>();
 
-  focusable_bounds->push({id, bounds, focus_button, focus_state});
+  fb->id = id;
+  fb->bounds = bounds;
 
+  fb->next = current_group->fbounds;
+  current_group->fbounds = fb;
+  
   FocusFlags flags = {};
   
   auto& pfs = ui.prev_focus_state;
   auto& fs = ui.focus_state;
 
-  if (id == fs.hovered)
+  if (id == fs.hovered && current_layer->fid == fs.hovered_layer)
   {
     flags.set(FocusFlag::Hovered);
-    drawDebugBorder(bounds, {255,0,0,255});
 
     if (id != pfs.hovered)
     {

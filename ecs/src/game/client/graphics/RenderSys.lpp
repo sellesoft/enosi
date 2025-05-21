@@ -276,7 +276,7 @@ b8 RenderSys::update(const UpdateParams& params)
     scene.resolution_and_time[2] = time;
 
     scene_uniform_buffer.map(renderer);
-    scene_uniform_buffer.copy_and_flush(renderer, &scene, sizeof(scene));
+    scene_uniform_buffer.copyAndFlush(renderer, &scene, sizeof(scene));
     scene_uniform_buffer.unmap(renderer);
   }
 

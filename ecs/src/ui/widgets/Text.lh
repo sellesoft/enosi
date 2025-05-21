@@ -31,109 +31,6 @@ struct TextBreak
 typedef SmallArray<TextBreak, 64> TextBreaks;
 
 /* ============================================================================
- *  Helper for rendering text.
- */
-struct TextRenderer
-{
-  String text;
-
-  vec2f size;
-  TextBreaks breaks;
-
-  gfx::Font* font;
-  f32 font_height;
-  f32 tab_spaces;
-  f32 max_width;
-  u32 wrap;
-  Color color;
-
-  void init(
-      String text,
-      gfx::Font* font,
-      f32 font_height,
-      f32 tab_spaces,
-      f32 max_width,
-      u32 wrap,
-      Color color)
-  {
-    this->text = text;
-    this->font = font;
-    this->font_height = font_height;
-    this->tab_spaces = tab_spaces;
-    this->max_width = max_width;
-    this->wrap = wrap;
-    this->color = color;
-    breaks.init();
-  }
-
-  void deinit()
-  {
-    text = nil;
-    breaks.deinit();
-  }
-
-  void findTextBreaks();
-
-  // Draws text at the given position. This overload will call findTextBreaks
-  // internally with the provided information. If it has already been called,
-  // eg. in the case where the text size needed to be known before hand, you
-  // may use the following overload instead.
-  void draw(UI* ui, vec2f pos, DrawCmd* dc);
-};
-
-/* ============================================================================
- *  General text state for use by widgets that need to display text.
- */
-struct TextState
-{
-  // The loaded font for this text.
-  gfx::Font* font;
-
-  // The name of the loaded font so we may reload it if the user changes
-  // it.
-  String font_name;
-
-  // TODO(sushi) replace with text manipulation helper like 
-  //             we have in deshi.
-  io::Memory buffer;
-
-  DrawCmd* dc;
-
-  TextRenderer* renderer;
-
-  void cacheRenderer();
-
-  void initRenderer(
-    f32 font_height,
-    f32 tab_spaces,
-    f32 max_width,
-    u32 wrap,
-    Color color);
-
-  void freeRenderer();
-
-  void draw(UI* ui, vec2f pos);
-
-  b8   init(UI* ui, String init);
-  void deinit();
-
-  void checkFont(String name, UI* ui);
-
-  operator io::IO*() { return &buffer; }
-
-  void clear()
-  {
-    buffer.clear();
-  }
-
-  void set(String s)
-  {
-    clear();
-    buffer.write(s);
-  }
-};
-
-/* ============================================================================
  */
 struct Text
 {
@@ -151,6 +48,12 @@ struct Text
 
   // Clears any currently drawn text.
   void clear();
+
+  static void put(
+    ItemUpdateContext& ctx, 
+    Rect bounds, 
+    String text, 
+    const TextSkinDef& skin);
 };
 
 $ if false then

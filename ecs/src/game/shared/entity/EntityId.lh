@@ -16,9 +16,9 @@ struct EntityId
   u32 salt = 0;
 
   bool operator == (const EntityId& rhs) const { return value == rhs.value; }
-};
 
-DefineNilValue(EntityId, {0}, { return x.value == 0; });
+  DefineNilTrait(EntityId, {0}, x.value == 0);
+};
 
 /* ============================================================================
  */

@@ -208,7 +208,7 @@ InputText::UpdateResult InputText::update(
   UpdateResult result = {};
 
   result.focus = 
-    ctx.testFocus(&fid, bounds, MouseButton::Left, KeyState::Released);
+    ctx.testFocus(fid, bounds, MouseButton::Left, KeyState::Released);
 
   result.edit = updateEditBuffer(ctx, text_edit, buffer);
 
@@ -268,7 +268,7 @@ InputText::UpdateResult InputText::update(
   UpdateResult result = {};
   
   result.focus = 
-    ctx.testFocus(&fid, bounds, MouseButton::Left, KeyState::Released);
+    ctx.testFocus(fid, bounds, MouseButton::Left, KeyState::Released);
 
   result.edit = EditResult::Idle;
 

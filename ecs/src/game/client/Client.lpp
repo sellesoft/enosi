@@ -29,6 +29,7 @@ $ local ui = require "ui.UI"
 struct Test : ui::Item
 {
   ui::Button button;
+  ui::Button button2;
   ui::ComboBox cbox;
   ui::InputText itext;
   TestSkinDef* skin;
@@ -38,6 +39,8 @@ struct Test : ui::Item
 
   ui::DrawCmd* bg;
 
+  ui::FocusableId testid;
+
   static void create(ui::UI& ui, AssetLoader& loader)
   {
     using namespace ui;
@@ -46,6 +49,7 @@ struct Test : ui::Item
     auto* test = ui.allocateAndInitItem<Test>("test"_str);
 
     test->button.init(ui);
+    test->button2.init(ui);
     test->cbox.init(ui);
     test->itext.init(ui);
     test->bg = ui.drawcmds.add();
@@ -56,41 +60,60 @@ struct Test : ui::Item
     loader.load(&skinref, "assets/skins/Test"_str);
 
     test->skin = &*skinref;
+
+    test->testid = FocusableId::fromString("test"_str);
   }
 
   void update(ui::ItemUpdateContext& ctx) override
   {
-    button.update(
-      ctx, Rect::from(10, 10, 30, 30), "hi"_str, skin->button);
+    //
+    // String opts[] = 
+    // {
+    //   "bleh"_str,
+    //   "blah"_str,
+    //   "bloh"_str,
+    // };
+    //
+    // cbox.update(
+    //   ctx, Rect::from(10, 45, 30, 30), ui::ComboBox::Options::from(opts),
+    //   skin->combo_box);
+    //
+     ui::ItemSkinDef bgskin = {};
+     bgskin.color = {255,155, 155, 255};
+    //
+     ui::Item::drawBackground(
+       ctx.ui, Rect::from(0, 0, size.x, size.y), bg, bgskin);
+    //
+    // itext.update(
+    //   ctx, 
+    //   Rect::from(10, 80, 80, 30), 
+    //   {text_buffer, &text_len, 255},
+    //   skin->input_text);
 
-    String opts[] = 
+    Rect left_bounds = ctx.getBounds();
+    left_bounds.w *= 0.5f;
+
+    Rect right_bounds = left_bounds;
+    right_bounds.x += left_bounds.w;
+
+    ctx.pushLayer("left"_fid, left_bounds);
     {
-      "bleh"_str,
-      "blah"_str,
-      "bloh"_str,
-    };
+      button.update(ctx, ctx.getBounds(), "hello"_str, skin->button);
+    }
+    ctx.popLayer();
 
-    cbox.update(
-      ctx, Rect::from(10, 45, 30, 30), ui::ComboBox::Options::from(opts),
-      skin->combo_box);
-
-    ui::ItemSkinDef bgskin = {};
-    bgskin.color = {255,155, 155, 255};
-
-    ui::Item::drawBackground(
-      ctx.ui, Rect::from(0, 0, size.x, size.y), bg, bgskin);
-
-    itext.update(
-      ctx, 
-      Rect::from(10, 80, 80, 30), 
-      {text_buffer, &text_len, 255},
-      skin->input_text);
+    ctx.pushLayer("right"_fid, right_bounds);
+    {
+      button2.update(ctx, ctx.getBounds(), "bye"_str, skin->button);
+    }
+    ctx.popLayer();
   }
 
   void reportDrawCmds(ui::UI& ui, ui::DrawCmdLists& lists) override
   {
     lists.pre_children.push(bg);
     button.reportDrawCmds(ui, lists);
+    button2.reportDrawCmds(ui, lists);
     cbox.reportDrawCmds(ui, lists);
     itext.reportDrawCmds(ui, lists);
   }

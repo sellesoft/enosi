@@ -17,15 +17,14 @@ struct MoveTrait {};
 template<typename T>
 concept Movable = Nillable<T> && requires(T& from, T& to)
 {
-  MoveTrait<T>::doMove(from, to);
+  T::MoveTrait::doMove(from, to);
 };
 
-#define DefineMove(T, F) \
-  template<> \
-  struct MoveTrait<T> \
+#define DefineMoveTrait(T, F) \
+  struct MoveTrait \
   { \
     inline static void doMove(T& from, T& to) F \
-  } 
+  }
 
 /* ============================================================================
  *  Contains a value that has been moved. Eg. if this is the type of a function 
@@ -37,13 +36,16 @@ concept Movable = Nillable<T> && requires(T& from, T& to)
  *  longer owns anything.
  */
 template<Movable T>
-struct Moved : public T {};
+struct Moved : public T 
+{
+  DefineNilTrait(Moved<T>, T::NilTrait::getValue(), isnil((T&)x));
+};
 
 template<Movable T>
 inline void move(T& from, T& to)
 {
   assert(notnil(from) && "attempt to move a nil value");
-  MoveTrait<T>::doMove(from, to);
+  T::MoveTrait::doMove(from, to);
   from = nil;
 }
 
@@ -60,14 +62,6 @@ inline Moved<T> move(T&& from) // NOTE(sushi) this allows moving temp values,
 {                              // like move(Path::from("hi"_str))
   return move((T&)from);
 }
-
-// Moved values decay to their underlying values when dealing with nil.
-template<Nillable T>
-struct NilValue<Moved<T>>
-{
-  constexpr static const T Value = NilValue<T>::Value;
-  inline static bool isNil(const Moved<T>& x) { return NilValue<T>::isNil(x); }
-};
 
 /* ============================================================================
  *  Wraps an object that may be moved by someone. 
@@ -95,14 +89,8 @@ struct MayMove
 
   inline b8 wasMoved() { return isnil(x); }
   inline Moved<T> move() { return assert(not wasMoved()); ::move(x); }
-};
 
-template<Movable T>
-struct NilValue<MayMove<T>>
-{
-  constexpr static const T Value = NilValue<T>::Value;
-  inline static bool isNil(const MayMove<T>& x) 
-    { return NilValue<T>::isNil((const T&)x); }
+  DefineNilTrait(MayMove<T>, T::NilTrait::getValue(), isnil(x.x));
 };
 
 #endif

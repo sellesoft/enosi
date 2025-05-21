@@ -50,7 +50,7 @@ Char encodeCharacter(u32 codepoint)
     default:
       ERROR("utf8::encodeCharacter(): could not resolve a proper number of bytes needed to "
           "encode codepoint: ", codepoint, "\n");
-      return Char::invalid();
+      return nil;
 
     case 1: 
       c.bytes[0] = (u8)codepoint;

@@ -187,6 +187,10 @@ struct Path
 
   Rollback makeRollback() { return buffer.createRollback(); }
   void commitRollback(Rollback rollback) { buffer.commitRollback(rollback); }
+
+  DefineNilTrait(Path, {}, isnil(x.buffer));
+  DefineMoveTrait(Path, { to.buffer = move(from.buffer); });
+  DefineScopedTrait(Path, { x.destroy(); });
 };
 
 }
@@ -200,9 +204,5 @@ static s64 format(io::IO* io, fs::Path& x)
 }
 
 }
-
-DefineMove(iro::fs::Path, { to.buffer = move(from.buffer); });
-DefineNilValue(iro::fs::Path, {}, { return isnil(x.buffer); });
-DefineScoped(iro::fs::Path, { x.destroy(); });
 
 #endif // _iro_path_h

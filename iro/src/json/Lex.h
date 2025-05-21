@@ -48,15 +48,9 @@ struct Token
 
   s32 loc = 0;
   s32 len = 0;
+
+  DefineNilTrait(Token, {}, x.kind == Kind::Invalid);
 };
-
-}
-
-DefineNilValue(iro::json::Token, {}, 
-  { return x.kind == iro::json::Token::Kind::Invalid; });
-
-namespace iro::json
-{
 
 /* ============================================================================
  */

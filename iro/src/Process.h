@@ -57,6 +57,9 @@ struct Process
   // Closes this process, terminating it early if it is still running,
   // and cleans up its internal resources.
   b8 close();
+
+  DefineNilTrait(Process, {nullptr}, x.handle == nullptr);
+  DefineMoveTrait(Process, { to.handle = from.handle; });
 };
 
 /* ============================================================================
@@ -79,9 +82,5 @@ struct ProcessIO : io::IO
 };
 
 }
-
-DefineNilValue(iro::Process, {nullptr}, { return x.handle == nullptr; });
-DefineMove(iro::Process, { to.handle = from.handle; });
-
 
 #endif

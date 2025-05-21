@@ -88,7 +88,6 @@ $ end
   else
   {
     client = new Client;
-    mem::zero(client, sizeof(Client));
     
     if (!client->init(this))
       return FATAL("failed to initialize Client\n");
@@ -133,6 +132,8 @@ b8 Engine::update()
   // inspector->fps->set(fps.asStr());
 
   // ui.root->dirty = true;
+
+  // INFO(1 / (TimePoint::monotonic() - time_point).toSeconds(), "\n");
 
   return true;
 }

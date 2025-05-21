@@ -344,7 +344,7 @@ b8 Buffer::deinit(Renderer& renderer)
   if (index == 0)
     return true;
 
-  RendererBuffer* buffer = ri.buffer_pool.at_index(index);
+  RendererBuffer* buffer = ri.buffer_pool.atIndex(index);
   if (buffer == nullptr)
     return ERROR("attempted to destroy a buffer at index ", index,
       " which is out of bounds\n");
@@ -390,7 +390,7 @@ b8 Buffer::map(Renderer& renderer)
   if (index == 0)
     return ERROR("attempted to map an uninitialized buffer\n");
 
-  RendererBuffer* buffer = ri.buffer_pool.at_index(index);
+  RendererBuffer* buffer = ri.buffer_pool.atIndex(index);
   if (buffer == nullptr)
     return ERROR("attempted to map the buffer at index ", index,
       " which is out of bounds\n");
@@ -432,7 +432,7 @@ b8 Buffer::flush(Renderer& renderer, u64 offset, u64 size)
   if (index == 0)
     return ERROR("attempted to flush an uninitialized buffer\n");
 
-  RendererBuffer* buffer = ri.buffer_pool.at_index(index);
+  RendererBuffer* buffer = ri.buffer_pool.atIndex(index);
   if (buffer == nullptr)
     return ERROR("attempted to flush the buffer at index ", index,
       " which is out of bounds\n");
@@ -469,7 +469,7 @@ b8 Buffer::flush(Renderer& renderer, u64 offset, u64 size)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Buffer::copy_and_flush(Renderer& renderer, void* data, u64 size)
+b8 Buffer::copyAndFlush(Renderer& renderer, void* data, u64 size)
 {
   RendererInternal& ri = *(RendererInternal*)renderer.internal;
   TRACE("copying and flushing the buffer at index ", index, "\n");
@@ -477,7 +477,7 @@ b8 Buffer::copy_and_flush(Renderer& renderer, void* data, u64 size)
   if (index == 0)
     return ERROR("attempted to copy and flush an uninitialized buffer\n");
 
-  RendererBuffer* buffer = ri.buffer_pool.at_index(index);
+  RendererBuffer* buffer = ri.buffer_pool.atIndex(index);
   if (buffer == nullptr)
     return ERROR("attempted to copy and flush the buffer at index ", index,
       " which is out of bounds\n");
@@ -523,7 +523,7 @@ b8 Buffer::unmap(Renderer& renderer)
   if (index == 0)
     return ERROR("attempted to unmap an uninitialized buffer\n");
 
-  RendererBuffer* buffer = ri.buffer_pool.at_index(index);
+  RendererBuffer* buffer = ri.buffer_pool.atIndex(index);
   if (buffer == nullptr)
     return ERROR("attempted to unmap the buffer at index ", index,
       " which is out of bounds\n");

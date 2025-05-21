@@ -46,13 +46,15 @@ Button::State Button::update(
     String str, 
     const ButtonSkinDef& skin)
 {
+  ctx.takeNextLayerId(&fid);
+  
   text.clear();
 
   State state = State::None;
   const TextItemSkinDef* state_skin = &skin.normal;
 
   FocusFlags focus = 
-    ctx.testFocus(&fid, bounds, MouseButton::Left, KeyState::Released);
+    ctx.testFocus(fid, bounds, MouseButton::Left, KeyState::Released);
 
   if (focus.test(FocusFlag::Hovered))
   {

@@ -36,11 +36,6 @@ struct Button
   b8 init(UI& ui);
   void deinit(UI& ui);
 
-  void draw(
-    UI& ui,
-    Rect bounds,
-    const ButtonSkinDef& skin);
-
   enum class State
   {
     None,

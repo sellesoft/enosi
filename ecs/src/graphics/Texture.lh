@@ -45,8 +45,8 @@ struct Texture
   {
     return index != other.index;
   }
+
+  DefineNilTrait(Texture, {0}, x.index == 0);
 };
 
 }
-
-DefineNilValue(gfx::Texture, { 0 }, { return x.index == 0; });
