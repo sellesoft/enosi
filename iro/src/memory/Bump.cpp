@@ -1,5 +1,6 @@
 #include "Bump.h"
 #include "Memory.h"
+#include "memory/Allocator.h"
 
 namespace iro::mem
 {
@@ -26,6 +27,21 @@ void Bump::deinit()
     mem::stl_allocator.free(slabs);
     slabs = next;
   }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Bump::clear()
+{
+  // Deallocate any extra slabs we allocated and clear the first one.
+  while (slabs->next)
+  {
+    Slab* next = slabs->next;
+    mem::stl_allocator.free(slabs);
+    slabs = next;
+  }
+
+  start = cursor = slabs->content;
 }
 
 /* ----------------------------------------------------------------------------

@@ -17,16 +17,17 @@ using namespace iro;
 namespace ui
 {
 
-@log.ger(ui, Info)
+@log.ger(ui, Trace)
 
 /* ----------------------------------------------------------------------------
  */
 b8 UI::init(InitParams& params)
 {
   renderer = &params.renderer;
+  white_texture = params.white_texture;
 
   if (!frame_allocator.init())
-    return ERROR("failed to initialize frame allocator\n");
+    return ERROR("failed to initialize UI frame allocator\n");
 
   if (!params.loader.load(&pipeline_defref, "assets/shaders/UI"_str))
     return ERROR("failed to load UI pipeline def\n");
@@ -62,50 +63,247 @@ void UI::beginFrame(const FrameParams& params)
   assert(!in_frame && 
     "attempt to begin UI frame while one is already in progress");
 
+  DEBUG("UI::beginFrame\n");
+
   in_frame = true;
 
   frame_input = params.input;
   viewport = params.viewport;
 
-  // Reset draw info counts.
-  vertex_count = 0;
-  index_count = 0;
+  draw_counts = {};
 
-  current_layer = frame_allocator.allocateType<Layer>();
+  // Initialize the root Layer and its initial Panel.
+  root_layer = frame_allocator.construct<Layer>();
 
-  current_layer->groups = frame_allocator.allocateType<Group>();
-  current_group = current_layer->groups;
+  Panel* root_panel = frame_allocator.construct<Panel>();
 
-  current_group->bounds = viewport;
+  root_panel->bounds = viewport;
+  root_panel->transform = mat3x2::createTransform(viewport.pos(), 0.f);
 
-  top_layer = current_layer;
+  root_layer->current_panel = root_panel;
+  root_layer->panels = root_layer->current_panel;
 
-  
+  current_layer = root_layer;
+
+  pushPanelRenderState(root_panel);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::pushConstantFromTransform(mat3x2 transform, gfx::Renderer& renderer)
+{
+  f32 push_constant[16];
+
+  transform.toMat4(push_constant);
+    
+  f32 scale_x = 2.f / viewport.w;
+  f32 scale_y = 2.f / viewport.h;
+  push_constant[0] *= scale_x;
+  push_constant[1] *= scale_x;
+  push_constant[4] *= scale_y;
+  push_constant[5] *= scale_y;
+
+  push_constant[12] = push_constant[2] * scale_x;
+  push_constant[13] = push_constant[6] * scale_y;
+  push_constant[2] = 0.f;
+  push_constant[6] = 0.f;
+
+  renderer.pushConstant(push_constant, c_PushConstantSize);
 }
 
 /* ----------------------------------------------------------------------------
  */
 void UI::endFrame()
 {
-  
+  // Bind UI's gfx objects.
+  renderer->bindPipeline(pipeline);
+  renderer->bindVertexBuffer(vertex_buffer);
+  renderer->bindIndexBuffer(index_buffer);
 
+  // Map the draw info buffers.
+  vertex_buffer.map(*renderer);
+  index_buffer.map(*renderer);
 
-  frame_allocator.deinit();
+  // Execute each layer's Cmds.
+  for (Layer* layer = root_layer; layer; layer = layer->next)
+  {
+    for (Cmd* cmd = layer->first_cmd; cmd; cmd = cmd->next)
+    {
+      cmd->execute(*this, *renderer);
+    }
+  }
+
+  // Clean up the frame's memory.
+  frame_allocator.clear();
+
+  // Flush and unmap the buffers.
+  vertex_buffer.flush(*renderer, 0, gfx::Buffer::FLUSH_WHOLE_BUFFER);
+  index_buffer.flush(*renderer, 0, gfx::Buffer::FLUSH_WHOLE_BUFFER);
+  vertex_buffer.unmap(*renderer);
+  index_buffer.unmap(*renderer);
+
+  // Reset layer states.
+  root_layer = nullptr;
+  current_layer = nullptr;
+
+  in_frame = false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Layer::pushCmd(Cmd* cmd)
+{
+  if (last_cmd != nullptr)
+  {
+    last_cmd->next = cmd;
+    last_cmd = cmd;
+  }
+  else
+  {
+    first_cmd = last_cmd = cmd;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::pushLayer(FocusableId id, Rect bounds, LayerFlags flags)
+{
+  DEBUG("UI::pushLayer\n");
+
+  assert(notnil(id));
+
+  // Push into the next layer. If we haven't already in this frame, allocate
+  // a new one.
+  Layer* next_layer = current_layer->next;
+
+  if (next_layer == nullptr)
+  {
+    next_layer = frame_allocator.construct<Layer>();
+    next_layer->prev = current_layer;
+    current_layer->next = next_layer;
+  }
+
+  Panel* prev_panel = current_layer->current_panel;
+
+  current_layer = next_layer;
+
+  beginPanel(id, bounds, prev_panel);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::popLayer()
+{
+  DEBUG("UI::popLayer\n");
+
+  assert(current_layer->prev != nullptr);
+
+  current_layer = current_layer->prev;
+
+  pushPanelRenderState(current_layer->current_panel);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::beginPanel(FocusableId id, Rect bounds, Panel* prev)
+{
+  DEBUG("UI::beginPanel\n");
+
+  assert(notnil(id));
+
+  auto* next_panel = frame_allocator.construct<Panel>();
+  next_panel->id = id;
+  next_panel->bounds = bounds;
+
+  if (prev != nullptr)
+  {
+    // Set the transform of this panel to be nested within the current panel.
+    next_panel->transform = 
+      prev->transform.mul(
+        mat3x2::createTransform(bounds.pos(), 0.f));
+  }
+  else
+  {
+    // Otherwise, the panel is transformed in screen space.
+    next_panel->transform = mat3x2::createTransform(bounds.pos(), 0.f);
+  }
+
+  next_panel->prev = current_layer->panels;
+  current_layer->panels = next_panel;
+
+  current_layer->current_panel = next_panel;
+
+  pushPanelRenderState(next_panel);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::beginPanel(FocusableId id, Rect bounds)
+{
+  beginPanel(id, bounds, current_layer->current_panel);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::endPanel()
+{
+  DEBUG("UI::endPanel\n");
+
+  Panel* current_panel = current_layer->current_panel;
+
+  assert(current_panel && current_panel->prev != nullptr);
+
+  current_layer->current_panel = current_panel->prev;
+
+  pushPanelRenderState(current_layer->current_panel);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::pushPanelRenderState(Panel* panel)
+{
+  auto* transform_cmd = frame_allocator.construct<TransformCmd>();
+  transform_cmd->transform = &panel->transform;
+
+  auto* scissor_cmd = frame_allocator.construct<ScissorCmd>();
+  scissor_cmd->bounds = panel->bounds;
+
+  current_layer->pushCmd(transform_cmd);
+  current_layer->pushCmd(scissor_cmd);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void TransformCmd::execute(UI& ui, gfx::Renderer& renderer)
+{
+  TRACE("execute transform ", transform->getTranslation(), "\n");
+
+  ui.pushConstantFromTransform(*transform, renderer);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void ScissorCmd::execute(UI& ui, gfx::Renderer& renderer)
+{
+  TRACE("execute scissor ", bounds.pos(), " ", bounds.size(), "\n");
+
+  renderer.setScissor(bounds.pos(), bounds.size());
 }
 
 /* ----------------------------------------------------------------------------
  */
 void UI::putQuad(Rect bounds, gfx::Texture texture, Rect uv, Color color)
 {
-  auto* cmd = frame_allocator.allocateType<QuadDrawCmd>();
+  assert(in_frame);
 
-  cmd->next = current_group->drawcmds;
-  current_group->drawcmds = cmd;
+  auto* cmd = frame_allocator.construct<QuadDrawCmd>();
 
   cmd->texture = texture;
   cmd->bounds = bounds;
   cmd->uv = uv;
   cmd->color = color;
+
+  current_layer->pushCmd(cmd);
 }
 
 /* ----------------------------------------------------------------------------
@@ -120,6 +318,41 @@ void UI::putQuad(Rect bounds, gfx::Texture texture, Color color)
 void UI::putQuad(Rect bounds, Color color)
 {
   putQuad(bounds, white_texture, color);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void QuadDrawCmd::execute(UI& ui, gfx::Renderer& renderer)
+{
+  TRACE("execute draw quad ", bounds.pos(), " ", bounds.size(), 
+        " ", color, "\n");
+
+  renderer.bindTexture(texture);
+
+  // TODO(sushi) use a special buffer for quads so that we can just instance
+  //             the indexes, like we do in RenderSys (to be renamed 
+  //             GameRenderer) and so we aren't sending so many drawcmds.
+
+  // TODO(sushi) we can probably do the actual drawing earlier, though not 
+  //             sure yet if its better to defer that to frame end to 
+  //             not bog down the performance of UI code.
+  vec2i drawn = 
+    gfx::putFilledRect(
+      (gfx::Vertex*)ui.vertex_buffer.mapped_data,
+      (gfx::Index*)ui.index_buffer.mapped_data,
+      ui.draw_counts,
+      bounds.pos(),
+      bounds.size(),
+      color);
+
+  TRACE("draw: ", ui.draw_counts.y, " ", drawn.y, " ", ui.draw_counts.x, "\n");
+
+  renderer.draw(
+    ui.draw_counts.y,
+    drawn.y,
+    ui.draw_counts.x);
+
+  ui.draw_counts += drawn;
 }
 
 }

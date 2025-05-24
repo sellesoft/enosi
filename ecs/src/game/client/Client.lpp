@@ -103,6 +103,17 @@ $ end
   // };
   // \@init(ui.init(ui_params), UI);
 
+  ui::UI::InitParams ui_params = 
+  {
+    .assetmgr = engine->assetmgr,
+    .renderer = renderer,
+    
+    .white_texture = white_texture,
+
+    .loader = asset_loader,
+  };
+  @init(ui.init(ui_params), UI);
+
   cl::GameSim::InitParams sim_params = 
   {
     .loader   = asset_loader,
@@ -155,6 +166,25 @@ b8 Client::update()
 
   InputState ui_input = {};
   input.cloneInputState(&ui_input);
+
+  ui::UI::FrameParams ui_params = 
+  {
+    .input = ui_input,
+    .viewport = Rect::from(vec2f(0,0), window.size),
+  };
+
+  ui.beginFrame(ui_params);
+  {
+    // ui.pushLayer("test_above"_fid, Rect::from(10, 10, 100, 100), {});
+    // {
+      ui.putQuad(Rect::from(0,0,10,10), 0xff0000ff);
+    // }
+    // ui.popLayer();
+
+    ui.putQuad(Rect::from(10, 10, 30, 30), 0x00ff00ff);
+
+  }
+  ui.endFrame();
 
   return true;
 }

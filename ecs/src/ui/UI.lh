@@ -19,6 +19,7 @@ $ local ui = require "ui.UI"
 #include "iro/containers/Tree.h"
 #include "iro/memory/Bump.h"
 #include "math/Rect.h"
+#include "math/mat.h"
 #include "Color.h"
 
 namespace gfx
@@ -29,8 +30,12 @@ namespace gfx
 
 struct InputMgr;
 
+struct mat3x2;
+
 namespace ui
 {
+
+struct UI;
 
 struct TextSkinDef;
 
@@ -82,37 +87,56 @@ struct FocusableBounds
 
 /* ============================================================================
  */
-struct DrawCmd
+struct Cmd
 {
-  // The next command in a group's drawcmd list.
-  DrawCmd* next;
+  Cmd* next;
 
-  virtual void draw(gfx::Renderer& renderer);
+  virtual void execute(UI& ui, gfx::Renderer& renderer) = 0;
 };
 
 /* ============================================================================
  */
-struct QuadDrawCmd : DrawCmd
+struct TransformCmd : Cmd
+{
+  mat3x2* transform;
+
+  void execute(UI& ui, gfx::Renderer& renderer) override;
+};
+
+/* ============================================================================
+ */
+struct ScissorCmd : Cmd
+{
+  Rect bounds = {};
+
+  void execute(UI& ui, gfx::Renderer& renderer) override;
+};
+
+/* ============================================================================
+ */
+struct QuadDrawCmd : Cmd
 {
   gfx::Texture texture;
   Rect uv;
   Color color;
   Rect bounds;
 
-  void draw(gfx::Renderer& renderer) override;
+  void execute(UI& ui, gfx::Renderer& renderer) override;
 };
 
 /* ============================================================================
  */
-struct Group
+struct Panel
 {
-  Group* prev = nullptr;
+  FocusableId id;
 
   Rect bounds = {};
-  
-  FocusableBounds* fbounds = nullptr;
 
-  DrawCmd* drawcmds = nullptr;
+  mat3x2 transform = {};
+
+  Panel* prev = nullptr;
+
+  FocusableBounds* fbounds = nullptr;
 };
 
 /* ============================================================================
@@ -129,13 +153,17 @@ typedef Flags<LayerFlag> LayerFlags;
  */
 struct Layer
 {
-  FocusableId id = nil;
-  Group* groups = nullptr;
+  Panel* panels = nullptr;
+
+  Cmd* first_cmd = nullptr;
+  Cmd* last_cmd = nullptr;
+
+  Panel* current_panel = nullptr;
 
   Layer* prev = nullptr;
   Layer* next = nullptr;
 
-  b8 minor = false;
+  void pushCmd(Cmd* cmd);
 };
 
 /* ============================================================================
@@ -148,23 +176,7 @@ struct UI
     c_MaxIndices = (c_MaxVertices / 4) * 6,
     c_PushConstantSize = 16 * sizeof(f32),
   };
-
-  mem::Bump frame_allocator;
-
-  Rect viewport;
-
-  gfx::Renderer* renderer;
-
-  gfx::Shader vertex_shader;
-  gfx::Shader fragment_shader;
-  gfx::Pipeline pipeline;
-  gfx::PipelineDefRef pipeline_defref;
-
-  gfx::Texture white_texture;
-
-  gfx::Buffer vertex_buffer;
-  gfx::Buffer index_buffer;
-
+ 
   struct InitParams
   {
     AssetMgr& assetmgr;
@@ -196,14 +208,45 @@ struct UI
   void putQuad(Rect bounds, gfx::Texture texture, Color color);
   void putQuad(Rect bounds, Color color);
 
+  FocusFlags putFocusableBounds(FocusableId id, Rect bounds);
+
   void putText(Rect bounds, String text, const TextSkinDef& skin);
 
-  void beginLayer(FocusableId id, Rect bounds, LayerFlags flags);
-  void endLayer();
+  // Pushes a layer and starts a new panel at the given bounds with the 
+  // given id.
+  void pushLayer(FocusableId id, Rect bounds, LayerFlags flags);
+  void popLayer();
+
+  // Begins a new panel.
+  void beginPanel(FocusableId id, Rect bounds);
+  void beginPanel(FocusableId id, Rect bounds, Panel* prev);
+
+  void endPanel();
+
+  // Pushes Cmds to the active Layer to transform and scissor successive Cmds
+  // according to the given Panel.
+  void pushPanelRenderState(Panel* panel);
 
   Rect getBounds() const;
 
-private:
+  // Bump allocator for memory allocated throughout a UI frame.
+  mem::Bump frame_allocator;
+
+  // The current viewport (is this needed?)
+  Rect viewport = {};
+
+  gfx::Renderer* renderer = nullptr;
+
+  // Graphics stuff.
+  gfx::Shader vertex_shader;
+  gfx::Shader fragment_shader;
+  gfx::Pipeline pipeline;
+  gfx::PipelineDefRef pipeline_defref;
+
+  gfx::Texture white_texture;
+
+  gfx::Buffer vertex_buffer;
+  gfx::Buffer index_buffer;
 
   // True when a UI frame is in progress.
   b8 in_frame = false;
@@ -212,9 +255,7 @@ private:
   // state by either UI or Items.
   InputState frame_input;
 
-  // Counts of vertices and indices drawn this frame.
-  u64 vertex_count;
-  u64 index_count;
+  vec2i draw_counts = {};
 
   u64 next_focusable_id;
 
@@ -233,16 +274,20 @@ private:
   void drawDebugRect(Rect rect, Color color);
   void drawDebugBorder(Rect rect, Color color);
 
+  // The initial Layer created on frame start.
+  Layer* root_layer;
+
   // The current layer being operated on this frame.
   Layer* current_layer;
 
-  // The current group of the current Layer.
-  Group* current_group;
-
-  // The layer we will start drawing from when the frame has ended. 
-  Layer* top_layer;
+  void pushConstantFromTransform(mat3x2 transform, gfx::Renderer& renderer);
 };
 
+}
+
+consteval ui::FocusableId operator ""_fid(const char* c, size_t s)
+{
+  return ui::FocusableId{operator ""_hashed(c,s)};
 }
 
 

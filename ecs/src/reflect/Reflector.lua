@@ -167,11 +167,11 @@ lpp.import = function(path)
 ]]
 
   buf:put("// ", path, ": \n\n")
-  buf:put("\n#line 1 \"", path, "\"\n")
+  -- buf:put("\n#line 1 \"", path, "\"\n")
 
   buf:put(result)
 
-  buf:put("\n#line 1 \"", lpp.getCurrentInputSourceName(), "\"\n")
+  -- buf:put("\n#line 1 \"", lpp.getCurrentInputSourceName(), "\"\n")
 
   local expansion = lpp.MacroExpansion.new()
   expansion:pushBack(

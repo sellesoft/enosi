@@ -21,7 +21,7 @@ struct Renderer;
  */
 struct Shader
 {
-  u32 index;
+  u32 index = 0;
 
   b8 init(
     Renderer& renderer,

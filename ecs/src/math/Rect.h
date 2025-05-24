@@ -5,6 +5,7 @@
 #define _ecs_rect_h
 
 #include "math/vec.h"
+#include "iro/io/IO.h"
 
 /* ============================================================================
  */
@@ -50,7 +51,16 @@ struct Rect
   {
     return p.x >= x && p.y >= y && p.x <= x + w && p.y <= y + h;
   }
-
 };
+
+namespace iro::io
+{
+
+static s64 format(IO* io, const Rect& rect)
+{
+  return io::formatv(io, '(', rect.pos(), ',', rect.size(), ')');
+}
+
+}
 
 #endif
