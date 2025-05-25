@@ -110,6 +110,7 @@ struct File : public io::IO
   static File from( Moved<Path> path, OpenFlags flags);
 
   static b8 copy(String dst, String src);
+  static b8 rename(String dst, String src);
   static b8 unlink(String path);
 
   static b8 exists(String path);

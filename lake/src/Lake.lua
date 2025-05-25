@@ -71,6 +71,7 @@ ffi.cdef
   s32  lua__getMaxJobs(void* lake);
 
   b8 lua__copyFile(String dst, String src);
+  b8 lua__moveFile(String dst, String src);
   b8 lua__chdir(String path);
   b8 lua__rm(String path, b8, b8);
   b8 lua__touch(String path);
@@ -362,6 +363,17 @@ end
 ---@return boolean
 lake.copy = function(dst, src)
   return C.lua__copyFile(makeStr(dst), makeStr(src))
+end
+
+-- * --------------------------------------------------------------------------
+
+--- Moves the file at 'src' to 'dst'.
+---
+---@param src string
+---@param dst string
+---@return boolean
+lake.move = function(dst, src)
+  return C.lua__moveFile(makeStr(dst), makeStr(src))
 end
 
 -- * --------------------------------------------------------------------------

@@ -178,6 +178,8 @@ struct String
   pos findFirstNot(u8 c) const;
   pos findLastNot(u8 c) const;
 
+  pos findString(String s) const;
+
   void split(
       u8 c,
       ExpandableContainer<String> auto* container,

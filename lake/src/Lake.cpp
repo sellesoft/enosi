@@ -774,6 +774,14 @@ b8 lua__copyFile(String dst, String src)
 /* ----------------------------------------------------------------------------
  */
 EXPORT_DYNAMIC
+b8 lua__moveFile(String dst, String src)
+{
+  return fs::File::rename(dst, src);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+EXPORT_DYNAMIC
 b8 lua__rm(String path, b8 recursive, b8 force)
 {
   // TODO(sushi) move to iro
@@ -892,10 +900,11 @@ b8 lua__rm(String path, b8 recursive, b8 force)
   }
   else
   {
-    ERROR("cannot rm path '", path, "' because either its a directory and "
-          "recursive was not specified or because I still have not added "
-          "non-recursive rm yet ;_;\n");
-    return false;
+	if (!platform::unlinkFile(path))
+	{
+		ERROR("cannot rm path '", path, "'\n");
+		return false;
+	}
   }
 
   return true;

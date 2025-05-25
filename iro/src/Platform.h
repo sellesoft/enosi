@@ -161,12 +161,16 @@ b8 fileExists(String path);
 b8 copyFile(String dst, String src);
 
 /* ----------------------------------------------------------------------------
+ */
+b8 moveFile(String dst, String src);
+
+/* ----------------------------------------------------------------------------
  *  Equivalent to 'unlink' on Linux. IDK how this will behave on Windows/Mac
  *  yet and so I'll put a better description here when I do.
  *
  *  This works on any kind of file except directories. Use 'rmdir' to delete
  *  those.
- */
+*/
 b8 unlinkFile(String path);
 
 /* ----------------------------------------------------------------------------

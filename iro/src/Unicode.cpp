@@ -433,6 +433,22 @@ String::pos String::findLastNot(u8 c) const
 
 /* ----------------------------------------------------------------------------
  */
+String::pos String::findString(String s) const
+{
+  if (s.len > len)
+    return pos::notFound();
+
+  for (s32 i = 0; i <= len - s.len; ++i)
+  {
+    if (sub(i).startsWith(s))
+      return pos::found(i);
+  }
+
+  return pos::notFound();
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 String::startsWith(String s) const
 {
   if (s.len > len)

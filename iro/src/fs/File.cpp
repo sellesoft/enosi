@@ -46,6 +46,13 @@ b8 File::copy(String dst, String src)
 
 /* ----------------------------------------------------------------------------
  */
+b8 File::rename(String dst, String src)
+{
+  return platform::moveFile(dst, src);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 File::unlink(String path)
 {
   return platform::unlinkFile(path);

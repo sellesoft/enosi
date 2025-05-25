@@ -908,6 +908,29 @@ b8 copyFile(String dst, String src)
 
 /* ----------------------------------------------------------------------------
  */
+b8 moveFile(String dst, String src)
+{
+	assert(notnil(dst));
+	assert(notnil(src));
+
+  const u64 buflen = 4096;
+  wchar_t wpath_dst[buflen];
+  wchar_t wpath_src[buflen];
+
+  if (0 == stringToWideChar(dst, wpath_dst, buflen))
+    return false;
+
+  if (0 == stringToWideChar(src, wpath_src, buflen))
+    return false;
+
+  if (MoveFileW(wpath_src, wpath_dst) == 0)
+    return win32Err("failed to move file from ", src, " to ", dst);
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 unlinkFile(String path)
 {
   assert(notnil(path));
