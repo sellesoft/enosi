@@ -17,7 +17,11 @@ struct EventBus
 
   // Subscribes to an event received from the network
   template<typename T>
-  void subscribeTo(void* subscriber, void (*callback)(void*, T&));
+  void subscribe(void* subscriber, void (*callback)(void*, T&));
+
+  // Unsubscribes from a previously subscribed event
+  template<typename T>
+  void unsubscribe(void* subscriber, void (*callback)(void*, T&));
 
   // Queues an event that will be networked
   //   session is used to identify the recipient of the event on the server

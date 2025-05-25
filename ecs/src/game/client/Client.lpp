@@ -242,9 +242,9 @@ $ end
   Test::create(ui, asset_loader, this);
 
   this->net_event_bus.init(&mem::stl_allocator);
-  this->net_event_bus.subscribeTo<ConnectionNetEvent>(this,
-                                                      handleConnectionEvent);
-  this->net_event_bus.subscribeTo<MessageNetEvent>(this, handleMessageEvent);
+  this->net_event_bus.subscribe<ConnectionNetEvent>(this,
+                                                    handleConnectionEvent);
+  this->net_event_bus.subscribe<MessageNetEvent>(this, handleMessageEvent);
 
   return true;
 }
@@ -271,7 +271,7 @@ static void receiveNetMessages(Client* client)
     net::Message message;
     message.init(connection.incoming_message_data,
                 connection.incoming_message_size);
-    if (!this->net_event_bus.parseMessage(message))
+    if (!client->net_event_bus.parseMessage(message))
       @log.error("failed to parse network message\n");
   }
   else
@@ -295,7 +295,7 @@ static void receiveNetMessages(Client* client)
       net::Message message;
       message.init(connection.incoming_message_data,
                   connection.incoming_message_size);
-      if (!this->net_event_bus.parseMessage(message))
+      if (!client->net_event_bus.parseMessage(message))
         @log.error("failed to parse network message\n");
     }
   }

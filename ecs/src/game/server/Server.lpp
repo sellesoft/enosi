@@ -296,8 +296,9 @@ static Server* createServer(thread::Context* ctx, sv::CreateParams* params)
   }
 
   server->net_event_bus.init(&server->global_allocator);
-  server->net_event_bus.subscribeTo<ConnectionNetEvent>(server, handleConnectionEvent);
-  server->net_event_bus.subscribeTo<MessageNetEvent>(server, handleMessageEvent);
+  server->net_event_bus.subscribe<ConnectionNetEvent>(server,
+                                                      handleConnectionEvent);
+  server->net_event_bus.subscribe<MessageNetEvent>(server, handleMessageEvent);
 
   server_running.store(true);
   return server;
