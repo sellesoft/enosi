@@ -22,6 +22,9 @@ end
 ecs.report.defines { ECS_VULKAN=1 }
 if sys.os == "windows" then
   local vulkan_path = lake.getEnvVar("VULKAN_SDK");
+  if not vulkan_path then
+    error "VULKAN_SDK environment variable not defined"
+  end
   vulkan_path = string.gsub(vulkan_path, "\\", "/");
   if vulkan_path:sub(-1) == "\0" then
     vulkan_path = vulkan_path:sub(1,#vulkan_path-1)

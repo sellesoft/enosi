@@ -1,4 +1,4 @@
-#include "Common.h"
+#include "../Common.h"
 #include "IO.h"
 #include "Format.h"
 
@@ -142,8 +142,8 @@ s64 format(IO* io, const SanitizeControlCharacters<char>& x)
 s64 format(IO* io, const SanitizeControlCharacters<String>& x)
 {
   StackArray<u8, 255> buffer;
-  
-  auto flush = 
+
+  auto flush =
     [&buffer, io]() { io->write(buffer.asSlice()); buffer.len = 0; };
 
   s64 bytes_written = 0;
@@ -154,7 +154,7 @@ s64 format(IO* io, const SanitizeControlCharacters<String>& x)
 
     for (u64 i = 0; i < s.len; ++i)
       *buffer.push() = s.ptr[i];
-    
+
     bytes_written += s.len;
   };
 
@@ -271,7 +271,7 @@ s64 format(IO* io, Hex<s16> x)
 
 s64 format(IO* io, Hex<s32> x)
 {
-  return formatHexWithPrecision(io, std::bit_cast<u32>(x.x), 
+  return formatHexWithPrecision(io, std::bit_cast<u32>(x.x),
                                 x.precision, x.uppercase, x.prefix);
 }
 
