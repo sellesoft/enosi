@@ -1,3 +1,5 @@
+$ if false then
+
 $ require "common"
 $ local m = require "reflect.Metadata"
 
@@ -59,3 +61,5 @@ struct SourceDataEditorSkinDef
 
   Color missing_data_color;
 };
+
+$ end

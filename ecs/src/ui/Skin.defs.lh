@@ -3,6 +3,9 @@ $ local m = require "reflect.Metadata"
 
 @@lpp.import "graphics/Ref.defs.lh"
 
+#include "math/Rect.h"
+#include "Color.h"
+
 namespace ui 
 {
 
@@ -12,7 +15,7 @@ namespace ui
 @m.source_types(skin)
 struct ItemSkinDef
 {
-  gfx::TextureDef texture;
+  gfx::TextureRef texture;
 
   @m.default "{x=0,y=0,w=1,h=1}"
   Rect uv;

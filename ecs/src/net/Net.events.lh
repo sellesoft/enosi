@@ -35,6 +35,8 @@
 $ require "common"
 $ local metadata = require "reflect.Metadata"
 
+#include "iro/Common.h"
+
 /* ============================================================================
  */
 @metadata.netevent({priority = true, broadcast = false})

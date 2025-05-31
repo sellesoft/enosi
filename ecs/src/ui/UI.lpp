@@ -214,13 +214,13 @@ void UI::endFrame()
       frame_input.wasMouseButtonPressed(MouseButton::Left))
   {
     next_focus_state.focused = next_focus_state.hovered;
-    next_focus_state.focused_panel = next_focus_state.hovered_panel
+    next_focus_state.focused_panel = next_focus_state.hovered_panel;
     next_focus_state.focused_layer_idx = next_focus_state.hovered_layer_idx;
   }
   else
   {
     next_focus_state.focused = focus_state.hovered;
-    next_focus_state.focused_panel = focus_state.hovered_panel
+    next_focus_state.focused_panel = focus_state.hovered_panel;
     next_focus_state.focused_layer_idx = focus_state.hovered_layer_idx;
   }
 
@@ -367,11 +367,10 @@ FocusFlags UI::putButton(
 {
   FocusFlags focus = putFocusableBounds(id, bounds);
 
-  TextItemSkinDef* state_skin = &skin.normal;
+  const TextItemSkinDef* state_skin = &skin.normal;
 
   if (focus.test(FocusFlag::Hovered))
   {
-    if ()
   }
 }
 
@@ -501,7 +500,7 @@ FocusFlags UI::putFocusableBounds(FocusableId id, Rect bounds)
 
   if (layer_idx == focus_state.focused_layer_idx)
   {
-    if (current_layer->current_panel->id = focus_state.focused_panel)
+    if (current_layer->current_panel->id == focus_state.focused_panel)
     {
       if (focus_state.focused == id)
         result.set(FocusFlag::Focused);
