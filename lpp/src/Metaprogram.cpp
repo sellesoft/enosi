@@ -705,6 +705,8 @@ b8 Metaprogram::run()
   {
     const s32 I_errinfo = lua.gettop();
 
+    lua.stackDump();
+
     if (lua.isfunction())
     {
       lua.pushstring("cancel"_str);
@@ -835,6 +837,7 @@ b8 Metaprogram::processScopeSections(Scope* scope)
             !section->buffer->asStr().isEmpty())
         {
           lua.pushvalue(I.lpp_runDocumentSectionCallbacks);
+
           if (!lua.pcall(0, 0, I.errhandler))
             return false;
 
@@ -870,7 +873,7 @@ b8 Metaprogram::processScopeSections(Scope* scope)
         TRACE("invoking macro\n");
         lua.pushinteger(section->macro_idx);
         lua.gettable(I.macro_invokers);
-        if (!lua.pcall(0, 1))
+        if (!lua.pcall(0, 1, I.errhandler))
         {
           const s32 I_errinfo = lua.gettop();
 

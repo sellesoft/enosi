@@ -13,6 +13,8 @@ $ local ui = require "ui.UI"
 
 @@lpp.import "input/InputState.lh"
 
+@@lpp.import "ui/Skin.defs.lh"
+
 #include "iro/containers/List.h"
 #include "iro/containers/Pool.h"
 #include "iro/containers/LinkedPool.h"
@@ -126,6 +128,16 @@ struct QuadDrawCmd : Cmd
 
 /* ============================================================================
  */
+struct BorderDrawCmd : Cmd
+{
+  Rect bounds;
+  Color color;
+
+  void execute(UI& ui, gfx::Renderer& renderer) override;
+};
+
+/* ============================================================================
+ */
 struct Panel
 {
   FocusableId id;
@@ -153,6 +165,8 @@ typedef Flags<LayerFlag> LayerFlags;
  */
 struct Layer
 {
+  u32 idx = 0;
+
   Panel* panels = nullptr;
 
   Cmd* first_cmd = nullptr;
@@ -210,8 +224,6 @@ struct UI
 
   FocusFlags putFocusableBounds(FocusableId id, Rect bounds);
 
-  void putText(Rect bounds, String text, const TextSkinDef& skin);
-
   // Pushes a layer and starts a new panel at the given bounds with the 
   // given id.
   void pushLayer(FocusableId id, Rect bounds, LayerFlags flags);
@@ -222,6 +234,10 @@ struct UI
   void beginPanel(FocusableId id, Rect bounds, Panel* prev);
 
   void endPanel();
+
+  void putText(Rect bounds, String text, const TextSkinDef& skin);
+
+  FocusFlags putButton(FocusableId id, Rect bounds, const ButtonSkinDef& skin);
 
   // Pushes Cmds to the active Layer to transform and scissor successive Cmds
   // according to the given Panel.
@@ -262,9 +278,11 @@ struct UI
   struct FocusState
   {
     FocusableId focused;
-    FocusableId focused_layer;
     FocusableId hovered;
-    FocusableId hovered_layer;
+    FocusableId focused_panel;
+    FocusableId hovered_panel;
+    u32 hovered_layer_idx;
+    u32 focused_layer_idx;
   };
 
   FocusState prev_focus_state;
@@ -274,11 +292,16 @@ struct UI
   void drawDebugRect(Rect rect, Color color);
   void drawDebugBorder(Rect rect, Color color);
 
+  Cmd* debug_cmds;
+
   // The initial Layer created on frame start.
   Layer* root_layer;
 
   // The current layer being operated on this frame.
   Layer* current_layer;
+
+  // Current layer index, used for tracked focused/hovered layers.
+  u32 layer_idx;
 
   void pushConstantFromTransform(mat3x2 transform, gfx::Renderer& renderer);
 };

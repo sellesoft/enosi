@@ -1,0 +1,68 @@
+$ require "common"
+$ local m = require "reflect.Metadata"
+
+@@lpp.import "graphics/Ref.defs.lh"
+
+namespace ui 
+{
+
+/* ============================================================================
+ */
+@m.def
+@m.source_types(skin)
+struct ItemSkinDef
+{
+  gfx::TextureDef texture;
+
+  @m.default "{x=0,y=0,w=1,h=1}"
+  Rect uv;
+
+  @m.default "{r=25,g=25,b=25,a=255}"
+  Color color;
+};
+
+/* ============================================================================
+ */
+enum class TextWrap
+{
+  None,
+  Char,
+  Word,
+};
+
+/* ============================================================================
+ */
+@m.def
+@m.source_types(skin)
+struct TextSkinDef
+{
+  gfx::FontRef font;
+  TextWrap     wrap;
+  @m.default "{r=255,g=255,b=255,a=255}"
+  Color        color;
+  f32          font_height;
+  f32          tab_spaces;
+};
+
+/* ============================================================================
+ */
+@m.def
+@m.source_types(skin)
+struct TextItemSkinDef
+{
+  TextSkinDef text;
+  ItemSkinDef item;
+};
+
+/* ============================================================================
+ */
+struct ButtonSkinDef
+{
+  vec2f text_align;
+  TextItemSkinDef normal;
+  TextItemSkinDef hovered;
+  TextItemSkinDef pressed;
+  TextItemSkinDef disabled;
+};
+
+}

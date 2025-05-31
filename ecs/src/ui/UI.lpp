@@ -124,6 +124,8 @@ void UI::endFrame()
   vertex_buffer.map(*renderer);
   index_buffer.map(*renderer);
 
+  Layer* top_layer = nullptr;
+
   // Execute each layer's Cmds.
   for (Layer* layer = root_layer; layer; layer = layer->next)
   {
@@ -131,7 +133,69 @@ void UI::endFrame()
     {
       cmd->execute(*this, *renderer);
     }
+
+    top_layer = layer;
   }
+
+  for (Layer* layer = top_layer; layer; layer = layer->prev)
+  {
+    for (Panel* panel = layer->panels; panel; panel = panel->prev)
+    {
+      vec2f screen_translation = panel->transform.getTranslation();
+
+      Rect screen_bounds = 
+        Rect::from(screen_translation, panel->bounds.size());
+
+      drawDebugBorder(screen_bounds, 0x00ffaaff);
+
+      if (screen_bounds.containsPoint(frame_input.getCursorPos()))
+      {
+        next_focus_state.hovered_panel = panel->id;
+        next_focus_state.hovered_layer_idx = layer->idx;
+
+        for (FocusableBounds* fbounds = panel->fbounds; 
+             fbounds; fbounds = fbounds->next)
+        {
+          vec2f screen_fbounds_translation = 
+            screen_translation + fbounds->bounds.pos();
+
+          Rect screen_fbounds = 
+            Rect::from(screen_fbounds_translation, fbounds->bounds.size());
+
+          drawDebugBorder(screen_fbounds, 0x335599ff);
+
+          if (screen_fbounds.containsPoint(frame_input.getCursorPos()))
+          {
+            next_focus_state.hovered = fbounds->id;
+          }
+        }
+      }
+    }
+
+    if (notnil(next_focus_state.hovered_panel))
+      break;
+  }
+
+  if (debug_cmds != nullptr)
+  {
+    mat3x2 screen_transform = mat3x2::createTransform(vec2f(0,0), 0.f);
+
+    TransformCmd transform_cmd = {};
+    transform_cmd.transform = &screen_transform;
+
+    ScissorCmd scissor_cmd = {};
+    scissor_cmd.bounds = viewport;
+
+    transform_cmd.execute(*this, *renderer);
+    scissor_cmd.execute(*this, *renderer);
+
+    for (Cmd* cmd = debug_cmds; cmd; cmd = cmd->next)
+    {
+      cmd->execute(*this, *renderer);
+    }
+  }
+
+  debug_cmds = nullptr;
 
   // Clean up the frame's memory.
   frame_allocator.clear();
@@ -145,6 +209,29 @@ void UI::endFrame()
   // Reset layer states.
   root_layer = nullptr;
   current_layer = nullptr;
+
+  if (notnil(next_focus_state.hovered) &&
+      frame_input.wasMouseButtonPressed(MouseButton::Left))
+  {
+    next_focus_state.focused = next_focus_state.hovered;
+    next_focus_state.focused_panel = next_focus_state.hovered_panel
+    next_focus_state.focused_layer_idx = next_focus_state.hovered_layer_idx;
+  }
+  else
+  {
+    next_focus_state.focused = focus_state.hovered;
+    next_focus_state.focused_panel = focus_state.hovered_panel
+    next_focus_state.focused_layer_idx = focus_state.hovered_layer_idx;
+  }
+
+  prev_focus_state = focus_state;
+  focus_state = next_focus_state;
+  next_focus_state = {};
+
+  TRACE("focus_state:",
+      "\n            hovered: ", focus_state.hovered.val,
+      "\n      hovered_panel: ", focus_state.hovered_panel.val,
+      "\n  hovered_layer_idx: ", focus_state.hovered_layer_idx, "\n");
 
   in_frame = false;
 }
@@ -187,6 +274,10 @@ void UI::pushLayer(FocusableId id, Rect bounds, LayerFlags flags)
 
   current_layer = next_layer;
 
+  layer_idx += 1;
+
+  current_layer->idx = layer_idx;
+
   beginPanel(id, bounds, prev_panel);
 }
 
@@ -200,6 +291,8 @@ void UI::popLayer()
 
   current_layer = current_layer->prev;
 
+  layer_idx -= 1;
+
   pushPanelRenderState(current_layer->current_panel);
 }
 
@@ -207,7 +300,7 @@ void UI::popLayer()
  */
 void UI::beginPanel(FocusableId id, Rect bounds, Panel* prev)
 {
-  DEBUG("UI::beginPanel\n");
+  DEBUG("UI::beginPanel(", id.val, ")\n");
 
   assert(notnil(id));
 
@@ -256,6 +349,30 @@ void UI::endPanel()
   current_layer->current_panel = current_panel->prev;
 
   pushPanelRenderState(current_layer->current_panel);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::putText(Rect bounds, String text, const TextSkinDef& skin)
+{
+  
+}
+
+/* ----------------------------------------------------------------------------
+ */
+FocusFlags UI::putButton(
+    FocusableId id, 
+    Rect bounds, 
+    const ButtonSkinDef& skin)
+{
+  FocusFlags focus = putFocusableBounds(id, bounds);
+
+  TextItemSkinDef* state_skin = &skin.normal;
+
+  if (focus.test(FocusFlag::Hovered))
+  {
+    if ()
+  }
 }
 
 /* ----------------------------------------------------------------------------
@@ -350,9 +467,82 @@ void QuadDrawCmd::execute(UI& ui, gfx::Renderer& renderer)
   renderer.draw(
     ui.draw_counts.y,
     drawn.y,
-    ui.draw_counts.x);
+    0);
 
   ui.draw_counts += drawn;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+FocusFlags UI::putFocusableBounds(FocusableId id, Rect bounds)
+{
+  TRACE("UI::putFocusableBounds(", id.val, ")\n");
+
+  Panel* current_panel = current_layer->current_panel;
+
+  auto* focusable = frame_allocator.construct<FocusableBounds>();
+  focusable->id = id;
+  focusable->bounds = bounds;
+
+  focusable->next = current_panel->fbounds;
+  current_panel->fbounds = focusable;
+  
+  // Check if these bounds were hovered or focused last frame.
+  FocusFlags result = {};
+
+  if (layer_idx == focus_state.hovered_layer_idx)
+  {
+    if (current_layer->current_panel->id == focus_state.hovered_panel)
+    {
+      if (focus_state.hovered == id)
+        result.set(FocusFlag::Hovered);
+    }
+  }
+
+  if (layer_idx == focus_state.focused_layer_idx)
+  {
+    if (current_layer->current_panel->id = focus_state.focused_panel)
+    {
+      if (focus_state.focused == id)
+        result.set(FocusFlag::Focused);
+    }
+  }
+
+  return result;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void BorderDrawCmd::execute(UI& ui, gfx::Renderer& renderer)
+{
+  renderer.bindTexture(ui.white_texture);
+
+  vec2i drawn = 
+    gfx::putBorders(
+      (gfx::Vertex*)ui.vertex_buffer.mapped_data,
+      (gfx::Index*)ui.index_buffer.mapped_data,
+      ui.draw_counts,
+      vec4f(1,1,1,1),
+      bounds.pos(),
+      bounds.size(),
+      color);
+
+  renderer.draw(ui.draw_counts.y, drawn.y, 0);
+ 
+  ui.draw_counts += drawn;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::drawDebugBorder(Rect bounds, Color color)
+{
+  auto* border_cmd = frame_allocator.construct<BorderDrawCmd>();
+
+  border_cmd->bounds = bounds;
+  border_cmd->color = color;
+
+  border_cmd->next = debug_cmds;
+  debug_cmds = border_cmd;
 }
 
 }

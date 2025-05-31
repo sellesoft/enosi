@@ -175,11 +175,18 @@ b8 Client::update()
 
   ui.beginFrame(ui_params);
   {
-    // ui.pushLayer("test_above"_fid, Rect::from(10, 10, 100, 100), {});
-    // {
-      ui.putQuad(Rect::from(0,0,10,10), 0xff0000ff);
-    // }
-    // ui.popLayer();
+    ui.pushLayer("test_above"_fid, Rect::from(10, 10, 100, 100), {});
+    {
+      ui::FocusFlags flags = 
+        ui.putFocusableBounds("test"_fid, Rect::from(0,0,10,10));
+
+      Color col = 0xff0000ff;
+      if (flags.test(ui::FocusFlag::Hovered))
+        col = 0x0000ffff;
+
+      ui.putQuad(Rect::from(0,0,10,10), col);
+    }
+    ui.popLayer();
 
     ui.putQuad(Rect::from(10, 10, 30, 30), 0x00ff00ff);
 
