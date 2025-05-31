@@ -22,6 +22,10 @@
 #include "io/IO.h"
 #include "io/Format.h"
 
+#if IRO_DEBUG && IRO_LOGGER_DEBUG_BREAK_ON_ERRORS
+#include "Platform.h"
+#endif // #if IRO_DEBUG && IRO_LOGGER_DEBUG_BREAK_ON_ERRORS
+
 #define __HELPER(v, r, nf, ...) \
   ((((u32)logger.verbosity <= (u32)Logger::Verbosity::v) && \
    (logger.log(Logger::Verbosity::v, nf, __VA_ARGS__), true)), r)
@@ -326,7 +330,11 @@ struct Logger
       }
     }
 
-    // assert(v != Verbosity::Fatal);
+#if IRO_DEBUG && IRO_LOGGER_DEBUG_BREAK_ON_ERRORS
+    if (   (v == Verbosity::Fatal || v == Verbosity::Error)
+        && iro::platform::isRunningUnderDebugger())
+      iro::platform::debugBreak();
+#endif // #if IRO_DEBUG && IRO_LOGGER_DEBUG_BREAK_ON_ERRORS
   }
 
   template<io::Formattable... T>

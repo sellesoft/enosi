@@ -29,6 +29,10 @@ elseif sys.cfg.cpp.compiler == "cl" then
   iro.report.pub.defines { IRO_CL=1 }
 end
 
+if sys.cfg.iro and sys.cfg.iro.break_on_error_log then
+  iro.report.pub.defines { IRO_LOGGER_DEBUG_BREAK_ON_ERRORS=1 }
+end
+
 for cfile in lake.find("src/**/*.cpp"):each() do
   iro.report.pub.CppObj(cfile)
 end
