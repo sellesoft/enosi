@@ -71,6 +71,7 @@ ffi.cdef
   s32  lua__getMaxJobs(void* lake);
 
   b8 lua__copyFile(String dst, String src);
+  b8 lua__moveFile(String dst, String src);
   b8 lua__chdir(String path);
   b8 lua__rm(String path, b8, b8);
   b8 lua__touch(String path);
@@ -366,6 +367,17 @@ end
 
 -- * --------------------------------------------------------------------------
 
+--- Moves the file at 'src' to 'dst'.
+---
+---@param src string
+---@param dst string
+---@return boolean
+lake.move = function(dst, src)
+  return C.lua__moveFile(makeStr(dst), makeStr(src))
+end
+
+-- * --------------------------------------------------------------------------
+
 --- Globs from the current working directory and returns a List 
 --- of all files that match the given pattern.
 ---
@@ -504,7 +516,7 @@ lake.cmd = function(args, options)
       -- try to read until we stop recieving data because the process can 
       -- report that its terminated before all of its buffered output is 
       -- consumed
-      while tryRead() ~= 0 do print("reading excess data ", handle) end
+      while tryRead() ~= 0 do end
 
       C.lua__processClose(lake.handle, handle)
 

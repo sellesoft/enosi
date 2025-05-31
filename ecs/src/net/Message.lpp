@@ -54,8 +54,8 @@ void Message::writeBits(u64 value)
   static_assert(BITS > 0 && BITS <= 64);
   if constexpr (BITS != 64)
     assert(value < ((1ULL << BITS) - 1ULL));
-  @log.trace("writing bits to message\n");
-  @log.debug("offset: ", this->size, ", value: ", value,
+  @log.trace("writing bits to message\n"
+             "offset: ", this->size, ", value: ", value,
              ", bits: ", BITS, "\n");
 
   if ((Message::MAX_SIZE - this->size) / 8 < BITS)
@@ -202,10 +202,10 @@ u64 Message::readBits()
   @log.trace("reading bits to message\n");
 
   u32 byte_cursor = this->cursor / 8;
-  if ((this->size - byte_cursor) < (BITS * 8))
+  if ((((u32)this->size * 8) - this->cursor) < BITS)
   {
     @log.warn("message overflow\n");
-    this->cursor = this->size;
+    this->cursor = this->size * 8;
     return 0;
   }
 
@@ -237,7 +237,7 @@ u64 Message::readBits()
   {
     static_assert(!"arbitrary bit size reading not setup yet");
   }
-  @log.debug("offset: ", this->cursor, ", value: ", value,
+  @log.trace("offset: ", this->cursor, ", value: ", value,
              ", bits: ", BITS, "\n");
 
   return value;
@@ -325,8 +325,16 @@ f32 Message::readAngle16()
 void Message::readData(u8* data, u16 bytes)
 {
   constexpr u32 max_cursor = (u32)Message::MAX_SIZE * 8;
-  for (u16 i = 0; i < bytes && this->cursor < max_cursor; i++)
-    data[i] = this->readBits<8>();
+  if (data == nullptr)
+  {
+    for (u16 i = 0; i < bytes && this->cursor < max_cursor; i++)
+      this->readBits<8>();
+  }
+  else
+  {
+    for (u16 i = 0; i < bytes && this->cursor < max_cursor; i++)
+      data[i] = this->readBits<8>();
+  }
 }
 
 /* ----------------------------------------------------------------------------

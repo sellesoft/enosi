@@ -25,7 +25,8 @@ $ end -- if not IRO_WIN32
 #include "iro/Common.h"
 #include "iro/Unicode.h"
 #include "iro/memory/Memory.h"
-
+#include "iro/io/IO.h"
+#include "iro/io/Format.h"
 #include <cstdlib>
 #include <cstdio>
 
@@ -124,17 +125,12 @@ Address::Address(const u8* ipv6, u16 port)
   }
 }
 
-Address::Address(utf8::String address_string)
+Address::Address(String address_string)
 {
   this->type = AddressType::Invalid;
   if (address_string.isEmpty())
     return;
   assert(address_string.len <= 63);
-
-  // ensure the address string is null-terminated
-  io::StaticBuffer<63> address_buffer;
-  address_buffer.write(address_string);
-  address_string = address_buffer.asStr();
 
   // parse domain name address like "some.domain.com:8080"
   if (address_string.ptr[0] < '0' || address_string.ptr[0] > '9')
@@ -244,7 +240,7 @@ Address::Address(utf8::String address_string)
         had_shorthand = true;
 
         int remaining_colons = 0;
-        for (auto scan = remaining.sub(1); !scan.isEmpty(); 
+        for (auto scan = remaining.sub(1); !scan.isEmpty();
              scan = scan.sub(1))
         {
           if (scan.ptr[0] == ':') remaining_colons++;
@@ -310,7 +306,17 @@ Address::Address(utf8::String address_string)
         return; // number too large
 
       ip[ip_parts] = (u8)value;
-      remaining = remaining.sub(pos.x + 1);
+
+      if (pos.x + 1 >= remaining.len)
+      {
+        remaining.increment(pos.x + 1);
+        break;
+      }
+      else
+      {
+        remaining = remaining.sub(pos.x + 1);
+      }
+
       ip_parts++;
       continue;
     }
@@ -329,18 +335,36 @@ Address::Address(utf8::String address_string)
       ip[ip_parts] = (u8)value;
       remaining = remaining.sub(pos.x + 1);
       ip_parts++;
-      break;
+    }
+    else
+    {
+      auto num_str = remaining;
+      if (!num_str.isNumeric() || num_str.len > 3)
+        return; // invalid number
+
+      int value = atoi((const char*)num_str.ptr);
+      if (value > 255)
+        return; // number too large
+
+      remaining.increment(num_str.len);
+
+      ip[ip_parts] = (u8)value;
+      ip_parts++;
     }
 
     break;
   }
 
-  if (remaining.isEmpty() || !remaining.isNumeric() || remaining.len > 5)
-    return; // invalid port
+  int port = 0;
+  if (!remaining.isEmpty())
+  {
+    if (!remaining.isNumeric() || remaining.len > 5)
+      return; // invalid port
 
-  int port = atoi((const char*)remaining.ptr);
-  if (port > 65535)
-    return; // port too large
+    port = atoi((const char*)remaining.ptr);
+    if (port > 65535)
+      return; // port too large
+  }
 
   if (ip_parts != 4)
     return; // wrong number of IP parts
@@ -364,44 +388,16 @@ Address::Address(utf8::String address_string)
   }
 }
 
-io::StaticBuffer<64> Address::toString() const
-{
-  io::StaticBuffer<64> buffer;
-  if (this->type == AddressType::Offline)
-  {
-    buffer.write("offline"_str);
-    return buffer;
-  }
-
-  if (   this->ipv4._8zeros == 0 && this->ipv4._0000 == 0
-      && this->ipv4._ffff == 0xffff)
-  {
-    buffer.len = snprintf((char*)buffer.buffer, 64, "%u.%u.%u.%u:%u",
-      this->ipv4.ip[0], this->ipv4.ip[1],
-      this->ipv4.ip[2], this->ipv4.ip[3],
-      this->port);
-  }
-  else
-  {
-    buffer.len = snprintf((char*)buffer.buffer, 64,
-      "[%02x%02x:%02x%02x:%02x%02x:%02x%02x:"
-      "%02x%02x:%02x%02x:%02x%02x:%02x%02x]:%u",
-      this->ipv6[0], this->ipv6[1], this->ipv6[2], this->ipv6[3],
-      this->ipv6[4], this->ipv6[5], this->ipv6[6], this->ipv6[7],
-      this->ipv6[8], this->ipv6[9], this->ipv6[10], this->ipv6[11],
-      this->ipv6[12], this->ipv6[13], this->ipv6[14], this->ipv6[15],
-      this->port);
-  }
-  assert(buffer.len > 0);
-
-  return buffer;
-}
-
 Address Address::createOffline()
 {
   Address address;
   address.type = AddressType::Offline;
   return address;
+}
+
+Address Address::createLocalHost(u16 port)
+{
+  return Address(127, 0, 0, 1, port);
 }
 
 u32 Address::getIPv4() const
@@ -416,6 +412,53 @@ b8 Address::isIPv4() const
 {
   return this->ipv4._8zeros == 0 && this->ipv4._0000 == 0
     && this->ipv4._ffff == 0xffff;
+}
+
+s64 format(iro::io::IO* io, Address address)
+{
+  if (address.type == AddressType::Offline)
+  {
+    if (7 != io->write("offline"_str))
+      return false;
+    return true;
+  }
+
+  if (address.type == AddressType::Local)
+  {
+    if (10 > io::formatv(io, "localhost"_str, ":"_str, address.port))
+      return false;
+    return true;
+  }
+
+  if (   address.ipv4._8zeros == 0 && address.ipv4._0000 == 0
+      && address.ipv4._ffff == 0xffff)
+  {
+    if (0 > io::formatv(io, address.ipv4.ip[0], "."_str,
+                        address.ipv4.ip[1], "."_str,
+                        address.ipv4.ip[2], "."_str,
+                        address.ipv4.ip[3], ":"_str, address.port))
+      return false;
+  }
+  else
+  {
+    if (1 != io->write("["_str))
+      return false;
+
+    for (int i = 0; i < 16; i += 2)
+    {
+      if (i > 0 && 1 != io->write(":"_str))
+        return false;
+
+      if (2 != io::formatv(io, io::Hex<u8>(address.ipv6[i], 2, false, false),
+                           io::Hex<u8>(address.ipv6[i+1], 2, false, false)))
+        return false;
+    }
+
+    if (0 > io::formatv(io, "]:"_str, address.port))
+      return false;
+  }
+
+  return true;
 }
 
 }

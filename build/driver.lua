@@ -394,11 +394,19 @@ driver.subcmds.publish = function(args, no_write_ver)
             -- Remove any file that might already be there. This is done to 
             -- handle publishing lake, which is (at the time of writing) the
             -- program that will be running this script.
-            --
-            -- TODO(sushi) this probably wont work on Windows.
-            if lake.pathExists(target) then
-              lake.rm(target)
-            end
+			if sys.os == "windows" then
+				if lake.pathExists(target) then
+					local renamed = target..".old"
+					if lake.pathExists(renamed) then
+						lake.rm(renamed, {force = true})
+					end
+					lake.move(target..".old", target)
+				end
+			else
+				if lake.pathExists(target) then
+				  lake.rm(target)
+				end
+			end
 
             -- Copy the new file.
             lake.copy(target, bobjpath)

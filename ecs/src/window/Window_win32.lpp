@@ -152,12 +152,48 @@ LRESULT CALLBACK win32WindowCallback(
 
   case WM_MOUSEMOVE:
     {
-      inputmgr->mouse.window.x = GET_X_LPARAM(lparam);
-      inputmgr->mouse.window.y = GET_Y_LPARAM(lparam);
-      POINT screen = { GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam) };
-      ClientToScreen((HWND)window->handle, &screen);
-      inputmgr->mouse.screen.x = screen.x;
-      inputmgr->mouse.screen.y = screen.y;
+      vec2f window_pos = vec2f(GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam));
+      inputmgr->onCursorMove(window_pos);
+    }
+    return 0;
+
+  case WM_CHAR:
+    {
+      if (iswcntrl(LOWORD(wparam)))
+        return 0;
+
+      static wchar_t prev_wc; // used for utf-16 surrogate pairs
+      wchar_t wc = (wchar_t)wparam;
+      wchar_t wchars[2];
+      int wchar_count = 0;
+
+      if (IS_HIGH_SURROGATE(wc))
+      {
+        prev_wc = wc;
+      }
+      else if (IS_LOW_SURROGATE(wc))
+      {
+        if (IS_SURROGATE_PAIR(prev_wc, wc))
+        {
+          wchars[0] = prev_wc;
+          wchars[1] = wc;
+          wchar_count = 2;
+        }
+        prev_wc = 0;
+      }
+      else
+      {
+        wchars[0] = wc;
+        wchar_count = 1;
+      }
+
+      if (wchar_count)
+      {
+        char chars[8];
+        int char_count = WideCharToMultiByte(CP_UTF8, 0, wchars, wchar_count,
+          chars, 8, 0, 0);
+        inputmgr->onCharInput(String::from((u8*)chars, char_count));
+      }
     }
     return 0;
 
@@ -198,9 +234,9 @@ LRESULT CALLBACK win32WindowCallback(
           const RAWKEYBOARD& rawkb = p_raw_input->data.keyboard;
           Key key = rawKeyToKey(rawkb);
           if (rawkb.Flags & RI_KEY_BREAK)
-            inputmgr->keys_real.unset(key);
+            inputmgr->onKeyRelease(key);
           else
-            inputmgr->keys_real.set(key);
+            inputmgr->onKeyPress(key);
         }
         break;
 
@@ -214,9 +250,9 @@ LRESULT CALLBACK win32WindowCallback(
 
 $ local mbutton = function(wc, ec)
           if (rawm.ulButtons & RI_MOUSE_$(wc)_UP)
-            inputmgr->mouse_real.unset(MouseButton::$(ec));
+            inputmgr->onMButtonRelease(MouseButton::$(ec));
           if (rawm.ulButtons & RI_MOUSE_$(wc)_DOWN)
-            inputmgr->mouse_real.set(MouseButton::$(ec));
+            inputmgr->onMButtonPress(MouseButton::$(ec));
 $ end
           @mbutton(LEFT_BUTTON,   Left)
           @mbutton(RIGHT_BUTTON,  Right)
@@ -226,7 +262,8 @@ $ end
 
           if (rawm.ulButtons & RI_MOUSE_WHEEL)
           {
-            inputmgr->scroll += f32(s16(rawm.usButtonData)) / (f32)WHEEL_DELTA;
+            f32 scroll = f32(s16(rawm.usButtonData)) / (f32)WHEEL_DELTA;
+            inputmgr->onAddScroll(scroll);
           }
         }
         break;
@@ -355,9 +392,6 @@ b8 Window::init(String name, InputMgr& inputmgr)
  */
 b8 Window::update(InputMgr& input)
 {
-  // TODO(sushi) do this elsewhere.
-  input.scroll = 0.f;
-
   MSG msg;
   while (PeekMessage(&msg, (HWND)handle, 0, 0, PM_REMOVE))
   {

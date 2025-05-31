@@ -87,7 +87,14 @@ template<typename T>
 struct Hex
 {
   T& x;
-  Hex(T& x) : x(x) {}
+  u8 precision;
+  b8 uppercase;
+  b8 prefix;
+
+  Hex(T& x, u8 precision = 0, b8 uppercase = false, b8 prefix = true)
+    : x(x), precision(precision), uppercase(uppercase), prefix(prefix) {}
+  Hex(const T& x, u8 precision = 0, b8 uppercase = false, b8 prefix = true)
+    : x(x), precision(precision), uppercase(uppercase), prefix(prefix) {}
 };
 
 s64 format(IO* io, Hex<u8>  x);
@@ -109,6 +116,6 @@ struct ByteUnits
 
 s64 format(IO* io, ByteUnits x);
 
-}
+} // namespace iro::io
 
 #endif // _ilo_io_format_h

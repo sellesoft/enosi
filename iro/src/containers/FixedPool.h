@@ -114,11 +114,25 @@ struct FixedPool
     assert(index >= 0 && index < N_slots
       && "invalid index passed to atIndex");
 
-    if (index < 0 || index >= N_slots)
-      return nullptr;
+    return (T*)(slots + index);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  T& operator[](s32 index)
+  {
+    assert(index >= 0 && index < N_slots
+      && "invalid index passed to operator[]");
 
     return (T*)(slots + index);
   }
+
+  /* --------------------------------------------------------------------------
+   */
+  T* begin() { return (T*)slots; }
+  T* end()   { return (T*)(slots + N_slots); }
+  const T* begin() const { return (T*)slots; }
+  const T* end()   const { return (T*)(slots + N_slots); }
 
   // Manually written because C++ is very cool.
   struct NilTrait

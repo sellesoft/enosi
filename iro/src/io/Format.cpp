@@ -1,4 +1,4 @@
-#include "Common.h"
+#include "../Common.h"
 #include "IO.h"
 #include "Format.h"
 
@@ -6,6 +6,7 @@
 
 #include "stdlib.h"
 #include "stdio.h"
+#include "bit"
 
 namespace iro::io
 {
@@ -141,8 +142,8 @@ s64 format(IO* io, const SanitizeControlCharacters<char>& x)
 s64 format(IO* io, const SanitizeControlCharacters<String>& x)
 {
   StackArray<u8, 255> buffer;
-  
-  auto flush = 
+
+  auto flush =
     [&buffer, io]() { io->write(buffer.asSlice()); buffer.len = 0; };
 
   s64 bytes_written = 0;
@@ -153,7 +154,7 @@ s64 format(IO* io, const SanitizeControlCharacters<String>& x)
 
     for (u64 i = 0; i < s.len; ++i)
       *buffer.push() = s.ptr[i];
-    
+
     bytes_written += s.len;
   };
 
@@ -181,60 +182,103 @@ s64 format(IO* io, const SanitizeControlCharacters<String>& x)
   return bytes_written;
 }
 
+template<typename T>
+static s64 formatHexWithPrecision(
+  IO* io,
+  T value,
+  u8 precision,
+  b8 uppercase,
+  b8 prefix)
+{
+  constexpr u8 max_digits = sizeof(T) * 2;
+
+  // determine precision if not provided
+  if (precision == 0 || precision > max_digits)
+  {
+    u8 digits = max_digits;
+    T mask = (T)(0xF) << ((digits - 1) * 4);
+    while (digits > 1 && (value & mask) == 0)
+    {
+      digits--;
+      mask >>= 4;
+    }
+    precision = digits;
+  }
+
+  s64 total = 0;
+
+  // write prefix
+  if (prefix)
+  {
+    if (2 != io->write("0x"_str))
+      return -1;
+    total += 2;
+  }
+
+  // write leading zeros
+  for (u8 i = precision; i < max_digits; i++)
+  {
+    if (1 != io->write("0"_str))
+      return -1;
+    total += 1;
+  }
+
+  // write hex digits
+  for (s8 i = (precision - 1) * 4; i >= 0; i -= 4)
+  {
+    u8 digit = (value >> i) & 0xF;
+    char c = digit < 10 ? '0' + digit :
+      (uppercase ? 'A' : 'a') + (digit - 10);
+    if (1 != io->write({(u8*)&c, 1}))
+      return -1;
+    total += 1;
+  }
+
+  return total;
+}
+
 s64 format(IO* io, Hex<u8> x)
 {
-  u8  buffer[32];
-  u64 len = snprintf((char*)buffer, 32, "0x%hhx", x.x);
-  return io->write({buffer, len});
+  return formatHexWithPrecision(io, x.x, x.precision, x.uppercase, x.prefix);
 }
 
 s64 format(IO* io, Hex<u16> x)
 {
-  u8  buffer[32];
-  u64 len = snprintf((char*)buffer, 32, "0x%hx", x.x);
-  return io->write({buffer, len});
+  return formatHexWithPrecision(io, x.x, x.precision, x.uppercase, x.prefix);
 }
 
 s64 format(IO* io, Hex<u32> x)
 {
-  u8  buffer[32];
-  u64 len = snprintf((char*)buffer, 32, "0x%x", x.x);
-  return io->write({buffer, len});
+  return formatHexWithPrecision(io, x.x, x.precision, x.uppercase, x.prefix);
 }
 
 s64 format(IO* io, Hex<u64> x)
 {
-  u8  buffer[32];
-  u64 len = snprintf((char*)buffer, 32, "0x%lx", x.x);
-  return io->write({buffer, len});
+  return formatHexWithPrecision(io, x.x, x.precision, x.uppercase, x.prefix);
 }
 
 s64 format(IO* io, Hex<s8> x)
 {
-  u8  buffer[32];
-  u64 len = snprintf((char*)buffer, 32, "0x%hhx", x.x);
-  return io->write({buffer, len});
+  return formatHexWithPrecision(io, std::bit_cast<u8>(x.x),
+                                x.precision, x.uppercase, x.prefix);
 }
 
 s64 format(IO* io, Hex<s16> x)
 {
-  u8  buffer[32];
-  u64 len = snprintf((char*)buffer, 32, "0x%hx", x.x);
-  return io->write({buffer, len});
+  return formatHexWithPrecision(io, std::bit_cast<u16>(x.x),
+                                x.precision, x.uppercase, x.prefix);
 }
 
 s64 format(IO* io, Hex<s32> x)
 {
-  u8  buffer[32];
-  u64 len = snprintf((char*)buffer, 32, "0x%x", x.x);
-  return io->write({buffer, len});
+  return formatHexWithPrecision(io, std::bit_cast<u32>(x.x),
+                                x.precision, x.uppercase, x.prefix);
 }
 
 s64 format(IO* io, Hex<s64> x)
 {
-  u8  buffer[32];
-  u64 len = snprintf((char*)buffer, 32, "%lx", x.x);
-  return io->write({buffer, len});
+  return formatHexWithPrecision(io, std::bit_cast<u64>(x.x),
+                                x.precision, x.uppercase, x.prefix);
 }
 
 s64 format(IO* io, ByteUnits x)

@@ -44,7 +44,7 @@ int lua__setEnvVar(lua_State* L);
 #undef stderr
 #undef stdin
 
-static Logger logger = Logger::create("lake"_str, 
+static Logger logger = Logger::create("lake"_str,
     Logger::Verbosity::Notice);
 
 /* ----------------------------------------------------------------------------
@@ -145,13 +145,13 @@ b8 Lake::init(const char** argv, int argc, mem::Allocator* allocator)
     return ERROR("failed to init active process pool\n");
 
   // TODO(sushi) maybe just use raw process handles and remove iro's
-  //             whole Process interface in favor of just putting 
-  //             Process platform stuff in its own interface and 
-  //             splitting up the Platform.h stuff into different 
+  //             whole Process interface in favor of just putting
+  //             Process platform stuff in its own interface and
+  //             splitting up the Platform.h stuff into different
   //             files to begin with.
   active_process_pool = Pool<Process>::create(allocator);
 
-  if (!active_recipes.init(allocator)) 
+  if (!active_recipes.init(allocator))
     return false;
   active_recipe_count = 0;
 
@@ -204,7 +204,7 @@ static b8 processMaxJobsArg(Lake* lake, ArgIter* iter)
   {
     if (!isdigit(*scan))
     {
-      FATAL("given argument '", arg, "' after '", mjarg, 
+      FATAL("given argument '", arg, "' after '", mjarg,
             "' must be a number\n");
       return false;
     }
@@ -224,8 +224,8 @@ static b8 processMaxJobsArg(Lake* lake, ArgIter* iter)
 /* ----------------------------------------------------------------------------
  */
 static b8 processArgDoubleDash(
-    Lake* lake, 
-    String arg, 
+    Lake* lake,
+    String arg,
     ArgIter* iter)
 {
   switch (arg.hash())
@@ -248,7 +248,7 @@ static b8 processArgDoubleDash(
             " via command line argument.\n"); \
         logger.verbosity = Logger::Verbosity::level;\
         break;
-      
+
       verbmap("trace", Trace);
       verbmap("debug", Debug);
       verbmap("info", Info);
@@ -283,8 +283,8 @@ static b8 processArgDoubleDash(
 /* ----------------------------------------------------------------------------
  */
 static b8 processArgSingleDash(
-    Lake* lake, 
-    String arg, 
+    Lake* lake,
+    String arg,
     ArgIter* iter)
 {
   switch (arg.hash())
@@ -352,7 +352,7 @@ b8 Lake::run()
   auto lakefile_start = TimePoint::monotonic();
 
   lua.require("Errh"_str);
-  if (!lua.loadfile((char*)initpath.ptr) || 
+  if (!lua.loadfile((char*)initpath.ptr) ||
       !lua.pcall(0,1))
   {
     ERROR("failed to run ", initpath, ": ", lua.tostring(), "\n");
@@ -361,14 +361,14 @@ b8 Lake::run()
   }
 
   if (print_timers)
-    NOTICE("lakefile took ", 
+    NOTICE("lakefile took ",
            WithUnits(TimePoint::monotonic() - lakefile_start), "\n");
 
   if (lua.isboolean())
   {
     // If the lakefile returns false, dont move onto building.
     // Other other kind of return is ignored.
-    // TODO(sushi) make what the lakefile returns explicit, or have them 
+    // TODO(sushi) make what the lakefile returns explicit, or have them
     //             signal not to perform building via a lake api function
     //             or something.
     if (!lua.toboolean())
@@ -382,7 +382,7 @@ b8 Lake::run()
   // for (Task& task : tasks)
   // {
   //   INFO("task ", task.name, ":\n");
-  //   
+  //
   //   INFO("  prereqs:\n");
   //   for (Task& prereq : task.prerequisites)
   //   {
@@ -401,7 +401,7 @@ b8 Lake::run()
     return ERROR("cycle detected\n");
 
   if (print_timers)
-    NOTICE("top sort took ", WithUnits(TimePoint::monotonic() - sort_start), 
+    NOTICE("top sort took ", WithUnits(TimePoint::monotonic() - sort_start),
          "\n");
 
   for (Task& task : build_queue)
@@ -409,7 +409,7 @@ b8 Lake::run()
     if (task.isLeaf())
       addLeaf(&task);
   }
-    
+
   b8 success = true;
   for (u64 build_pass = 0, recipe_pass = 0;;)
   {
@@ -440,7 +440,7 @@ b8 Lake::run()
       }
     }
 
-    while (max_jobs <= active_recipe_count || 
+    while (max_jobs <= active_recipe_count ||
           (active_recipe_count && leaves.isEmpty()))
     {
       TaskList::Node* task_node = active_recipes.head;
@@ -526,7 +526,7 @@ Task* lua__createTask(Lake* lake, String name)
 EXPORT_DYNAMIC
 void lua__makeDep(Task* task, Task* prereq)
 {
-  INFO("Making '", prereq->name, "' a prerequisite of task '", 
+  INFO("Making '", prereq->name, "' a prerequisite of task '",
        task->name, "'.\n");
   task->prerequisites.insert(prereq);
   prereq->dependents.insert(task);
@@ -596,10 +596,10 @@ Process* lua__processSpawn(Lake* lake, String* args, u32 args_count)
     auto cwd = fs::Path::cwd();
     DEBUG("in dir ", cwd, "\n");
     cwd.destroy();
-  } 
+  }
 
   Process* proc = lake->active_process_pool.add();
-  *proc = 
+  *proc =
     Process::spawn(args[0], {.ptr=args+1, .len=args_count-1}, nil);
   if (isnil(*proc))
   {
@@ -614,7 +614,7 @@ Process* lua__processSpawn(Lake* lake, String* args, u32 args_count)
  */
 EXPORT_DYNAMIC
 void lua__processRead(
-    Process* proc, 
+    Process* proc,
     void* ptr, u64 len, u64* out_bytes_read)
 {
   assert(proc && ptr && len && out_bytes_read);
@@ -637,14 +637,14 @@ EXPORT_DYNAMIC
 b8 lua__processCheck(Process* proc, s32* out_exit_code)
 {
   assert(proc and out_exit_code);
-  
+
   proc->check();
   if (proc->status == Process::Status::ExitedNormally)
   {
     *out_exit_code = proc->exit_code;
     return true;
   }
-  
+
   if (proc->status == Process::Status::ExitedFatally)
   {
     // Set exit code to one for the process since it crashed.
@@ -703,7 +703,7 @@ void lua__setMaxJobs(Lake* lake, s32 n)
   {
     // NOTICE("max_jobs set to ", n, " from lakefile call to lake.maxjobs\n");
 
-    // TODO(sushi) make a thing to get number of logical processors and also 
+    // TODO(sushi) make a thing to get number of logical processors and also
     //             warn here if max jobs is set too high
     lake->max_jobs = n;
   }
@@ -774,6 +774,14 @@ b8 lua__copyFile(String dst, String src)
 /* ----------------------------------------------------------------------------
  */
 EXPORT_DYNAMIC
+b8 lua__moveFile(String dst, String src)
+{
+  return fs::File::rename(dst, src);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+EXPORT_DYNAMIC
 b8 lua__rm(String path, b8 recursive, b8 force)
 {
   // TODO(sushi) move to iro
@@ -782,7 +790,7 @@ b8 lua__rm(String path, b8 recursive, b8 force)
   if (!Path::isDirectory(path))
     return File::unlink(path);
 
-  // TODO(sushi) uhh apparently i forgot to implement the non-recursive part 
+  // TODO(sushi) uhh apparently i forgot to implement the non-recursive part
   //             of this so do that when i actually use it :P
   if (recursive)
   {
@@ -792,14 +800,14 @@ b8 lua__rm(String path, b8 recursive, b8 force)
 
     u64 file_count = 0;
 
-    struct DirEntry 
-    { 
-      Dir dir; 
-      Path* path; 
-      SList<Path> files; 
+    struct DirEntry
+    {
+      Dir dir;
+      Path* path;
+      SList<Path> files;
 
-      DirEntry() : dir(nil), path(nil), files(nil) {} 
-      DirEntry(Dir&& dir, Path* path, mem::Bump* bump) 
+      DirEntry() : dir(nil), path(nil), files(nil) {}
+      DirEntry(Dir&& dir, Path* path, mem::Bump* bump)
         : dir(dir), path(path) { files = SList<Path>::create(bump); }
     };
 
@@ -808,8 +816,8 @@ b8 lua__rm(String path, b8 recursive, b8 force)
     auto dirstack = DList<DirEntry>::create(&bump);
     auto dirqueue = DList<DirEntry>::create(&bump);
 
-    defer 
-    { 
+    defer
+    {
       for (auto& path : pathpool.list)
         path.destroy();
 
@@ -868,8 +876,8 @@ b8 lua__rm(String path, b8 recursive, b8 force)
 
     if (!force && file_count)
     {
-      io::formatv(&fs::stdout, 
-          "Are you sure you want to delete all ", file_count, " files in '", 
+      io::formatv(&fs::stdout,
+          "Are you sure you want to delete all ", file_count, " files in '",
           path, "'? [y/N] ");
       u8 c;
       fs::stdin.read({&c, 1});
@@ -892,10 +900,11 @@ b8 lua__rm(String path, b8 recursive, b8 force)
   }
   else
   {
-    ERROR("cannot rm path '", path, "' because either its a directory and "
-          "recursive was not specified or because I still have not added "
-          "non-recursive rm yet ;_;\n");
-    return false;
+	if (!platform::unlinkFile(path))
+	{
+		ERROR("cannot rm path '", path, "'\n");
+		return false;
+	}
   }
 
   return true;
@@ -943,13 +952,23 @@ int lua__getEnvVar(lua_State* L)
 		return ERROR("lua__getEnvVar expects a string as first argument\n");
 
 	String var = lua.tostring(1);
+	TRACE("lua__getEnvVar(\"", var, "\")\n");
 
 	s32 bytes_needed = platform::getEnvVar(var, nil);
+	if (bytes_needed == -1)
+	{
+	 lua.pushnil();
+	 return 1;
+	}
 
   auto buffer = Bytes::from(
       (u8*)mem::stl_allocator.allocate(bytes_needed), bytes_needed);
+  if (buffer.ptr == nullptr)
+    return ERROR("lua__getEnvVar failed to allocate space for a string"
+                 " of ", bytes_needed, " bytes\n");
 
   s32 bytes_written = platform::getEnvVar(var, buffer);
+  DEBUG("lua__getEnvVar(\"", var, "\") == \"", String::from(buffer), "\"\n");
 
 	lua.pushstring(String::from(buffer));
 

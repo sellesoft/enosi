@@ -62,7 +62,7 @@ struct Engine
   // These are how the Engine runs the game, and the Engine has little to 
   // no access to game systems.
   Client* client;
-  Server* server;
+  void* server_thread;
 
   // Time point at which the Engine finished initialization.
   TimePoint init_time;

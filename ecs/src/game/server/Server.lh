@@ -5,13 +5,17 @@
 $ require "common"
 
 #include "iro/Common.h"
-#include "iro/containers/StackArray.h"
+#include "iro/io/IO.h"
 
 struct Engine;
 struct Server;
 
 namespace sv
 {
+
+/* ============================================================================
+ */
+static constexpr u64 MAX_PASSWORD_LENGTH = 64;
 
 /* ============================================================================
  */
@@ -32,30 +36,17 @@ struct CreateParams
   u64 match_allocation_size;
   u64 tick_allocation_size;
   s64 target_tickrate_ms;
-  b8 dedicated;
   ServerPublicity publicity;
-  u16 max_clients;
-  StackArray<u8, 64> password;
+  u16 max_sessions;
+  io::StaticBuffer<MAX_PASSWORD_LENGTH-1> password;
 };
 
 /* ----------------------------------------------------------------------------
  */
-Server* create(const CreateParams& params);
+void* create(CreateParams& params);
 
 /* ----------------------------------------------------------------------------
  */
-void destroy(Server* server);
-
-/* ----------------------------------------------------------------------------
- */
-b8 startMatch(Server* server, u64 map_name, b8 existing);
-
-/* ----------------------------------------------------------------------------
- */
-void stopMatch(Server* server);
-
-/* ----------------------------------------------------------------------------
- */
-b8 update(Server* server);
+void destroy();
 
 } // namespace sv

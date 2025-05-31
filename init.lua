@@ -443,6 +443,8 @@ do
     {
       "luajit"
     }
+    exe_params.use_groups = true
+    exe_params.export_dynamic = true
   end
   exe_params.debug_info = true
   exe_params.address_sanitizer = address_sanitizer
@@ -541,6 +543,8 @@ do
     {
       "luajit"
     }
+    exe_params.use_groups = true
+    exe_params.export_dynamic = true
   end
   exe_params.address_sanitizer = address_sanitizer
 

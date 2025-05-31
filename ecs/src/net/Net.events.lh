@@ -1,0 +1,62 @@
+/*
+ *  Uncategorized network events. Systems and components should define their
+ *  own events elsewhere.
+ * 
+ *  The 'metadata.netevent' attribute is used to identify net event structs.
+ *  Event IDs are auto-generated.
+ *    eg: metadata.netevent({})
+ * 
+ *  A priority message will be sent out of sequence, meaning that it will be
+ *  sent the frame it's raised regardless of wether the client has acknowledged
+ *  the previous message.
+ *    eg: metadata.netevent({priority = true})
+ * 
+ *  A broadcast message will be sent to all clients. If broadcast is false,
+ *  the net event must have a session field which will identify the recipient.
+ *  Defaults to true.
+ *    eg: metadata.netevent({broadcast = false})
+ * 
+ *  An event can have a fixed maximum of subscribers.
+ *  Defaults to 10.
+ *    eg: metadata.netevent({max_subscribers = 10})
+ * 
+ *  The 'metadata.netfield_blob' attribute is used to define a blob of data
+ *  whose size is the value of the expression passed as an argument. 'event'
+ *  is an implicit variable that refers to the event struct.
+ *    eg: u32 texture_width, texture_height;
+ *        metadata.netfield_blob(event.texture_width * event.texture_height)
+ *        u32* texture_data;
+ *
+ *  The 'metadata.netfield_ignore' attribute is used to mark fields that should
+ *  not be sent over the network.
+ *    eg: metadata.netfield_ignore({})
+ *        void* local_data;
+ */
+$ require "common"
+$ local metadata = require "reflect.Metadata"
+
+/* ============================================================================
+ */
+@metadata.netevent({priority = true, broadcast = false})
+struct ConnectionNetEvent
+{
+  @metadata.netfield_ignore({})
+  void* session;
+
+  u8 name_length;
+  @metadata.netfield_blob(event.name_length)
+  u8* name;
+};
+
+/* ============================================================================
+ */
+@metadata.netevent({priority = false, broadcast = false})
+struct MessageNetEvent
+{
+  @metadata.netfield_ignore({})
+  void* session;
+
+  u16 message_length;
+  @metadata.netfield_blob(event.message_length)
+  u8* message;
+};

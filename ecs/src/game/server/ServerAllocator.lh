@@ -19,8 +19,7 @@ struct ServerAllocator : public iro::mem::Allocator
   u64 size;
   u64 used;
 
-  b8 init(u64 size);
-  void deinit();
+  b8 init(void* backing, u64 size);
   void clear();
 
   void* allocate(u64 size) override;

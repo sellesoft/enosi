@@ -52,13 +52,10 @@ $ end
 
   if (launch_args.find("-dedicated"_hashed))
   {
-    StackArray<u8, 64> password = {};
+    io::StaticBuffer<sv::MAX_PASSWORD_LENGTH-1> password = {};
     LaunchArg* password_arg = launch_args.find("-password"_hashed);
     if (password_arg != nullptr)
-    {
-      password.len = min<u64>(64ULL, password_arg->value.len);
-      mem::copy(password.arr, password_arg->value.ptr, password.len);
-    }
+      password.write(password_arg->value);
 
     sv::CreateParams server_params =
     {
@@ -67,13 +64,14 @@ $ end
       .match_allocation_size = unit::megabytes(1),
       .tick_allocation_size = unit::megabytes(2),
       .target_tickrate_ms = 48,
-      .dedicated = true,
       .publicity = (password.len > 0)
         ? sv::ServerPublicity::Password : sv::ServerPublicity::Public,
-      .max_clients = 8,
+      .max_sessions = 8,
       .password = password,
     };
-    server = sv::create(server_params);
+    server_thread = sv::create(server_params);
+    if (server_thread == nullptr)
+      return FATAL("failed to create server thread\n");
   }
   else
   {
@@ -112,8 +110,6 @@ b8 Engine::update()
 
   if (client)
     client->update();
-  if (server)
-    sv::update(server);
 
   // inspector->fps->dirty = true;
   //

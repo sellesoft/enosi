@@ -40,11 +40,19 @@ struct FragmentHeader
 static constexpr u16 MAX_FRAGMENT_SIZE = 1200;
 static constexpr u16 MAX_FRAGMENT_DATA_SIZE =
   MAX_FRAGMENT_SIZE - sizeof(FragmentHeader);
+static constexpr u16 SERVER_PORT = 40230;
 
 /* ============================================================================
  */
 struct Connection
 {
+  enum struct State
+  {
+    Disconnected,
+    Challenging,
+    Connected,
+  } state;
+
   Address address;
 
   u32 acknowledged_sequence;
@@ -67,7 +75,7 @@ struct Connection
   iro::mem::Allocator* allocator;
 
 
-  b8 init(Source source, Address address, iro::mem::Allocator* allocator);
+  b8 init(Address address, iro::mem::Allocator* allocator);
 
   // priority messages are sent out-of-sequence
   // returns true if the message was sent, fragmented, or queued
@@ -75,6 +83,10 @@ struct Connection
   b8 sendNextFragment();
 
   void receive(Source source, iro::StackArray<u8, MAX_FRAGMENT_SIZE>& data);
+
+  // locks the connection on the thread for offline messages
+  void lock(Source source);
+  void unlock(Source source);
 };
 
 /* ----------------------------------------------------------------------------
@@ -84,6 +96,11 @@ b8 init();
 /* ----------------------------------------------------------------------------
  */
 void deinit();
+
+/* ----------------------------------------------------------------------------
+ * Binds the socket to a specific port. Should only be called by servers.
+ */
+b8 bind(u16 port);
 
 /* ----------------------------------------------------------------------------
  */
