@@ -7,9 +7,7 @@ local lppclang = sys.getLoadingProject()
 lppclang:dependsOn("llvm", "iro")
 
 for cfile in lake.find("src/**/*.cpp"):each() do 
-  --if not cfile:find("main%.cpp") then
-    lppclang.report.CppObj(cfile)
-  --end
+  lppclang.report.CppObj(cfile)
 end
 
 for lfile in lake.find("src/**/*.lua"):each() do

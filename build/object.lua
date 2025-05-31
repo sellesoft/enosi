@@ -532,9 +532,6 @@ local defineLinkerTask = function(self, is_shared, lib_filter)
 
   -- some commands don't exist on windows/linux
   if sys.os == "windows" then
-    params.start_group = ""
-    params.end_group = ""
-    params.export_dynamic = ""
     -- TODO: support launching without a console
     if "ld" == params.linker
       or "lld" == params.linker
@@ -550,10 +547,8 @@ local defineLinkerTask = function(self, is_shared, lib_filter)
       error("unhandled linker "..params.linker)
     end
   else
-    params.start_group = "-Wl,--start-group"
-    params.end_group = "-Wl,--end-group"
-    params.export_dynamic = "-Wl,-E"
-    params.subsystem = ""
+    params.use_groups = true
+    params.export_dynamic = true
   end
 
   local cmd = build.cmd.Exe.new(params)

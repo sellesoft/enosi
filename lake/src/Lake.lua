@@ -516,7 +516,7 @@ lake.cmd = function(args, options)
       -- try to read until we stop recieving data because the process can 
       -- report that its terminated before all of its buffered output is 
       -- consumed
-      while tryRead() ~= 0 do print("reading excess data ", handle) end
+      while tryRead() ~= 0 do end
 
       C.lua__processClose(lake.handle, handle)
 

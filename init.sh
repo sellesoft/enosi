@@ -7,7 +7,7 @@ echo making sure luajit submodule is initialized...
 git submodule update --init luajit ||
   { echo initializing luajit failed!; exit 1; }
 
-mkdir bin
+mkdir -p bin
 
 if ! test -f bin/luajit;
 then
@@ -40,6 +40,8 @@ then
   echo retrieving asset server client executable...
   curl 15.204.247.107:3000/get_client?platform=linux -o bin/client ||
     { echo getting asset server client failed!; exit 1; }
+  echo making asset server client executable...
+  chmod +x bin/client
 fi
 
 if ! test -d llvm/llvm_build;

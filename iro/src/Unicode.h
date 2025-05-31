@@ -116,6 +116,11 @@ struct String
   // allocator. The length of the returned string will be the same.
   String nullTerminate(mem::Allocator* allocator) const;
 
+  b8 isNullTerminated() const
+  {
+    return *end() == '\0';
+  }
+
   String sub(s32 start) const
   {
     assert(start >= 0 && start < len);

@@ -361,6 +361,15 @@ cmd.Exe = Type:make()
 ---@field static_msvcrt boolean
 --- Warnings to disable.
 ---@field disabled_warnings string
+--- Group all lib arguments. This is primarily to avoid lib ordering issues
+--- when building lppclang as llvm has a ridiculous amount of libs to link 
+--- and I do not feel like figuring out the proper order. HOWEVER, I don't 
+--- know if this is even an issue anymore. It was at one point, but I remember
+--- NOT using it at one point and it still worked, though that may have been
+--- on Windows, idk!
+---@field use_groups boolean
+--- Export all symbols to the dynamic table.
+---@field export_dynamic boolean
 
 ---@param params cmd.Exe.Params
 ---@return cmd.Exe
@@ -385,7 +394,7 @@ cmd.Exe.new = function(params)
     o.partial = helpers.listBuilder(
       "clang++",
       "-fuse-ld="..params.linker,
-      params.subsystem,
+      params.subsystem or "",
       params.is_shared and "-shared",
       params.address_sanitizer and "-fsanitize=address",
       params.debug_info and "-g",
@@ -396,15 +405,15 @@ cmd.Exe.new = function(params)
       params.libdirs and params.libdirs:flatten():map(function(dir)
         return "-L"..dir
       end),
-      params.start_group,
+      params.use_groups and "-Wl,--start-group",
       params.shared_libs and params.shared_libs:flatten():map(function(lib)
         return "-l"..lib
       end),
       params.static_libs and params.static_libs:flatten():map(function(lib)
         return "-l"..lib
       end),
-      params.end_group,
-      params.export_dynamic)
+      params.use_groups and "-Wl,--end-group",
+      params.export_dynamic and "-Wl,-E")
       -- Tell the exe's dynamic linker to check the directory its in
       -- for shared libraries.
       -- NOTE(sushi) this is disabled for now as I'm not actually using it
@@ -490,38 +499,6 @@ cmd.StaticLib = function(params)
   else
     error("unhandled program "..params.program)
   end
-end
-
----@class cmd.Makefile
-cmd.Makefile = Type.make()
-
----@class cmd.Makefile.Params
-
----@param params cmd.Makefile.Params
-cmd.Makefile.new = function(params)
-  return helpers.listBuilder("make", "-j")
-end
-
----@class cmd.CMake
-cmd.CMake = Type.make()
-
----@class cmd.CMake.Params
---- What generator to use.
----@field generator string
---- Arguments passed to CMake.
----@field args iro.List
---- Path to the configuration directory.
----@field config_dir string
-
-cmd.CMake.new = function(params)
-  return helpers.listBuilder(
-    "cmake",
-    "-G",
-    params.generator or
-      error("no generator specified"),
-    params.config_dir,
-    params.args
-  )
 end
 
 return cmd

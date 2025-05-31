@@ -25,6 +25,8 @@
 #include "sys/sendfile.h"
 #include "sys/mman.h"
 
+#include "stdio.h"
+
 #include "valgrind/callgrind.h"
 
 #include "ctime"
@@ -409,6 +411,18 @@ b8 copyFile(String dst, String src)
     if (bytes_copied < 0)
       return reportErrno( "failed to copy '", src, "' to '", dst, "'");
   }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 moveFile(String dst, String src)
+{
+  assert(dst.isNullTerminated() && src.isNullTerminated());
+
+  if (-1 == rename((char*)src.begin(), (char*)dst.begin()))
+    return reportErrno("failed to move '", src, "' to '", dst, "'\n");
 
   return true;
 }
