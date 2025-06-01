@@ -22,8 +22,11 @@ struct SourceData
   // NOTE(sushi) all Strings on a SourceData are ALWAYS assumed to be 
   //             stored elsewhere! A SourceData will NEVER clean up 
   //             Strings stored on it upon deletion!!!
+  //             Typically, the Strings are allocated from the SourceDataFile
+  //             containing this SourceData, however this may not always
+  //             be the case!
 
-  String name;
+  String name = nil;
 
   struct Value
   {
@@ -42,6 +45,10 @@ struct SourceData
   Value val = {};
   String type = nil;
   Array<SourceData*> children = nil;
+
+  // A SourceData to inherit children from. The base SourceData and this one
+  // must of course both be Objects.
+  SourceData* base = nullptr;
 
   SourceData() {}
 

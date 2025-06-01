@@ -37,10 +37,29 @@ struct SourceDataParser
 
   b8 parseReturn();
   b8 parseAuxData(Token tok);
+
+  // Parse data that may start with an identifier followed by an '='.
+  b8 parsePossiblyNamedData(SourceData* data);
+
+  // Same as above, but when the token has already been parsed.
+  b8 parsePossiblyNamedData(Token tok, SourceData* data);
+
+  // Parse data that may start with an identifier specifying a typename or 
+  // some aux data to derive from.
+  b8 parsePossiblyTypedOrDerivedData(SourceData* data);
+
+  // Similar to the above, but disambiguate using 'tok', which should be 
+  // either a ':' in the case of derivation or a '{' in the case of typed
+  // data.
+  b8 parseTypedOrDerivedData(Token id, Token tok, SourceData* data);
+
+  // Parses some object data that may be typed.
   b8 parsePossiblyTypedData(SourceData* data);
+
+  // Parses some object data, eg. data wrapped in '{}'.
   b8 parseObjectData(SourceData* data);
-  b8 parseNamedOrPossiblyTypedData(SourceData* data);
-  b8 parseNamedOrPossiblyTypedData(Token tok, SourceData* data);
+
+  // Parses a value or untyped object data.
   b8 parseValueOrUntypedObject(Token tok, SourceData* data);
 
   Token nextToken();

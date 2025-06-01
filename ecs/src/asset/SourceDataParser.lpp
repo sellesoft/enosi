@@ -6,7 +6,7 @@ $ local cmn = require "common"
 #include "iro/Logger.h"
 #include "iro/Platform.h"
 
-@cmn.defFileLogger(srcdata.parse, Notice)
+@cmn.defFileLogger(srcdata.parse, Trace)
 
 /* ----------------------------------------------------------------------------
  */
@@ -18,7 +18,8 @@ void SourceDataParser::ScopedStage::onEnter(const char* funcname)
       min<u64>(10, 
         parser.scanner.cache.len - parser.scanner.cache_offset));
 
-  log("> ", funcname, ": '", io::SanitizeControlCharacters(preview), "'\n");
+  log("> ", funcname, ": '", io::SanitizeControlCharacters(preview), "' (",
+      parser.scanner.line, ':', parser.scanner.column, ")\n");
 }
 
 /* ----------------------------------------------------------------------------
@@ -82,6 +83,8 @@ $$$
 
     "Comma",
     "Equal",
+
+    "Colon",
 
     "Eof",
   }
@@ -149,11 +152,15 @@ b8 SourceDataParser::parseAuxData(Token tok)
   PARSER_STAGE;
   SourceData* data = file->addAuxData();
 
-  if (!parseNamedOrPossiblyTypedData(data))
-    return false;
+  data->name = tok.raw;
 
-  if (isnil(data->name))
-    return errorAt(tok, "aux data must be named\n");
+  tok = nextToken();
+
+  if (tok.kind != TK::Equal)
+    return errorAt(tok, "expected '=' after aux data name\n");
+
+  if (!parsePossiblyTypedOrDerivedData(data))
+    return false;
 
   return true;
 }
@@ -177,21 +184,69 @@ b8 SourceDataParser::parseReturn()
 
 /* ----------------------------------------------------------------------------
  */
-b8 SourceDataParser::parsePossiblyTypedData(SourceData* data)
+b8 SourceDataParser::parsePossiblyNamedData(SourceData* data)
+{
+  return parsePossiblyNamedData(nextToken(), data);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SourceDataParser::parsePossiblyNamedData(Token tok, SourceData* data)
 {
   PARSER_STAGE;
-  auto tok = nextToken();
   switch (tok.kind)
   {
   case TK::Identifier:
     {
-      data->type = tok.raw;
-
+      // This could be a name, type, or aux data to derive from.
+      auto id = tok;
       tok = nextToken();
-      if (tok.kind != TK::LBrace)
-        return errorAt(tok, "expected object data after typename\n");
 
-      if (!parseObjectData(data))
+      switch (tok.kind)
+      {
+      case TK::Equal:
+        {
+          // This is some named data.
+          data->name = id.raw;
+
+          if (!parsePossiblyTypedOrDerivedData(data))
+            return false;
+        }
+        break;
+
+      default:
+        // This is either a typename or some aux data to derive from.
+        if (!parseTypedOrDerivedData(id, tok, data))
+          return false;
+      }
+    }
+    break;
+
+  default:
+    if (!parseValueOrUntypedObject(tok, data))
+      return false;
+  }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SourceDataParser::parsePossiblyTypedOrDerivedData(SourceData* data)
+{
+  PARSER_STAGE;
+
+  auto tok = nextToken();
+
+  switch (tok.kind)
+  {
+  case TK::Identifier:
+    {
+      // Parse the next token and disambiguate.
+      auto id = tok;
+      tok = nextToken();
+
+      if (!parseTypedOrDerivedData(id, tok, data))
         return false;
     }
     break;
@@ -199,9 +254,87 @@ b8 SourceDataParser::parsePossiblyTypedData(SourceData* data)
   default:
     if (!parseValueOrUntypedObject(tok, data))
       return false;
-    break;
   }
+
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SourceDataParser::parseTypedOrDerivedData(
+    Token id, 
+    Token tok, 
+    SourceData* data)
+{
+  PARSER_STAGE;
+
+  // Disambiguate whether this id is being used as a typename or aux data
+  // id to derive from.
+
+  switch (tok.kind)
+  {
+  case TK::Colon:
+    {
+      // We are deriving from some aux data, so look it up by name and set
+      // it as base if it exists.
+      for (SourceData& aux : file->aux_data_list)
+      {
+        if (aux.name == id.raw)
+        {
+          data->base = &aux;
+          break;
+        }
+      }
+
+      if (data->base == nullptr)
+        return errorAt(id, "no aux data named '", id.raw, "'");
+
+      stage.log("parsed base ", data->base->name, "\n");
+
+      // Parse the following possibly typed data.
+      if (!parsePossiblyTypedData(data))
+        return false;
+    }
+    break;
+
+  case TK::LBrace:
+    {
+      // The id is being used as a typename, so set type and parse the 
+      // following object.
+      data->type = id.raw;
+
+      if (!parseObjectData(data))
+        return false;
+    }
+    break;
+
+  default:
+    return errorAt(tok, 
+      "expected ':' for inheritance or '{' for typed object");
+  }
+  
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SourceDataParser::parsePossiblyTypedData(SourceData* data)
+{
+  PARSER_STAGE;
+  auto tok = nextToken();
+
+  if (tok.kind == TK::Identifier)
+  {
+    data->type = tok.raw;
+    tok = nextToken();
+
+    if (tok.kind != TK::LBrace)
+      return errorAt(tok, "expected object data after typename\n");
+  }
+  else if (tok.kind != TK::LBrace)
+    return errorAt(tok, "expected typename or object data\n");
+
+  return parseObjectData(data);
 }
 
 /* ----------------------------------------------------------------------------
@@ -221,7 +354,7 @@ b8 SourceDataParser::parseObjectData(SourceData* obj)
 
     auto* data = file->allocateSourceData();
 
-    if (!parseNamedOrPossiblyTypedData(tok, data))
+    if (!parsePossiblyNamedData(tok, data))
       return false;
 
     if (first == nullptr)
@@ -246,55 +379,6 @@ b8 SourceDataParser::parseObjectData(SourceData* obj)
     }
   }
 
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 SourceDataParser::parseNamedOrPossiblyTypedData(SourceData* data)
-{
-  return parseNamedOrPossiblyTypedData(nextToken(), data);
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 SourceDataParser::parseNamedOrPossiblyTypedData(Token tok, SourceData* data)
-{
-  PARSER_STAGE;
-  switch (tok.kind)
-  {
-  case TK::Identifier:
-    {
-      auto id = tok;
-      tok = nextToken();
-      switch (tok.kind)
-      {
-      case TK::Equal:
-        data->name = id.raw;
-        if (!parsePossiblyTypedData(data))
-          return false;
-        break;
-
-      case TK::LBrace:
-        {
-          data->type = id.raw;
-
-          if (!parseObjectData(data))
-            return false;
-        }
-        break;
-
-      default:
-        return errorAt(tok, "expected named or typed data\n");
-      }
-    }
-    break;
-
-  default:
-    if (!parseValueOrUntypedObject(tok, data))
-      return false;
-    break;
-  }
   return true;
 }
 
@@ -349,6 +433,7 @@ Token SourceDataParser::nextToken()
 
   stage.log(io::SanitizeControlCharacters(
     String::fromCStr(scanner.cache.ptr + scanner.cache_offset)), "\n");
+
 
   out.line = scanner.line;
   out.column = scanner.column;
@@ -436,6 +521,7 @@ local map =
   RBrace = "}",
   Comma = ",",
   Equal = "=",
+  Colon = ":",
 }
 $$$
 $ for k,v in pairs(map) do
