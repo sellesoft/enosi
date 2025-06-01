@@ -14,6 +14,7 @@ M.__index = function(_,k)
       v = v:gsub("[%c\"]",
         {
           ["\n"] = "\\n",
+          ["\r"] = "",
           ['"'] = '\\"',
         })
     else
@@ -27,8 +28,8 @@ end
 
 metadata.__parse = function(x)
   local o = {}
-  for k,v in x:gmatch '%.metadata%s+([%w_]+)%s+=%s+([^\n]+)' do
-    o[k] = v:sub(2,-2):gsub("\\n", "\n")
+  for k,v in x:gmatch '%.metadata%s+([%w_]+)%s+=%s+([^\r\n]+)' do
+    o[k] = v:sub(2,-2):gsub("\\[rn]", {["\\n"]="\n", ["\\r"]=""})
   end
   return o
 end
