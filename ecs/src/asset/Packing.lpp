@@ -44,6 +44,8 @@ struct Packer
 {
   PackedData* packed;
 
+  mem::Bump temp_allocator;
+
   template<typename T>
   b8 pack(const SourceData& data, T* out);
 };
@@ -209,6 +211,53 @@ $     if not field.metadata.hidden then
 $       putTypePacker(field.type)
 $     end
 $   end
+$ local ffields_name = decl:getIdSafeName().."_FoundFields"
+
+typedef BitArray<$(decl:getFieldCount())> $(ffields_name);
+
+/* ----------------------------------------------------------------------------
+ *  Nested recursive packer for gathering unspecified members of a struct 
+ *  from some SourceData's base if it has one.
+ */
+static b8 packStructWithBases(
+    Packer& packer, 
+    const SourceData& data, 
+    $(name)* out,
+    $(ffields_name)* found_fields)
+{
+  for (const SourceData* child : data.children)
+  {
+    if (isnil(child->name))
+      return ERROR("struct field data must be named\n");
+
+    switch (child->name.hash())
+    {
+$ for field, i in decl:eachFieldWithIndex() do
+    case "$(field.name)"_hashed:
+$   if field.metadata.hidden then
+      return ERROR("field '$(field.name)' of $(name) is marked hidden\n");
+$   else
+      if (!found_fields->test($(i)))
+      {
+        found_fields->set($(i));
+        if (!packer.pack(*child, &out->$(field.name)))
+          return ERROR("failed to pack field $(field.name) of $(name)\n");
+      }
+$   end
+      break;
+$ end
+    }
+  }
+
+  if (data.base != nullptr)
+  {
+    if (!packStructWithBases(packer, *data.base, out, found_fields))
+      return false;
+  }
+
+  return true;
+}
+
 /* ----------------------------------------------------------------------------
  */
 template<>
@@ -222,29 +271,11 @@ b8 Packer::pack(const SourceData& data, $(name)* out)
 
   mem::zero(out, sizeof($(name)));
 
-  BitArray<$(decl:getFieldCount())> found_fields = {};
+  $(ffields_name) found_fields = {};
 
-  for (const SourceData* child : data.children)
-  {
-    if (isnil(child->name))
-      return ERROR("struct field data must be named\n");
-
-    switch (child->name.hash())
-    {
-$ for field, i in decl:eachFieldWithIndex() do
-    case "$(field.name)"_hashed:
-$   if field.metadata.hidden then
-      return ERROR("field '$(field.name)' of $(name) is marked hidden\n");
-$   else
-      found_fields.set($(i));
-      if (!pack(*child, &out->$(field.name)))
-        return ERROR("failed to pack field $(field.name) of $(name)\n");
-$   end
-      break;
-$ end
-    }
-  }
-
+  if (!packStructWithBases(*this, data, out, &found_fields))
+    return false;
+ 
 $ for field,i in decl:eachFieldWithIndex() do
 $   if field.metadata.default and not field.metadata.hidden then
   if (!found_fields.test($(i)))

@@ -6,7 +6,7 @@ $ local cmn = require "common"
 #include "iro/Logger.h"
 #include "iro/Platform.h"
 
-@cmn.defFileLogger(srcdata.parse, Trace)
+@cmn.defFileLogger(srcdata.parse, Notice)
 
 /* ----------------------------------------------------------------------------
  */

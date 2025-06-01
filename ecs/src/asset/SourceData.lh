@@ -121,6 +121,11 @@ struct SourceData
       if (child->name == name)
         return child;
     }
+    
+    // If we dont have the child, try asking base for it if we have one.
+    if (base != nullptr)
+      return base->findChildByName(name);
+
     return nullptr;
   }
 

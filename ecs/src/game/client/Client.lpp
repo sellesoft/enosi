@@ -130,6 +130,13 @@ $ end
   // };
   // \@init(ui.init(ui_params), UI);
 
+  SourceDataFileHandle hskin = 
+    asset_loader.sfilereg.loadFromDisk("assets/skins/Test.skin"_str);
+
+  SourceDataFile* fskin = hskin.getFile();
+
+  fskin->returned_data->dump();
+
   ui::UI::InitParams ui_params = 
   {
     .assetmgr = engine->assetmgr,
