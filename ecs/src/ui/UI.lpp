@@ -146,7 +146,7 @@ void UI::endFrame()
       Rect screen_bounds = 
         Rect::from(screen_translation, panel->bounds.size());
 
-      drawDebugBorder(screen_bounds, 0x00ffaaff);
+      // drawDebugBorder(screen_bounds, 0x00ffaaff);
 
       if (screen_bounds.containsPoint(frame_input.getCursorPos()))
       {
@@ -162,7 +162,7 @@ void UI::endFrame()
           Rect screen_fbounds = 
             Rect::from(screen_fbounds_translation, fbounds->bounds.size());
 
-          drawDebugBorder(screen_fbounds, 0x335599ff);
+          // drawDebugBorder(screen_fbounds, 0x335599ff);
 
           if (screen_fbounds.containsPoint(frame_input.getCursorPos()))
           {
