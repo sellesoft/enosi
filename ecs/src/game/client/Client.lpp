@@ -153,6 +153,7 @@ $ end
 
   // \@init(editor.init(this), Editor);
 
+  asset_loader.load(&test_skin, "assets/skins/Test.skin"_str);
 
   this->net_event_bus.init(&mem::stl_allocator);
   this->net_event_bus.subscribe<ConnectionNetEvent>(this,
@@ -319,21 +320,40 @@ b8 Client::update()
 
   ui.beginFrame(ui_params);
   {
-    ui.pushLayer("test_above"_fid, Rect::from(10, 10, 100, 100), {});
+    ui.pushLayer("layer0"_fid, {10.f, 10.f, 50.f, 30.f}, {});
     {
-      ui::FocusFlags flags = 
-        ui.putFocusableBounds("test"_fid, Rect::from(0,0,10,10));
-
-      Color col = 0xff0000ff;
-      if (flags.test(ui::FocusFlag::Hovered))
-        col = 0x0000ffff;
-
-      ui.putQuad(Rect::from(0,0,10,10), col);
+      if (ui.putButton(
+            "test"_fid, 
+            {10.f, 10.f, 35.f, 15.f}, 
+            "hello"_str, 
+            test_skin->button))
+      {
+        INFO("hello\n");
+      }
     }
     ui.popLayer();
 
-    ui.putQuad(Rect::from(10, 10, 30, 30), 0x00ff00ff);
+    ui.pushLayer("layer1"_fid, { 10.f, 40.f, 50.f, 30.f}, {});
+    {
+      if (ui.putButton(
+            "test"_fid, 
+            {10.f, 10.f, 35.f, 15.f}, 
+            "goodbye"_str, 
+            test_skin->button))
+      {
+        INFO("goodbye\n");
+      }
+    }
+    ui.popLayer();
 
+    if (ui.putButton(
+          "test"_fid, 
+          {10.f, 15.f, 50.f, 30.f}, 
+          "blah"_str, 
+          test_skin->button))
+    {
+      INFO("blah\n");
+    }
   }
   ui.endFrame();
 
@@ -346,148 +366,11 @@ b8 Client::update()
 
 /* ----------------------------------------------------------------------------
  */
-b8 Client::compileRequiredAssets(AssetMgr& assetmgr)
-{
-  TRACE("compiling white and null textures\n");
-  {
-    mem::LenientBump texture_compile_allocator;
-    if (!texture_compile_allocator.init())
-      return ERROR("failed to initialize texture compile allocator\n");
-    defer { texture_compile_allocator.deinit(); };
-
-    gfx::CompiledTexture::CompileParams null_texture_params =
-    {
-      .name         = "assets/textures/null"_str,
-      .format       = gfx::ImageFormat::RGBA,
-      .usage        = gfx::ImageUsage::Sampled,
-      .filter       = gfx::ImageFilter::Nearest,
-      .address_mode = gfx::ImageAddressMode::ClampToWhite,
-      .allocator    = &texture_compile_allocator,
-      .assetmgr     = &assetmgr,
-    };
-
-    gfx::CompiledTexture::compilePNG(null_texture_params);
-
-    auto* null_texture_compiled =
-      gfx::CompiledTexture::load(
-        "assets/textures/null"_str, assetmgr, renderer);
-    if (null_texture_compiled == nullptr)
-      return ERROR("failed to load null texture\n");
-  }
-
-  TRACE("compiling shaders\n");
-  {
-    Ref::LoadParams load_params =
-    {
-      .renderer = renderer,
-      .assetmgr = engine->assetmgr,
-      .sfile_reg = &engine->source_data_file_reg,
-    };
-
-    auto compile = [&](String name)
-    {
-      gfx::ShaderRef ref;
-      ref.name = name;
-      if (!ref.load(load_params))
-        return ERROR("failed to load shader ", name, "\n");
-      return true;
-    };
-
-    if (!compile("assets/shaders/Fullscreen.vert"_str))
-      return false;
-
-    if (!compile("assets/shaders/Scene.frag"_str))
-      return false;
-
-    if (!compile("assets/shaders/Scene.vert"_str))
-      return false;
-
-    if (!compile("assets/shaders/Stars.frag"_str))
-      return false;
-
-    gfx::CompiledShader::CompileParams scene_vertex_shader_params =
-    {
-      .name      = "assets/shaders/scene.vertex"_str,
-      .kind      = gfx::ShaderKind::Vertex,
-      .allocator = &mem::stl_allocator,
-      .assetmgr  = &assetmgr,
-    };
-    gfx::CompiledShader::compileGLSL(scene_vertex_shader_params);
-
-    gfx::CompiledShader::CompileParams scene_fragment_shader_params =
-    {
-      .name      = "assets/shaders/scene.fragment"_str,
-      .kind      = gfx::ShaderKind::Fragment,
-      .allocator = &mem::stl_allocator,
-      .assetmgr  = &assetmgr,
-    };
-    gfx::CompiledShader::compileGLSL(scene_fragment_shader_params);
-
-    gfx::CompiledShader::CompileParams fullscreen_vertex_shader_params =
-    {
-      .name      = "assets/shaders/fullscreen.vertex"_str,
-      .kind      = gfx::ShaderKind::Vertex,
-      .allocator = &mem::stl_allocator,
-      .assetmgr  = &assetmgr,
-    };
-    gfx::CompiledShader::compileGLSL(fullscreen_vertex_shader_params);
-
-    gfx::CompiledShader::CompileParams stars_fragment_shader_params =
-    {
-      .name      = "assets/shaders/stars.fragment"_str,
-      .kind      = gfx::ShaderKind::Fragment,
-      .allocator = &mem::stl_allocator,
-      .assetmgr  = &assetmgr,
-    };
-    gfx::CompiledShader::compileGLSL(stars_fragment_shader_params);
-
-    gfx::CompiledShader::CompileParams ui_vertex_shader_params =
-    {
-      .name      = "assets/shaders/ui.vertex"_str,
-      .kind      = gfx::ShaderKind::Vertex,
-      .allocator = &mem::stl_allocator,
-      .assetmgr  = &assetmgr,
-    };
-    gfx::CompiledShader::compileGLSL(ui_vertex_shader_params);
-
-    gfx::CompiledShader::CompileParams ui_fragment_shader_params =
-    {
-      .name      = "assets/shaders/ui.fragment"_str,
-      .kind      = gfx::ShaderKind::Fragment,
-      .allocator = &mem::stl_allocator,
-      .assetmgr  = &assetmgr,
-    };
-    gfx::CompiledShader::compileGLSL(ui_fragment_shader_params);
-  }
-
-  TRACE("compiling gohu font\n");
-  {
-    CodepointRange ascii =
-    {
-      .first_codepoint = 32,
-      .num_codepoints = 94,
-    };
-
-    gfx::Font::CompileParams params =
-    {
-      .name       = "assets/fonts/gohu"_str,
-      .ranges     = CodepointRanges::from(&ascii, 1),
-      .allocator  = &mem::stl_allocator,
-      .assetmgr   = &assetmgr,
-    };
-
-    gfx::Font::compileBDF(params);
-  }
-
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
 b8 Client::wantHotReload()
 {
-  if (input.real_state.wasKeyPressed(Key::R))
-    return true;
+  // TODO(sushi) do this some other way later.
+  // if (input.real_state.wasKeyPressed(Key::R))
+  //   return true;
   return false;
 }
 

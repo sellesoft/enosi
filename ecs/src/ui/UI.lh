@@ -45,19 +45,11 @@ struct TextSkinDef;
  */
 enum class FocusFlag
 {
-  // The given focusable is hovered.
   Hovered, 
-
-  // The given focusable gained/lost hover this frame.
-  GainedHover,
-  LostHover,
-
-  // The given focusable has focus.
   Focused,
 
-  // The given focusable gained/lost focus this frame.
-  GainedFocus,
-  LostFocus,
+  Pressed,
+  Released,
 
   COUNT
 };
@@ -119,9 +111,9 @@ struct ScissorCmd : Cmd
 struct QuadDrawCmd : Cmd
 {
   gfx::Texture texture;
-  Rect uv;
   Color color;
   Rect bounds;
+  vec4f uv;
 
   void execute(UI& ui, gfx::Renderer& renderer) override;
 };
@@ -218,7 +210,10 @@ struct UI
   void beginFrame(const FrameParams& params);
   void endFrame();
 
-  void putQuad(Rect bounds, gfx::Texture texture, Rect uv, Color color);
+  // Returns the bounds of the currently active Panel.
+  Rect getBounds() const;
+
+  void putQuad(Rect bounds, gfx::Texture texture, vec4f uv, Color color);
   void putQuad(Rect bounds, gfx::Texture texture, Color color);
   void putQuad(Rect bounds, Color color);
 
@@ -235,15 +230,25 @@ struct UI
 
   void endPanel();
 
+  // Places a basic 'item', a decorated rect basically.
+  void putItem(Rect bounds, const ItemSkinDef& skin);
+
+  // Places undecorated text.
   void putText(Rect bounds, String text, const TextSkinDef& skin);
 
-  FocusFlags putButton(FocusableId id, Rect bounds, const ButtonSkinDef& skin);
+  // Places text with a background and various other decor (eventually).
+  void putTextItem(Rect bounds, String text, const TextItemSkinDef& skin);
+
+  // Returns true if clicked.
+  b8 putButton(
+    FocusableId id, 
+    Rect bounds, 
+    String text, 
+    const ButtonSkinDef& skin);
 
   // Pushes Cmds to the active Layer to transform and scissor successive Cmds
   // according to the given Panel.
   void pushPanelRenderState(Panel* panel);
-
-  Rect getBounds() const;
 
   // Bump allocator for memory allocated throughout a UI frame.
   mem::Bump frame_allocator;
@@ -277,6 +282,8 @@ struct UI
 
   struct FocusState
   {
+    // TODO(sushi) it would be nice to compress these, but for now this is 
+    //             probably ok.
     FocusableId focused;
     FocusableId hovered;
     FocusableId focused_panel;

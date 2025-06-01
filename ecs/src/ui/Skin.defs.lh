@@ -16,11 +16,7 @@ namespace ui
 struct ItemSkinDef
 {
   gfx::TextureRef texture;
-
-  @m.default "{x=0,y=0,w=1,h=1}"
   Rect uv;
-
-  @m.default "{r=25,g=25,b=25,a=255}"
   Color color;
 };
 
@@ -45,6 +41,7 @@ struct TextSkinDef
   Color        color;
   f32          font_height;
   f32          tab_spaces;
+  vec2f        align;
 };
 
 /* ============================================================================

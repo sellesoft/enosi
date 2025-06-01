@@ -1,1 +1,15 @@
+$ require "common"
+$ local m = require "reflect.Metadata"
 
+@@lpp.import "asset/Asset.lh"
+@@lpp.import "ui/Skin.defs.lh"
+
+@m.def
+@m.source_types(skin)
+struct TestSkinDef
+{
+  ui::TextSkinDef text;
+  ui::ButtonSkinDef button;
+};
+
+typedef TypedSourceAssetRef<TestSkinDef> TestSkinRef;

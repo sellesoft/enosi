@@ -17,7 +17,7 @@ using namespace iro;
 namespace ui
 {
 
-@log.ger(ui, Trace)
+@log.ger(ui, Info)
 
 /* ----------------------------------------------------------------------------
  */
@@ -172,7 +172,7 @@ void UI::endFrame()
       }
     }
 
-    if (notnil(next_focus_state.hovered_panel))
+    if (notnil(next_focus_state.hovered))
       break;
   }
 
@@ -353,25 +353,137 @@ void UI::endPanel()
 
 /* ----------------------------------------------------------------------------
  */
-void UI::putText(Rect bounds, String text, const TextSkinDef& skin)
+void UI::putItem(Rect bounds, const ItemSkinDef& skin)
 {
+  if (skin.color.a == 0)
+    // Skip queuing commands for invisible items.
+    return;
+
+  gfx::Texture texture;
+  vec4f uv;
+
+  if (skin.texture.isValid())
+  {
+    // Compute the uvs. It would be nice to cache this, since we should 
+    // know what the Texture is on load and it shouldn't change unless 
+    // the skin is reloaded.
+    const gfx::CompiledTexture& ctex = *skin.texture;
+    const gfx::CompiledTextureData& cdata = ctex.getData();
+
+    texture = ctex.gfx_texture;
+
+    vec2f tl = skin.uv.pos();
+    vec2f br = skin.uv.extent();
+
+    uv.x = tl.x / cdata.width;
+    uv.y = tl.y / cdata.height;
+    uv.z = br.x / cdata.width;
+    uv.w = br.y / cdata.height;
+  }
+  else
+  {
+    texture = white_texture;
+    uv = {};
+  }
   
+  putQuad(bounds, texture, uv, skin.color);
 }
 
 /* ----------------------------------------------------------------------------
  */
-FocusFlags UI::putButton(
+void UI::putText(Rect bounds, String text, const TextSkinDef& skin)
+{
+  // TODO(sushi) add a null font so that this isn't fatal.
+  assert(skin.font.isValid());
+
+  const gfx::Font& font = *skin.font;
+
+  gfx::PackedChar space_char;
+  font.getPackedChar(&space_char, ' ');
+  f32 space_width = space_char.xadvance;
+
+  vec2f cursor = bounds.pos();
+  const gfx::FontData& font_data = font.getData();
+
+  while (!text.isEmpty())
+  {
+    utf8::Codepoint cp = text.advance();
+
+    switch (cp.codepoint)
+    {
+    case '\n':
+      cursor.y += skin.font_height;
+      cursor.x = bounds.x;
+      break;
+
+    case '\t':
+      cursor.x += skin.tab_spaces * space_width;
+      break;
+
+    default:
+      {
+        gfx::PackedChar pc;
+        font.getPackedChar(&pc, cp.codepoint);
+        
+        vec4f uv = {};
+        uv.x = f32(pc.x0) / font_data.size_x;
+        uv.y = f32(pc.y0) / font_data.size_y;
+        uv.z = f32(pc.x1) / font_data.size_x;
+        uv.w = f32(pc.y1) / font_data.size_y;
+
+        auto glyph_size = vec2f(pc.x1 - pc.x0, pc.y1 - pc.y0);
+
+        // TODO(sushi) group quad commands so we aren't storing 
+        //             the same texture and color over and over again.
+        putQuad(
+          Rect::from(cursor, glyph_size), 
+          font.texture->gfx_texture,
+          uv,
+          skin.color);
+
+        cursor.x += pc.xadvance;
+      }
+      break;
+    }
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::putTextItem(Rect bounds, String text, const TextItemSkinDef& skin)
+{
+  putItem(bounds, skin.item);
+  putText(bounds, text, skin.text);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 UI::putButton(
     FocusableId id, 
     Rect bounds, 
+    String text,
     const ButtonSkinDef& skin)
 {
   FocusFlags focus = putFocusableBounds(id, bounds);
 
   const TextItemSkinDef* state_skin = &skin.normal;
 
+  b8 clicked = false;
+
   if (focus.test(FocusFlag::Hovered))
   {
+    state_skin = &skin.hovered;
+
+    if (frame_input.wasMouseButtonPressed(MouseButton::Left))
+    {
+      state_skin = &skin.pressed;
+      clicked = true;
+    }
   }
+
+  putTextItem(bounds, text, *state_skin);
+
+  return clicked;
 }
 
 /* ----------------------------------------------------------------------------
@@ -408,7 +520,7 @@ void ScissorCmd::execute(UI& ui, gfx::Renderer& renderer)
 
 /* ----------------------------------------------------------------------------
  */
-void UI::putQuad(Rect bounds, gfx::Texture texture, Rect uv, Color color)
+void UI::putQuad(Rect bounds, gfx::Texture texture, vec4f uv, Color color)
 {
   assert(in_frame);
 
@@ -426,7 +538,7 @@ void UI::putQuad(Rect bounds, gfx::Texture texture, Rect uv, Color color)
  */
 void UI::putQuad(Rect bounds, gfx::Texture texture, Color color)
 {
-  putQuad(bounds, texture, Rect::from(0,0,1,1), color); 
+  putQuad(bounds, texture, vec4f(0,0,1,1), color); 
 }
 
 /* ----------------------------------------------------------------------------
@@ -459,6 +571,10 @@ void QuadDrawCmd::execute(UI& ui, gfx::Renderer& renderer)
       ui.draw_counts,
       bounds.pos(),
       bounds.size(),
+      { uv.x, uv.y },
+      { uv.z, uv.y },
+      { uv.z, uv.w },
+      { uv.x, uv.w },
       color);
 
   TRACE("draw: ", ui.draw_counts.y, " ", drawn.y, " ", ui.draw_counts.x, "\n");

@@ -21,6 +21,7 @@ $ require "common"
 @@lpp.import "net/Address.lh"
 @@lpp.import "net/Connection.lh"
 @@lpp.import "net/EventBus.lh"
+@@lpp.import "game/client/TestSkin.defs.lh"
 
 #include "iro/time/Time.h"
 
@@ -40,6 +41,8 @@ struct Client
   ui::UI ui;
   InputMgr input;
   Window window;
+
+  TestSkinRef test_skin;
 
   // cl::Editor editor;
 

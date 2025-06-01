@@ -36,6 +36,7 @@ struct Rect
 
   vec2f pos() const { return {x,y}; }
   vec2f size() const { return {w,h}; }
+  vec2f extent() const { return pos() + size(); }
 
   void floorPos() { x = floor(x); y = floor(y); }
 
