@@ -1,20 +1,15 @@
 $ require "common"
 $ local m = require "reflect.Metadata"
 
-@@lpp.import "ui/ItemSkin.defs.lh"
-@@lpp.import "ui/widgets/ComboBoxSkin.defs.lh"
-@@lpp.import "ui/widgets/TextSkin.defs.lh"
-@@lpp.import "ui/widgets/ButtonSkin.defs.lh"
-@@lpp.import "ui/widgets/InputTextSkin.defs.lh"
+@@lpp.import "asset/Asset.lh"
+@@lpp.import "ui/Skin.defs.lh"
 
 @m.def
 @m.source_types(skin)
 struct TestSkinDef
 {
   ui::TextSkinDef text;
-  ui::ComboBoxSkinDef combo_box;
   ui::ButtonSkinDef button;
-  ui::InputTextSkinDef input_text;
 };
 
 typedef TypedSourceAssetRef<TestSkinDef> TestSkinRef;

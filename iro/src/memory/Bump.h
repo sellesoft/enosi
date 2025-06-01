@@ -36,6 +36,8 @@ struct Bump : public Allocator
   b8   init();
   void deinit();
 
+  void clear();
+
   void* allocate(u64 size) override;
 
   void* reallocate(void* ptr, u64 size) override;

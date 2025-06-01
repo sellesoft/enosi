@@ -41,9 +41,9 @@ struct Component
   
   template<typename T>
   static void onCreate(Component* comp);
-};
 
-DefineNilValue(Component, {0}, { return x.kind == 0; });
+  DefineNilTrait(Component, {0}, x.kind == 0);
+};
 
 typedef TypedPtr<Component> ComponentPtr;
 

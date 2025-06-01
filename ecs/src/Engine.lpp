@@ -14,26 +14,16 @@ using namespace iro;
 @@lpp.import "asset/CompiledData.lh"
 @@lpp.import "asset/SourceDataFile.lh"
 @@lpp.import "asset/SourceDataParser.lh"
-@@lpp.import "asset/SourceDataEditor.lh"
 @@lpp.import "event/BroadcastEventBus.lh"
 @@lpp.import "graphics/Font.lh"
 @@lpp.import "graphics/CompiledShader.lh"
 @@lpp.import "net/Connection.lh"
-@@lpp.import "ui/Inspector.lh"
-@@lpp.import "ui/widgets/Text.lh"
-@@lpp.import "ui/widgets/Button.lh"
-@@lpp.import "ui/widgets/Separator.lh"
-@@lpp.import "ui/widgets/InputText.lh"
-@@lpp.import "ui/widgets/CollapsingHeader.lh"
 
 @@lpp.import "game/client/Client.lh"
 @@lpp.import "game/server/Server.lh"
 
 static Logger logger =
   Logger::create("ecs.eng"_str, Logger::Verbosity::Info);
-
-ui::Item* base;
-ui::SourceDataEditor* sdata_edit_test;
 
 /* ----------------------------------------------------------------------------
  */
@@ -86,7 +76,6 @@ $ end
   else
   {
     client = new Client;
-    mem::zero(client, sizeof(Client));
     
     if (!client->init(this))
       return FATAL("failed to initialize Client\n");
@@ -129,6 +118,8 @@ b8 Engine::update()
   // inspector->fps->set(fps.asStr());
 
   // ui.root->dirty = true;
+
+  // INFO(1 / (TimePoint::monotonic() - time_point).toSeconds(), "\n");
 
   return true;
 }

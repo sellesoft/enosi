@@ -132,12 +132,10 @@ struct Buffer
     Persistent,
   };
 
-
   static constexpr u64 FLUSH_WHOLE_BUFFER = MAX_U64;
 
-  u32 index;
-  void* mapped_data;
-
+  u32 index = 0;
+  void* mapped_data = nullptr;
 
   b8 init(
     Renderer& renderer,
@@ -156,7 +154,7 @@ struct Buffer
   // of the buffer is flushed.
   b8 flush(Renderer& renderer, u64 offset, u64 size);
 
-  b8 copy_and_flush(Renderer& renderer, void* data, u64 size);
+  b8 copyAndFlush(Renderer& renderer, void* data, u64 size);
 
   b8 unmap(Renderer& renderer);
 };

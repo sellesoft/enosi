@@ -28,6 +28,7 @@ $ if IRO_LINUX then
 #undef Bool
 #undef True
 #undef False
+#undef Status
 
 struct X11Stuff
 {

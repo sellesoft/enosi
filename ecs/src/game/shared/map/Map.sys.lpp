@@ -16,6 +16,7 @@ $ local cmn = require "common"
 
 #include "iro/Logger.h"
 #include "math/util.h"
+#include "iro/Platform.h"
 
 @cmn.defFileLogger(game.map, Info)
 

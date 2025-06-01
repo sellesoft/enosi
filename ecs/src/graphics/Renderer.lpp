@@ -1263,7 +1263,7 @@ b8 Renderer::deinit()
 
   for (u32 i = 0; i < ri.texture_pool.MAX_COUNT; i++)
   {
-    RendererTexture* texture = ri.texture_pool.at_index(i);
+    RendererTexture* texture = ri.texture_pool.atIndex(i);
     if (texture != nullptr && texture->image != VK_NULL_HANDLE)
     {
       gfx::Texture api_texture = {i};
@@ -1274,7 +1274,7 @@ b8 Renderer::deinit()
 
   for (u32 i = 0; i < ri.framebuffer_pool.MAX_COUNT; i++)
   {
-    RendererFramebuffer* framebuffer = ri.framebuffer_pool.at_index(i);
+    RendererFramebuffer* framebuffer = ri.framebuffer_pool.atIndex(i);
     if (framebuffer != nullptr && framebuffer->framebuffer != VK_NULL_HANDLE)
     {
       gfx::Framebuffer api_framebuffer = {i};
@@ -1285,7 +1285,7 @@ b8 Renderer::deinit()
 
   for (u32 i = 0; i < ri.shader_pool.MAX_COUNT; i++)
   {
-    RendererShader* shader = ri.shader_pool.at_index(i);
+    RendererShader* shader = ri.shader_pool.atIndex(i);
     if (shader != nullptr && shader->module != VK_NULL_HANDLE)
     {
       gfx::Shader api_shader = {i};
@@ -1296,7 +1296,7 @@ b8 Renderer::deinit()
 
   for (u32 i = 0; i < ri.buffer_pool.MAX_COUNT; i++)
   {
-    RendererBuffer* buffer = ri.buffer_pool.at_index(i);
+    RendererBuffer* buffer = ri.buffer_pool.atIndex(i);
     if (buffer != nullptr && buffer->buffer != VK_NULL_HANDLE)
     {
       gfx::Buffer api_buffer = {i};
@@ -1307,7 +1307,7 @@ b8 Renderer::deinit()
 
   for (u32 i = 0; i < ri.pipeline_pool.MAX_COUNT; i++)
   {
-    RendererPipeline* pipeline = ri.pipeline_pool.at_index(i);
+    RendererPipeline* pipeline = ri.pipeline_pool.atIndex(i);
     if (pipeline != nullptr && pipeline->pipeline != VK_NULL_HANDLE)
     {
       gfx::Pipeline api_pipeline = {i};
@@ -1549,7 +1549,7 @@ $ end -- if ECS_DEBUG
       if (current_framebuffer.index != 0)
       {
         RendererFramebuffer* framebuffer =
-          ri.framebuffer_pool.at_index(current_framebuffer.index);
+          ri.framebuffer_pool.atIndex(current_framebuffer.index);
         if (framebuffer == nullptr)
         {
           ERROR("failed to transition the framebuffer image back to"
@@ -1598,7 +1598,7 @@ $ end -- if ECS_DEBUG
       else
       {
         RendererFramebuffer* framebuffer =
-          ri.framebuffer_pool.at_index(cmd.bind_framebuffer.index);
+          ri.framebuffer_pool.atIndex(cmd.bind_framebuffer.index);
         if (framebuffer == nullptr)
         {
           ERROR("failed to bind framebuffer at index ",
@@ -1693,7 +1693,8 @@ $ end -- if ECS_DEBUG
     {
       TRACE("binding pipeline ", cmd.bind_pipeline.index, "\n");
 
-      RendererPipeline* pipeline = ri.pipeline_pool.at_index(cmd.bind_pipeline.index);
+      RendererPipeline* pipeline = 
+        ri.pipeline_pool.atIndex(cmd.bind_pipeline.index);
       if (pipeline == nullptr || pipeline->pipeline == VK_NULL_HANDLE)
       {
         ERROR("failed to bind invalid pipeline\n");
@@ -1717,7 +1718,7 @@ $ end -- if ECS_DEBUG
       }
 
       RendererPipeline* pipeline =
-        ri.pipeline_pool.at_index(current_pipeline.index);
+        ri.pipeline_pool.atIndex(current_pipeline.index);
       if (pipeline == nullptr)
       {
         ERROR("failed to bind texture because the pipeline"
@@ -1733,7 +1734,7 @@ $ end -- if ECS_DEBUG
       }
 
       RendererTexture* texture =
-        ri.texture_pool.at_index(cmd.bind_texture.index);
+        ri.texture_pool.atIndex(cmd.bind_texture.index);
       if (texture == nullptr)
       {
         ERROR("failed to bind texture at index ", cmd.bind_texture.index,
@@ -1758,7 +1759,7 @@ $ end -- if ECS_DEBUG
       }
 
       RendererPipeline* pipeline =
-        ri.pipeline_pool.at_index(current_pipeline.index);
+        ri.pipeline_pool.atIndex(current_pipeline.index);
       if (pipeline == nullptr)
       {
         ERROR("failed to bind uniform buffer because the pipeline"
@@ -1774,7 +1775,7 @@ $ end -- if ECS_DEBUG
       }
 
       RendererBuffer* buffer =
-        ri.buffer_pool.at_index(cmd.bind_buffer.index);
+        ri.buffer_pool.atIndex(cmd.bind_buffer.index);
       if (buffer == nullptr)
       {
         ERROR("failed to bind uniform buffer at index ",
@@ -1807,7 +1808,7 @@ $ end -- if ECS_DEBUG
       }
 
       RendererBuffer* buffer =
-        ri.buffer_pool.at_index(cmd.bind_buffer.index);
+        ri.buffer_pool.atIndex(cmd.bind_buffer.index);
       if (buffer == nullptr)
       {
         ERROR("failed to bind storage buffer at index ",
@@ -1816,7 +1817,7 @@ $ end -- if ECS_DEBUG
       }
 
       RendererPipeline* pipeline =
-        ri.pipeline_pool.at_index(current_pipeline.index);
+        ri.pipeline_pool.atIndex(current_pipeline.index);
       if (pipeline == nullptr)
       {
         ERROR("failed to bind storage buffer because the pipeline"
@@ -1840,7 +1841,7 @@ $ end -- if ECS_DEBUG
         break;
       }
 
-      RendererBuffer* buffer = ri.buffer_pool.at_index(cmd.bind_buffer.index);
+      RendererBuffer* buffer = ri.buffer_pool.atIndex(cmd.bind_buffer.index);
       if (buffer == nullptr)
       {
         ERROR("attempted to bind buffer at index ",
@@ -1868,7 +1869,7 @@ $ end -- if ECS_DEBUG
         break;
       }
 
-      RendererBuffer* buffer = ri.buffer_pool.at_index(cmd.bind_buffer.index);
+      RendererBuffer* buffer = ri.buffer_pool.atIndex(cmd.bind_buffer.index);
       if (buffer == nullptr)
       {
         ERROR("attempted to bind buffer at index ",
@@ -1897,7 +1898,7 @@ $ end -- if ECS_DEBUG
       TRACE("pushing the constant ", cmd.push_constant.data,
         " with size ", cmd.push_constant.size, "\n");
 
-      RendererPipeline* pipeline = ri.pipeline_pool.at_index(current_pipeline.index);
+      RendererPipeline* pipeline = ri.pipeline_pool.atIndex(current_pipeline.index);
       if (pipeline == nullptr || pipeline->pipeline == VK_NULL_HANDLE)
       {
         ERROR("attempted to push constant with an invalid pipeline\n");
@@ -1993,7 +1994,7 @@ $ end -- if ECS_DEBUG
     if (current_framebuffer.index != 0)
     {
       RendererFramebuffer* framebuffer =
-        ri.framebuffer_pool.at_index(current_framebuffer.index);
+        ri.framebuffer_pool.atIndex(current_framebuffer.index);
       assert(framebuffer != nullptr);
 
       VkImageMemoryBarrier barrier =

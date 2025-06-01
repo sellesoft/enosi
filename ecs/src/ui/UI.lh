@@ -1,13 +1,9 @@
 /*
  *  UI system!
- *
  */
 
 $ local cmn = require "common"
 $ local ui = require "ui.UI"
-
-@@lpp.import "ui/Item.lh"
-@@lpp.import "ui/DrawCmd.lh"
 
 @@lpp.import "graphics/Buffer.lh"
 @@lpp.import "graphics/CompiledTexture.lh"
@@ -17,12 +13,16 @@ $ local ui = require "ui.UI"
 
 @@lpp.import "input/InputState.lh"
 
+@@lpp.import "ui/Skin.defs.lh"
+
 #include "iro/containers/List.h"
 #include "iro/containers/Pool.h"
 #include "iro/containers/LinkedPool.h"
 #include "iro/containers/Tree.h"
 #include "iro/memory/Bump.h"
 #include "math/Rect.h"
+#include "math/mat.h"
+#include "Color.h"
 
 namespace gfx
 {
@@ -32,8 +32,145 @@ namespace gfx
 
 struct InputMgr;
 
+struct mat3x2;
+
 namespace ui
 {
+
+struct UI;
+
+struct TextSkinDef;
+
+/* ============================================================================
+ */
+enum class FocusFlag
+{
+  Hovered, 
+  Focused,
+
+  Pressed,
+  Released,
+
+  COUNT
+};
+typedef Flags<FocusFlag> FocusFlags;
+
+/* ============================================================================
+ */
+struct FocusableId
+{
+  u64 val = 0;
+
+  bool operator == (const FocusableId& rhs) const
+  {
+    return val == rhs.val;
+  }
+
+  DefineNilTrait(FocusableId, {0}, x.val == 0);
+};
+
+/* ============================================================================
+ */
+struct FocusableBounds
+{
+  FocusableId id = {};
+  Rect bounds = {};
+
+  FocusableBounds* next = nullptr;
+};
+
+/* ============================================================================
+ */
+struct Cmd
+{
+  Cmd* next;
+
+  virtual void execute(UI& ui, gfx::Renderer& renderer) = 0;
+};
+
+/* ============================================================================
+ */
+struct TransformCmd : Cmd
+{
+  mat3x2* transform;
+
+  void execute(UI& ui, gfx::Renderer& renderer) override;
+};
+
+/* ============================================================================
+ */
+struct ScissorCmd : Cmd
+{
+  Rect bounds = {};
+
+  void execute(UI& ui, gfx::Renderer& renderer) override;
+};
+
+/* ============================================================================
+ */
+struct QuadDrawCmd : Cmd
+{
+  gfx::Texture texture;
+  Color color;
+  Rect bounds;
+  vec4f uv;
+
+  void execute(UI& ui, gfx::Renderer& renderer) override;
+};
+
+/* ============================================================================
+ */
+struct BorderDrawCmd : Cmd
+{
+  Rect bounds;
+  Color color;
+
+  void execute(UI& ui, gfx::Renderer& renderer) override;
+};
+
+/* ============================================================================
+ */
+struct Panel
+{
+  FocusableId id;
+
+  Rect bounds = {};
+
+  mat3x2 transform = {};
+
+  Panel* prev = nullptr;
+
+  FocusableBounds* fbounds = nullptr;
+};
+
+/* ============================================================================
+ */
+enum class LayerFlag
+{
+  TopMost,
+
+  COUNT
+};
+typedef Flags<LayerFlag> LayerFlags;
+
+/* ============================================================================
+ */
+struct Layer
+{
+  u32 idx = 0;
+
+  Panel* panels = nullptr;
+
+  Cmd* first_cmd = nullptr;
+  Cmd* last_cmd = nullptr;
+
+  Panel* current_panel = nullptr;
+
+  Layer* prev = nullptr;
+  Layer* next = nullptr;
+
+  void pushCmd(Cmd* cmd);
+};
 
 /* ============================================================================
  */
@@ -41,77 +178,11 @@ struct UI
 {
   enum
   {
-    MaxVertices = 0xffff,
-    MaxIndices = (MaxVertices / 4) * 6,
-    PushConstantSize = 16 * sizeof(f32),
+    c_MaxVertices = 0xffff,
+    c_MaxIndices = (c_MaxVertices / 4) * 6,
+    c_PushConstantSize = 16 * sizeof(f32),
   };
-
-  // Root item of anything in the item tree.
-  Item* root;
-
-  // The currently hovered item or nullptr if none.
-  Item* hovered;
-
-  // The currently focused item, eg. the last item clicked on.
-  Item* focused;
-
-  // TODO(sushi) the stack prob does not need to be a whole list!
-  SList<Item> item_stack;
-
-  typedef Tree<Item> ItemTree;
-
-  ItemTree item_tree;
-
-  Pool<DrawCmd> drawcmds;
-
-  SList<DrawCmd> free_drawcmds;
-
-  // TODO(sushi) maybe these should be lists, could also be AVL?
-  Array<DrawCmd*> free_drawcmds_vertex_sorted;
-  Array<DrawCmd*> free_drawcmds_index_sorted;
-
-  gfx::Shader vertex_shader;
-  gfx::Shader fragment_shader;
-  gfx::Pipeline pipeline;
-  gfx::PipelineDefRef pipeline_defref;
-
-  gfx::Buffer vertex_buffer;
-  gfx::Buffer index_buffer;
-  u64 vertex_next;
-  u64 index_next;
-
-  vec2f scrollbar_offset;
-  Item* scrolling_item;
-  b8 horizontal_scroll;
-
-  gfx::Texture white_texture;
-
-  mem::LenientBump temp_alloc;
-
-  DrawCmd* dbg_cmd;
-
-  static const s32 cursor_track_len = 30;
-  vec2f cursor_track[cursor_track_len];
-  s32 cursor_track_pos = 0;
-
-  // NOTE(sushi) don't like doing this, but currently moving UI to be under
-  //             Client and removing it just storing whatever stores it
-  //             (eg. it used to just store an Engine*) to move towards it
-  //             being passed what it needs on update and init and stuff.
-  //             This makes Item callbacks annoying, though, as then they
-  //             all have to also be passed that stuff, which sucks. So I'm
-  //             cheating for now and just storing systems it should be using
-  //             instead. Eventually though this needs to be changed.
-  //             Especially removing the asset mgr, I don't like UI logic
-  //             managing assets (like, inside widgets) and would like to
-  //             move towards these things being stored on data driven
-  //             style structures, where each asset we use is known there
-  //             and loaded all at one time.
-  AssetMgr* assetmgr;
-  gfx::Renderer* renderer;
-
-  Rect viewport;
-
+ 
   struct InitParams
   {
     AssetMgr& assetmgr;
@@ -127,107 +198,126 @@ struct UI
   b8   init(InitParams& params);
   void deinit();
 
-  struct UpdateParams
+  struct FrameParams
   {
+    // The input state to be applied during this frame.
     InputState input;
+
+    // The viewport drawn into this frame.
+    Rect viewport;
   };
 
-  b8 update(const UpdateParams& params);
+  void beginFrame(const FrameParams& params);
+  void endFrame();
 
-  // Helper for widgets to allocate themselves and initialize base Item
-  // stuff.
-  template<typename T>
-  T* allocateAndInitItem(String id)
-  {
-    auto* item = (T*)mem::stl_allocator.construct<T>();
+  // Returns the bounds of the currently active Panel.
+  Rect getBounds() const;
 
-    if (!item->Item::init(*this, id))
-    {
-      mem::stl_allocator.deconstruct(item);
-      return nullptr;
-    }
+  void putQuad(Rect bounds, gfx::Texture texture, vec4f uv, Color color);
+  void putQuad(Rect bounds, gfx::Texture texture, Color color);
+  void putQuad(Rect bounds, Color color);
 
-    return item;
-  }
+  FocusFlags putFocusableBounds(FocusableId id, Rect bounds);
 
-  void destroyItem(Item* item);
-  void destroyItemChildren(Item* item);
+  // Pushes a layer and starts a new panel at the given bounds with the 
+  // given id.
+  void pushLayer(FocusableId id, Rect bounds, LayerFlags flags);
+  void popLayer();
 
-  void beginItem(Item* item);
-  void endItem();
+  // Begins a new panel.
+  void beginPanel(FocusableId id, Rect bounds);
+  void beginPanel(FocusableId id, Rect bounds, Panel* prev);
 
-  template<typename TItem>
-  void end() { endItem(); }
+  void endPanel();
 
-  void setViewport(Rect viewport)
-  {
-    this->viewport = viewport;
-    root->setDirty();
-  }
+  // Places a basic 'item', a decorated rect basically.
+  void putItem(Rect bounds, const ItemSkinDef& skin);
 
-private:
-  friend ItemUpdateContext;
+  // Places undecorated text.
+  void putText(Rect bounds, String text, const TextSkinDef& skin);
 
-  // The input state of an 'update'. Inputs may be consumed from this 
+  // Places text with a background and various other decor (eventually).
+  void putTextItem(Rect bounds, String text, const TextItemSkinDef& skin);
+
+  // Returns true if clicked.
+  b8 putButton(
+    FocusableId id, 
+    Rect bounds, 
+    String text, 
+    const ButtonSkinDef& skin);
+
+  // Pushes Cmds to the active Layer to transform and scissor successive Cmds
+  // according to the given Panel.
+  void pushPanelRenderState(Panel* panel);
+
+  // Bump allocator for memory allocated throughout a UI frame.
+  mem::Bump frame_allocator;
+
+  // The current viewport (is this needed?)
+  Rect viewport = {};
+
+  gfx::Renderer* renderer = nullptr;
+
+  // Graphics stuff.
+  gfx::Shader vertex_shader;
+  gfx::Shader fragment_shader;
+  gfx::Pipeline pipeline;
+  gfx::PipelineDefRef pipeline_defref;
+
+  gfx::Texture white_texture;
+
+  gfx::Buffer vertex_buffer;
+  gfx::Buffer index_buffer;
+
+  // True when a UI frame is in progress.
+  b8 in_frame = false;
+
+  // The input state of an update. Inputs may be consumed from this 
   // state by either UI or Items.
   InputState frame_input;
 
-  Item* eval_break;
+  vec2i draw_counts = {};
 
-  // A type storing a DrawCmd to be drawn later than when it was reported.
-  // This happens in cases like top-most drawcmds.
-  struct DeferredDrawCmd
+  u64 next_focusable_id;
+
+  struct FocusState
   {
-    mat3x2 transform;
-    DrawCmd* drawcmd;
+    // TODO(sushi) it would be nice to compress these, but for now this is 
+    //             probably ok.
+    FocusableId focused;
+    FocusableId hovered;
+    FocusableId focused_panel;
+    FocusableId hovered_panel;
+    u32 hovered_layer_idx;
+    u32 focused_layer_idx;
   };
 
-  typedef SmallArray<DeferredDrawCmd, 4> DeferredDrawCmdList;
+  FocusState prev_focus_state;
+  FocusState focus_state;
+  FocusState next_focus_state;
 
-  struct UpdateTreeContext
-  {
-    DeferredDrawCmdList* top_most_drawcmds = nullptr;
-    const mat3x2* current_transform = nullptr;
-    Item* hovered = nullptr;
-    DrawCmdList* debug_cmds;
+  void drawDebugRect(Rect rect, Color color);
+  void drawDebugBorder(Rect rect, Color color);
 
-    UpdateTreeContext inherit(const mat3x2* current_transform)
-    {
-      return
-      {
-        .top_most_drawcmds = top_most_drawcmds,
-        .current_transform = current_transform,
-        .debug_cmds = debug_cmds,
-      };
-    }
-  };
+  Cmd* debug_cmds;
 
-  void updateTree(ItemNode* node, UpdateTreeContext& ctx);
+  // The initial Layer created on frame start.
+  Layer* root_layer;
 
-  struct FlexContext
-  {
-    // Set when the parent of the evaluating item is a flex container.
-    b8 is_container;
-    // Set when the parent is displaying items in a row.
-    b8 disp_horizontal;
-    // Sum of flex sized child ratios.
-    f32 ratio_sum;
-    // Size that the parent can fit flexed items in.
-    f32 effective_size;
-    // How many times we much ceil a child's size rather than floor it.
-    u32 n_ceils;
-  };
+  // The current layer being operated on this frame.
+  Layer* current_layer;
 
-  void evalItemBranch(ItemNode* node, FlexContext* flex);
+  // Current layer index, used for tracked focused/hovered layers.
+  u32 layer_idx;
 
-  void emitDrawCmd(
-    DrawCmd* drawcmd,
-    Item* item,
-    vec4f current_scissor);
-
-  void emitDrawCmds(DeferredDrawCmdList& drawcmds);
+  void pushConstantFromTransform(mat3x2 transform, gfx::Renderer& renderer);
 };
 
+}
+
+consteval ui::FocusableId operator ""_fid(const char* c, size_t s)
+{
+  return ui::FocusableId{operator ""_hashed(c,s)};
 }
 
 

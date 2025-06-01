@@ -18,11 +18,10 @@ $ require "common"
 @@lpp.import "window/Window.lh"
 @@lpp.import "input/InputMgr.lh"
 @@lpp.import "graphics/Renderer.lh"
-@@lpp.import "game/client/editor/Editor.lh"
-@@lpp.import "ui/widgets/TextSkin.defs.lh"
 @@lpp.import "net/Address.lh"
 @@lpp.import "net/Connection.lh"
 @@lpp.import "net/EventBus.lh"
+@@lpp.import "game/client/TestSkin.defs.lh"
 
 #include "iro/time/Time.h"
 
@@ -43,11 +42,11 @@ struct Client
   InputMgr input;
   Window window;
 
-  cl::Editor editor;
+  TestSkinRef test_skin;
+
+  // cl::Editor editor;
 
   gfx::Texture white_texture;
-
-  ui::TextSkinRef test_skin;
 
   b8 init(Engine* engine);
 

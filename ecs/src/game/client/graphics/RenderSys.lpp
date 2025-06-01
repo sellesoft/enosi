@@ -8,6 +8,7 @@ $ require "common"
 
 @@lpp.import "graphics/CompiledShader.lh"
 @@lpp.import "graphics/Renderer.lh"
+@@lpp.import "graphics/Geo.lh"
 
 @@lpp.import "game/client/GameMgr.lh"
 @@lpp.import "game/shared/Transform.comp.lh"
@@ -276,7 +277,7 @@ b8 RenderSys::update(const UpdateParams& params)
     scene.resolution_and_time[2] = time;
 
     scene_uniform_buffer.map(renderer);
-    scene_uniform_buffer.copy_and_flush(renderer, &scene, sizeof(scene));
+    scene_uniform_buffer.copyAndFlush(renderer, &scene, sizeof(scene));
     scene_uniform_buffer.unmap(renderer);
   }
 

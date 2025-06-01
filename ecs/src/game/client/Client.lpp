@@ -20,106 +20,9 @@ $ local ui = require "ui.UI"
 @@lpp.import "graphics/Renderer.lh"
 @@lpp.import "input/InputMgr.lh"
 @@lpp.import "graphics/Ref.defs.lh"
-@@lpp.import "ui/widgets/Text.lh"
-@@lpp.import "ui/widgets/ComboBox.lh"
-@@lpp.import "ui/widgets/Button.lh"
-@@lpp.import "ui/widgets/InputText.lh"
-@@lpp.import "game/client/TestSkin.defs.lh"
 @@lpp.import "net/Net.events.lh"
 
 @log.ger(client, Debug)
-
-struct Test : ui::Item
-{
-  ui::Button button;
-  ui::ComboBox cbox;
-  ui::InputText itext;
-  TestSkinDef* skin;
-
-  u8 text_buffer[255];
-  s32 text_len = 0;
-
-  ui::DrawCmd* bg;
-
-  Client* client;
-
-  static void create(ui::UI& ui, AssetLoader& loader, Client* client)
-  {
-    using namespace ui;
-    using namespace item_layout_typedefs;
-
-    auto* test = ui.allocateAndInitItem<Test>("test"_str);
-
-    test->button.init(ui);
-    test->cbox.init(ui);
-    test->itext.init(ui);
-    test->bg = ui.drawcmds.add();
-
-    @ui.layout(test, size: 100 100);
-
-    TestSkinRef skinref;
-    loader.load(&skinref, "assets/skins/Test"_str);
-
-    test->skin = &*skinref;
-    test->client = client;
-  }
-
-  void update(ui::ItemUpdateContext& ctx) override
-  {
-    button.update(
-      ctx, Rect::from(10, 10, 30, 30), "hi"_str, skin->button);
-
-    String opts[] =
-    {
-      "bleh"_str,
-      "blah"_str,
-      "bloh"_str,
-    };
-
-    cbox.update(
-      ctx, Rect::from(10, 45, 30, 30), ui::ComboBox::Options::from(opts),
-      skin->combo_box);
-
-    ui::ItemSkinDef bgskin = {};
-    bgskin.color = {255,155, 155, 255};
-
-    ui::Item::drawBackground(
-      ctx.ui, Rect::from(0, 0, size.x, size.y), bg, bgskin);
-
-    itext.update(
-      ctx,
-      Rect::from(10, 80, 80, 30),
-      {text_buffer, &text_len, 255},
-      skin->input_text);
-
-    String input_text = itext.asStr();
-    if (   itext.focused && input_text.len > 0
-        && client->input.real_state.wasKeyPressed(Key::Enter))
-    {
-      if (input_text == "connect offline"_str)
-      {
-        client->connectToServer(net::Address::createOffline());
-      }
-      else if (input_text == "connect localhost"_str)
-      {
-        client->connectToServer(net::Address::createLocalHost(0));
-      }
-      else if (input_text.startsWith("connect "_str))
-      {
-        client->connectToServer(
-          net::Address(input_text.subFromFirst(' ').trim()));
-      }
-    }
-  }
-
-  void reportDrawCmds(ui::UI& ui, ui::DrawCmdLists& lists) override
-  {
-    lists.pre_children.push(bg);
-    button.reportDrawCmds(ui, lists);
-    cbox.reportDrawCmds(ui, lists);
-    itext.reportDrawCmds(ui, lists);
-  }
-};
 
 /* ----------------------------------------------------------------------------
  */
@@ -214,16 +117,27 @@ $ end
     .sfilereg = engine->source_data_file_reg,
   };
 
-  ui::UI::InitParams ui_params =
+  // ui::UI::InitParams ui_params = 
+  // {
+  //   .assetmgr = engine->assetmgr,
+  //   .renderer = renderer,
+  //
+  //   .white_texture = white_texture,
+  //
+  //   .viewport = Rect::from({0,0}, window.size),
+  //
+  //   .loader   = asset_loader,
+  // };
+  // \@init(ui.init(ui_params), UI);
+
+  ui::UI::InitParams ui_params = 
   {
     .assetmgr = engine->assetmgr,
     .renderer = renderer,
 
     .white_texture = white_texture,
 
-    .viewport = Rect::from({0,0}, window.size),
-
-    .loader   = asset_loader,
+    .loader = asset_loader,
   };
   @init(ui.init(ui_params), UI);
 
@@ -237,9 +151,9 @@ $ end
   };
   @init(sim.init(sim_params), cl::GameSim);
 
-  @init(editor.init(this), Editor);
+  // \@init(editor.init(this), Editor);
 
-  Test::create(ui, asset_loader, this);
+  asset_loader.load(&test_skin, "assets/skins/Test.skin"_str);
 
   this->net_event_bus.init(&mem::stl_allocator);
   this->net_event_bus.subscribe<ConnectionNetEvent>(this,
@@ -398,13 +312,50 @@ b8 Client::update()
   InputState ui_input = {};
   input.cloneInputState(&ui_input);
 
-  ui::UI::UpdateParams ui_params =
+  ui::UI::FrameParams ui_params = 
   {
     .input = ui_input,
+    .viewport = Rect::from(vec2f(0,0), window.size),
   };
 
-  if (!ui.update(ui_params))
-    return ERROR("failed to update ui\n");
+  ui.beginFrame(ui_params);
+  {
+    ui.pushLayer("layer0"_fid, {10.f, 10.f, 50.f, 30.f}, {});
+    {
+      if (ui.putButton(
+            "test"_fid, 
+            {10.f, 10.f, 35.f, 15.f}, 
+            "hello"_str, 
+            test_skin->button))
+      {
+        INFO("hello\n");
+      }
+    }
+    ui.popLayer();
+
+    ui.pushLayer("layer1"_fid, { 10.f, 40.f, 50.f, 30.f}, {});
+    {
+      if (ui.putButton(
+            "test"_fid, 
+            {10.f, 10.f, 35.f, 15.f}, 
+            "goodbye"_str, 
+            test_skin->button))
+      {
+        INFO("goodbye\n");
+      }
+    }
+    ui.popLayer();
+
+    if (ui.putButton(
+          "test"_fid, 
+          {10.f, 15.f, 50.f, 30.f}, 
+          "blah"_str, 
+          test_skin->button))
+    {
+      INFO("blah\n");
+    }
+  }
+  ui.endFrame();
 
   // Send messages to the server.
   if (connection.address.type != net::AddressType::Invalid)
@@ -415,148 +366,11 @@ b8 Client::update()
 
 /* ----------------------------------------------------------------------------
  */
-b8 Client::compileRequiredAssets(AssetMgr& assetmgr)
-{
-  TRACE("compiling white and null textures\n");
-  {
-    mem::LenientBump texture_compile_allocator;
-    if (!texture_compile_allocator.init())
-      return ERROR("failed to initialize texture compile allocator\n");
-    defer { texture_compile_allocator.deinit(); };
-
-    gfx::CompiledTexture::CompileParams null_texture_params =
-    {
-      .name         = "assets/textures/null"_str,
-      .format       = gfx::ImageFormat::RGBA,
-      .usage        = gfx::ImageUsage::Sampled,
-      .filter       = gfx::ImageFilter::Nearest,
-      .address_mode = gfx::ImageAddressMode::ClampToWhite,
-      .allocator    = &texture_compile_allocator,
-      .assetmgr     = &assetmgr,
-    };
-
-    gfx::CompiledTexture::compilePNG(null_texture_params);
-
-    auto* null_texture_compiled =
-      gfx::CompiledTexture::load(
-        "assets/textures/null"_str, assetmgr, renderer);
-    if (null_texture_compiled == nullptr)
-      return ERROR("failed to load null texture\n");
-  }
-
-  TRACE("compiling shaders\n");
-  {
-    Ref::LoadParams load_params =
-    {
-      .renderer = renderer,
-      .assetmgr = engine->assetmgr,
-      .sfile_reg = &engine->source_data_file_reg,
-    };
-
-    auto compile = [&](String name)
-    {
-      gfx::ShaderRef ref;
-      ref.name = name;
-      if (!ref.load(load_params))
-        return ERROR("failed to load shader ", name, "\n");
-      return true;
-    };
-
-    if (!compile("assets/shaders/Fullscreen.vert"_str))
-      return false;
-
-    if (!compile("assets/shaders/Scene.frag"_str))
-      return false;
-
-    if (!compile("assets/shaders/Scene.vert"_str))
-      return false;
-
-    if (!compile("assets/shaders/Stars.frag"_str))
-      return false;
-
-    gfx::CompiledShader::CompileParams scene_vertex_shader_params =
-    {
-      .name      = "assets/shaders/scene.vertex"_str,
-      .kind      = gfx::ShaderKind::Vertex,
-      .allocator = &mem::stl_allocator,
-      .assetmgr  = &assetmgr,
-    };
-    gfx::CompiledShader::compileGLSL(scene_vertex_shader_params);
-
-    gfx::CompiledShader::CompileParams scene_fragment_shader_params =
-    {
-      .name      = "assets/shaders/scene.fragment"_str,
-      .kind      = gfx::ShaderKind::Fragment,
-      .allocator = &mem::stl_allocator,
-      .assetmgr  = &assetmgr,
-    };
-    gfx::CompiledShader::compileGLSL(scene_fragment_shader_params);
-
-    gfx::CompiledShader::CompileParams fullscreen_vertex_shader_params =
-    {
-      .name      = "assets/shaders/fullscreen.vertex"_str,
-      .kind      = gfx::ShaderKind::Vertex,
-      .allocator = &mem::stl_allocator,
-      .assetmgr  = &assetmgr,
-    };
-    gfx::CompiledShader::compileGLSL(fullscreen_vertex_shader_params);
-
-    gfx::CompiledShader::CompileParams stars_fragment_shader_params =
-    {
-      .name      = "assets/shaders/stars.fragment"_str,
-      .kind      = gfx::ShaderKind::Fragment,
-      .allocator = &mem::stl_allocator,
-      .assetmgr  = &assetmgr,
-    };
-    gfx::CompiledShader::compileGLSL(stars_fragment_shader_params);
-
-    gfx::CompiledShader::CompileParams ui_vertex_shader_params =
-    {
-      .name      = "assets/shaders/ui.vertex"_str,
-      .kind      = gfx::ShaderKind::Vertex,
-      .allocator = &mem::stl_allocator,
-      .assetmgr  = &assetmgr,
-    };
-    gfx::CompiledShader::compileGLSL(ui_vertex_shader_params);
-
-    gfx::CompiledShader::CompileParams ui_fragment_shader_params =
-    {
-      .name      = "assets/shaders/ui.fragment"_str,
-      .kind      = gfx::ShaderKind::Fragment,
-      .allocator = &mem::stl_allocator,
-      .assetmgr  = &assetmgr,
-    };
-    gfx::CompiledShader::compileGLSL(ui_fragment_shader_params);
-  }
-
-  TRACE("compiling gohu font\n");
-  {
-    CodepointRange ascii =
-    {
-      .first_codepoint = 32,
-      .num_codepoints = 94,
-    };
-
-    gfx::Font::CompileParams params =
-    {
-      .name       = "assets/fonts/gohu"_str,
-      .ranges     = CodepointRanges::from(&ascii, 1),
-      .allocator  = &mem::stl_allocator,
-      .assetmgr   = &assetmgr,
-    };
-
-    gfx::Font::compileBDF(params);
-  }
-
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
 b8 Client::wantHotReload()
 {
-  if (input.real_state.wasKeyPressed(Key::R))
-    return true;
+  // TODO(sushi) do this some other way later.
+  // if (input.real_state.wasKeyPressed(Key::R))
+  //   return true;
   return false;
 }
 

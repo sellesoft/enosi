@@ -21,6 +21,8 @@ struct Renderer;
 struct AssetMgr;
 struct SourceDataFileReg;
 
+/* ============================================================================
+ */
 struct Ref 
 { 
   struct LoadParams
@@ -42,6 +44,8 @@ protected:
   b8 load(LoadParams&) { return false; }
 }; 
 
+/* ============================================================================
+ */
 struct AssetLoader
 {
   gfx::Renderer& renderer;

@@ -38,6 +38,8 @@ struct TimePoint
   {
     return s == rhs.s && ns == rhs.ns;
   }
+
+  DefineNilTrait(TimePoint, {(u64)-1}, x.s == -1);
 };
 
 TimeSpan operator-(const TimePoint& lhs, const TimePoint& rhs);
@@ -106,8 +108,5 @@ s64 format(IO* io, const WithUnits& x);
 }
 
 }
-
-DefineNilValue(iro::TimePoint, {(u64)-1}, { return x.s == -1; });
-// no nil for timespans rn
 
 #endif // _iro_time_h

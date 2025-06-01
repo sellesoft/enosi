@@ -5,6 +5,7 @@
  *  helpers for interacting with assets and game state.
  */
 
+$ if false then
 $ require "common"
 
 $ local ui = require "ui.UI"
@@ -40,3 +41,4 @@ struct Editor
 };
 
 }
+$ end

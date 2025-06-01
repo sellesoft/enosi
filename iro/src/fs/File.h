@@ -140,6 +140,14 @@ struct File : public io::IO
 
   // Returns a File::Info containing various information about this file.
   FileInfo getInfo();
+
+  DefineNilTrait(File, {}, x.handle == -1);
+  DefineScopedTrait(File, { x.close(); });
+  DefineMoveTrait(File, 
+    { 
+      to.handle = from.handle;  
+      to.path = move(from.path);
+    });
 };
 
 #if IRO_LINUX
@@ -171,18 +179,10 @@ struct FileInfo
 
   static FileInfo of(String path);
   static FileInfo of(File file);
+
+  DefineNilTrait(FileInfo, {FileKind::Invalid}, x.kind == FileKind::Invalid);
 };
 
 }
-
-// semantics definitions
-DefineMove(iro::fs::File, 
-    { to.handle = from.handle; to.path = move(from.path); });
-DefineNilValue(iro::fs::File, {}, { return x.handle == -1; });
-DefineScoped(iro::fs::File, { x.close(); });
-
-DefineNilValue(iro::fs::FileInfo, 
-    {iro::fs::FileKind::Invalid}, 
-    { return x.kind == iro::fs::FileKind::Invalid; });
 
 #endif

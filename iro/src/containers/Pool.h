@@ -123,6 +123,8 @@ struct Pool
     free_slot = slot;
   }
 
+  DefineNilTrait(Pool<T>, {}, x.free_slot == nullptr);
+    
   /* --------------------------------------------------------------------------------------------
    *  Internal helpers
    */ 
@@ -156,16 +158,5 @@ struct StaticPool : public Pool<T>
 };
 
 }
-
-template<typename T>
-struct NilValue<iro::Pool<T>>
-{
-  constexpr static iro::Pool<T> Value = {};
-  
-  static inline bool isNil(const iro::Pool<T>& x) 
-    { return x.free_slot == nullptr; }
-};
-
-// DefineExpandableContainerT(iro::Pool, { self->add(value); return true; });
 
 #endif

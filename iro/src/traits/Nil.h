@@ -1,4 +1,6 @@
 /*
+ *  TODO(sushi) update this explanation once i feel like it idk
+ *
  *  Nil value trait declaration and a helper for defining a NilValue for a 
  *  given type.
  *
@@ -17,44 +19,24 @@
 
 #include "../Common.h"
 
-/* ============================================================================
- *  Template for types that define a nil value. 
- *  
- *  Types implementing this are expected to define two things:
- *    
- *    constexpr static const T Value;
- *        A compile time value that represents the nil state of T.
- *    
- *    static b8 isNil(const T& x);
- *      A function used to check if 'x' is nil.
- *
- *  The helper DefineNilValue helps wrap up the boilerplate needed to actually 
- *  define these things.
- *
- */
-template<typename T>
-struct NilValue {};
-
 /* ----------------------------------------------------------------------------
  *  Defines value 'V" as the NilValue for the type 'T'
  *  and defines 'F' as the function to check if an instance 
  *  of 'T' is nil.
  */
-#define DefineNilValue(T, V, F)              \
-  template<>                               \
-  struct NilValue<T>                       \
-  {                                        \
-    constexpr static const T Value = V;  \
-    inline static b8 isNil(const T& x) F \
-  }                                        \
-
-#define DefineNilValueT(T, V, F) \
-  template<typename X>              \
-  struct NilValue<T<X>>             \
-  {                                 \
-    constexpr static const T<X> Value = V; \
-    inline static b8 isNil(const T<X>& x) F \
-  } 
+#define DefineNilTrait(T, V, F) \
+  struct NilTrait \
+  { \
+    static constexpr T getValue() \
+    { \
+      return V; \
+    } \
+    \
+    static b8 isNil(const T& x) \
+    { \
+      return F; \
+    } \
+  };
 
 /* ----------------------------------------------------------------------------
  *  Concept used to require a type to have implemented NilValue and so compiler 
@@ -63,8 +45,8 @@ struct NilValue {};
 template<typename T>
 concept Nillable = requires(const T& x)
 {
-  NilValue<T>::Value;
-  NilValue<T>::isNil(x);
+  T::NilTrait::getValue();
+  T::NilTrait::isNil(x);
 };
 
 /* ----------------------------------------------------------------------------
@@ -77,7 +59,7 @@ struct Nil
   constexpr ~Nil() {}
 
   template<Nillable T>
-  constexpr operator T() const { return NilValue<T>::Value; }
+  constexpr operator T() const { return T::NilTrait::getValue(); }
 
   // any pointer can be nil!
   // note this also handles the case of checking if a pointer is nil
@@ -86,7 +68,7 @@ struct Nil
 };
 
 template<Nillable T>
-release_inline bool isnil(const T& x) { return NilValue<T>::isNil(x); }
+release_inline bool isnil(const T& x) { return T::NilTrait::isNil(x); }
 
 template<Nillable T>
 release_inline bool notnil(const T& x) { return not isnil(x); }

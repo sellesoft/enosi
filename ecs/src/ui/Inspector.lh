@@ -1,3 +1,5 @@
+$ if false then
+
 /*
  *  Debug tool for inspecting the state of the Engine.
  */
@@ -104,3 +106,5 @@ struct Inspector : Item
 };
 
 }
+
+$ end

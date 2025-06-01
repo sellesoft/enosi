@@ -1,3 +1,5 @@
+$ if false then
+
 $ local cmn = require "common"
 $ local reflect = require "reflect.Reflector"
 
@@ -44,3 +46,4 @@ struct DrawCmd
 
 }
 
+$ end

@@ -1,3 +1,4 @@
+$ if false then
 $ local cmn = require "common"
 
 @lpp.import "ui/UI.lh"
@@ -280,3 +281,5 @@ Pair<gfx::Vertex*, gfx::Index*> DrawCmd::getPtrs(UI* ui)
 
 
 }
+
+$ end

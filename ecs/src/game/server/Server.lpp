@@ -21,6 +21,7 @@ $ require "common"
 #include "iro/time/Time.h"
 #include "iro/Thread.h"
 #include "iro/io/IO.h"
+#include "iro/Platform.h"
 
 #include <atomic>
 

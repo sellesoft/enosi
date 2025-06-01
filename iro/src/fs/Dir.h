@@ -46,11 +46,12 @@ struct Dir
   // and returns the number of bytes written on success. Returns -1 if 
   // we fail for some reason and 0 when we are done.
   s64 next(Bytes buffer);
+
+  DefineNilTrait(Dir, {nullptr}, x.handle == nullptr);
+  DefineMoveTrait(Dir, {to.handle = from.handle;});
+  DefineScopedTrait(Dir, { x.close(); });
 };
 
 }
-
-DefineMove(iro::fs::Dir, { to.handle = from.handle; });
-DefineNilValue(iro::fs::Dir, {nullptr}, { return x.handle == nullptr; });
 
 #endif // _iro_dir_h

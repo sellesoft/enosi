@@ -25,7 +25,7 @@ return
     --"lppls",
     "elua",
     "lake",
-    --"hreload",
+    "hreload",
     --"experimental/eog",
     -- "experimental/lamu",
     "ecs",

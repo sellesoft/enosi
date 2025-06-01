@@ -385,6 +385,9 @@ $   if not subdecl then
 $     error(name..": failed to get declaration of sub type")
 $   end
 $   putPacker(subdecl)
+$   for derived in subdecl.derived:each() do
+$     putPacker(derived)
+$   end
 /* ----------------------------------------------------------------------------
  */
 template<>
@@ -843,6 +846,7 @@ $   end
 $ 
 $   place_queue:pop()
 $   recordPlaced(decl.name, decl)
+$ 
 $   endPlace(decl.name)
 $ end
 
@@ -858,6 +862,20 @@ $   if type:is(ast.TagType) then
 $     return (putPacker(type:getDecl()))
 $   elseif type:is(ast.TypedefType) then
 $     return (putPacker(type.decl))
+$   end
+$ end
+
+$ -- * ------------------------------------------------------------------------
+$ -- Helper for placing a packer for all derived types of the given decl 
+$ -- recursively. Used in cases where just calling putPacker on the base
+$ -- type is not sufficient to achieve this, as the base type may already 
+$ -- be queued for placement, which will prevent how we normally perform
+$ -- this.
+
+$ putPackersForAllDerived = function(decl)
+$   for derived in decl.derived:each() do
+$     putPacker(derived)
+$     putPackersForAllDerived(derived)
 $   end
 $ end
 

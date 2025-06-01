@@ -61,15 +61,9 @@ struct Token
       return src->getVirtualStr(loc, len);
     return src->getStr(loc, len); 
   }
+
+  DefineNilTrait(Token, {}, x.kind == Kind::Invalid);
 };
-
-}
-
-DefineNilValue(lpp::Token, {}, 
-    { return x.kind == lpp::Token::Kind::Invalid; });
-
-namespace lpp
-{
 
 struct Lexer;
 

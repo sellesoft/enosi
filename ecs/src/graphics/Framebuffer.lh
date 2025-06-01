@@ -32,8 +32,8 @@ struct Framebuffer
     String name = "unnamed"_str);
 
   b8 deinit(Renderer& renderer);
+
+  DefineNilTrait(Framebuffer, {0}, x.index == 0);
 };
 
 }
-
-DefineNilValue(gfx::Framebuffer, { 0 }, { return x.index == 0; });
