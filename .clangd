@@ -4,6 +4,10 @@ CompileFlags:
 Index:
   StandardLibrary: No
 
+Completion:
+  ArgumentLists: None
+  CodePatterns: None
+
 Diagnostics:
   ClangTidy:
     Add: ['*']

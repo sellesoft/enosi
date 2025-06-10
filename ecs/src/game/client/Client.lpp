@@ -22,6 +22,8 @@ $ local ui = require "ui.UI"
 @@lpp.import "graphics/Ref.defs.lh"
 @@lpp.import "net/Net.events.lh"
 
+#include "iro/memory/LinkedHeap.h"
+
 @log.ger(client, Debug)
 
 /* ----------------------------------------------------------------------------
@@ -45,7 +47,6 @@ static void handleMessageEvent(void* client_ptr, MessageNetEvent& event)
     @log.info("Message Received: \"", string_buffer, "\"\n");
   }
 }
-
 
 /* ----------------------------------------------------------------------------
  */
@@ -116,19 +117,6 @@ $ end
     .assetmgr = engine->assetmgr,
     .sfilereg = engine->source_data_file_reg,
   };
-
-  // ui::UI::InitParams ui_params = 
-  // {
-  //   .assetmgr = engine->assetmgr,
-  //   .renderer = renderer,
-  //
-  //   .white_texture = white_texture,
-  //
-  //   .viewport = Rect::from({0,0}, window.size),
-  //
-  //   .loader   = asset_loader,
-  // };
-  // \@init(ui.init(ui_params), UI);
 
   SourceDataFileHandle hskin = 
     asset_loader.sfilereg.loadFromDisk("assets/skins/Test.skin"_str);
@@ -327,40 +315,6 @@ b8 Client::update()
 
   ui.beginFrame(ui_params);
   {
-    ui.pushLayer("layer0"_fid, {10.f, 10.f, 50.f, 30.f}, {});
-    {
-      if (ui.putButton(
-            "test"_fid, 
-            {10.f, 10.f, 35.f, 15.f}, 
-            "hello"_str, 
-            test_skin->button))
-      {
-        INFO("hello\n");
-      }
-    }
-    ui.popLayer();
-
-    ui.pushLayer("layer1"_fid, { 10.f, 40.f, 50.f, 30.f}, {});
-    {
-      if (ui.putButton(
-            "test"_fid, 
-            {10.f, 10.f, 35.f, 15.f}, 
-            "goodbye"_str, 
-            test_skin->button))
-      {
-        INFO("goodbye\n");
-      }
-    }
-    ui.popLayer();
-
-    if (ui.putButton(
-          "test"_fid, 
-          {10.f, 15.f, 50.f, 30.f}, 
-          "blah"_str, 
-          test_skin->button))
-    {
-      INFO("blah\n");
-    }
   }
   ui.endFrame();
 
@@ -376,8 +330,8 @@ b8 Client::update()
 b8 Client::wantHotReload()
 {
   // TODO(sushi) do this some other way later.
-  // if (input.real_state.wasKeyPressed(Key::R))
-  //   return true;
+  if (input.real_state.wasKeyPressed(Key::R))
+    return true;
   return false;
 }
 

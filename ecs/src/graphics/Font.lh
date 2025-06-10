@@ -105,6 +105,11 @@ struct Font
     return texture->gfx_texture;
   }
 
+  f32 getHeight() const
+  {
+    return getData().height;
+  }
+
   // It's recommended to use this to find the proper range for a given
   // codepoint and then passing it to getPackedChar() when you know what
   // ranges you'll be working with.

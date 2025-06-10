@@ -1,43 +1,55 @@
-return TestSkinDef
+button_state_base = 
 {
   text = 
   {
     font = "assets/fonts/gohu",
-    wrap = "Word",
     font_height = 11,
-    tab_spaces = 1,
-  },
+  }
+}
+
+text = 
+{
+  font = "assets/fonts/gohu",
+  wrap = "Word",
+  font_height = 11,
+  tab_spaces = 1,
+}
+
+return TestSkinDef
+{
+  text = text : {},
 
   button = 
   {
-    normal = 
+    normal = button_state_base :
     {
       item = { color = {r=10,g=10,b=10,a=255} },
-      text = 
-      {
-        font = "assets/fonts/gohu",
-        font_height = 11
-      }
     },
 
-    hovered = 
+    hovered = button_state_base :
     {
       item = { color = {r=50,g=50,b=50,a=255} },
-      text = 
+    },
+
+    pressed = button_state_base :
+    {
+      item = { color = {r=70,g=70,b=70,a=255} },
+    }
+  },
+
+  text_field = 
+  {
+    box = 
+    { 
+      text = text : { align = {0.5,0.5} }, 
+      item = 
       {
-        font = "assets/fonts/gohu",
-        font_height = 11
+        color = {r=0,g=40,b=30,a=255}
       }
     },
 
-    pressed = 
-    {
-      item = { color = {r=70,g=70,b=70,a=255} },
-      text = 
-      {
-        font = "assets/fonts/gohu",
-        font_height = 11
-      }
-    }
-  },
+    padding = {4, 0},
+
+    cursor_color = {r=255,g=255,b=255,a=255},
+  }
 }

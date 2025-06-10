@@ -42,11 +42,18 @@ struct Rect
 
   void addPos(vec2f v) { x += v.x; y += v.y; }
 
-  Rect contractedX(f32 v) const 
-  {
-    return {x + v, y, w - 2.f * v, h};
-  }
+  Rect contractedX(f32 v) const { return {x + v, y, w - 2.f * v, h}; }
   void contractX(f32 v) { *this = contractedX(v); }
+
+  Rect contractedY(f32 v) const { return { x, y + v, w, h - 2.f * v}; }
+  void contractY(f32 v) { *this = contractedY(v); }
+
+  Rect contracted(f32 v) const { return contractedX(v).contractedY(v); }
+  void contract(f32 v) { *this = contracted(v); }
+
+  Rect contracted(f32 vx, f32 vy) const 
+    { return contractedX(vx).contracted(vy); }
+  void contract(f32 vx, f32 vy) { *this = contracted(vx, vy); }
 
   b8 containsPoint(vec2f p) const
   {

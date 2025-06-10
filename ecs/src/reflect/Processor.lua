@@ -48,6 +48,7 @@ Processor.new = function(input, filter)
   }
   o.prereqs = {}
   o.namespace_stack = List{}
+  o.all_decls = List{}
   return setmetatable(o, Processor)
 end
 
@@ -260,6 +261,8 @@ Processor.resolveDecl = function(self, cdecl)
       decl.is_anonymous = true
     end
     decl.typedefs = List{}
+
+    self.all_decls:push(decl)
   end
 
   return decl

@@ -6,7 +6,6 @@ return EntityDef
     Appearance {},
     cl::Sprite 
     { 
-      state = 0,
       states = "assets/entities/locker/Locker" 
     },
     cl::Visualizer

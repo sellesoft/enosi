@@ -10,6 +10,7 @@ struct TestSkinDef
 {
   ui::TextSkinDef text;
   ui::ButtonSkinDef button;
+  ui::TextFieldSkinDef text_field;
 };
 
 typedef TypedSourceAssetRef<TestSkinDef> TestSkinRef;

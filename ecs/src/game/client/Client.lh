@@ -22,6 +22,7 @@ $ require "common"
 @@lpp.import "net/Connection.lh"
 @@lpp.import "net/EventBus.lh"
 @@lpp.import "game/client/TestSkin.defs.lh"
+@@lpp.import "ui/TextEdit.lh"
 
 #include "iro/time/Time.h"
 
@@ -43,6 +44,12 @@ struct Client
   Window window;
 
   TestSkinRef test_skin;
+
+  u8 text_buffer[255];
+  s32 text_buffer_len = 0;
+
+  u8 text_buffer2[255];
+  s32 text_buffer2_len = 0;
 
   // cl::Editor editor;
 

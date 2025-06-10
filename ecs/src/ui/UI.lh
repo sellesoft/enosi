@@ -15,11 +15,14 @@ $ local ui = require "ui.UI"
 
 @@lpp.import "ui/Skin.defs.lh"
 
+@@lpp.import "ui/TextEdit.lh"
+
 #include "iro/containers/List.h"
 #include "iro/containers/Pool.h"
 #include "iro/containers/LinkedPool.h"
 #include "iro/containers/Tree.h"
 #include "iro/memory/Bump.h"
+#include "iro/memory/LinkedHeap.h"
 #include "math/Rect.h"
 #include "math/mat.h"
 #include "Color.h"
@@ -31,15 +34,13 @@ namespace gfx
 }
 
 struct InputMgr;
-
 struct mat3x2;
 
 namespace ui
 {
 
 struct UI;
-
-struct TextSkinDef;
+struct TextEdit;
 
 /* ============================================================================
  */
@@ -71,9 +72,23 @@ struct FocusableId
 
 /* ============================================================================
  */
+struct CombinedFocusableId
+{
+  u64 val = 0;
+
+  bool operator == (const CombinedFocusableId& rhs) const
+  {
+    return val == rhs.val;
+  }
+
+  DefineNilTrait(CombinedFocusableId, {0}, x.val == 0);
+};
+
+/* ============================================================================
+ */
 struct FocusableBounds
 {
-  FocusableId id = {};
+  CombinedFocusableId id = {};
   Rect bounds = {};
 
   FocusableBounds* next = nullptr;
@@ -130,17 +145,40 @@ struct BorderDrawCmd : Cmd
 
 /* ============================================================================
  */
-struct Panel
+enum class GroupScissor
 {
-  FocusableId id;
+  Self,
+  Parent,
+  None,
+};
 
+/* ============================================================================
+ */
+struct Group
+{
   Rect bounds = {};
 
   mat3x2 transform = {};
 
-  Panel* prev = nullptr;
+  GroupScissor scissoring = GroupScissor::Self;
 
   FocusableBounds* fbounds = nullptr;
+
+  Group* parent = nullptr;
+  Group* next = nullptr;
+};
+
+/* ============================================================================
+ */
+struct Panel
+{
+  CombinedFocusableId id = {};
+  
+  Group* groups = nullptr;
+  Group* current_group = nullptr;
+
+  Panel* parent = nullptr;
+  Panel* next = nullptr;
 };
 
 /* ============================================================================
@@ -160,16 +198,67 @@ struct Layer
   u32 idx = 0;
 
   Panel* panels = nullptr;
+  Panel* current_panel = nullptr;
 
   Cmd* first_cmd = nullptr;
   Cmd* last_cmd = nullptr;
-
-  Panel* current_panel = nullptr;
 
   Layer* prev = nullptr;
   Layer* next = nullptr;
 
   void pushCmd(Cmd* cmd);
+};
+
+/* ============================================================================
+ *  State intended to be kept persistent by users of TextFields.
+ */
+struct TextFieldState
+{
+  // X offset of this field's text. Used to follow the cursor when its moved
+  // outside of the visible text.
+  f32 x_offset;
+
+  // State tracking a buffer to edit as well as the cursor that moves through
+  // the buffer.
+  TextEdit edit;
+};
+
+/* ============================================================================
+ */
+struct PersistentState
+{
+  CombinedFocusableId id;
+
+  void* ptr;
+  u64   size;
+};
+
+/* ============================================================================
+ */
+struct PersistentStateMgr
+{
+  enum
+  {
+    c_MaxStates = 256,
+    c_HeapSize = unit::kilobytes(4)
+  };
+
+  void* heap_ptr;
+  mem::LinkedHeap heap;
+
+  PersistentState states[c_MaxStates];
+  u64 num_states;
+
+  b8 init(mem::Allocator* allocator);
+  void deinit(mem::Allocator* allocator);
+
+  struct GetResult
+  {
+    PersistentState* pstate;
+    b8 just_created;
+  };
+
+  GetResult registerOrGetState(CombinedFocusableId id, u64 size);
 };
 
 /* ============================================================================
@@ -210,8 +299,13 @@ struct UI
   void beginFrame(const FrameParams& params);
   void endFrame();
 
-  // Returns the bounds of the currently active Panel.
-  Rect getBounds() const;
+  Rect getBounds() const 
+  { 
+    return Rect::from({0,0}, getCurrentGroup()->bounds.size());
+  }
+
+  f32 getWidth() const { return getCurrentGroup()->bounds.w; }
+  f32 getHeight() const { return getCurrentGroup()->bounds.h; }
 
   void putQuad(Rect bounds, gfx::Texture texture, vec4f uv, Color color);
   void putQuad(Rect bounds, gfx::Texture texture, Color color);
@@ -227,13 +321,17 @@ struct UI
   // Begins a new panel.
   void beginPanel(FocusableId id, Rect bounds);
   void beginPanel(FocusableId id, Rect bounds, Panel* prev);
-
   void endPanel();
+
+  void beginGroup(Rect bounds, GroupScissor scissoring = GroupScissor::Self);
+  void endGroup();
 
   // Places a basic 'item', a decorated rect basically.
   void putItem(Rect bounds, const ItemSkinDef& skin);
 
   // Places undecorated text.
+  // TODO(sushi) basic text functions that don't require a skin
+  //             and use a default font (gohu, of course) stored on UI.
   void putText(Rect bounds, String text, const TextSkinDef& skin);
 
   // Places text with a background and various other decor (eventually).
@@ -246,14 +344,28 @@ struct UI
     String text, 
     const ButtonSkinDef& skin);
 
-  // Pushes Cmds to the active Layer to transform and scissor successive Cmds
-  // according to the given Panel.
-  void pushPanelRenderState(Panel* panel);
+  // Places a text field that edits some text specified in the state.
+  b8 putTextField(
+    FocusableId id,
+    Rect bounds, 
+    TextFieldState* state,
+    const TextFieldSkinDef& skin);
+
+  // Variant of the above which just takes a buffer of text to edit. The 
+  // state of the text field is managed internally by UI. If the field goes
+  // unused for too long its state will be cleared. To avoid this, use the 
+  // above function with a TextFieldState stored elsewhere.
+  b8 putTextField(
+    FocusableId id,
+    Rect bounds,
+    TextEdit::Buffer buffer,
+    const TextFieldSkinDef& skin);
+
+  void pushGroupRenderState(Group* group);
 
   // Bump allocator for memory allocated throughout a UI frame.
   mem::Bump frame_allocator;
 
-  // The current viewport (is this needed?)
   Rect viewport = {};
 
   gfx::Renderer* renderer = nullptr;
@@ -278,18 +390,10 @@ struct UI
 
   vec2i draw_counts = {};
 
-  u64 next_focusable_id;
-
   struct FocusState
   {
-    // TODO(sushi) it would be nice to compress these, but for now this is 
-    //             probably ok.
-    FocusableId focused;
-    FocusableId hovered;
-    FocusableId focused_panel;
-    FocusableId hovered_panel;
-    u32 hovered_layer_idx;
-    u32 focused_layer_idx;
+    CombinedFocusableId focused;
+    CombinedFocusableId hovered;
   };
 
   FocusState prev_focus_state;
@@ -299,18 +403,50 @@ struct UI
   void drawDebugRect(Rect rect, Color color);
   void drawDebugBorder(Rect rect, Color color);
 
-  Cmd* debug_cmds;
+  Cmd* debug_cmds = nullptr;
 
   // The initial Layer created on frame start.
-  Layer* root_layer;
+  Layer* root_layer = nullptr;
 
   // The current layer being operated on this frame.
-  Layer* current_layer;
+  Layer* current_layer = nullptr;
 
   // Current layer index, used for tracked focused/hovered layers.
-  u32 layer_idx;
+  u32 layer_idx = 0;
+
+  PersistentStateMgr persistent_state_mgr;
+
+  template<typename T>
+  b8 registerOrGetPersistentState(CombinedFocusableId id, T** out_state)
+  {
+    PersistentStateMgr::GetResult result = 
+      persistent_state_mgr.registerOrGetState(id, sizeof(T));
+
+    if (result.pstate == nullptr)
+      return false;
+
+    *out_state = (T*)result.pstate->ptr;
+    return result.just_created;
+  }
+
+  template<typename T>
+  b8 registerOrGetPersistentState(FocusableId id, T** out_state)
+  {
+    return registerOrGetPersistentState(getCombinedId(id), out_state);
+  }
 
   void pushConstantFromTransform(mat3x2 transform, gfx::Renderer& renderer);
+
+  // Combines the given ids.
+  CombinedFocusableId combineIds(FocusableId a, FocusableId b) const;
+  CombinedFocusableId combineIds(CombinedFocusableId a, FocusableId b) const;
+
+  // Combines the given id with the id of the current panel.
+  CombinedFocusableId getCombinedId(FocusableId id) const;
+
+  Layer* getCurrentLayer() const { return current_layer; }
+  Panel* getCurrentPanel() const { return getCurrentLayer()->current_panel; }
+  Group* getCurrentGroup() const { return getCurrentPanel()->current_group; }
 };
 
 }

@@ -71,6 +71,7 @@ $(comp.typename)* ComponentMgr::allocateComponent<$(comp.typename)>()
 {
   auto* node = pools->$(comp.name)_pool.pushHead();
   auto* cmp = node->data;
+  mem::zero(cmp, sizeof($(comp.typename)));
   cmp->node = node;
   Component::onCreate<$(comp.typename)>(cmp);
   return cmp;

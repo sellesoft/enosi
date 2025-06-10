@@ -6,9 +6,12 @@ $ local ui = require "ui.UI"
 @@lpp.import "graphics/Renderer.lh"
 @@lpp.import "graphics/Geo.lh"
 @@lpp.import "math/util.h"
+@@lpp.import "ui/TextEdit.lh"
 
 #include "iro/Logger.h"
 #include "iro/containers/SmallArray.h"
+
+#include "ctype.h"
 
 $ require "Log"
 
@@ -53,7 +56,79 @@ b8 UI::init(InitParams& params)
         gfx::Buffer::MappingBehavior::Occasional))
     return ERROR("failed to initialize ui index buffer\n");
 
+  if (!persistent_state_mgr.init(&mem::stl_allocator))
+    return ERROR("failed to initialize persistent state manager\n");
+
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 PersistentStateMgr::init(mem::Allocator* allocator)
+{
+  heap_ptr = allocator->allocate(c_HeapSize);
+
+  if (!heap.init(heap_ptr, c_HeapSize))
+    return ERROR("failed to initialize persistent state heap\n");
+
+  mem::zero(states, c_MaxStates * sizeof(PersistentState));
+  num_states = 0;
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void PersistentStateMgr::deinit(mem::Allocator* allocator)
+{
+  allocator->free(heap_ptr);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+PersistentStateMgr::GetResult PersistentStateMgr::registerOrGetState(
+    CombinedFocusableId id,
+    u64 size)
+{
+  // Find a free slot or one that already exists with this id.
+  PersistentState* free_state = nullptr;
+  
+  for (s32 i = 0; i < c_MaxStates; ++i)
+  {
+    PersistentState* pstate = &states[i];
+
+    // Grab the first free state such that if we need to register a new one 
+    // we register the earliest one we find.
+    if (free_state == nullptr && pstate->ptr == nullptr)
+      free_state = pstate;
+
+    if (pstate->id == id)
+    {
+      // Simple assertion that the registered state has the same size as the 
+      // one being requested. This should be made more robust later by using 
+      // type ids (hashed typenames).
+      assert(pstate->size == size);
+
+      return {pstate, false};
+    }
+  }
+  
+  // We didn't find an existing state, so we need to register a new one.
+
+  // Check that we have room for another state.
+  if (free_state == nullptr)
+  {
+    ERROR("maximum amount of persistent states reached\n");
+    return {nullptr};
+  }
+
+  free_state->id = id;
+  free_state->ptr = heap.allocate(size);
+  free_state->size = size;
+
+  DEBUG("registered persistent state ", id.val, " at ", free_state->ptr, "\n");
+
+  return {free_state, true};
 }
 
 /* ----------------------------------------------------------------------------
@@ -76,16 +151,20 @@ void UI::beginFrame(const FrameParams& params)
   root_layer = frame_allocator.construct<Layer>();
 
   Panel* root_panel = frame_allocator.construct<Panel>();
+  Group* root_group = frame_allocator.construct<Group>();
 
-  root_panel->bounds = viewport;
-  root_panel->transform = mat3x2::createTransform(viewport.pos(), 0.f);
+  root_group->bounds = viewport;
+  root_group->transform = mat3x2::createTransform(viewport.pos(), 0.f);
+
+  root_panel->current_group = root_group;
+  root_panel->groups = root_group;
 
   root_layer->current_panel = root_panel;
   root_layer->panels = root_layer->current_panel;
 
   current_layer = root_layer;
 
-  pushPanelRenderState(root_panel);
+  pushGroupRenderState(root_group);
 }
 
 /* ----------------------------------------------------------------------------
@@ -115,18 +194,23 @@ void UI::pushConstantFromTransform(mat3x2 transform, gfx::Renderer& renderer)
  */
 void UI::endFrame()
 {
+  DEBUG("UI::endFrame\n");
+
   // Bind UI's gfx objects.
+  TRACE("binding ui gfx objects\n");
   renderer->bindPipeline(pipeline);
   renderer->bindVertexBuffer(vertex_buffer);
   renderer->bindIndexBuffer(index_buffer);
 
   // Map the draw info buffers.
+  TRACE("mapping ui draw info buffers\n");
   vertex_buffer.map(*renderer);
   index_buffer.map(*renderer);
 
   Layer* top_layer = nullptr;
 
   // Execute each layer's Cmds.
+  TRACE("executing layer draw commands\n");
   for (Layer* layer = root_layer; layer; layer = layer->next)
   {
     for (Cmd* cmd = layer->first_cmd; cmd; cmd = cmd->next)
@@ -137,36 +221,33 @@ void UI::endFrame()
     top_layer = layer;
   }
 
+  TRACE("evaluating input\n");
   for (Layer* layer = top_layer; layer; layer = layer->prev)
   {
-    for (Panel* panel = layer->panels; panel; panel = panel->prev)
+    for (Panel* panel = layer->panels; panel; panel = panel->next)
     {
-      vec2f screen_translation = panel->transform.getTranslation();
-
-      Rect screen_bounds = 
-        Rect::from(screen_translation, panel->bounds.size());
-
-      // drawDebugBorder(screen_bounds, 0x00ffaaff);
-
-      if (screen_bounds.containsPoint(frame_input.getCursorPos()))
+      for (Group* group = panel->groups; group; group = group->next)
       {
-        next_focus_state.hovered_panel = panel->id;
-        next_focus_state.hovered_layer_idx = layer->idx;
+        vec2f screen_translation = group->transform.getTranslation();
 
-        for (FocusableBounds* fbounds = panel->fbounds; 
-             fbounds; fbounds = fbounds->next)
+        Rect screen_bounds = 
+          Rect::from(screen_translation, group->bounds.size());
+
+        if (screen_bounds.containsPoint(frame_input.getCursorPos()))
         {
-          vec2f screen_fbounds_translation = 
-            screen_translation + fbounds->bounds.pos();
-
-          Rect screen_fbounds = 
-            Rect::from(screen_fbounds_translation, fbounds->bounds.size());
-
-          // drawDebugBorder(screen_fbounds, 0x335599ff);
-
-          if (screen_fbounds.containsPoint(frame_input.getCursorPos()))
+          for (FocusableBounds* fbounds = group->fbounds; 
+               fbounds; fbounds = fbounds->next)
           {
-            next_focus_state.hovered = fbounds->id;
+            vec2f screen_fbounds_translation = 
+              screen_translation + fbounds->bounds.pos();
+
+            Rect screen_fbounds = 
+              Rect::from(screen_fbounds_translation, fbounds->bounds.size());
+
+            if (screen_fbounds.containsPoint(frame_input.getCursorPos()))
+            {
+              next_focus_state.hovered = fbounds->id;
+            }
           }
         }
       }
@@ -178,6 +259,8 @@ void UI::endFrame()
 
   if (debug_cmds != nullptr)
   {
+    TRACE("executing debug draw commands\n");
+
     mat3x2 screen_transform = mat3x2::createTransform(vec2f(0,0), 0.f);
 
     TransformCmd transform_cmd = {};
@@ -198,11 +281,15 @@ void UI::endFrame()
   debug_cmds = nullptr;
 
   // Clean up the frame's memory.
+  TRACE("clearing ui frame allocator\n");
   frame_allocator.clear();
 
   // Flush and unmap the buffers.
+  TRACE("flushing ui draw buffers\n");
   vertex_buffer.flush(*renderer, 0, gfx::Buffer::FLUSH_WHOLE_BUFFER);
   index_buffer.flush(*renderer, 0, gfx::Buffer::FLUSH_WHOLE_BUFFER);
+
+  TRACE("unmapping ui draw buffers\n");
   vertex_buffer.unmap(*renderer);
   index_buffer.unmap(*renderer);
 
@@ -210,28 +297,20 @@ void UI::endFrame()
   root_layer = nullptr;
   current_layer = nullptr;
 
-  if (notnil(next_focus_state.hovered) &&
-      frame_input.wasMouseButtonPressed(MouseButton::Left))
+  if (frame_input.wasMouseButtonPressed(MouseButton::Left))
   {
     next_focus_state.focused = next_focus_state.hovered;
-    next_focus_state.focused_panel = next_focus_state.hovered_panel;
-    next_focus_state.focused_layer_idx = next_focus_state.hovered_layer_idx;
   }
   else
   {
-    next_focus_state.focused = focus_state.hovered;
-    next_focus_state.focused_panel = focus_state.hovered_panel;
-    next_focus_state.focused_layer_idx = focus_state.hovered_layer_idx;
+    next_focus_state.focused = focus_state.focused;
   }
 
   prev_focus_state = focus_state;
   focus_state = next_focus_state;
   next_focus_state = {};
 
-  TRACE("focus_state:",
-      "\n            hovered: ", focus_state.hovered.val,
-      "\n      hovered_panel: ", focus_state.hovered_panel.val,
-      "\n  hovered_layer_idx: ", focus_state.hovered_layer_idx, "\n");
+  frame_input.clear();
 
   in_frame = false;
 }
@@ -293,7 +372,7 @@ void UI::popLayer()
 
   layer_idx -= 1;
 
-  pushPanelRenderState(current_layer->current_panel);
+  pushGroupRenderState(current_layer->current_panel->current_group);
 }
 
 /* ----------------------------------------------------------------------------
@@ -303,30 +382,45 @@ void UI::beginPanel(FocusableId id, Rect bounds, Panel* prev)
   DEBUG("UI::beginPanel(", id.val, ")\n");
 
   assert(notnil(id));
+  
+  CombinedFocusableId prev_id = 
+    prev == nullptr
+    ? current_layer->current_panel->id 
+    : prev->id;
 
+  // Allocate the new Panel and assign its id.
   auto* next_panel = frame_allocator.construct<Panel>();
-  next_panel->id = id;
-  next_panel->bounds = bounds;
+  next_panel->id = combineIds(prev_id, id);
 
+  // Allocate the new Panel's root group and link to it.
+  auto* next_group = frame_allocator.construct<Group>();
+  next_panel->current_group = next_group;
+  next_panel->groups = next_group;
+
+  // Set the group's local bounds and compute its screen transform.
+  next_group->bounds = bounds;
   if (prev != nullptr)
   {
-    // Set the transform of this panel to be nested within the current panel.
-    next_panel->transform = 
-      prev->transform.mul(
+    // If we have a previous Panel, set the transform of the new Panel's 
+    // root Group relative to that Panel.
+    next_group->transform = 
+      prev->current_group->transform.mul(
         mat3x2::createTransform(bounds.pos(), 0.f));
   }
   else
   {
-    // Otherwise, the panel is transformed in screen space.
-    next_panel->transform = mat3x2::createTransform(bounds.pos(), 0.f);
+    // Otherwise, set its transform in screen space.
+    next_group->transform = mat3x2::createTransform(bounds.pos(), 0.f);
   }
 
-  next_panel->prev = current_layer->panels;
+  // Link the new Panel in the current Layer.
+  next_panel->parent = prev;
+  next_panel->next = current_layer->panels;
   current_layer->panels = next_panel;
-
   current_layer->current_panel = next_panel;
 
-  pushPanelRenderState(next_panel);
+  // Push the render state of the new group.
+  pushGroupRenderState(next_group);
 }
 
 /* ----------------------------------------------------------------------------
@@ -344,11 +438,93 @@ void UI::endPanel()
 
   Panel* current_panel = current_layer->current_panel;
 
-  assert(current_panel && current_panel->prev != nullptr);
+  if (current_panel == nullptr)
+    assert(!"attempt to end non-existant panel");
 
-  current_layer->current_panel = current_panel->prev;
+  if (current_panel->parent == nullptr)
+    assert(!"attempt to end root panel of layer");
 
-  pushPanelRenderState(current_layer->current_panel);
+  if (current_panel->current_group->parent != nullptr)
+    assert(!"attempt to end panel with active groups");
+
+  current_layer->current_panel = current_panel->parent;
+
+  pushGroupRenderState(current_layer->current_panel->current_group);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::beginGroup(Rect bounds, GroupScissor scissoring)
+{
+  Panel* current_panel = current_layer->current_panel;
+  Group* current_group = current_panel->current_group;
+
+  Group* next_group = frame_allocator.construct<Group>();
+  next_group->bounds = bounds;
+  next_group->scissoring = scissoring;
+  next_group->parent = current_group;
+  next_group->next = current_panel->groups;
+  current_panel->groups = next_group;
+  current_panel->current_group = next_group;
+
+  next_group->transform =
+    current_group->transform.mul(mat3x2::createTransform(bounds.pos(), 0.f));
+
+  pushGroupRenderState(next_group);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::endGroup()
+{
+  Panel* current_panel = current_layer->current_panel;
+
+  current_panel->current_group = current_panel->current_group->parent;
+  assert(current_panel->current_group != nullptr);
+
+  pushGroupRenderState(current_panel->current_group);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::pushGroupRenderState(Group* group)
+{
+  auto* transform_cmd = frame_allocator.construct<TransformCmd>();
+  transform_cmd->transform = &group->transform;
+
+  vec2f group_pos = group->transform.getTranslation();
+
+  auto* scissor_cmd = frame_allocator.construct<ScissorCmd>();
+
+  switch (group->scissoring)
+  {
+  case GroupScissor::Self:
+    scissor_cmd->bounds.set(group_pos, group->bounds.size());
+    break;
+
+  case GroupScissor::Parent:
+    if (group->parent != nullptr)
+    {
+      vec2f parent_group_pos = group->parent->transform.getTranslation();
+      scissor_cmd->bounds.set(parent_group_pos, group->parent->bounds.size());
+    }
+    else
+      // TODO(sushi) handle this properly 
+      scissor_cmd->bounds = group->bounds;
+    break;
+
+  case GroupScissor::None:
+    scissor_cmd->bounds = viewport;
+    break;
+  }
+
+  TRACE(
+    "pushing group (", group, ") render state (t: ", 
+    transform_cmd->transform->getTranslation(), ", s: ", scissor_cmd->bounds, 
+    ")\n");
+
+  current_layer->pushCmd(transform_cmd);
+  current_layer->pushCmd(scissor_cmd);
 }
 
 /* ----------------------------------------------------------------------------
@@ -396,13 +572,21 @@ void UI::putText(Rect bounds, String text, const TextSkinDef& skin)
   // TODO(sushi) add a null font so that this isn't fatal.
   assert(skin.font.isValid());
 
+  TRACE("UI::putText\n");
+
   const gfx::Font& font = *skin.font;
 
   gfx::PackedChar space_char;
   font.getPackedChar(&space_char, ' ');
   f32 space_width = space_char.xadvance;
 
-  vec2f cursor = bounds.pos();
+  vec2f text_size = gfx::measureText(text, &font, skin.font_height, 1.f);
+
+  vec2f cursor = {};
+  cursor.x = bounds.x + skin.align.x * (bounds.w - text_size.x);
+  cursor.y = bounds.y + skin.align.y * (bounds.h - text_size.y);
+  cursor = round(cursor);
+
   const gfx::FontData& font_data = font.getData();
 
   while (!text.isEmpty())
@@ -474,11 +658,11 @@ b8 UI::putButton(
   {
     state_skin = &skin.hovered;
 
-    if (frame_input.wasMouseButtonPressed(MouseButton::Left))
-    {
+    if (frame_input.isMouseButtonDown(MouseButton::Left))
       state_skin = &skin.pressed;
+
+    if (frame_input.wasMouseButtonReleased(MouseButton::Left))
       clicked = true;
-    }
   }
 
   putTextItem(bounds, text, *state_skin);
@@ -488,16 +672,203 @@ b8 UI::putButton(
 
 /* ----------------------------------------------------------------------------
  */
-void UI::pushPanelRenderState(Panel* panel)
+b8 UI::putTextField(
+    FocusableId id,
+    Rect bounds,
+    TextFieldState* state,
+    const TextFieldSkinDef& skin)
 {
-  auto* transform_cmd = frame_allocator.construct<TransformCmd>();
-  transform_cmd->transform = &panel->transform;
+  assert(state != nullptr);
 
-  auto* scissor_cmd = frame_allocator.construct<ScissorCmd>();
-  scissor_cmd->bounds = panel->bounds;
+  TRACE("UI::putTextField\n");
 
-  current_layer->pushCmd(transform_cmd);
-  current_layer->pushCmd(scissor_cmd);
+  FocusFlags focus = putFocusableBounds(id, bounds);
+
+  TextEdit* edit = &state->edit;
+
+  b8 focused = focus.test(FocusFlag::Focused);
+
+  b8 cursor_moved = false;
+  b8 buffer_too_small = false;
+  b8 text_changed = false;
+
+  putItem(bounds, skin.box.item);
+
+  if (focused)
+  {
+    b8 ctrl_down = 
+      frame_input.isKeyDown(Key::LCtrl) || 
+      frame_input.isKeyDown(Key::RCtrl);
+
+    b8 alt_down = 
+      frame_input.isKeyDown(Key::LAlt) ||
+      frame_input.isKeyDown(Key::RAlt);
+
+$ local function actions(len)
+$   len = len or ""
+    if (frame_input.wasKeyPressed(Key::Right))
+    {
+      if (0 != edit->cursorMoveRight$(len)()) 
+        cursor_moved = true;
+    }
+    if (frame_input.wasKeyPressed(Key::Left))
+    {
+      if (0 != edit->cursorMoveLeft$(len)())
+        cursor_moved = true;
+    }
+    if (frame_input.wasKeyPressed(Key::Backspace))
+    {
+      if (0 != edit->deleteLeft$(len)())
+      {
+        cursor_moved = true;
+        text_changed = true;
+      }
+    }
+    if (frame_input.wasKeyPressed(Key::Delete))
+    {
+      if (0 != edit->deleteRight$(len)())
+      {
+        cursor_moved = true;
+        text_changed = true;
+      }
+    }
+$ end
+
+    if (ctrl_down)
+    {
+      @actions "Word"
+    }
+    else if (alt_down)
+    {
+      @actions "WordPart"
+    }
+    else
+    {
+      @actions
+    }
+
+    if (frame_input.hasCharInput())
+    {
+      String input = frame_input.getCharInput();
+      if (!iscntrl(input.ptr[0]))
+      {
+        u32 insert_len = edit->insertString(frame_input.getCharInput());
+
+        if (insert_len == 0)
+          buffer_too_small = true;
+        else
+          text_changed = true;
+      }
+    }
+  }
+
+  f32 text_width = 0.f;
+  f32 cursor_offset = -1.f;
+
+  String text = edit->asStr();
+  String cscan = text;
+
+  const f32 visible_width = bounds.contractedX(skin.padding.x).w;
+  for (;;)
+  {
+    if (edit->cursor.pos == text.len - cscan.len ||
+        cscan.isEmpty())
+    {
+      if (cursor_offset < 0.f)
+      {
+        cursor_offset = text_width;
+
+        if (text_width < state->x_offset)
+          state->x_offset = text_width;
+        else if (text_width > state->x_offset + visible_width)
+          state->x_offset = text_width - visible_width;
+      }
+
+      if (cscan.isEmpty())
+        break;
+    }
+
+    u32 codepoint = cscan.advance().codepoint;
+
+    // TODO(sushi) text box
+    if (codepoint == '\n')
+    {
+      WARN("newline encountered in a UI text field buffer! these are not ",
+           "handled in this widget\n");
+    }
+  
+    gfx::PackedChar pc;
+    skin.box.text.font->getPackedChar(&pc, codepoint);
+
+    text_width += pc.xadvance;
+  }
+
+  Rect text_bounds = {};
+  text_bounds.x = -state->x_offset;
+  text_bounds.y = 0.f;
+  text_bounds.w = max(1.f, text_width);
+  text_bounds.h = bounds.h;
+
+  // TODO(sushi) using 2 Groups to handle panning the text is kinda scuffed
+  //             but otherwise we need to store some kind of scroll state 
+  //             or, more generally, offset state for each Group and idk
+  //             if I wanna do that.
+  // Begin a group for the bounds we want to scissor the text in.
+  beginGroup(
+    bounds.contracted(skin.padding.x, skin.padding.y),
+    GroupScissor::Parent);
+  {
+    // Begin a group for the text such that we can pan it.
+    beginGroup(
+      text_bounds,
+      GroupScissor::Parent);
+    {
+      putText(
+        Rect::from({0,0},text_bounds.size()), 
+        text, 
+        skin.box.text);
+
+      if (focused)
+      {
+        if (cursor_offset == 0.f)
+          cursor_offset += 1.f;
+        else if (cursor_offset == text_width)
+          cursor_offset -= 1.f;
+
+        putQuad(
+          Rect::from(
+            cursor_offset,
+            0.f,
+            1.f,
+            skin.box.text.font->getHeight()),
+          skin.cursor_color);
+      }
+    }
+    endGroup();
+  }
+  endGroup();
+
+  return text_changed;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 UI::putTextField(
+    FocusableId id, 
+    Rect bounds, 
+    TextEdit::Buffer buffer,
+    const TextFieldSkinDef& skin)
+{
+  TextFieldState* state = nullptr;
+  if (registerOrGetPersistentState(id, &state))
+  {
+    state->x_offset = 0.f;
+    state->edit = {};
+  }
+
+  state->edit.setBuffer(buffer);
+
+  return putTextField(id, bounds, state, skin);
 }
 
 /* ----------------------------------------------------------------------------
@@ -596,32 +967,22 @@ FocusFlags UI::putFocusableBounds(FocusableId id, Rect bounds)
   Panel* current_panel = current_layer->current_panel;
 
   auto* focusable = frame_allocator.construct<FocusableBounds>();
-  focusable->id = id;
+  focusable->id = getCombinedId(id);
   focusable->bounds = bounds;
 
-  focusable->next = current_panel->fbounds;
-  current_panel->fbounds = focusable;
+  focusable->next = current_panel->current_group->fbounds;
+  current_panel->current_group->fbounds = focusable;
   
   // Check if these bounds were hovered or focused last frame.
   FocusFlags result = {};
 
-  if (layer_idx == focus_state.hovered_layer_idx)
-  {
-    if (current_layer->current_panel->id == focus_state.hovered_panel)
-    {
-      if (focus_state.hovered == id)
-        result.set(FocusFlag::Hovered);
-    }
-  }
+  auto combined = getCombinedId(id);
 
-  if (layer_idx == focus_state.focused_layer_idx)
-  {
-    if (current_layer->current_panel->id == focus_state.focused_panel)
-    {
-      if (focus_state.focused == id)
-        result.set(FocusFlag::Focused);
-    }
-  }
+  if (combined == focus_state.hovered)
+    result.set(FocusFlag::Hovered);
+
+  if (combined == focus_state.focused)
+    result.set(FocusFlag::Focused);
 
   return result;
 }
@@ -658,6 +1019,33 @@ void UI::drawDebugBorder(Rect bounds, Color color)
 
   border_cmd->next = debug_cmds;
   debug_cmds = border_cmd;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+CombinedFocusableId UI::combineIds(FocusableId a, FocusableId b) const
+{
+  u64 lhs = a.val;
+  u64 rhs = b.val;
+  
+  // TODO(sushi) get that proper hashing lib going.
+  lhs ^= rhs + 0x517cc1b727220a95 + (lhs << 6) + (lhs >> 2);
+
+  return {lhs};
+}
+
+/* ----------------------------------------------------------------------------
+ */
+CombinedFocusableId UI::combineIds(CombinedFocusableId a, FocusableId b) const
+{
+  return combineIds(FocusableId{a.val}, b);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+CombinedFocusableId UI::getCombinedId(FocusableId id) const
+{
+  return combineIds(current_layer->current_panel->id, id);
 }
 
 }

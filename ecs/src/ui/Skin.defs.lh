@@ -58,11 +58,28 @@ struct TextItemSkinDef
  */
 struct ButtonSkinDef
 {
-  vec2f text_align;
   TextItemSkinDef normal;
   TextItemSkinDef hovered;
   TextItemSkinDef pressed;
   TextItemSkinDef disabled;
+};
+
+/* ============================================================================
+ */
+struct TextFieldSkinDef
+{
+  TextItemSkinDef box;
+
+  vec2f padding;
+
+  Color cursor_color;
+};
+
+/* ============================================================================
+ */
+struct DropDownSkinDef
+{
+  TextItemSkinDef selection;
 };
 
 }

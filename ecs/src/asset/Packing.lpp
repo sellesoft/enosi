@@ -266,7 +266,7 @@ b8 Packer::pack(const SourceData& data, $(name)* out)
   if (!data.hasObjectData())
     return ERROR("expected object data to pack $(name)\n");
 
-  if (data.children.isEmpty())
+  if (data.children.isEmpty() && data.base == nullptr)
     return true;
 
   mem::zero(out, sizeof($(name)));
