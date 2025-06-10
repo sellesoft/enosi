@@ -86,6 +86,21 @@ struct Pool
     free_slot = nullptr;
   }
 
+  /* -------------------------------------------------------------------------------------------- destroy
+   */ 
+  void move(Pool<T>& dest)
+  {
+    assert(isnil(dest));
+
+    dest.current_chunk = current_chunk;
+    dest.free_slot = free_slot;
+    dest.allocator = allocator;
+
+    current_chunk = nullptr;
+    free_slot = nullptr;
+    allocator = nullptr;
+  }
+
   /* -------------------------------------------------------------------------------------------- add
    */ 
   T* add()

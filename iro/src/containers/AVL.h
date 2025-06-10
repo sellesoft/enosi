@@ -87,6 +87,18 @@ struct AVL
 
   /* --------------------------------------------------------------------------
    */
+  void move(Self& dest)
+  {
+    assert(isnil(dest));
+
+    dest.root = root;
+    pool.move(dest.pool);
+
+    root = nullptr;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
   b8 isEmpty() const
   {
     return root == nullptr;
@@ -669,12 +681,12 @@ public:
   // cause C++ is great and awesome!
   struct NilTrait
   {
-    static constexpr T getValue() 
+    static constexpr Self getValue() 
     {
       return {};
     }
 
-    static b8 isNil(const T& x)
+    static b8 isNil(const Self& x)
     {
       return isnil(x.pool);
     }
