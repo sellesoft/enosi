@@ -18,6 +18,7 @@
 
 #include "Reloader.h"
 
+#include "iro/time/Time.h"
 #include "stdio.h"
 #include "sys/mman.h"
 #include "errno.h"
@@ -406,6 +407,8 @@ struct Reloader
   // Cleared at the end of a reload.
   mem::LenientBump talloc;
 
+  /* ==========================================================================
+   */
   struct Patch
   {
     // The elf file representing this Patch.
@@ -417,6 +420,31 @@ struct Reloader
     // Handle to this patch's dl stuff.
     void* dhandle = nullptr;
 
+    /* ========================================================================
+     */
+    struct FunctionSymbol
+    {
+      // Hash of this function symbol's name.
+      u64 hash;
+
+      // The symbol's name.
+      String name;
+      
+      // The address of this symbol in memory.
+      Elf64_Addr addr;
+    };
+
+    typedef 
+      AVL<FunctionSymbol, [](const FunctionSymbol* sym) { return sym->hash; }>
+      FunctionSymbolMap;
+
+    typedef Pool<FunctionSymbol> FunctionSymbolPool;
+
+    FunctionSymbolMap function_map;
+    FunctionSymbolPool function_pool;
+
+    /* ------------------------------------------------------------------------
+     */
     b8 isValid() const 
     { 
       return start_addr != nullptr &&
@@ -444,7 +472,9 @@ struct Reloader
       start_addr = (void*)lm->l_addr;
 
       assert(isValid());
-
+    
+      collectFunctionSymbols();
+     
       return true;
     }
 
@@ -464,7 +494,51 @@ struct Reloader
       if (!elf.init(exepath, allocator))
         return ERROR("failed to initialize patch ELF\n");
 
+      collectFunctionSymbols();
+
       return true;
+    }
+
+    /* ------------------------------------------------------------------------
+     */
+    void collectFunctionSymbols()
+    {
+      function_map.init();
+      function_pool.init();
+
+      for (s32 i = 0; i < elf.getSectionHeaderCount(); ++i)
+      {
+        auto sec = elf.getSectionHeader(i);
+        if (!sec.isSymtab())
+          continue;
+
+        for (s32 sym_idx = 0; sym_idx < sec.entCount(); ++sym_idx)
+        {
+          auto ent = sec.getEntry(sym_idx);
+          if (!ent.isFunc() || !ent.isDefined())
+            continue;
+
+          void* addr = (u8*)start_addr + ent->st_value;
+
+          String name = ent.getName();
+        
+          if (name.startsWith("_GLOBAL__sub_I_"_str) ||
+              name.startsWith("__cxx_global_var_init"_str) ||
+              name.endsWith(".ro"_str))
+            continue;
+
+
+          if (notnil(name))
+          {
+            FunctionSymbol* fsym = function_pool.add();
+            fsym->name = name;
+            fsym->hash = name.hash();
+            fsym->addr = ent->st_value;
+
+            function_map.insert(fsym);
+          }
+        }
+      }
     }
 
     /* ------------------------------------------------------------------------
@@ -473,6 +547,8 @@ struct Reloader
     {
       elf.deinit();
       dlclose(dhandle);
+      function_map.deinit();
+      function_pool.deinit();
       start_addr = dhandle = nullptr;
     }
 
@@ -483,6 +559,8 @@ struct Reloader
       rhs->elf = elf;
       rhs->dhandle = dhandle;
       rhs->start_addr = start_addr;
+      function_map.move(rhs->function_map);
+      function_pool.move(rhs->function_pool);
       elf = {};
       start_addr = dhandle = nullptr;
     }
@@ -518,24 +596,24 @@ struct Reloader
 
           void* from_addr = (u8*)start_addr + from_ent->st_value;
 
-          b8 found = false;
-          for (void*& explicit_func : explicit_funcs)
-          {
-            if (from_addr == explicit_func)
-            {
-              found = true;
-              break;
-            }
-          }
-
-          if (!found)
-            continue;
+          // b8 found = false;
+          // for (void*& explicit_func : explicit_funcs)
+          // {
+          //   if (from_addr == explicit_func)
+          //   {
+          //     found = true;
+          //     break;
+          //   }
+          // }
+          //
+          // if (!found)
+          //   continue;
 
           String from_name = from_ent.getName();
           if (isnil(from_name))
             // Can't match to any other symbol nor filter.
             continue;
-          
+
           // Filter out global initializer functions.
           if (from_name.startsWith("_GLOBAL__sub_I_"_str) || // static globals
               from_name.startsWith("__cxx_global_var_init"_str))
@@ -548,17 +626,24 @@ struct Reloader
             continue;
 
           // Lookup the symbol in the patch we are redirecting functions to.
-          auto to_ent = to.elf.findSymbol(from_name);
-          if (!to_ent.isValid())
-            // The new patch no longer has this symbol (probably).
+          // TODO(sushi) generating this function map has cut down the time 
+          //             it takes to look up symbols a LOT but we could prob
+          //             do even better if we set up the generation of this 
+          //             map to only store the symbols we are interested in
+          //             redirecting from as well so that we can eliminate
+          //             searching the ELF like we do here as well. I really 
+          //             need to clean up a lot more of hreload so I'm going to
+          //             save that for a later time.
+          FunctionSymbol* to_func = to.function_map.find(from_name.hash());
+          if (to_func == nullptr)
             continue;
 
-          void* to_addr = (u8*)to.start_addr + to_ent->st_value;
+          void* to_addr = (u8*)to.start_addr + to_func->addr;
 
           DEBUG("patching ", from_name, ": \n",
                "  ", from_addr, " => ", to_addr, "\n");
-          from_ent.print();
-          to_ent.print();
+          // from_ent.print();
+          // to_ent.print();
 
           void* check = dlsym(to.dhandle, (char*)from_name.ptr);
           if (check && check != to_addr)
@@ -926,6 +1011,8 @@ struct Reloader
     const ReloadContext& context, 
     ReloadResult*        result)
   {
+    TimePoint start_time = TimePoint::monotonic();
+
     String hrfpath = context.hrfpath;
     String exepath = context.exepath;
 
@@ -1022,7 +1109,9 @@ struct Reloader
 
     result->remappings_written = remappings_written;
 
-    INFO("done!\n");
+    auto time_taken = TimePoint::monotonic() - start_time;
+
+    INFO("done! (finished in ", WithUnits(time_taken), ")\n");
 
     return true;
   }
