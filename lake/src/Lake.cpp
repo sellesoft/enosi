@@ -837,7 +837,7 @@ b8 lua__rm(String path, b8 recursive, b8 force)
 
       StackArray<u8, 255> dirent;
 
-      dirent.len = direntry->dir.next({dirent.arr, dirent.capacity()});
+      dirent.len = direntry->dir.next({dirent.arr, u64(dirent.capacity())});
       if (dirent.len < 0)
         return false;
 
