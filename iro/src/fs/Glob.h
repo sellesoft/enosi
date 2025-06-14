@@ -227,7 +227,7 @@ void Globber::run(GlobberCallback auto callback)
 
         for (;;)
         {
-          buffer.len = dir.next({buffer.arr, buffer.capacity()});
+          buffer.len = dir.next({buffer.arr, u64(buffer.capacity())});
           if (buffer.len == -1)
             goto err;
           if (buffer.len == 0)
@@ -277,7 +277,7 @@ void Globber::run(GlobberCallback auto callback)
 
         for (;;)
         {
-          buffer.len = dir.next({buffer.arr, buffer.capacity()});
+          buffer.len = dir.next({buffer.arr, u64(buffer.capacity())});
 
           if (buffer.len == -1)
             goto err;
@@ -357,7 +357,7 @@ void Globber::run(GlobberCallback auto callback)
 
           StackArray<u8, 255> dirent;
 
-          dirent.len = dir->next({dirent.arr, dirent.capacity()});
+          dirent.len = dir->next({dirent.arr, u64(dirent.capacity())});
           if (dirent.len == -1)
             goto err;
 
