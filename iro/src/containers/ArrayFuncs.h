@@ -91,6 +91,16 @@ static inline void remove(T* arr, s32* len, s32 idx)
 /* ----------------------------------------------------------------------------
  */ 
 template<typename T>
+static inline void removeUnordered(T* arr, s32* len, s32 idx)
+{
+  (arr + idx)->~T();
+  mem::move(arr + *len - 1, arr + idx, sizeof(T));
+  *len -= 1;
+}
+
+/* ----------------------------------------------------------------------------
+ */ 
+template<typename T>
 static inline void clear(T* arr, s32* len)
 {
   for (s32 i = 0; i < *len; ++i)
