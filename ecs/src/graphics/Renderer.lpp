@@ -18,6 +18,7 @@ $ end -- if IRO_LINUX
 
 #include "iro/fs/File.h"
 #include "iro/Logger.h"
+#include "Color.h"
 
 #include <string.h>
 
@@ -2384,7 +2385,7 @@ void Renderer::draw(
 
 /* ----------------------------------------------------------------------------
  */
-void Renderer::debugBeginLabel(vec4f color, utf8::String label)
+void Renderer::debugBeginLabel(Color color, utf8::String label)
 {
 $ if ECS_DEBUG then
   DrawCmd cmd =
@@ -2392,7 +2393,7 @@ $ if ECS_DEBUG then
     .kind = DrawCmd::Kind::DebugBeginLabel,
     .debug_label =
     {
-      .color = color,
+      .color = color.asVec4Norm(),
     }
   };
   mem::copy(cmd.debug_label.label, label.ptr, min<u64>(label.len, 63ULL));
@@ -2415,7 +2416,7 @@ $ end -- if ECS_DEBUG
 
 /* ----------------------------------------------------------------------------
  */
-void Renderer::debugInsertLabel(vec4f color, utf8::String label)
+void Renderer::debugInsertLabel(Color color, utf8::String label)
 {
 $ if ECS_DEBUG then
   DrawCmd cmd =
@@ -2423,7 +2424,7 @@ $ if ECS_DEBUG then
     .kind = DrawCmd::Kind::DebugInsertLabel,
     .debug_label =
     {
-      .color = color,
+      .color = color.asVec4Norm(),
     }
   };
   mem::copy(cmd.debug_label.label, label.ptr, min<u64>(label.len, 63ULL));

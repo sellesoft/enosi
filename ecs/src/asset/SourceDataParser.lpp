@@ -6,61 +6,7 @@ $ local cmn = require "common"
 #include "iro/Logger.h"
 #include "iro/Platform.h"
 
-@cmn.defFileLogger(srcdata.parse, Notice)
-
-/* ----------------------------------------------------------------------------
- */
-void SourceDataParser::ScopedStage::onEnter(const char* funcname)
-{
-  String preview = 
-    String::from(
-      parser.scanner.cache.ptr + parser.scanner.cache_offset, 
-      min<u64>(10, 
-        parser.scanner.cache.len - parser.scanner.cache_offset));
-
-  log("> ", funcname, ": '", io::SanitizeControlCharacters(preview), "' (",
-      parser.scanner.line, ':', parser.scanner.column, ")\n");
-}
-
-/* ----------------------------------------------------------------------------
- */
-void SourceDataParser::ScopedStage::onLeave()
-{
-  log("<\n");
-}
-
-/* ----------------------------------------------------------------------------
- */
-template<typename... T>
-void SourceDataParser::ScopedStage::log(T... args)
-{
-  for (u32 i = 0; i < parser.stage_depth; ++i)
-    DEBUG(" ");
-  DEBUG(args...);
-}
-
-#define PARSER_STAGE \
-  ScopedStage stage(*this, __func__)
-
-/* ----------------------------------------------------------------------------
- */
-b8 SourceDataParser::init(SourceDataFile* file, io::IO* in, String in_name)
-{
-  this->file = file;
-  this->in_name = in_name;
-
-  if (!scanner.init(in))
-    return ERROR("failed to init scanner\n");
-
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-void SourceDataParser::deinit()
-{
-  scanner.deinit();
-}
+@cmn.defFileLogger(srcdata.parse, Info)
 
 /* ============================================================================
  */
@@ -75,6 +21,7 @@ $$$
     "Identifier",
     "String",
     "Number",
+    "NumberHex",
     "True",
     "False",
 
@@ -103,6 +50,8 @@ $ end
   String raw;
 
   u64 line, column;
+
+  DefineNilTrait(Token, { Kind::Invalid }, x.kind == Kind::Invalid);
 };
 
 using TK = Token::Kind;
@@ -118,9 +67,190 @@ $ end
   return "** invalid token kind **"_str;
 }
 
+/* ============================================================================
+ */
+struct Parser
+{
+  Token           curt    = nil;
+  Token           peek    = nil;
+  SourceDataFile* file    = nullptr;
+  String          in_name = nil;
+  Scanner         scanner = {};
+
+  b8 init(SourceDataFile* file, io::IO* in, String in_name)
+  {
+    this->file = file;
+    this->in_name = in_name;
+    
+    if (!scanner.init(in))
+      return ERROR("failed to init scanner\n");
+
+    return true;
+  }
+
+  void deinit()
+  {
+    scanner.deinit();
+  }
+
+  b8 parse();
+
+  b8 parseReturn();
+  b8 parseAuxData(Token tok);
+
+  // Parse data that may start with an identifier followed by an '='.
+  b8 parsePossiblyNamedData(SourceData* data);
+
+  // Same as above, but when the token has already been parsed.
+  b8 parsePossiblyNamedData(Token tok, SourceData* data);
+
+  // Parse data that may start with an identifier specifying a typename or 
+  // some aux data to derive from.
+  b8 parsePossiblyTypedOrDerivedData(SourceData* data);
+
+  // Similar to the above, but disambiguate using 'tok', which should be 
+  // either a ':' in the case of derivation or a '{' in the case of typed
+  // data.
+  b8 parseTypedOrDerivedData(Token id, Token tok, SourceData* data);
+
+  // Parses some object data that may be typed.
+  b8 parsePossiblyTypedData(SourceData* data);
+
+  // Parses some object data, eg. data wrapped in '{}'.
+  b8 parseObjectData(SourceData* data);
+
+  // Parses a value or untyped object data.
+  b8 parseValueOrUntypedObject(Token tok, SourceData* data);
+
+  Token nextToken(b8 peek = false);
+  Token peekToken() { return nextToken(true); }
+  Token consumePeek() 
+  {
+    assert(notnil(peek));
+    curt = peek;
+    peek = nil;
+    return curt;
+  }
+  void consumePeekIfNeeded()
+  {
+    if (notnil(peek))
+    {
+      curt = peek;
+      peek = nil;
+    }
+  }
+
+  template<typename... Args>
+  b8 errorAt(Token tok, Args... args);
+
+  u32 stage_depth = 0;
+
+  struct ScopedStage
+  {
+    Parser& parser;
+
+    const char* funcname;
+
+    ScopedStage(Parser& parser, const char* funcname)
+      : parser(parser), funcname(funcname)
+    {
+      onEnter(funcname);
+      parser.stage_depth += 1;
+    }
+
+    ~ScopedStage()
+    {
+      parser.stage_depth -= 1;
+      onLeave();
+    }
+
+    void onEnter(const char* funcname);
+    void onLeave();
+
+    template<typename... T>
+    void log(T... args);
+  };
+};
+
 /* ----------------------------------------------------------------------------
  */
-b8 SourceDataParser::parse()
+b8 parseSourceDataFile(SourceDataFile* file, io::IO* io, String name)
+{
+  Parser parser;
+
+  if (!parser.init(file, io, name))
+    return false;
+
+  if (!parser.parse())
+    return false;
+
+  parser.deinit();
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+SourceData* parsePossiblyTypedSourceData(
+    SourceDataFile* file, 
+    io::IO* io,
+    String name)
+{
+  Parser parser;
+
+  if (!parser.init(file, io, name))
+    return nullptr;
+
+  SourceData* result = file->allocateSourceData();
+
+  if (!parser.parsePossiblyTypedData(result))
+    return nullptr;
+
+  parser.deinit();
+
+  return result;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Parser::ScopedStage::onEnter(const char* funcname)
+{
+  String preview = 
+    String::from(
+      parser.scanner.cache.ptr + parser.scanner.cache_offset, 
+      min<u64>(10, 
+        parser.scanner.cache.len - parser.scanner.cache_offset));
+
+  log("> ", color::green(funcname), ": '", 
+      io::SanitizeControlCharacters(preview), "' (",
+      parser.scanner.line, ':', parser.scanner.column, ")\n");
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Parser::ScopedStage::onLeave()
+{
+  log("< ", color::blue(funcname), '\n');
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<typename... T>
+void Parser::ScopedStage::log(T... args)
+{
+  for (u32 i = 0; i < parser.stage_depth; ++i)
+    DEBUG(" ");
+  DEBUG(args...);
+}
+
+#define PARSER_STAGE \
+  ScopedStage stage(*this, __func__)
+
+/* ----------------------------------------------------------------------------
+ *   <id>
+ *   'return'
+ */
+b8 Parser::parse()
 {
   PARSER_STAGE;
   for (;;)
@@ -146,8 +276,9 @@ b8 SourceDataParser::parse()
 }
 
 /* ----------------------------------------------------------------------------
+ *  <id> '=' <val> | <obj>
  */
-b8 SourceDataParser::parseAuxData(Token tok)
+b8 Parser::parseAuxData(Token tok)
 {
   PARSER_STAGE;
   SourceData* data = file->addAuxData();
@@ -167,7 +298,7 @@ b8 SourceDataParser::parseAuxData(Token tok)
 
 /* ----------------------------------------------------------------------------
  */
-b8 SourceDataParser::parseReturn()
+b8 Parser::parseReturn()
 {
   PARSER_STAGE;
   SourceData* data = file->addReturnData();
@@ -184,30 +315,34 @@ b8 SourceDataParser::parseReturn()
 
 /* ----------------------------------------------------------------------------
  */
-b8 SourceDataParser::parsePossiblyNamedData(SourceData* data)
+b8 Parser::parsePossiblyNamedData(SourceData* data)
 {
   return parsePossiblyNamedData(nextToken(), data);
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 SourceDataParser::parsePossiblyNamedData(Token tok, SourceData* data)
+b8 Parser::parsePossiblyNamedData(Token tok, SourceData* data)
 {
   PARSER_STAGE;
   switch (tok.kind)
   {
   case TK::Identifier:
     {
-      // This could be a name, type, or aux data to derive from.
+      // Peek the next token to see if its an assignment.
       auto id = tok;
-      tok = nextToken();
+      tok = peekToken();
 
       switch (tok.kind)
       {
       case TK::Equal:
         {
+          consumePeek();
+
           // This is some named data.
           data->name = id.raw;
+
+          stage.log("named data (", id.raw, ")\n");
 
           if (!parsePossiblyTypedOrDerivedData(data))
             return false;
@@ -216,6 +351,7 @@ b8 SourceDataParser::parsePossiblyNamedData(Token tok, SourceData* data)
 
       default:
         // This is either a typename or some aux data to derive from.
+        stage.log("typename or aux data derivation\n");
         if (!parseTypedOrDerivedData(id, tok, data))
           return false;
       }
@@ -223,6 +359,7 @@ b8 SourceDataParser::parsePossiblyNamedData(Token tok, SourceData* data)
     break;
 
   default:
+    stage.log("value or untyped object\n");
     if (!parseValueOrUntypedObject(tok, data))
       return false;
   }
@@ -232,7 +369,7 @@ b8 SourceDataParser::parsePossiblyNamedData(Token tok, SourceData* data)
 
 /* ----------------------------------------------------------------------------
  */
-b8 SourceDataParser::parsePossiblyTypedOrDerivedData(SourceData* data)
+b8 Parser::parsePossiblyTypedOrDerivedData(SourceData* data)
 {
   PARSER_STAGE;
 
@@ -244,7 +381,7 @@ b8 SourceDataParser::parsePossiblyTypedOrDerivedData(SourceData* data)
     {
       // Parse the next token and disambiguate.
       auto id = tok;
-      tok = nextToken();
+      tok = peekToken();
 
       if (!parseTypedOrDerivedData(id, tok, data))
         return false;
@@ -261,7 +398,7 @@ b8 SourceDataParser::parsePossiblyTypedOrDerivedData(SourceData* data)
 
 /* ----------------------------------------------------------------------------
  */
-b8 SourceDataParser::parseTypedOrDerivedData(
+b8 Parser::parseTypedOrDerivedData(
     Token id, 
     Token tok, 
     SourceData* data)
@@ -275,21 +412,18 @@ b8 SourceDataParser::parseTypedOrDerivedData(
   {
   case TK::Colon:
     {
-      // We are deriving from some aux data, so look it up by name and set
-      // it as base if it exists.
-      for (SourceData& aux : file->aux_data_list)
-      {
-        if (aux.name == id.raw)
-        {
-          data->base = &aux;
-          break;
-        }
-      }
+      consumePeekIfNeeded();
 
-      if (data->base == nullptr)
-        return errorAt(id, "no aux data named '", id.raw, "'");
+      SourceData* aux = file->findAuxData(id.raw);
+      if (aux == nullptr)
+        return errorAt(id, "no aux data named '", id.raw, "' to inherit");
 
-      stage.log("parsed base ", data->base->name, "\n");
+      if (aux->hasObjectData())
+        data->base = aux;
+      else
+        data->val = aux->val;
+
+        stage.log("aux data derivation (", id.raw, ")\n");
 
       // Parse the following possibly typed data.
       if (!parsePossiblyTypedData(data))
@@ -299,6 +433,8 @@ b8 SourceDataParser::parseTypedOrDerivedData(
 
   case TK::LBrace:
     {
+      consumePeekIfNeeded();
+
       // The id is being used as a typename, so set type and parse the 
       // following object.
       data->type = id.raw;
@@ -309,8 +445,21 @@ b8 SourceDataParser::parseTypedOrDerivedData(
     break;
 
   default:
-    return errorAt(tok, 
-      "expected ':' for inheritance or '{' for typed object");
+    {
+      SourceData* aux = file->findAuxData(id.raw);
+      if (aux == nullptr)
+        return errorAt(id, 
+          "no aux data named '", id.raw, "'; did you mean to use '{' for "
+          "defining object data of some type?");
+
+      if (aux->hasObjectData())
+        data->base = aux;
+      else
+        data->val = aux->val;
+
+      stage.log("aux data assignment (", id.raw, ")\n");
+    }
+    break;
   }
   
   return true;
@@ -318,7 +467,7 @@ b8 SourceDataParser::parseTypedOrDerivedData(
 
 /* ----------------------------------------------------------------------------
  */
-b8 SourceDataParser::parsePossiblyTypedData(SourceData* data)
+b8 Parser::parsePossiblyTypedData(SourceData* data)
 {
   PARSER_STAGE;
   auto tok = nextToken();
@@ -339,7 +488,7 @@ b8 SourceDataParser::parsePossiblyTypedData(SourceData* data)
 
 /* ----------------------------------------------------------------------------
  */
-b8 SourceDataParser::parseObjectData(SourceData* obj)
+b8 Parser::parseObjectData(SourceData* obj)
 {
   PARSER_STAGE;
   SourceData* first = nullptr;
@@ -370,12 +519,17 @@ b8 SourceDataParser::parseObjectData(SourceData* obj)
 
     obj->children.push(data);
 
-    tok = nextToken();
-    if (tok.kind != TK::Comma)
+    if (curt.kind != TK::Comma)
     {
-      if (tok.kind != TK::RBrace)
-        return errorAt(tok, "expected ',' or '}'\n");
-      break;
+      tok = nextToken();
+      if (tok.kind != TK::Comma)
+      {
+        if (tok.kind != TK::RBrace)
+          return errorAt(tok, "expected ',' or '}'\n");
+
+        stage.log("obj finished (encountered '}')\n");
+        break;
+      }
     }
   }
 
@@ -384,7 +538,7 @@ b8 SourceDataParser::parseObjectData(SourceData* obj)
 
 /* ----------------------------------------------------------------------------
  */
-b8 SourceDataParser::parseValueOrUntypedObject(Token tok, SourceData* data)
+b8 Parser::parseValueOrUntypedObject(Token tok, SourceData* data)
 {
   PARSER_STAGE;
   switch (tok.kind)
@@ -396,6 +550,11 @@ b8 SourceDataParser::parseValueOrUntypedObject(Token tok, SourceData* data)
 
   case TK::Number:
     data->val.kind = SourceData::Value::Kind::Number;
+    data->val.str = tok.raw;
+    break;
+
+  case TK::NumberHex:
+    data->val.kind = SourceData::Value::Kind::NumberHex;
     data->val.str = tok.raw;
     break;
 
@@ -420,20 +579,24 @@ b8 SourceDataParser::parseValueOrUntypedObject(Token tok, SourceData* data)
 
 /* ----------------------------------------------------------------------------
  */
-Token SourceDataParser::nextToken()
+Token Parser::nextToken(b8 peek)
 {
   PARSER_STAGE;
   using TK = Token::Kind;
+
+  if (notnil(this->peek))
+  {
+    if (peek)
+      return this->peek;
+
+    return consumePeek();
+  }
 
   Token out = {};
   out.kind = TK::Invalid;
   out.raw = nil;
 
   scanner.skipWhitespaceAndComments();
-
-  stage.log(io::SanitizeControlCharacters(
-    String::fromCStr(scanner.cache.ptr + scanner.cache_offset)), "\n");
-
 
   out.line = scanner.line;
   out.column = scanner.column;
@@ -451,7 +614,6 @@ Token SourceDataParser::nextToken()
     }
     else if (id == "true"_str)
     {
-      // platform::debugBreak();
       out.kind = TK::True;
     }
     else if (id == "false"_str)
@@ -502,8 +664,11 @@ Token SourceDataParser::nextToken()
   }
   else if (scanner.atDigit() || scanner.at('-'))
   {
-    out.kind = TK::Number;
     out.raw = scanner.scanNumber().allocateCopy(&file->string_cache);
+    if (out.raw.startsWith("0x"_str))
+      out.kind = TK::NumberHex;
+    else
+      out.kind = TK::Number;
   }
   else if (scanner.at('"'))
   {
@@ -532,11 +697,16 @@ $ end
 
   stage.log("Token(", getTokenKindString(out.kind), ", ", out.raw, ")\n");
 
+  if (peek)
+    this->peek = out;
+  else
+    curt = out;
+
   return out;
 }
 
 template<typename... Args>
-b8 SourceDataParser::errorAt(Token tok, Args... args)
+b8 Parser::errorAt(Token tok, Args... args)
 {
   return ERROR(in_name,":",tok.line,":",tok.column,": ", args...);
 }

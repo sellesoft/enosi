@@ -17,10 +17,8 @@ $ local ui = require "ui.UI"
 
 @@lpp.import "ui/TextEdit.lh"
 
-#include "iro/containers/List.h"
-#include "iro/containers/Pool.h"
-#include "iro/containers/LinkedPool.h"
-#include "iro/containers/Tree.h"
+#include "iro/containers/StackArray.h"
+#include "iro/containers/EnumArray.h"
 #include "iro/memory/Bump.h"
 #include "iro/memory/LinkedHeap.h"
 #include "math/Rect.h"
@@ -41,16 +39,22 @@ namespace ui
 
 struct UI;
 struct TextEdit;
+struct Group;
 
 /* ============================================================================
  */
 enum class FocusFlag
 {
-  Hovered, 
   Focused,
+  Hovered,
 
-  Pressed,
-  Released,
+  PrimaryDown,
+  PrimaryPressed,
+  PrimaryReleased,
+
+  SecondaryDown,
+  SecondaryPressed,
+  SecondaryReleased,
 
   COUNT
 };
@@ -58,40 +62,43 @@ typedef Flags<FocusFlag> FocusFlags;
 
 /* ============================================================================
  */
-struct FocusableId
+struct ItemId
 {
   u64 val = 0;
 
-  bool operator == (const FocusableId& rhs) const
+  bool operator == (const ItemId& rhs) const
   {
     return val == rhs.val;
   }
 
-  DefineNilTrait(FocusableId, {0}, x.val == 0);
+  DefineNilTrait(ItemId, {0}, x.val == 0);
 };
 
 /* ============================================================================
  */
-struct CombinedFocusableId
+struct CombinedItemId
 {
   u64 val = 0;
 
-  bool operator == (const CombinedFocusableId& rhs) const
+  bool operator == (const CombinedItemId& rhs) const
   {
     return val == rhs.val;
   }
 
-  DefineNilTrait(CombinedFocusableId, {0}, x.val == 0);
+  DefineNilTrait(CombinedItemId, {0}, x.val == 0);
 };
 
 /* ============================================================================
  */
-struct FocusableBounds
+struct Item
 {
-  CombinedFocusableId id = {};
+  CombinedItemId id = {};
+    
+  // Id of the popup this was placed in.
+  CombinedItemId parent_popup = {};
   Rect bounds = {};
 
-  FocusableBounds* next = nullptr;
+  Item* next = nullptr;
 };
 
 /* ============================================================================
@@ -99,6 +106,9 @@ struct FocusableBounds
 struct Cmd
 {
   Cmd* next;
+
+  // The Group that was active when this Cmd was pushed.
+  Group* group;
 
   virtual void execute(UI& ui, gfx::Renderer& renderer) = 0;
 };
@@ -138,6 +148,18 @@ struct QuadDrawCmd : Cmd
 struct BorderDrawCmd : Cmd
 {
   Rect bounds;
+  Rect offsets;
+  Color color;
+
+  void execute(UI& ui, gfx::Renderer& renderer) override;
+};
+
+/* ============================================================================
+ */
+struct LineDrawCmd : Cmd
+{
+  vec2f start;
+  vec2f end;
   Color color;
 
   void execute(UI& ui, gfx::Renderer& renderer) override;
@@ -156,23 +178,34 @@ enum class GroupScissor
  */
 struct Group
 {
+  // This Group's local bounds.
   Rect bounds = {};
+
+  // This group's scissor in screen space.
+  Rect scissor = {};
+
+  // Extent of things drawn within this Group (widgets as well as child 
+  // Groups) relative to the group's screen position.
+  Rect extents = {};
 
   mat3x2 transform = {};
 
   GroupScissor scissoring = GroupScissor::Self;
 
-  FocusableBounds* fbounds = nullptr;
+  Item* items = nullptr;
 
   Group* parent = nullptr;
   Group* next = nullptr;
 };
 
 /* ============================================================================
- */
+ *  TODO(sushi) it would be nice to eliminate this to cut down the amount of 
+ *              layers to 2, but not sure how at the moment without sacrificing
+ *              the idea of Layers being actual layers.
+ */ 
 struct Panel
 {
-  CombinedFocusableId id = {};
+  Item item = {}; // NOTE(sushi) this is largely unused I believe.
   
   Group* groups = nullptr;
   Group* current_group = nullptr;
@@ -192,19 +225,47 @@ enum class LayerFlag
 typedef Flags<LayerFlag> LayerFlags;
 
 /* ============================================================================
+ *  TODO(sushi) it may be more useful to allow users to inject commands 
+ *              at either end of the command list, as trying to solve 
+ *              the problem I want to solve with this can still be broken
+ *              if something decides to draw to a sublayer before something
+ *              else and idk immediate mode ui is weird.
+ */
+enum class Sublayer
+{
+  Bottom,
+  Middle,
+  Top,
+
+  COUNT
+};
+
+/* ============================================================================
+ */
+struct CmdList
+{
+  Cmd* first = nullptr;
+  Cmd* last = nullptr;
+
+  CmdList* prev = nullptr;
+};
+
+/* ============================================================================
  */
 struct Layer
 {
-  u32 idx = 0;
-
   Panel* panels = nullptr;
   Panel* current_panel = nullptr;
 
-  Cmd* first_cmd = nullptr;
-  Cmd* last_cmd = nullptr;
-
   Layer* prev = nullptr;
   Layer* next = nullptr;
+
+  // A stack of CmdLists created externally. Usually used to inject 
+  // a series of commands in a specific order. If nullptr, then 
+  // Cmds will be pushed to the normal CmdList of the active Sublayer.
+  CmdList* cmd_list_stack = nullptr;
+
+  CmdList cmd_list = {};
 
   void pushCmd(Cmd* cmd);
 };
@@ -225,9 +286,16 @@ struct TextFieldState
 
 /* ============================================================================
  */
+struct ScrollBarState
+{
+  f32 scroll_value;
+};
+
+/* ============================================================================
+ */
 struct PersistentState
 {
-  CombinedFocusableId id;
+  CombinedItemId id;
 
   void* ptr;
   u64   size;
@@ -258,8 +326,19 @@ struct PersistentStateMgr
     b8 just_created;
   };
 
-  GetResult registerOrGetState(CombinedFocusableId id, u64 size);
+  GetResult registerOrGetState(CombinedItemId id, u64 size);
 };
+
+/* ============================================================================
+ */
+enum class PopupFlag
+{
+  // Close popup when an input is made elsewhere.
+  Dismissable,
+  
+  COUNT
+};
+typedef Flags<PopupFlag> PopupFlags;
 
 /* ============================================================================
  */
@@ -311,55 +390,124 @@ struct UI
   void putQuad(Rect bounds, gfx::Texture texture, Color color);
   void putQuad(Rect bounds, Color color);
 
-  FocusFlags putFocusableBounds(FocusableId id, Rect bounds);
+  FocusFlags putFocusableBounds(ItemId id, Rect bounds)
+    { return putFocusableBounds(getCombinedId(id), bounds); }
+  FocusFlags putFocusableBounds(CombinedItemId id, Rect bounds);
 
   // Pushes a layer and starts a new panel at the given bounds with the 
   // given id.
-  void pushLayer(FocusableId id, Rect bounds, LayerFlags flags);
+  void pushLayer(ItemId id, Rect bounds, LayerFlags flags);
+
+  void pushLayer(
+    ItemId id, 
+    Rect bounds, 
+    LayerFlags flags, 
+    GroupScissor scissoring)
+  {
+    pushLayer(getCombinedId(id), bounds, flags, scissoring);
+  }
+
+  void pushLayer(
+    CombinedItemId id, 
+    Rect bounds, 
+    LayerFlags flags, 
+    GroupScissor scissoring);
+
   void popLayer();
 
+  void beginCmdFrontInjection();
+  void endCmdFrontInjection();
+
   // Begins a new panel.
-  void beginPanel(FocusableId id, Rect bounds);
-  void beginPanel(FocusableId id, Rect bounds, Panel* prev);
+  void beginPanel(ItemId id, Rect bounds);
+  void beginPanel(ItemId id, Rect bounds, Panel* prev);
+
+  void beginPanel(
+    ItemId id, 
+    Rect bounds, 
+    Panel* prev, 
+    GroupScissor scissoring)
+  {
+    beginPanel(getCombinedId(id), bounds, prev, scissoring);
+  }
+
+  void beginPanel(
+    CombinedItemId id,
+    Rect bounds,
+    Panel* prev,
+    GroupScissor scissoring);
+
   void endPanel();
 
   void beginGroup(Rect bounds, GroupScissor scissoring = GroupScissor::Self);
   void endGroup();
 
+  void openPopup(ItemId id) { openPopup(getCombinedId(id)); }
+  void openPopup(CombinedItemId id);
+
+  void closePopup(ItemId id) { closePopup(getCombinedId(id)); }
+  void closePopup(CombinedItemId id);
+  void closePopup();
+
+  b8 beginPopup(ItemId id, Rect bounds, PopupFlags flags = {})
+  {
+    return beginPopup(getCombinedId(id), bounds, flags);
+  }
+
+  b8 beginPopup(CombinedItemId id, Rect bounds, PopupFlags flags = {});
+  void endPopup();
+
+  b8 isPopupOpen(ItemId id) const { return isPopupOpen(getCombinedId(id)); }
+  b8 isPopupOpen(CombinedItemId id) const;
+
   // Places a basic 'item', a decorated rect basically.
-  void putItem(Rect bounds, const ItemSkinDef& skin);
+  void putItem(Rect bounds, const ItemSkin& skin);
+
+  vec2f getLocalCursorPos() const;
 
   // Places undecorated text.
   // TODO(sushi) basic text functions that don't require a skin
   //             and use a default font (gohu, of course) stored on UI.
-  void putText(Rect bounds, String text, const TextSkinDef& skin);
+  vec2f putText(Rect bounds, String text, const TextSkin& skin);
 
   // Places text with a background and various other decor (eventually).
-  void putTextItem(Rect bounds, String text, const TextItemSkinDef& skin);
+  void putTextItem(Rect bounds, String text, const TextItemSkin& skin);
 
   // Returns true if clicked.
   b8 putButton(
-    FocusableId id, 
+    ItemId id, 
     Rect bounds, 
     String text, 
-    const ButtonSkinDef& skin);
+    const ButtonSkin& skin);
 
   // Places a text field that edits some text specified in the state.
   b8 putTextField(
-    FocusableId id,
+    ItemId id,
     Rect bounds, 
     TextFieldState* state,
-    const TextFieldSkinDef& skin);
+    const TextFieldSkin& skin);
 
   // Variant of the above which just takes a buffer of text to edit. The 
   // state of the text field is managed internally by UI. If the field goes
   // unused for too long its state will be cleared. To avoid this, use the 
   // above function with a TextFieldState stored elsewhere.
   b8 putTextField(
-    FocusableId id,
+    ItemId id,
     Rect bounds,
     TextEdit::Buffer buffer,
-    const TextFieldSkinDef& skin);
+    const TextFieldSkin& skin);
+
+  b8 beginDropDown(
+    ItemId id, 
+    Rect bounds,
+    f32 open_height,
+    String selected_text,
+    const DropDownSkin& skin);
+  
+  void endDropDown();
+
+  void beginScrollGroup(ItemId id, Rect bounds, const ScrollBarSkin& skin);
+  void endScrollGroup(const ScrollBarSkin& skin);
 
   void pushGroupRenderState(Group* group);
 
@@ -389,19 +537,67 @@ struct UI
   InputState frame_input;
 
   vec2i draw_counts = {};
+  
+  enum class InternalPopupFlag
+  {
+    JustOpened,
+
+    COUNT
+  };
+  typedef Flags<InternalPopupFlag> InternalPopupFlags;
+
+  // Data relevant to an opened popup.
+  struct PopupData
+  {
+    CombinedItemId id;
+    PopupFlags flags;
+    InternalPopupFlags internal_flags;
+
+    void reset()
+    {
+      id = nil;
+      flags.clear();
+      internal_flags.clear();
+    }
+  };
+
+  StackArray<PopupData, 16> open_popups;
+
+  // Stack of popups that have been begun.
+  StackArray<PopupData*, 16> popup_stack;
+
+  PopupData* getOpenPopupData(CombinedItemId id);
 
   struct FocusState
   {
-    CombinedFocusableId focused;
-    CombinedFocusableId hovered;
+    Item focused;
+    Item hovered;
+    FocusFlags flags;
+    // Cursor position in local space of the focused Item captured when it is
+    // pressed.
+    vec2f pressed_cursor_offset;
   };
 
   FocusState prev_focus_state;
   FocusState focus_state;
   FocusState next_focus_state;
 
-  void drawDebugRect(Rect rect, Color color);
-  void drawDebugBorder(Rect rect, Color color);
+  b8 isFocusedItem(ItemId id) const 
+    { return isFocusedItem(getCombinedId(id)); }
+  b8 isFocusedItem(CombinedItemId id) const 
+    { return focus_state.focused.id == id; }
+
+  b8 isHoveredItem(ItemId id) const
+    { return isHoveredItem(getCombinedId(id)); }
+  b8 isHoveredItem(CombinedItemId id) const
+    { return focus_state.hovered.id == id; }
+
+  FocusFlags getFocus() const
+    { return focus_state.flags; }
+
+  void drawDebugRect(Rect rect, Color color = 0xff0000ff);
+  void drawDebugBorder(Rect rect, Color color = 0xff0000ff);
+  void drawDebugLine(vec2f start, vec2f end, Color color = 0xff0000ff);
 
   Cmd* debug_cmds = nullptr;
 
@@ -411,13 +607,17 @@ struct UI
   // The current layer being operated on this frame.
   Layer* current_layer = nullptr;
 
-  // Current layer index, used for tracked focused/hovered layers.
-  u32 layer_idx = 0;
-
   PersistentStateMgr persistent_state_mgr;
 
+  StackArray<CombinedItemId, 64> id_stack;
+  CombinedItemId current_id = {};
+
+  void pushId(ItemId id) { pushId(getCombinedId(id)); }
+  void pushId(CombinedItemId id);
+  void popId();
+
   template<typename T>
-  b8 registerOrGetPersistentState(CombinedFocusableId id, T** out_state)
+  b8 registerOrGetPersistentState(CombinedItemId id, T** out_state)
   {
     PersistentStateMgr::GetResult result = 
       persistent_state_mgr.registerOrGetState(id, sizeof(T));
@@ -430,7 +630,18 @@ struct UI
   }
 
   template<typename T>
-  b8 registerOrGetPersistentState(FocusableId id, T** out_state)
+  T* getPersistentState(CombinedItemId id)
+  {
+    PersistentStateMgr::GetResult result = 
+      persistent_state_mgr.registerOrGetState(id, sizeof(T));
+
+    assert(result.pstate != nullptr && !result.just_created);
+
+    return (T*)result.pstate->ptr;
+  }
+
+  template<typename T>
+  b8 registerOrGetPersistentState(ItemId id, T** out_state)
   {
     return registerOrGetPersistentState(getCombinedId(id), out_state);
   }
@@ -438,22 +649,33 @@ struct UI
   void pushConstantFromTransform(mat3x2 transform, gfx::Renderer& renderer);
 
   // Combines the given ids.
-  CombinedFocusableId combineIds(FocusableId a, FocusableId b) const;
-  CombinedFocusableId combineIds(CombinedFocusableId a, FocusableId b) const;
+  CombinedItemId combineIds(ItemId a, ItemId b) const;
+  CombinedItemId combineIds(CombinedItemId a, ItemId b) const;
 
   // Combines the given id with the id of the current panel.
-  CombinedFocusableId getCombinedId(FocusableId id) const;
+  CombinedItemId getCombinedId(ItemId id) const;
+
+  ItemId generateIdFromPointer(void* ptr) const
+  {
+    // TODO(sushi) prob want something more robust than this.
+    return ItemId{(u64)ptr};
+  }
 
   Layer* getCurrentLayer() const { return current_layer; }
   Panel* getCurrentPanel() const { return getCurrentLayer()->current_panel; }
   Group* getCurrentGroup() const { return getCurrentPanel()->current_group; }
+
+  void expandCurrentGroupExtents(Rect bounds)
+  {
+    getCurrentGroup()->extents.expandToContain(bounds);
+  }
 };
 
 }
 
-consteval ui::FocusableId operator ""_fid(const char* c, size_t s)
+consteval ui::ItemId operator ""_fid(const char* c, size_t s)
 {
-  return ui::FocusableId{operator ""_hashed(c,s)};
+  return ui::ItemId{operator ""_hashed(c,s)};
 }
 
 

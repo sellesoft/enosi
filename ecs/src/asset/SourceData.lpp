@@ -103,6 +103,19 @@ void SourceData::dump(u32 depth) const
 
 /* ----------------------------------------------------------------------------
  */
+void SourceData::setObject(String name)
+{
+  if (!hasObjectData())
+    children.init();
+  else
+    children.clear();
+
+  if (notnil(name))
+    this->name = name;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 SourceData* SourceData::addObject(SourceDataFile& file, String name)
 {
   SourceData* child = file.allocateSourceData();
@@ -119,31 +132,10 @@ SourceData* SourceData::addObject(SourceDataFile& file, String name)
  */
 void SourceData::setVec2(SourceDataFile& file, vec2f v)
 {
-  if (hasObjectData())
-    children.clear();
-  else
-    children.init();
+  setObject(nil);
 
-  SourceData* x = file.allocateSourceData();
-  SourceData* y = file.allocateSourceData();
-
-  x->name = "x"_str;
-  y->name = "y"_str;
-
-  children.push(x);
-  children.push(y);
-
-  io::StaticBuffer<255> buffer;
-
-  io::format(&buffer, v.x);
-  x->val.kind = Value::Kind::Number;
-  x->val.str = buffer.asStr().allocateCopy(&file.string_cache);
-
-  buffer.clear();
-
-  io::format(&buffer, v.y);
-  y->val.kind = Value::Kind::Number;
-  y->val.str = buffer.asStr().allocateCopy(&file.string_cache);
+  addNumberValue("x"_str, v.x, file);
+  addNumberValue("y"_str, v.y, file);
 }
 
 /* ----------------------------------------------------------------------------
@@ -156,6 +148,43 @@ SourceData* SourceData::addVec2(SourceDataFile& file, String name, vec2f v)
 
   child->name = name;
   child->setVec2(file, v);
+
+  return child;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SourceData::setNumberValue(f32 value, SourceDataFile& file)
+{
+  io::StaticBuffer<64> buffer;
+  io::format(&buffer, value);
+
+  val.kind = Value::Kind::String;
+  val.str = buffer.asStr().allocateCopy(&file.string_cache);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+SourceData* SourceData::addNumberValue(f32 val, SourceDataFile& file)
+{
+  return addNumberValue(nil, val, file);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+SourceData* SourceData::addNumberValue(
+    String name, 
+    f32 value, 
+    SourceDataFile& file)
+{
+  assert(notnil(children));
+
+  SourceData* child = file.allocateSourceData();
+
+  children.push(child);
+
+  child->name = name;
+  child->setNumberValue(value, file);
 
   return child;
 }

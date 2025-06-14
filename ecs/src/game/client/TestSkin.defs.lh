@@ -8,9 +8,9 @@ $ local m = require "reflect.Metadata"
 @m.source_types(skin)
 struct TestSkinDef
 {
-  ui::TextSkinDef text;
-  ui::ButtonSkinDef button;
-  ui::TextFieldSkinDef text_field;
+  ui::TextSkin text;
+  ui::ButtonSkin button;
+  ui::TextFieldSkin text_field;
 };
 
 typedef TypedSourceAssetRef<TestSkinDef> TestSkinRef;

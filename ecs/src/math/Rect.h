@@ -55,9 +55,43 @@ struct Rect
     { return contractedX(vx).contracted(vy); }
   void contract(f32 vx, f32 vy) { *this = contracted(vx, vy); }
 
+  Rect contracted(vec2f padding) const
+  {
+    return contracted(padding.x, padding.y);
+  }
+
   b8 containsPoint(vec2f p) const
   {
     return p.x >= x && p.y >= y && p.x <= x + w && p.y <= y + h;
+  }
+
+  b8 containsRect(const Rect& rhs) const
+  {
+    return rhs.x >= x && rhs.y >= y && 
+           rhs.x + rhs.w <= x + w && rhs.y + rhs.h <= y + h;
+  }
+
+  Rect clipTo(const Rect& rhs) const
+  {
+    Rect result = {};
+    result.x = max(rhs.x, x);
+    result.y = max(rhs.y, y);
+    result.w = min(rhs.x + rhs.w, x + w) - result.x;
+    result.h = min(rhs.y + rhs.h, y + h) - result.y;
+    return result;
+  }
+
+  f32 getCenteredY(f32 height) const
+  {
+    return floor(0.5f * (h - height));
+  }
+
+  void expandToContain(const Rect& rhs)
+  {
+    x = min(rhs.x, x);
+    y = min(rhs.y, y);
+    w = max(rhs.x + rhs.w, x + w) - x;
+    h = max(rhs.y + rhs.h, y + h) - y;
   }
 };
 

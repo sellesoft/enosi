@@ -24,6 +24,7 @@ struct Client;
 struct WindowResized;
 struct Window;
 struct PostReload;
+struct Color;
 
 namespace gfx
 {
@@ -69,9 +70,9 @@ struct Renderer
 
   u64 getMaxPushConstantSize();
 
-  void debugBeginLabel(vec4f color, utf8::String label);
+  void debugBeginLabel(Color color, utf8::String label);
   void debugEndLabel();
-  void debugInsertLabel(vec4f color, utf8::String label);
+  void debugInsertLabel(Color color, utf8::String label);
 
   void onWindowResized(vec2i size);
 

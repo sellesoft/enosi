@@ -1,24 +1,18 @@
-$ if false then
-
-/*
- *  Widget for editing some source data.
- */
-
 $ require "common"
 $ local ui = require "ui.UI"
 
-@@lpp.import "ui/Item.lh"
-@@lpp.import "ui/widgets/InputText.lh"
 @@lpp.import "graphics/Font.lh"
 @@lpp.import "asset/SourceDataFile.lh"
+@@lpp.import "asset/SourceDataEditorSkin.defs.lh"
 
 #include "iro/memory/Bump.h"
 
-struct SourceData;
-
 namespace ui
 {
+struct UI;
+}
 
+struct SourceData;
 struct DatumState;
 
 /* ============================================================================
@@ -28,37 +22,20 @@ struct SourceDataEditor
   // The SourceData we are editing. This is not owned by the editor, and 
   // so is not cleaned up when setSourceData is called, and is expected to
   // be kept in memory until released from the editor.
-  SourceData* sdata;
-  SourceDataFile* sfile;
+  SourceData* sdata = nullptr;
+  SourceDataFile* sfile = nullptr;
 
-  SourceDataFile default_data;
+  SourceDataFile default_data = {};
 
   mem::Bump datum_allocator;
 
-  u64 type_id;
+  u64 type_id = 0;
 
-  f32 max_name_width;
+  f32 name_column_width = 0.f;
+  f32 max_name_extent = 0.f;
 
-  DatumState* current_datum;
-  DatumState* hovered;
-
-  static const s32 input_text_buffer_size = 255;
-  u8 input_text_buffer[input_text_buffer_size];
-  s32 input_text_buffer_len = 0;
-
-  TextEdit::Buffer beginEditText(String text);
-
-  TextEdit::Buffer getTextEditBuffer()
-  {
-    return 
-      { input_text_buffer, &input_text_buffer_len, input_text_buffer_size };
-  }
-
-  String copyTextEditBuffer() const
-  {
-    return String::from((u8*)input_text_buffer, input_text_buffer_len)
-      .allocateCopy(&sfile->string_cache);
-  }
+  DatumState* current_datum = nullptr;
+  DatumState* hovered = nullptr;
 
   // An interface for recieving notifications when the source data editor does
   // certain things.
@@ -68,23 +45,18 @@ struct SourceDataEditor
     virtual void onEdit(SourceData* data) = 0;
   };
 
-  Interface* interface;
+  Interface* interface = nullptr;
 
-  b8 init(UI& ui);
-  void deinit(UI& ui);
+  b8 init(ui::UI& ui);
+  void deinit(ui::UI& ui);
 
   void setSourceData(
-      UI& ui, 
+      ui::UI& ui, 
       SourceData* data, 
       SourceDataFile* file, 
       u64 type_id = 0);
 
-  void update(ItemUpdateContext& ctx, Rect bounds);
-  void reportDrawCmds(UI& ui, DrawCmdLists& lists);
+  void update(ui::UI& ui, Rect bounds, const SourceDataEditorSkinDef& skin);
 
   SourceData* parseDefaultData(String s);
 };
-
-}
-
-$ end

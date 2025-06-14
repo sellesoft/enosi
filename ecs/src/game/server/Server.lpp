@@ -225,7 +225,7 @@ static Server* createServer(thread::Context* ctx, sv::CreateParams* params)
     return nullptr;
   }
 
-   ServerAllocator global_allocator;
+  ServerAllocator global_allocator;
   if(!global_allocator.init(global_memory, params->global_allocation_size))
   {
     @log.error("failed to init the global server allocator\n");

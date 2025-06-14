@@ -32,4 +32,6 @@ struct SourceDataFile
   SourceData* allocateSourceData();
   SourceData* addAuxData();
   SourceData* addReturnData();
+
+  SourceData* findAuxData(String name);
 };

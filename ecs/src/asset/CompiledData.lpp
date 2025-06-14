@@ -928,7 +928,7 @@ b8 CompiledData::compile(const CompileParams& params)
       // Set the pointer to be an offset to the data we're about to write.
       ((OffsetPtr<void>*)ptrptr)->set(data_buffer.ptr + data_buffer.len);
 
-      INFO("compiling ", ptr.pointee_type, "\n");
+      DEBUG("compiling ", ptr.pointee_type, "\n");
 
       // Compile each pointee.
       for (u32 i = 0; i < ptr.pointee_count; ++i)

@@ -87,7 +87,7 @@ void PersistentStateMgr::deinit(mem::Allocator* allocator)
 /* ----------------------------------------------------------------------------
  */
 PersistentStateMgr::GetResult PersistentStateMgr::registerOrGetState(
-    CombinedFocusableId id,
+    CombinedItemId id,
     u64 size)
 {
   // Find a free slot or one that already exists with this id.
@@ -155,6 +155,7 @@ void UI::beginFrame(const FrameParams& params)
 
   root_group->bounds = viewport;
   root_group->transform = mat3x2::createTransform(viewport.pos(), 0.f);
+  root_group->scissor = viewport;
 
   root_panel->current_group = root_group;
   root_panel->groups = root_group;
@@ -164,7 +165,8 @@ void UI::beginFrame(const FrameParams& params)
 
   current_layer = root_layer;
 
-  pushGroupRenderState(root_group);
+  id_stack.clear();
+  current_id = {"_root_id_"_fid.val};
 }
 
 /* ----------------------------------------------------------------------------
@@ -196,6 +198,9 @@ void UI::endFrame()
 {
   DEBUG("UI::endFrame\n");
 
+  assert(id_stack.isEmpty());
+  assert(popup_stack.isEmpty());
+
   // Bind UI's gfx objects.
   TRACE("binding ui gfx objects\n");
   renderer->bindPipeline(pipeline);
@@ -209,17 +214,56 @@ void UI::endFrame()
 
   Layer* top_layer = nullptr;
 
+  io::StaticBuffer<255> debug_layer_name;
+
   // Execute each layer's Cmds.
   TRACE("executing layer draw commands\n");
-  for (Layer* layer = root_layer; layer; layer = layer->next)
+  u32 layer_idx = 0;
+  Group* active_render_group = nullptr;
+  for (Layer* layer = root_layer; layer; layer = layer->next, layer_idx++)
   {
-    for (Cmd* cmd = layer->first_cmd; cmd; cmd = cmd->next)
+    io::formatv(&debug_layer_name, "layer ", layer_idx);
+
+    renderer->debugBeginLabel(0x3d405bff, debug_layer_name.asStr());
+
+    for (Cmd* cmd = layer->cmd_list.first;
+         cmd; cmd = cmd->next)
     {
+      if (cmd->group != active_render_group)
+      {
+        Group* group = cmd->group;
+
+        // TODO(sushi) this culling needs to be done earlier but not sure 
+        //             how to nicely yet. Invisible cmds should not be 
+        //             queued at all.
+        if (group->scissor.w <= 0.f || group->scissor.h <= 0.f)
+          continue;
+
+        active_render_group = group;
+
+        vec2f group_pos = group->transform.getTranslation();
+
+        ScissorCmd scissor_cmd = {};
+        scissor_cmd.bounds = group->scissor;
+        scissor_cmd.execute(*this, *renderer);
+
+        TransformCmd transform_cmd = {};
+        transform_cmd.transform = &group->transform;
+
+        transform_cmd.execute(*this, *renderer);
+
+        renderer->debugInsertLabel(0x000033ff, "group change"_str);
+      }
+
       cmd->execute(*this, *renderer);
     }
 
     top_layer = layer;
+
+    renderer->debugEndLabel();
   }
+
+  vec2f hovered_cursor_offset = {};
 
   TRACE("evaluating input\n");
   for (Layer* layer = top_layer; layer; layer = layer->prev)
@@ -230,30 +274,36 @@ void UI::endFrame()
       {
         vec2f screen_translation = group->transform.getTranslation();
 
-        Rect screen_bounds = 
-          Rect::from(screen_translation, group->bounds.size());
+        // drawDebugBorder(group->scissor, {0,255,0,255});
 
-        if (screen_bounds.containsPoint(frame_input.getCursorPos()))
+        if (group->scissor.containsPoint(frame_input.getCursorPos()))
         {
-          for (FocusableBounds* fbounds = group->fbounds; 
-               fbounds; fbounds = fbounds->next)
+          for (Item* item = group->items; item; item = item->next)
           {
             vec2f screen_fbounds_translation = 
-              screen_translation + fbounds->bounds.pos();
+              screen_translation + item->bounds.pos();
 
             Rect screen_fbounds = 
-              Rect::from(screen_fbounds_translation, fbounds->bounds.size());
+              Rect::from(screen_fbounds_translation, item->bounds.size());
+
+            // drawDebugBorder(screen_fbounds, {255,0,0,255});
+
+            TRACE("testing item ", io::Hex(item->id.val), "\n");
 
             if (screen_fbounds.containsPoint(frame_input.getCursorPos()))
             {
-              next_focus_state.hovered = fbounds->id;
+              TRACE("hovered ", io::Hex(item->id.val), "\n");
+              next_focus_state.hovered = *item;
+              hovered_cursor_offset = 
+                frame_input.getCursorPos() - screen_fbounds.pos();
+              break;
             }
           }
         }
       }
     }
 
-    if (notnil(next_focus_state.hovered))
+    if (notnil(next_focus_state.hovered.id))
       break;
   }
 
@@ -280,6 +330,9 @@ void UI::endFrame()
 
   debug_cmds = nullptr;
 
+  // u64 mem_usage = frame_allocator.estimateMemUsage();
+  // INFO("ui frame used ", color::green(io::ByteUnits(mem_usage)), " bytes \n");
+
   // Clean up the frame's memory.
   TRACE("clearing ui frame allocator\n");
   frame_allocator.clear();
@@ -300,11 +353,38 @@ void UI::endFrame()
   if (frame_input.wasMouseButtonPressed(MouseButton::Left))
   {
     next_focus_state.focused = next_focus_state.hovered;
+    next_focus_state.pressed_cursor_offset = hovered_cursor_offset;
   }
   else
   {
     next_focus_state.focused = focus_state.focused;
+    next_focus_state.pressed_cursor_offset = focus_state.pressed_cursor_offset;
   }
+
+  for (PopupData& popup : open_popups)
+    popup.internal_flags.unset(InternalPopupFlag::JustOpened);
+
+  FocusFlags focus = {};
+
+  if (frame_input.wasMouseButtonPressed(MouseButton::Left))
+    focus.set(FocusFlag::PrimaryPressed);
+
+  if (frame_input.wasMouseButtonReleased(MouseButton::Left))
+    focus.set(FocusFlag::PrimaryReleased);
+
+  if (frame_input.isMouseButtonDown(MouseButton::Left))
+    focus.set(FocusFlag::PrimaryDown);
+
+  if (frame_input.wasMouseButtonPressed(MouseButton::Right))
+    focus.set(FocusFlag::SecondaryPressed);
+
+  if (frame_input.wasMouseButtonReleased(MouseButton::Right))
+    focus.set(FocusFlag::SecondaryReleased);
+
+  if (frame_input.isMouseButtonDown(MouseButton::Right))
+    focus.set(FocusFlag::SecondaryDown);
+
+  next_focus_state.flags = focus;
 
   prev_focus_state = focus_state;
   focus_state = next_focus_state;
@@ -317,22 +397,60 @@ void UI::endFrame()
 
 /* ----------------------------------------------------------------------------
  */
-void Layer::pushCmd(Cmd* cmd)
+void UI::pushId(CombinedItemId id)
 {
-  if (last_cmd != nullptr)
+  if (id_stack.push(current_id))
   {
-    last_cmd->next = cmd;
-    last_cmd = cmd;
+    current_id = id;
   }
   else
   {
-    first_cmd = last_cmd = cmd;
+    WARN("too many ids pushed\n");
   }
 }
 
 /* ----------------------------------------------------------------------------
  */
-void UI::pushLayer(FocusableId id, Rect bounds, LayerFlags flags)
+void UI::popId()
+{
+  assert(!id_stack.isEmpty());
+  current_id = *id_stack.last();
+  id_stack.pop();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Layer::pushCmd(Cmd* cmd)
+{
+  cmd->group = current_panel->current_group;
+
+  CmdList* list = cmd_list_stack == nullptr? &cmd_list : cmd_list_stack;
+
+  if (list->last != nullptr)
+  {
+    list->last->next = cmd;
+    list->last = cmd;
+  }
+  else
+  {
+    list->first = list->last = cmd;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::pushLayer(ItemId id, Rect bounds, LayerFlags flags)
+{
+  pushLayer(id, bounds, flags, GroupScissor::Self);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::pushLayer(
+    CombinedItemId id, 
+    Rect bounds, 
+    LayerFlags flags, 
+    GroupScissor scissoring)
 {
   DEBUG("UI::pushLayer\n");
 
@@ -353,11 +471,7 @@ void UI::pushLayer(FocusableId id, Rect bounds, LayerFlags flags)
 
   current_layer = next_layer;
 
-  layer_idx += 1;
-
-  current_layer->idx = layer_idx;
-
-  beginPanel(id, bounds, prev_panel);
+  beginPanel(id, bounds, prev_panel, scissoring);
 }
 
 /* ----------------------------------------------------------------------------
@@ -368,29 +482,85 @@ void UI::popLayer()
 
   assert(current_layer->prev != nullptr);
 
+  endPanel();
+
   current_layer = current_layer->prev;
-
-  layer_idx -= 1;
-
-  pushGroupRenderState(current_layer->current_panel->current_group);
 }
 
 /* ----------------------------------------------------------------------------
  */
-void UI::beginPanel(FocusableId id, Rect bounds, Panel* prev)
+void UI::beginCmdFrontInjection()
 {
-  DEBUG("UI::beginPanel(", id.val, ")\n");
+  auto* cmd_list = frame_allocator.construct<CmdList>();
+
+  cmd_list->prev = current_layer->cmd_list_stack;
+  current_layer->cmd_list_stack = cmd_list;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::endCmdFrontInjection()
+{
+  CmdList* list = current_layer->cmd_list_stack;
+  assert(list != nullptr);
+
+  Cmd* old_first = current_layer->cmd_list.first;
+
+  current_layer->cmd_list.first = list->first;
+  list->last->next = old_first;
+
+  current_layer->cmd_list_stack = list->prev;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static void setGroupScissor(
+    Group* group, 
+    Group* parent, 
+    GroupScissor scissoring,
+    Rect viewport)
+{
+  group->scissoring = scissoring;
+  switch (scissoring)
+  {
+  case GroupScissor::None:
+    group->scissor = viewport;
+    break;
+
+  case GroupScissor::Self:
+    {
+      Rect screen_bounds = group->bounds;
+      screen_bounds.addPos(parent->transform.getTranslation());
+      group->scissor = screen_bounds.clipTo(parent->scissor);
+    }
+    break;
+
+  case GroupScissor::Parent:
+    group->scissor = parent->scissor;
+    break;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::beginPanel(
+    CombinedItemId id, 
+    Rect bounds, 
+    Panel* prev, 
+    GroupScissor scissoring)
+{
+  DEBUG("UI::beginPanel(", id.val, ") ");
 
   assert(notnil(id));
   
-  CombinedFocusableId prev_id = 
-    prev == nullptr
-    ? current_layer->current_panel->id 
-    : prev->id;
+  pushId(id);
 
   // Allocate the new Panel and assign its id.
   auto* next_panel = frame_allocator.construct<Panel>();
-  next_panel->id = combineIds(prev_id, id);
+  next_panel->item.id = current_id;
+
+  if (PopupData** current_popup = popup_stack.last())
+    next_panel->item.parent_popup = (*current_popup)->id;
 
   // Allocate the new Panel's root group and link to it.
   auto* next_group = frame_allocator.construct<Group>();
@@ -399,6 +569,7 @@ void UI::beginPanel(FocusableId id, Rect bounds, Panel* prev)
 
   // Set the group's local bounds and compute its screen transform.
   next_group->bounds = bounds;
+  next_group->scissoring = scissoring;
   if (prev != nullptr)
   {
     // If we have a previous Panel, set the transform of the new Panel's 
@@ -406,12 +577,22 @@ void UI::beginPanel(FocusableId id, Rect bounds, Panel* prev)
     next_group->transform = 
       prev->current_group->transform.mul(
         mat3x2::createTransform(bounds.pos(), 0.f));
+
+    setGroupScissor(next_group, prev->current_group, scissoring, viewport);
   }
   else
   {
     // Otherwise, set its transform in screen space.
     next_group->transform = mat3x2::createTransform(bounds.pos(), 0.f);
+    next_group->scissoring = scissoring;
+    next_group->scissor = viewport;
   }
+
+  // Set the Panel's Item bounds in screen space.
+  next_panel->item.bounds = 
+    Rect::from(next_group->transform.getTranslation(), bounds.size());
+
+  DEBUG(current_layer->current_panel, " -> ", next_panel, "\n");
 
   // Link the new Panel in the current Layer.
   next_panel->parent = prev;
@@ -419,13 +600,25 @@ void UI::beginPanel(FocusableId id, Rect bounds, Panel* prev)
   current_layer->panels = next_panel;
   current_layer->current_panel = next_panel;
 
+  // putFocusableBounds(id, Rect::from({0,0}, bounds.size()));
+
   // Push the render state of the new group.
-  pushGroupRenderState(next_group);
+  // pushGroupRenderState(next_group);
 }
 
 /* ----------------------------------------------------------------------------
  */
-void UI::beginPanel(FocusableId id, Rect bounds)
+void UI::beginPanel(
+    ItemId id, 
+    Rect bounds, 
+    Panel* prev)
+{
+  beginPanel(id, bounds, prev, GroupScissor::Self);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::beginPanel(ItemId id, Rect bounds)
 {
   beginPanel(id, bounds, current_layer->current_panel);
 }
@@ -434,22 +627,21 @@ void UI::beginPanel(FocusableId id, Rect bounds)
  */
 void UI::endPanel()
 {
-  DEBUG("UI::endPanel\n");
+  DEBUG("UI::endPanel ");
 
   Panel* current_panel = current_layer->current_panel;
 
   if (current_panel == nullptr)
     assert(!"attempt to end non-existant panel");
 
-  if (current_panel->parent == nullptr)
-    assert(!"attempt to end root panel of layer");
-
   if (current_panel->current_group->parent != nullptr)
     assert(!"attempt to end panel with active groups");
 
+  popId();
+
   current_layer->current_panel = current_panel->parent;
 
-  pushGroupRenderState(current_layer->current_panel->current_group);
+  DEBUG(current_panel, " -> ", current_layer->current_panel, "\n");
 }
 
 /* ----------------------------------------------------------------------------
@@ -458,6 +650,8 @@ void UI::beginGroup(Rect bounds, GroupScissor scissoring)
 {
   Panel* current_panel = current_layer->current_panel;
   Group* current_group = current_panel->current_group;
+
+  expandCurrentGroupExtents(bounds);
 
   Group* next_group = frame_allocator.construct<Group>();
   next_group->bounds = bounds;
@@ -470,7 +664,14 @@ void UI::beginGroup(Rect bounds, GroupScissor scissoring)
   next_group->transform =
     current_group->transform.mul(mat3x2::createTransform(bounds.pos(), 0.f));
 
-  pushGroupRenderState(next_group);
+  Rect screen_bounds = 
+    Rect::from(next_group->transform.getTranslation(), bounds.size());
+
+  // drawDebugBorder(screen_bounds);
+
+  setGroupScissor(next_group, current_group, scissoring, viewport);
+
+  // drawDebugBorder(next_group->scissor, 0x00ff00ff);
 }
 
 /* ----------------------------------------------------------------------------
@@ -481,8 +682,6 @@ void UI::endGroup()
 
   current_panel->current_group = current_panel->current_group->parent;
   assert(current_panel->current_group != nullptr);
-
-  pushGroupRenderState(current_panel->current_group);
 }
 
 /* ----------------------------------------------------------------------------
@@ -529,7 +728,128 @@ void UI::pushGroupRenderState(Group* group)
 
 /* ----------------------------------------------------------------------------
  */
-void UI::putItem(Rect bounds, const ItemSkinDef& skin)
+b8 UI::isPopupOpen(CombinedItemId id) const
+{
+  for (const PopupData& popup : open_popups)
+  {
+    if (popup.id == id)
+      return true;
+  }
+
+  return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::openPopup(CombinedItemId id)
+{
+  if (open_popups.isFull())
+  {
+    ERROR("max popups open\n");
+    return;
+  }
+
+  for (PopupData& popup : open_popups)
+  {
+    if (popup.id == id)
+      return;
+  }
+
+  PopupData* new_popup = open_popups.push();
+  new_popup->id = id;
+  new_popup->internal_flags.set(InternalPopupFlag::JustOpened);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::closePopup(CombinedItemId id)
+{
+  for (PopupData& popup : open_popups)
+  {
+    if (popup.id == id)
+    {
+      popup.reset();
+      open_popups.removeUnordered(&popup);
+    }
+  }
+} 
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::closePopup()
+{
+  closePopup((*popup_stack.last())->id);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 UI::beginPopup(CombinedItemId id, Rect bounds, PopupFlags flags)
+{
+  PopupData* popup = getOpenPopupData(id);
+  if (popup == nullptr)
+    return false;
+
+  for (PopupData* placed_popup : popup_stack)
+  {
+    if (placed_popup->id == id)
+    {
+      WARN("attempt to begin a popup twice\n");
+      return false;
+    }
+  } 
+
+  popup->flags = flags;
+
+  if (flags.test(PopupFlag::Dismissable) && 
+      !popup->internal_flags.test(InternalPopupFlag::JustOpened))
+  {
+    // Test if the focused item is no longer a child of this popup
+    // and close if not.
+    if (focus_state.focused.id != id &&
+        focus_state.focused.parent_popup != id)
+    {
+      closePopup(id);
+      return false;
+    }
+  }
+
+  if (!popup_stack.push(popup))
+  {
+    WARN("too many popups begun\n");
+    return false;
+  }
+
+  pushLayer(id, bounds, {}, GroupScissor::None);
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::endPopup()
+{
+  assert(!popup_stack.isEmpty());
+  popup_stack.pop();
+
+  popLayer();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+UI::PopupData* UI::getOpenPopupData(CombinedItemId id)
+{
+  for (PopupData& popup : open_popups)
+  {
+    if (id == popup.id)
+      return &popup;
+  }
+
+  return nullptr;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::putItem(Rect bounds, const ItemSkin& skin)
 {
   if (skin.color.a == 0)
     // Skip queuing commands for invisible items.
@@ -563,11 +883,37 @@ void UI::putItem(Rect bounds, const ItemSkinDef& skin)
   }
   
   putQuad(bounds, texture, uv, skin.color);
+
+  if (skin.border.x != 0.f ||
+      skin.border.y != 0.f ||
+      skin.border.w != 0.f ||
+      skin.border.h != 0.f)
+  {
+    auto border_cmd = frame_allocator.construct<BorderDrawCmd>();
+    border_cmd->bounds = bounds;
+    border_cmd->offsets = skin.border;
+    border_cmd->color = skin.border_color;
+    current_layer->pushCmd(border_cmd);
+  }
+
+  expandCurrentGroupExtents(bounds);
 }
 
 /* ----------------------------------------------------------------------------
  */
-void UI::putText(Rect bounds, String text, const TextSkinDef& skin)
+vec2f UI::getLocalCursorPos() const
+{
+  Group* curgroup = getCurrentGroup();
+  Item* curitem = curgroup->items;
+  assert(curitem != nullptr);
+
+  return frame_input.getCursorPos() - 
+         (curitem->bounds.pos() + curgroup->transform.getTranslation());
+}
+
+/* ----------------------------------------------------------------------------
+ */
+vec2f UI::putText(Rect bounds, String text, const TextSkin& skin)
 {
   // TODO(sushi) add a null font so that this isn't fatal.
   assert(skin.font.isValid());
@@ -586,6 +932,8 @@ void UI::putText(Rect bounds, String text, const TextSkinDef& skin)
   cursor.x = bounds.x + skin.align.x * (bounds.w - text_size.x);
   cursor.y = bounds.y + skin.align.y * (bounds.h - text_size.y);
   cursor = round(cursor);
+
+  vec2f text_pos = cursor;
 
   const gfx::FontData& font_data = font.getData();
 
@@ -630,27 +978,31 @@ void UI::putText(Rect bounds, String text, const TextSkinDef& skin)
       break;
     }
   }
+
+  expandCurrentGroupExtents(Rect::from(text_pos, text_size));
+
+  return text_size;
 }
 
 /* ----------------------------------------------------------------------------
  */
-void UI::putTextItem(Rect bounds, String text, const TextItemSkinDef& skin)
+void UI::putTextItem(Rect bounds, String text, const TextItemSkin& skin)
 {
   putItem(bounds, skin.item);
-  putText(bounds, text, skin.text);
+  putText(bounds.contracted(skin.text_padding), text, skin.text);
 }
 
 /* ----------------------------------------------------------------------------
  */
 b8 UI::putButton(
-    FocusableId id, 
+    ItemId id, 
     Rect bounds, 
     String text,
-    const ButtonSkinDef& skin)
+    const ButtonSkin& skin)
 {
   FocusFlags focus = putFocusableBounds(id, bounds);
 
-  const TextItemSkinDef* state_skin = &skin.normal;
+  const TextItemSkin* state_skin = &skin.normal;
 
   b8 clicked = false;
 
@@ -658,14 +1010,16 @@ b8 UI::putButton(
   {
     state_skin = &skin.hovered;
 
-    if (frame_input.isMouseButtonDown(MouseButton::Left))
-      state_skin = &skin.pressed;
-
     if (frame_input.wasMouseButtonReleased(MouseButton::Left))
       clicked = true;
   }
 
+  if (focus.test(FocusFlag::PrimaryDown))
+    state_skin = &skin.pressed;
+
   putTextItem(bounds, text, *state_skin);
+
+  expandCurrentGroupExtents(bounds); // maybe not needed due to previous call
 
   return clicked;
 }
@@ -673,10 +1027,10 @@ b8 UI::putButton(
 /* ----------------------------------------------------------------------------
  */
 b8 UI::putTextField(
-    FocusableId id,
+    ItemId id,
     Rect bounds,
     TextFieldState* state,
-    const TextFieldSkinDef& skin)
+    const TextFieldSkin& skin)
 {
   assert(state != nullptr);
 
@@ -685,6 +1039,8 @@ b8 UI::putTextField(
   FocusFlags focus = putFocusableBounds(id, bounds);
 
   TextEdit* edit = &state->edit;
+
+  const gfx::Font& font = *skin.box.text.font;
 
   b8 focused = focus.test(FocusFlag::Focused);
 
@@ -762,6 +1118,9 @@ $ end
     }
   }
 
+  b8 clicked = focus.test(FocusFlag::PrimaryPressed);
+  vec2f cursor_pos = getLocalCursorPos().xadd(-skin.padding.x);
+
   f32 text_width = 0.f;
   f32 cursor_offset = -1.f;
 
@@ -771,7 +1130,9 @@ $ end
   const f32 visible_width = bounds.contractedX(skin.padding.x).w;
   for (;;)
   {
-    if (edit->cursor.pos == text.len - cscan.len ||
+    u32 text_pos = text.len - cscan.len;
+
+    if (edit->cursor.pos == text_pos ||
         cscan.isEmpty())
     {
       if (cursor_offset < 0.f)
@@ -800,7 +1161,39 @@ $ end
     gfx::PackedChar pc;
     skin.box.text.font->getPackedChar(&pc, codepoint);
 
-    text_width += pc.xadvance;
+    f32 next_text_width = text_width + pc.xadvance;
+
+    // TODO(sushi) this suuuuuuuucks clean this up
+    if (clicked)
+    {
+      f32 center = text_width + floor(pc.xadvance / 2.f);
+
+      if (cursor_pos.x < 0.f)
+      {
+        edit->cursor.pos = 0;
+        cursor_offset = 0.f;
+      }
+      else if (cscan.isEmpty() && cursor_pos.x > next_text_width)
+      {
+        edit->cursor.pos = text.len;
+        cursor_offset = next_text_width;
+      }
+      else if (text_width <= cursor_pos.x && next_text_width >= cursor_pos.x)
+      {
+        if (cursor_pos.x <= center)
+        {
+          edit->cursor.pos = text_pos;
+          cursor_offset = text_width;
+        }
+        else
+        {
+          edit->cursor.pos = text_pos + 1;
+          cursor_offset = next_text_width;
+        }
+      }
+    }
+
+    text_width = next_text_width;
   }
 
   Rect text_bounds = {};
@@ -816,12 +1209,10 @@ $ end
   // Begin a group for the bounds we want to scissor the text in.
   beginGroup(
     bounds.contracted(skin.padding.x, skin.padding.y),
-    GroupScissor::Parent);
+    GroupScissor::Self);
   {
     // Begin a group for the text such that we can pan it.
-    beginGroup(
-      text_bounds,
-      GroupScissor::Parent);
+    beginGroup(text_bounds, GroupScissor::Parent);
     {
       putText(
         Rect::from({0,0},text_bounds.size()), 
@@ -830,17 +1221,14 @@ $ end
 
       if (focused)
       {
-        if (cursor_offset == 0.f)
-          cursor_offset += 1.f;
-        else if (cursor_offset == text_width)
-          cursor_offset -= 1.f;
+        f32 cursor_height = font.getHeight();
 
         putQuad(
           Rect::from(
             cursor_offset,
-            0.f,
+            text_bounds.getCenteredY(cursor_height),
             1.f,
-            skin.box.text.font->getHeight()),
+            cursor_height),
           skin.cursor_color);
       }
     }
@@ -854,10 +1242,10 @@ $ end
 /* ----------------------------------------------------------------------------
  */
 b8 UI::putTextField(
-    FocusableId id, 
+    ItemId id, 
     Rect bounds, 
     TextEdit::Buffer buffer,
-    const TextFieldSkinDef& skin)
+    const TextFieldSkin& skin)
 {
   TextFieldState* state = nullptr;
   if (registerOrGetPersistentState(id, &state))
@@ -869,6 +1257,152 @@ b8 UI::putTextField(
   state->edit.setBuffer(buffer);
 
   return putTextField(id, bounds, state, skin);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 UI::beginDropDown(
+  ItemId id,
+  Rect bounds,
+  f32 open_height,
+  String selected_text,
+  const DropDownSkin& skin)
+{
+  putTextItem(bounds, selected_text, skin.selection);
+
+  FocusFlags focus = putFocusableBounds(id, bounds);
+
+  if (focus.test(FocusFlag::PrimaryReleased))
+    openPopup(id);
+
+  expandCurrentGroupExtents(bounds);
+
+  Rect open_bounds = bounds;
+  open_bounds.y += bounds.h;
+  open_bounds.h = open_height;
+
+  return beginPopup(id, open_bounds, PopupFlag::Dismissable);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::endDropDown()
+{
+  endPopup();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::beginScrollGroup(ItemId id, Rect bounds, const ScrollBarSkin& skin)
+{
+  CombinedItemId cid = getCombinedId(id);
+
+  pushId(cid);
+
+  f32* scroll_value = nullptr;
+  if (registerOrGetPersistentState(cid, &scroll_value))
+    *scroll_value = 0.f;
+
+  // Group that contents will scroll in.
+  beginGroup(bounds);
+
+  f32 bar_size = max(skin.thumb_size, skin.rail_size);
+
+  // Group containing contents.
+  Rect content_bounds = {0.f, 0.f, bounds.w - bar_size, bounds.h};
+  beginGroup(content_bounds);
+
+  // Offset content group y by scroll value.
+  getCurrentGroup()->transform.addTranslationY(-*scroll_value);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::endScrollGroup(const ScrollBarSkin& skin)
+{
+  CombinedItemId id = current_id;
+  popId();
+
+  f32* scroll_value = getPersistentState<f32>(id);
+
+  Group* content_group = getCurrentGroup();
+  endGroup();
+
+  Rect content_extents = content_group->extents;
+
+  Group* scroll_group = getCurrentGroup();
+
+  Rect scroll_bounds = scroll_group->bounds;
+
+  Rect screen_bounds = scroll_bounds;
+  screen_bounds.addPos(scroll_group->transform.getTranslation());
+
+  f32 bar_size = max(skin.thumb_size, skin.rail_size);
+    
+  Rect rail_bounds = 
+  {
+    scroll_bounds.w - bar_size,
+    0.f,
+    bar_size,
+    scroll_bounds.h,
+  };
+
+  putItem(rail_bounds, skin.rail);
+
+  f32 max_scroll = max(0.f, content_group->extents.h - scroll_group->bounds.h);
+
+  b8 drag_scroll = false;
+  if (skin.thumb_size != 0.f)
+  {
+    f32 thumb_height = min(
+      scroll_bounds.h, 
+      scroll_bounds.h * scroll_bounds.h / content_extents.h);
+
+    f32 thumb_pos = 
+      max_scroll == 0.f
+        ? 0.f 
+        : *scroll_value / max_scroll * (scroll_bounds.h - thumb_height);
+
+    Rect thumb_bounds = 
+    {
+      scroll_group->bounds.w - skin.thumb_size,
+      thumb_pos,
+      skin.thumb_size,
+      thumb_height,
+    };
+
+    static const ItemId button_id = "scroll_thumb"_fid;
+
+    putButton(button_id, thumb_bounds, nil, skin.thumb);
+
+    if (isFocusedItem(button_id))
+    {
+      FocusFlags flags = getFocus();
+
+      if (flags.test(FocusFlag::PrimaryDown))
+      {
+        drag_scroll = true;
+        
+        thumb_pos = 
+          frame_input.getCursorPos().y - 
+          focus_state.pressed_cursor_offset.y;
+
+        *scroll_value = 
+          max_scroll * thumb_pos / (scroll_bounds.h - thumb_height);
+      }
+    }
+  }
+
+  if (!drag_scroll && 
+      screen_bounds.containsPoint(frame_input.getCursorPos()))
+  {
+    *scroll_value -= frame_input.getScroll();
+    frame_input.consumeScroll();
+  }
+
+  *scroll_value = floor(max(0.f, min(max_scroll, *scroll_value)));
+
+  endGroup();
 }
 
 /* ----------------------------------------------------------------------------
@@ -903,6 +1437,8 @@ void UI::putQuad(Rect bounds, gfx::Texture texture, vec4f uv, Color color)
   cmd->color = color;
 
   current_layer->pushCmd(cmd);
+
+  expandCurrentGroupExtents(bounds);
 }
 
 /* ----------------------------------------------------------------------------
@@ -950,6 +1486,7 @@ void QuadDrawCmd::execute(UI& ui, gfx::Renderer& renderer)
 
   TRACE("draw: ", ui.draw_counts.y, " ", drawn.y, " ", ui.draw_counts.x, "\n");
 
+  // TODO(sushi) batch these draw cmds.
   renderer.draw(
     ui.draw_counts.y,
     drawn.y,
@@ -960,29 +1497,53 @@ void QuadDrawCmd::execute(UI& ui, gfx::Renderer& renderer)
 
 /* ----------------------------------------------------------------------------
  */
-FocusFlags UI::putFocusableBounds(FocusableId id, Rect bounds)
+void LineDrawCmd::execute(UI& ui, gfx::Renderer& renderer)
+{
+  vec2i drawn = 
+    gfx::putLine(
+      (gfx::Vertex*)ui.vertex_buffer.mapped_data,
+      (gfx::Index*)ui.index_buffer.mapped_data,
+      ui.draw_counts,
+      start,
+      end,
+      1.f,
+      color);
+
+  renderer.draw(
+    ui.draw_counts.y,
+    drawn.y,
+    0);
+
+  ui.draw_counts += drawn;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+FocusFlags UI::putFocusableBounds(CombinedItemId id, Rect bounds)
 {
   TRACE("UI::putFocusableBounds(", id.val, ")\n");
 
   Panel* current_panel = current_layer->current_panel;
 
-  auto* focusable = frame_allocator.construct<FocusableBounds>();
-  focusable->id = getCombinedId(id);
+  auto* focusable = frame_allocator.construct<Item>();
+  focusable->id = id;
   focusable->bounds = bounds;
-
-  focusable->next = current_panel->current_group->fbounds;
-  current_panel->current_group->fbounds = focusable;
   
-  // Check if these bounds were hovered or focused last frame.
+  if (PopupData** current_popup = popup_stack.last())
+    focusable->parent_popup = (*current_popup)->id;
+
+  focusable->next = current_panel->current_group->items;
+  current_panel->current_group->items = focusable;
+  
   FocusFlags result = {};
-
-  auto combined = getCombinedId(id);
-
-  if (combined == focus_state.hovered)
-    result.set(FocusFlag::Hovered);
-
-  if (combined == focus_state.focused)
+  if (isFocusedItem(id))
+  {
+    result = getFocus();
     result.set(FocusFlag::Focused);
+  }
+
+  if (isHoveredItem(id))
+    result.set(FocusFlag::Hovered);
 
   return result;
 }
@@ -1023,7 +1584,21 @@ void UI::drawDebugBorder(Rect bounds, Color color)
 
 /* ----------------------------------------------------------------------------
  */
-CombinedFocusableId UI::combineIds(FocusableId a, FocusableId b) const
+void UI::drawDebugLine(vec2f start, vec2f end, Color color)
+{
+  auto* cmd = frame_allocator.construct<LineDrawCmd>();
+
+  cmd->start = start;
+  cmd->end = end;
+  cmd->color = color;
+
+  cmd->next = debug_cmds;
+  debug_cmds = cmd;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+CombinedItemId UI::combineIds(ItemId a, ItemId b) const
 {
   u64 lhs = a.val;
   u64 rhs = b.val;
@@ -1036,16 +1611,16 @@ CombinedFocusableId UI::combineIds(FocusableId a, FocusableId b) const
 
 /* ----------------------------------------------------------------------------
  */
-CombinedFocusableId UI::combineIds(CombinedFocusableId a, FocusableId b) const
+CombinedItemId UI::combineIds(CombinedItemId a, ItemId b) const
 {
-  return combineIds(FocusableId{a.val}, b);
+  return combineIds(ItemId{a.val}, b);
 }
 
 /* ----------------------------------------------------------------------------
  */
-CombinedFocusableId UI::getCombinedId(FocusableId id) const
+CombinedItemId UI::getCombinedId(ItemId id) const
 {
-  return combineIds(current_layer->current_panel->id, id);
+  return combineIds(current_id, id);
 }
 
 }

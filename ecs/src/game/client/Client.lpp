@@ -123,8 +123,6 @@ $ end
 
   SourceDataFile* fskin = hskin.getFile();
 
-  fskin->returned_data->dump();
-
   ui::UI::InitParams ui_params = 
   {
     .assetmgr = engine->assetmgr,
@@ -149,6 +147,20 @@ $ end
   // \@init(editor.init(this), Editor);
 
   asset_loader.load(&test_skin, "assets/skins/Test.skin"_str);
+  asset_loader.load(&editor_skin, "assets/skins/SourceDataEditor.skin"_str);
+
+  sdata_editor.init(ui);
+
+  SourceDataFileHandle h_editor_skin_sdata = 
+    engine->source_data_file_reg.loadFromDisk(
+      "assets/maps/Test.map"_str);
+
+  SourceDataFile* editor_skin_sfile = h_editor_skin_sdata.getFile();
+  sdata_editor.setSourceData(
+    ui, 
+    editor_skin_sfile->returned_data, 
+    editor_skin_sfile,
+    "struct MapDef"_hashed);
 
   this->net_event_bus.init(&mem::stl_allocator);
   this->net_event_bus.subscribe<ConnectionNetEvent>(this,
@@ -315,6 +327,7 @@ b8 Client::update()
 
   ui.beginFrame(ui_params);
   {
+    sdata_editor.update(ui, {0.f, 0.f, 300.f, 300.f}, *editor_skin);
   }
   ui.endFrame();
 
@@ -330,7 +343,7 @@ b8 Client::update()
 b8 Client::wantHotReload()
 {
   // TODO(sushi) do this some other way later.
-  if (input.real_state.wasKeyPressed(Key::R))
+  if (input.real_state.wasKeyPressed(Key::F1))
     return true;
   return false;
 }

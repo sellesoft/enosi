@@ -80,17 +80,9 @@ SourceDataFileHandle SourceDataFileReg::loadFromDisk(String path)
     return SourceDataFileHandle::invalid();
   }
 
-  SourceDataParser parser;
-  if (!parser.init(&slot->file, &file, path))
+  if (!parseSourceDataFile(&slot->file, &file, path))
   {
     ERROR("failed to init source data file parser\n");
-    pool.remove(slot);
-    return SourceDataFileHandle::invalid();
-  }
-  defer { parser.deinit(); };
-
-  if (!parser.parse())
-  {
     pool.remove(slot);
     return SourceDataFileHandle::invalid();
   }

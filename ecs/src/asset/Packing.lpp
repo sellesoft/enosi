@@ -155,34 +155,79 @@ $ recordPlaced "struct iro::utf8::String"
 template<>
 b8 Packer::pack(const SourceData& data, Color* out)
 {
-if (!data.hasChildren())
-    return ERROR("expected an object to pack Color\n");
-
-  // TODO(sushi) nameless initialization
-
-  for (const SourceData* child : data.children)
+  if (data.hasNumberHexValue())
   {
-    if (!child->hasNumberValue())
-      return ERROR("Color members can only be numbers\n");
+    *out = strtol((char*)data.val.str.ptr, nullptr, 16);
+    return true;
+  }
+  else if (!data.hasChildren())
+    return ERROR("expected an object or hex number to pack Color\n");
 
-    switch (child->name.hash())
+  if (isnil(data.children[0]->name))
+  {
+    if (data.children.len() < 3)
+      return ERROR("array Color data must specify at least r, g, and b\n");
+
+    auto getCol = [&](SourceData* comp, u8* dest)
     {
-    case "r"_hashed:
-      out->r = strtof((char*)child->val.str.ptr, nullptr);
-      break;
-    case "g"_hashed:
-      out->g = strtof((char*)child->val.str.ptr, nullptr);
-      break;
-    case "b"_hashed:
-      out->b = strtof((char*)child->val.str.ptr, nullptr);
-      break;
-    case "a"_hashed:
-      out->a = strtof((char*)child->val.str.ptr, nullptr);
-      break;
-    default:
-      return ERROR("no member named ", child->name, " in Color\n");
+      if (!comp->hasNumberValue())
+        return ERROR("Color component must be a number\n");
+
+      *dest = strtof((char*)comp->val.str.ptr, nullptr);
+
+      return true;
+    };
+
+    if (!getCol(data.children[0], &out->r))
+      return false;
+
+    if (!getCol(data.children[1], &out->g))
+      return false;
+
+    if (!getCol(data.children[2], &out->b))
+      return false;
+
+    if (data.children.len() == 4)
+    {
+      if (!getCol(data.children[3], &out->r))
+        return false;
+    }
+    else if (data.children.len() > 4)
+    {
+      return ERROR("excess components specified for Color\n");
+    }
+    else
+    {
+      out->a = 255;
     }
   }
+  else
+  {
+    for (const SourceData* child : data.children)
+    {
+      if (!child->hasNumberValue())
+        return ERROR("Color members can only be numbers\n");
+
+      switch (child->name.hash())
+      {
+      case "r"_hashed:
+        out->r = strtof((char*)child->val.str.ptr, nullptr);
+        break;
+      case "g"_hashed:
+        out->g = strtof((char*)child->val.str.ptr, nullptr);
+        break;
+      case "b"_hashed:
+        out->b = strtof((char*)child->val.str.ptr, nullptr);
+        break;
+      case "a"_hashed:
+        out->a = strtof((char*)child->val.str.ptr, nullptr);
+        break;
+      default:
+        return ERROR("no member named ", child->name, " in Color\n");
+      }
+    }
+  }
+
 
   return true;
 }
@@ -201,6 +246,73 @@ b8 Packer::pack(const SourceData& data, StringHash* out)
   return true;
 }
 $ recordPlaced "struct StringHash"
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 Packer::pack(const SourceData& data, Rect* out)
+{
+  if (!data.hasObjectData())
+    return ERROR("expected object data to pack Rect\n");
+
+  if (data.children.len() != 4)
+    return ERROR("expected 4 components to pack Rect\n");
+
+  if (isnil(data.children[0]->name))
+  {
+    // Unnamed initialization.
+
+    auto packComponent = [&](const SourceData* comp, f32* out, const char* n)
+    {
+      if (!comp->hasNumberValue())
+        return ERROR("expected number value to pack Rect::", n, "\n");
+
+      *out = strtof((char*)comp->val.str.ptr, nullptr);
+      return true;
+    };
+
+    if (!packComponent(data.children[0], &out->x, "x"))
+      return false;
+
+    if (!packComponent(data.children[1], &out->y, "y"))
+      return false;
+
+    if (!packComponent(data.children[2], &out->w, "w"))
+      return false;
+
+    if (!packComponent(data.children[3], &out->h, "h"))
+      return false;
+  }
+  else
+  {
+    for (const SourceData* child : data.children)
+    {
+      if (!child->hasNumberValue())
+        return ERROR("Rect members can only be numbers\n");
+
+      switch (child->name.hash())
+      {
+      case "x"_hashed:
+        out->x = strtof((char*)child->val.str.ptr, nullptr);
+        break;
+      case "y"_hashed:
+        out->y = strtof((char*)child->val.str.ptr, nullptr);
+        break;
+      case "w"_hashed:
+        out->w = strtof((char*)child->val.str.ptr, nullptr);
+        break;
+      case "h"_hashed:
+        out->h = strtof((char*)child->val.str.ptr, nullptr);
+        break;
+      default:
+        return ERROR("no member named ", child->name, " in Rect\n");
+      }
+    }
+  }
+
+  return true;
+}
+$ recordPlaced "struct Rect"
 
 $ -- * ------------------------------------------------------------------------
 
@@ -263,7 +375,8 @@ $ end
 template<>
 b8 Packer::pack(const SourceData& data, $(name)* out)
 {
-  if (!data.hasObjectData())
+  if (!data.hasObjectData() && 
+      (data.base == nullptr || !data.base->hasObjectData()))
     return ERROR("expected object data to pack $(name)\n");
 
   if (data.children.isEmpty() && data.base == nullptr)
@@ -295,16 +408,13 @@ $   if field.metadata.default and not field.metadata.hidden then
     defer { file.deinit(); };
 
     auto view = io::StringView::from("$(field.metadata.default)"_str);
-    SourceDataParser parser;
-
-    parser.init(&file, &view, "$(field.name) default"_str);
-    defer { parser.deinit(); };
-
-    SourceData* default_data = file.allocateSourceData();
-
-    if (!parser.parsePossiblyTypedData(default_data))
-      return ERROR("failed to parse default value of $(field.name)\n");
+  
+    SourceData* default_data = 
+      parsePossiblyTypedSourceData(&file, &view, "$(field.name) default"_str);
     
+    if (default_data == nullptr)
+      return ERROR("failed to parse default value of $(field.name)\n");
+
     if (!pack(*default_data, &out->$(field.name)))
       return ERROR("failed to pack default data for field $(field.name) of "
                    "$(name)\n");
@@ -483,16 +593,13 @@ $     if field.metadata.default and not field.metadata.hidden then
       defer { file.deinit(); };
 
       auto view = io::StringView::from("$(field.metadata.default)"_str);
-      SourceDataParser parser;
 
-      parser.init(&file, &view, "$(field.name) default"_str);
-      defer { parser.deinit(); };
-
-      SourceData* default_data = file.allocateSourceData();
-
-      if (!parser.parsePossiblyTypedData(default_data))
-        return ERROR("failed to parse default value of $(field.name)\n");
+      SourceData* default_data = 
+        parsePossiblyTypedSourceData(&file, &view, "$(field.name) default"_str);
       
+      if (default_data == nullptr)
+        return ERROR("failed to parse default value of $(field.name)\n");
+
       if (!pack(*default_data, p))
         return ERROR("failed to pack default data for field $(field.name) " 
                      "of $(name)\n");

@@ -27,6 +27,10 @@ static Logger logger =
  *  pointer hack that is often seen elsewhere in the codebase. This function,
  *  when hotreloading is enabled, is passed to hreload since its the primary
  *  function we call into in main, and thus is the only one we have to reload.
+ *
+ *  TODO(sushi) this is no longer relevant as I've since fixed the performance
+ *              issues with reloading all functions, so reorganize this 
+ *              sometime.
  */
 b8 updateEngine(Engine* engine)
 {

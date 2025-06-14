@@ -34,6 +34,7 @@ struct SourceData
     {
       String,
       Number,
+      NumberHex,
       True,
       False,
     };
@@ -46,8 +47,6 @@ struct SourceData
   String type = nil;
   Array<SourceData*> children = nil;
 
-  // A SourceData to inherit children from. The base SourceData and this one
-  // must of course both be Objects.
   SourceData* base = nullptr;
 
   SourceData() {}
@@ -64,6 +63,13 @@ struct SourceData
   b8 hasNumberValue() const
   {
     return notnil(val.str) && val.kind == Value::Kind::Number;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 hasNumberHexValue() const
+  {
+    return notnil(val.str) && val.kind == Value::Kind::NumberHex;
   }
 
   /* --------------------------------------------------------------------------
@@ -101,7 +107,10 @@ struct SourceData
    */
   b8 hasData() const
   {
-    return hasObjectData() || hasStringValue() || hasNumberValue();
+    return hasObjectData()  || 
+           hasStringValue() || 
+           hasNumberValue() ||
+           hasNumberHexValue();
   }
 
   /* --------------------------------------------------------------------------
@@ -115,11 +124,13 @@ struct SourceData
    */
   const SourceData* findChildByName(String name) const
   {
-    assert(hasObjectData());
-    for (const SourceData* child : children)
+    if (hasObjectData())
     {
-      if (child->name == name)
-        return child;
+      for (const SourceData* child : children)
+      {
+        if (child->name == name)
+          return child;
+      }
     }
     
     // If we dont have the child, try asking base for it if we have one.
@@ -147,6 +158,7 @@ struct SourceData
    *  Editing helpers.
    */
 
+  void        setObject(String name);
   SourceData* addObject(SourceDataFile& file, String name);
 
   void        setVec2(SourceDataFile& file, vec2f v);
@@ -157,4 +169,8 @@ struct SourceData
     val.kind = Value::Kind::String;
     val.str = value;
   }
+
+  void setNumberValue(f32 val, SourceDataFile& file);
+  SourceData* addNumberValue(f32 val, SourceDataFile& file);
+  SourceData* addNumberValue(String name, f32 val, SourceDataFile& file);
 };

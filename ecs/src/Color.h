@@ -9,6 +9,7 @@
 #include "iro/Common.h"
 #include "iro/Platform.h"
 #include "iro/io/IO.h"
+#include "math/vec.h"
 
 struct Color;
 
@@ -41,6 +42,11 @@ struct Color
   void operator*= (f32 rhs)
   {
     *this = *this * rhs;
+  }
+
+  vec4f asVec4Norm() const
+  {
+    return vec4f(f32(r)/255.f,f32(g)/255.f,f32(b)/255.f,f32(a)/255.f);
   }
 };
 

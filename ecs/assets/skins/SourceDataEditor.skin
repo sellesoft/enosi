@@ -1,4 +1,112 @@
+// Night
+black = 0x0d0c0cff
+
+// Red (CMYK)
+red = 0xe82424ff
+
+// Silver
+white = 0xc5c9c5ff
+
+// Prussian blue
+dark_blue = 0x223249ff
+
+// Indigo dye
+blue = 0x2d4f67ff
+
+// Non Photo blue
+light_blue = 0x6396bbff
+
+// Rich black
+rich_black = 0x13212bff
+
+// Eerie black
+grey = 0x201d1dff
+
+text = 
+{
+  font = "assets/fonts/gohu",
+  wrap = "Word",
+  font_height = 11,
+  tab_spaces = 1,
+  color = white,
+}
+
+button_base = { text = text }
+
+button = 
+{
+  normal = button_base : { item = { color = dark_blue, } },
+  hovered = button_base : { item = { color = blue, } },
+  pressed = button_base : { item = { color = light_blue, } },
+}
+
 return SourceDataEditorSkinDef
 {
-  
+  bg_color = black,
+
+  children_indent = 3,
+
+  text = text : {},
+
+  padding = {0, 0},
+
+  missing_data_color = { 100,16,21 },
+
+  button = button,
+
+  text_field = 
+  {
+    box = 
+    {
+      text = text : 
+      {
+        align = {0.5, 0.5},
+      },
+      item = 
+      {
+        color = dark_blue,
+        border = { 1,1,1,1 },
+        border_color = {155,155,155},
+      }
+    },
+
+    padding = {4, 0},
+
+    cursor_color = {255,255,255},
+  },
+    
+  scroll_bar = 
+  {
+    thumb = button,
+    rail = { color = rich_black },
+    thumb_size = 5,
+    rail_size = 5,
+  },
+
+  row = 
+  {
+    height = 16,
+    name_padding = 4,
+    min_name_width = 30,
+    name_value_spacing = 4,
+    even_color = grey,
+    odd_color = black,
+  },
+
+  dropdown = 
+  {
+    selection = 
+    {
+      text = text : { align = {0, 0.5}, },
+      item = { color = {40,40,40}, },
+      text_padding = {5, 0},
+    }
+  },
+
+  vec2_data = 
+  {
+    min_comp_width = 30,
+    comp_name_spacing = 5,
+    comp_spacing = 5,
+  },
 }

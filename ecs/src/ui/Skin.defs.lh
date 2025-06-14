@@ -11,13 +11,15 @@ namespace ui
 
 /* ============================================================================
  */
-@m.def
-@m.source_types(skin)
-struct ItemSkinDef
+struct ItemSkin
 {
   gfx::TextureRef texture;
   Rect uv;
   Color color;
+  Rect border;
+  Color border_color;
+
+  // TODO(sushi) get 9-slicing working so we can use css-like border textures.
 };
 
 /* ============================================================================
@@ -31,9 +33,7 @@ enum class TextWrap
 
 /* ============================================================================
  */
-@m.def
-@m.source_types(skin)
-struct TextSkinDef
+struct TextSkin
 {
   gfx::FontRef font;
   TextWrap     wrap;
@@ -46,29 +46,29 @@ struct TextSkinDef
 
 /* ============================================================================
  */
-@m.def
-@m.source_types(skin)
-struct TextItemSkinDef
+struct TextItemSkin
 {
-  TextSkinDef text;
-  ItemSkinDef item;
+  TextSkin text;
+  ItemSkin item;
+
+  vec2f text_padding;
 };
 
 /* ============================================================================
  */
-struct ButtonSkinDef
+struct ButtonSkin
 {
-  TextItemSkinDef normal;
-  TextItemSkinDef hovered;
-  TextItemSkinDef pressed;
-  TextItemSkinDef disabled;
+  TextItemSkin normal;
+  TextItemSkin hovered;
+  TextItemSkin pressed;
+  TextItemSkin disabled;
 };
 
 /* ============================================================================
  */
-struct TextFieldSkinDef
+struct TextFieldSkin
 {
-  TextItemSkinDef box;
+  TextItemSkin box;
 
   vec2f padding;
 
@@ -77,9 +77,20 @@ struct TextFieldSkinDef
 
 /* ============================================================================
  */
-struct DropDownSkinDef
+struct DropDownSkin
 {
-  TextItemSkinDef selection;
+  TextItemSkin selection;
+};
+
+/* ============================================================================
+ */
+struct ScrollBarSkin
+{
+  ButtonSkin thumb;
+  ItemSkin rail;
+
+  f32 thumb_size;
+  f32 rail_size;
 };
 
 }

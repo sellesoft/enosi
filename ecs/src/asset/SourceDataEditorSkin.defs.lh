@@ -1,11 +1,8 @@
-$ if false then
-
 $ require "common"
 $ local m = require "reflect.Metadata"
 
-@@lpp.import "ui/widgets/TextSkin.defs.lh"
-@@lpp.import "ui/widgets/ButtonSkin.defs.lh"
-@@lpp.import "ui/widgets/InputTextSkin.defs.lh"
+@@lpp.import "asset/Asset.lh"
+@@lpp.import "ui/Skin.defs.lh"
 
 /* ============================================================================
  */
@@ -17,6 +14,9 @@ struct SourceDataEditorRowSkin
 
   // The padding of some data's name from the left edge.
   f32 name_padding;
+
+  // Padding from the right edge of the row.
+  f32 right_padding;
 
   // The minimum width of the name column.
   f32 min_name_width;
@@ -42,7 +42,7 @@ struct SourceDataEditorVectorSkin
   f32 comp_spacing;
 
   // The spacing between a component name and its value text box.
-  f32 comp_name_value_spacing;
+  f32 comp_name_spacing;
 };
 
 /* ============================================================================
@@ -50,9 +50,13 @@ struct SourceDataEditorVectorSkin
 @m.def
 struct SourceDataEditorSkinDef
 {
-  ui::TextSkinDef datum_name;
+  Color bg_color;
 
-  ui::InputTextSkinDef input_text;
+  ui::TextSkin      text;
+  ui::TextFieldSkin text_field;
+  ui::DropDownSkin  dropdown;
+  ui::ButtonSkin    button;
+  ui::ScrollBarSkin scroll_bar;
 
   SourceDataEditorRowSkin row;
 
@@ -60,6 +64,11 @@ struct SourceDataEditorSkinDef
   SourceDataEditorVectorSkin color_data;
 
   Color missing_data_color;
+
+  vec2f padding;
+
+  f32 children_indent;
 };
 
-$ end
+typedef TypedSourceAssetRef<SourceDataEditorSkinDef> 
+  SourceDataEditorSkinDefRef;

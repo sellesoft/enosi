@@ -24,6 +24,8 @@ $ require "common"
 @@lpp.import "game/client/TestSkin.defs.lh"
 @@lpp.import "ui/TextEdit.lh"
 
+@@lpp.import "asset/SourceDataEditor.lh"
+
 #include "iro/time/Time.h"
 
 /* ============================================================================
@@ -43,15 +45,10 @@ struct Client
   InputMgr input;
   Window window;
 
+  SourceDataEditorSkinDefRef editor_skin;
+  SourceDataEditor sdata_editor;
+
   TestSkinRef test_skin;
-
-  u8 text_buffer[255];
-  s32 text_buffer_len = 0;
-
-  u8 text_buffer2[255];
-  s32 text_buffer2_len = 0;
-
-  // cl::Editor editor;
 
   gfx::Texture white_texture;
 

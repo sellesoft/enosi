@@ -98,17 +98,20 @@ EntityId EntityMgr::createEntityFromSourceData(
     return nil;
   }
 
-  SourceDataParser parser;
-  if (!parser.init(&sfile, &file, path))
-  {
-    ERROR("failed to init source data parser\n");
-    return nil;
-  }
+  assert(!"fix me");
 
-  if (!parser.parse())
-    return nil;
-
-  return loadEntity(sfile, *this, assetmgr, renderer);
+  // SourceDataParser parser;
+  // if (!parser.init(&sfile, &file, path))
+  // {
+  //   ERROR("failed to init source data parser\n");
+  //   return nil;
+  // }
+  //
+  // if (!parser.parse())
+  //   return nil;
+  //
+  // return loadEntity(sfile, *this, assetmgr, renderer);
+  return nil;
 }
 
 /* ----------------------------------------------------------------------------

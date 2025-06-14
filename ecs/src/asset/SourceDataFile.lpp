@@ -56,3 +56,16 @@ SourceData* SourceDataFile::addReturnData()
   return returned_data;
 }
 
+/* ----------------------------------------------------------------------------
+ */
+SourceData* SourceDataFile::findAuxData(String name)
+{
+  for (SourceData& aux : aux_data_list)
+  {
+    if (aux.name == name)
+      return &aux;
+  }
+
+  return nullptr;
+}
+
