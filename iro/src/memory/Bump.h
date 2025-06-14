@@ -38,6 +38,8 @@ struct Bump : public Allocator
 
   void clear();
 
+  u64 estimateMemUsage() const;
+
   void* allocate(u64 size) override;
 
   void* reallocate(void* ptr, u64 size) override;

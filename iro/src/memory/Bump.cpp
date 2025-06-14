@@ -46,6 +46,19 @@ void Bump::clear()
 
 /* ----------------------------------------------------------------------------
  */
+u64 Bump::estimateMemUsage() const
+{
+  u64 sum = 0;
+  Slab* slab = slabs;
+  sum += cursor - start;
+  while ((slab = slab->next))
+    sum += slab_size;
+
+  return sum;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 void* Bump::allocate(u64 size)
 {
   assert(size < slab_size);
