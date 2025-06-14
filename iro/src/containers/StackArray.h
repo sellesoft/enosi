@@ -7,6 +7,7 @@
 
 #include "../Common.h"
 #include "Slice.h"
+#include "ArrayFuncs.h"
 
 #include <new>
 
@@ -15,28 +16,45 @@ namespace iro
 
 /* ============================================================================
  */
-template<typename T, s64 Capacity>
+template<typename T, s32 Capacity>
 struct StackArray
 {
   T arr[Capacity] = {};
-  u64 len = 0;
-
-
-  /* -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-   */
+  s32 len = 0;
 
 
   /* --------------------------------------------------------------------------
    */
-  u64 capacity() { return Capacity; }
+  s32 capacity() const { return Capacity; }
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 isFull() const { return len == Capacity; }
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 isEmpty() const { return len == 0; }
 
   /* --------------------------------------------------------------------------
    */
   T* push()
   {
-    if (len == Capacity)
+    if (isFull())
       return nullptr;
     return new (arr + len++) T;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 push(const T& v)
+  {
+    if (T* p = push())
+    {
+      *p = v;
+      return true;
+    }
+
+    return false;
   }
   
   /* --------------------------------------------------------------------------
@@ -50,21 +68,61 @@ struct StackArray
 
   /* --------------------------------------------------------------------------
    */
-  Slice<T> asSlice()
+  void remove(T* ptr)
   {
-    return {arr, len};
+    remove(ptr - arr);
   }
 
   /* --------------------------------------------------------------------------
    */
-  T& operator[](u64 i) { assert(i < len); return arr[i]; }
-  const T& operator[](u64 i) const { assert(i < len); return arr[i]; }
+  void remove(s32 idx)
+  {
+    assert(idx >= 0 && idx < len);
+    array::remove(arr, &len, idx);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void removeUnordered(T* ptr)
+  {
+    removeUnordered(ptr - arr);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void removeUnordered(s32 idx)
+  {
+    assert(idx >= 0 && idx < len);
+    array::removeUnordered(arr, &len, idx);
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void clear()
+  {
+    len = 0;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  Slice<T> asSlice()
+  {
+    return {arr, u64(len)};
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  T& operator[](s32 i) { assert(i < len); return arr[i]; }
+  const T& operator[](s32 i) const { assert(i < len); return arr[i]; }
 
   T* begin() { return arr; }
   T* end() { return arr + len; }
 
   const T* begin() const { return arr; }
   const T* end() const { return arr + len; }
+
+  T* last() { return isEmpty()? nullptr : arr + len - 1; }
+  const T* last() const { return isEmpty()? nullptr : arr + len - 1; }
 };
 
 }
