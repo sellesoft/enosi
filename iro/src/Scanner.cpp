@@ -120,12 +120,18 @@ String Scanner::scanIdentifier()
     return nil;
 }
 
-
 /* --------------------------------------------------------------------------
  */
 b8 Scanner::atDigit() const
 {
   return 0 != isdigit(current());
+}
+
+/* --------------------------------------------------------------------------
+ */
+b8 Scanner::atAlpha() const
+{
+  return 0 != isalpha(current());
 }
 
 /* --------------------------------------------------------------------------
@@ -157,16 +163,47 @@ String Scanner::scanNumber()
     u64 start = cache_offset;
     if (at('-'))
       advance(true);
-    while (not eof() and atDigit())
+
+    b8 is_hex = false;
+    if (at('0'))
+    {
       advance(true);
-    if (at('.'))
+      if (at('x'))
+      {
+        advance(true);
+        is_hex = true;
+      }
+    }
+
+    while (not eof())
+    {
+      if (not atDigit())
+      {
+        if (is_hex and atAlpha())
+        {
+          auto lower = tolower(current());
+          if (lower < 'a' or lower > 'f')
+            break;
+        }
+        else
+          break;
+      }
       advance(true);
-    while (not eof() and atDigit())
-      advance(true);
+    }
+
+    if (!is_hex)
+    {
+      if (at('.'))
+        advance(true);
+
+      while (not eof() and atDigit())
+        advance(true);
+    }
+
     return String::from(cache.ptr+start, cache_offset-start);
   }
-  else
-    return nil;
+
+  return nil;
 }
 
 /* --------------------------------------------------------------------------
