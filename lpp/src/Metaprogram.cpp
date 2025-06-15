@@ -705,8 +705,6 @@ b8 Metaprogram::run()
   {
     const s32 I_errinfo = lua.gettop();
 
-    lua.stackDump();
-
     if (lua.isfunction())
     {
       lua.pushstring("cancel"_str);

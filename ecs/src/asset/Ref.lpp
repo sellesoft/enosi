@@ -38,6 +38,14 @@ $   local name = importer.removeTag(der.name)
     SCOPED_INDENT;
     return (($(name)*)this)->load(params);
   }
+$   for td in der.typedefs:each() do
+  case "$(td.name)"_hashed:
+  {
+    TRACE("loading $(td.name)\n");
+    SCOPED_INDENT;
+    return (($(name)*)this)->load("$(td.name)"_str, params);
+  }
+$   end
 $   for der in der.derived:each() do
 $     placeDer(der)
 $   end

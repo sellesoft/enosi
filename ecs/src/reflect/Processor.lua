@@ -151,6 +151,20 @@ Processor.processTopLevelDecls = function(self, iter)
     end
 
     if decl and (not self.filter or self:filter(decl)) then
+      -- TODO(sushi) implement something that takes all the declarations 
+      --             we've gathered and sorts them into some list that 
+      --             covers all declarations (eg. those at top-level
+      --             and those used nested in structs and all of that).
+      --             We do a lot of dependency handling outside of here 
+      --             which gets quite annoying and is very easy to mess up
+      --             (and probably not the easiest thing to follow either).
+      --             We apparently track 'prereqs' of declarations (as 
+      --             used below) so it might not be that difficult to get
+      --             something like this working. I think that its just set
+      --             up currently to make sure that the top level decls 
+      --             we track are in the proper order, not everything
+      --             inside of them.
+
       -- We defer recording tag decls until we finish a top level decl to
       -- ensure that cyclic dependencies, eg.
       --
@@ -225,11 +239,6 @@ Processor.resolveDecl = function(self, cdecl)
   if not ctype then
     return
   end
-  -- io.write("----------------\n",
-  --   cdecl:name(), "\n",
-  --   ctype:getTypeName(), "\n" ,
-  --   ctype:getCanonicalTypeName(), "\n",
-  --   tostring((cdecl.handle)), "\n")
 
   -- Ignore template declarations for now.
   if cdecl:isTemplate() then return end
@@ -261,6 +270,7 @@ Processor.resolveDecl = function(self, cdecl)
       decl.is_anonymous = true
     end
     decl.typedefs = List{}
+    decl.local_name = cdecl:name()
 
     self.all_decls:push(decl)
   end
@@ -597,6 +607,11 @@ Processor.processTypedef = function(self, cdecl, ctype)
   typedef.subtype = self:resolveType(cdecl:getTypedefSubType())
     or error("failed to get subtype of "..ctype:getTypeName())
   self:recordProcessed(cdecl, typedef)
+  
+  typedef.comment = cdecl:getComment()
+  if typedef.comment then
+    typedef.metadata = metadata.__parse(typedef.comment)
+  end
 
   local subdecl = typedef.subtype:getDecl()
   if subdecl then

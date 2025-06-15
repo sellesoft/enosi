@@ -1,4 +1,20 @@
 $ local cmn = require "common"
+$ local ast = require "reflect.AST"
+
+
+@log.ger(asset, Info)
+
+$$$
+local importer = require "reflect.Importer"
+{
+  patterns =
+  {
+    "src/**/*.defs.lh",
+    "src/**/*.comp.lh",
+  },
+}
+$$$
+@importer:get
 
 @@lpp.import "asset/Asset.lh"
 @@lpp.import "asset/AssetMgr.lh"
@@ -10,7 +26,29 @@ $ local cmn = require "common"
 
 using namespace fs;
 
-@log.ger(asset, Info)
+/* ----------------------------------------------------------------------------
+ */
+static String resolveExpectedType(String s)
+{
+  switch (s.hash())
+  {
+$ importer:eachDecl(function(name, decl)
+$   if decl:is(ast.TypedefDecl) then
+$     local type = decl.subtype:getDesugared()
+$     local subdecl = type:getDecl()
+$     if subdecl and subdecl:is(ast.TemplateSpecialization) and
+$        subdecl.specialized_name == "TypedSourceAssetRef"
+$     then
+  case "$(decl.name)"_hashed:
+$       local name = importer.removeTag(subdecl.template_args[1].name)
+    return "$(name)"_str;
+$     end
+$   end
+$ end)
+  }
+
+  return s;
+}
 
 /* ----------------------------------------------------------------------------
  */
@@ -24,6 +62,8 @@ b8 TypedSourceAssetRef<int>::load(String type, LoadParams& params)
 
   PathBuffer src_path_buffer;
 
+  String actual_type = resolveExpectedType(type);
+
   if (Path::hasExtension(name))
   {
     io::formatv(&src_path_buffer, name);
@@ -33,10 +73,12 @@ b8 TypedSourceAssetRef<int>::load(String type, LoadParams& params)
   {
     String source_type = rtr::getMetadataValue(type, "source_types"_str);
     if (isnil(source_type))
+    {
       return ERROR(
         "attempt to load asset '", name, "' of type ", type, " but asset "
         "name has no extension and ", type, " does not specify source_types "
         "metadata\n");
+    }
 
     io::formatv(&src_path_buffer, name, '.', source_type);
   }
@@ -50,7 +92,7 @@ b8 TypedSourceAssetRef<int>::load(String type, LoadParams& params)
     CompiledData::CompileParams compile_params = 
     {
       .name = src_path,
-      .type = type,
+      .type = actual_type,
       .assetmgr = params.assetmgr,
       .sfile_reg = *params.sfile_reg,
     };
@@ -60,7 +102,7 @@ b8 TypedSourceAssetRef<int>::load(String type, LoadParams& params)
   }
 
   auto compiled_data = 
-    CompiledData::load(src_path, type, params.assetmgr, &asset);
+    CompiledData::load(src_path, actual_type, params.assetmgr, &asset);
   if (compiled_data == nullptr)
     return ERROR("failed to load data from '", src_path, "'\n");
 

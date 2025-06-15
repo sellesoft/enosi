@@ -21,6 +21,7 @@ $ local ui = require "ui.UI"
 @@lpp.import "input/InputMgr.lh"
 @@lpp.import "graphics/Ref.defs.lh"
 @@lpp.import "net/Net.events.lh"
+@@lpp.import "game/shared/entity/Entity.defs.lh"
 
 #include "iro/memory/LinkedHeap.h"
 
@@ -133,6 +134,11 @@ $ end
     .loader = asset_loader,
   };
   @init(ui.init(ui_params), UI);
+
+  @dbgBreak;
+  EntityDefRef test_spawner;
+  asset_loader.load(&test_spawner, 
+    "assets/entities/spawners/Player.entity"_str);
 
   cl::GameSim::InitParams sim_params =
   {

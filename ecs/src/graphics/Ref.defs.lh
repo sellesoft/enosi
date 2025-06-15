@@ -32,6 +32,14 @@ struct TypedResourceRef : ResourceRef
 {
   b8 load(LoadParams&);
 
+  b8 load(String type, LoadParams& params)
+  {
+    // NOTE(sushi) ignoring the type string here until we get to a point 
+    //             where we have a reason to typedef a resource handle.
+    //             Good luck future me.
+    return load(params);
+  }
+
   b8 isValid() const
   {
     return resource != nullptr;

@@ -57,11 +57,29 @@ setmetatable(ast,
     if Type:isTypeOf(v) or Decl:isTypeOf(v) then
       v.ast_kind = k
     end
+    if Type:isTypeOf(v) then
+      v.is_type = true
+    end
+    if Decl:isTypeOf(v) then
+      v.is_decl = true
+    end
     rawset(ast, k, v)
   end
 })
 
 ast.Type = Type
+
+local function joinNamespaceNames(decl)
+  local name = ""
+  local function join(ns)
+    if ns then
+      name = ns.name..'_'..name
+      join(ns.prev)
+    end
+  end
+  join(decl.namespace)
+  return name
+end
 
 --- Generates a name for this declaration that can safely be used as the 
 --- identifier of a variable or function in C.
@@ -126,6 +144,19 @@ Type.getDesugared = function(self)
     type = type.desugared
   end
   return type
+end
+
+Type.getIdSafeName = function(self)
+  local decl = self:getDecl()
+  if decl then
+    return decl:getIdSafeName()
+  elseif self:is(ast.BuiltinType) then
+    return self.name
+  end
+end
+
+Type.__tostring = function(self)
+  return self:tostring()
 end
 
 local BuiltinType = Type:derive()
@@ -248,17 +279,23 @@ ast.TypedefType = TypedefType
 TypedefType.new = function(decl)
   local o = {}
   o.decl = decl
-  if not decl:is(ast.TypedefDecl) then
-  end
   return setmetatable(o, TypedefType)
 end
 
 TypedefType.tostring = function(self)
-  return "Typedef("..self.decl.name..","..self.decl.subtype:tostring()..")"
+  return "TypedefType("..self.decl.name..","..self.decl.subtype:tostring()..
+         ")"
 end
 
 local TagType = Type:derive()
 ast.TagType = TagType
+
+local function removeTags(name)
+  return name
+    :gsub("struct ", "")
+    :gsub("union ", "")
+    :gsub("enum ", "")
+end
 
 TagType.new = function(name, decl)
   local o = TagType:derive()
@@ -271,6 +308,7 @@ TagType.tostring = function(self)
   return "TagType("..self.name..")"
 end
 
+-- TODO(sushi) remove or figure out why I added this.
 local TypeDecl = Decl:derive()
 ast.TypeDecl = TypeDecl
 
@@ -281,6 +319,16 @@ TagDecl.new = function(name)
   local o = {}
   o.name = name
   return setmetatable(o, TagDecl)
+end
+
+TagDecl.getIdSafeName = function(self, name)
+  local name = name or self.local_name
+
+  if self.namespace then
+    name = joinNamespaceNames(self)..name
+  end
+
+  return name
 end
 
 local TypedefDecl = TypeDecl:derive()
@@ -295,6 +343,15 @@ end
 
 TypedefDecl.__tostring = function(self)
   return "Typedef("..self.name..","..self.subtype:tostring()..")"
+end
+
+TypedefDecl.getSubDecl = function(self)
+  local subtype = self.subtype:getDesugared()
+  if subtype:is(ast.TagType) then
+    return subtype:getDecl()
+  elseif subtype:is(ast.TypedefType) then
+    return subtype.decl
+  end
 end
 
 local ElaboratedType = Type:derive()
@@ -409,6 +466,13 @@ Record.eachFieldWithIndex = function(self)
   end
 end
 
+Record.getField = function(self, name)
+  local mem = self.members.map[name]
+  if mem and mem:is(ast.Field) then
+    return mem
+  end
+end
+
 Record.log = function(self, var)
   local s = 'INFO("'..var..' '..self.name..'"'
   for field in self.members.list:each() do
@@ -431,6 +495,16 @@ Record.hasMethod = function(self, name)
     return true
   end
 end 
+
+Record.getIdSafeName = function(self, name)
+  local name = TagDecl.getIdSafeName(self, name or self.local_name)
+
+  if self.parent then
+    name = self.parent:getIdSafeName()..'_'..name
+  end
+
+  return name
+end
 
 local Field = Decl:derive()
 ast.Field = Field
@@ -482,6 +556,25 @@ TemplateSpecialization.tostring = function(self)
   end
   buf:put ")"
   return buf:get()
+end
+
+TemplateSpecialization.getIdSafeName = function(self)
+  local name = self.specialized_name
+
+  if self.namespace then
+    name = joinNamespaceNames(self)..'_'..name
+  end
+
+  for arg in self.template_args:each() do
+    if arg:is(ast.Type) then
+      name = name..'_'..arg:getIdSafeName()
+    else
+      error("unhandled template arg kind when forming id safe name of "..
+            self.name.." ("..tostring(arg)..")")
+    end
+  end
+  
+  return name
 end
 
 local Function = Decl:derive()

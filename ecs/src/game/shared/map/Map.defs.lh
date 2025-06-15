@@ -1,6 +1,4 @@
-
 $ local cmn = require "common"
-$ local Schema = require "asset.Schema"
 $ local metadata = require "reflect.Metadata"
 
 #include "iro/Common.h"
@@ -58,13 +56,13 @@ enum class TileKindConfig
 
 /* ============================================================================
  */
-@metadata.source_types(tile_kind)
 struct TileKindDef
 {
   TileKind kind;
   EnumArray<TileKindConfig, gfx::TextureRef> textures;
 };
 
+@metadata.source_types(tile_kind)
 typedef TypedSourceAssetRef<TileKindDef> TileKindRef;
   
 /* ============================================================================

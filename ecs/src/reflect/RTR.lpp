@@ -17,7 +17,6 @@ $ local function eachDecl(f)
 $   importer:eachDecl(function(name, decl)
 $     if decl.is_anonymous then return end
 $     if decl.has_unhandled_arg_kind then return end
-$     if decl:is(ast.TypedefDecl) then return end
 $     f(name, decl)
 $   end)
 $ end
@@ -25,11 +24,16 @@ $ end
 namespace rtr
 {
 
-template<typename T>
-struct Typename { };
-
 $ local decls_with_metadata = {}
 $ eachDecl(function(name, decl)
+$   local has_metadata = false
+$   for _ in pairs(decl.metadata) do
+$     has_metadata = true
+$     decls_with_metadata[name] = true
+$     break
+$   end
+$   if decl:is(ast.TypedefDecl) then return end
+
 /* ----------------------------------------------------------------------------
  */
 template<>
@@ -37,13 +41,6 @@ String getTypename<$(name)>()
 {
   return "$(name)"_str;
 }
-
-$ local has_metadata = false
-$ for _ in pairs(decl.metadata) do
-$   has_metadata = true
-$   decls_with_metadata[name] = true
-$   break
-$ end
 
 $ if has_metadata then
 /* ----------------------------------------------------------------------------
@@ -97,7 +94,18 @@ String getMetadataValue(String type, String name)
 $ eachDecl(function(name, decl)
 $   if decls_with_metadata[name] then
   case "$(name)"_hashed:
+$     if decl:is(ast.TypedefDecl) then
+    switch (name.hash())
+    {
+$       for k,v in pairs(decl.metadata) do
+    case "$(k)"_hashed:
+      return "$(v)"_str;
+$       end
+    }
+    break;
+$     else
     return getMetadataValue<$(name)>(name);
+$     end
 $   end
 $ end)
   }

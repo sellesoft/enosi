@@ -723,7 +723,7 @@ $     for td in decl.typedefs:each() do
 $       if not placed_rt[td.name] then
 $         placed_rt[td.name] = true
   case "$(importer.removeTag(td.name))"_hashed:
-$         f(decl)
+$         f(td)
     break;
 $       end
 $     end
@@ -841,9 +841,12 @@ b8 CompiledData::compile(const CompileParams& params)
   SourceData* root_data = sfile->returned_data;
 
   if (root_data->type != params.type)
+  {
+    @dbgBreak;
     return ERROR(
       "returned type (", root_data->type, ") from ", source_path,
       " differs from expected type ", params.type, "\n");
+  }
 
   // Pack the source data into binary data we can output.
   PackedData packed;
@@ -1053,6 +1056,50 @@ $ -- Definitions of CompiledData auxillary methods.
 template<typename T>
 void getRefs(CompiledData::Refs* refs, T* ptr);
 
+$ -- * ------------------------------------------------------------------------
+
+$ local function getRefsName(decl_or_type)
+$   if decl_or_type.is_decl then
+$     return "getRefs_"..decl_or_type:getIdSafeName()
+$   else
+$     return getRefsName(decl_or_type:getDecl())
+$   end
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function mayHaveRefs(decl_or_type)
+$   if decl_or_type.is_decl then
+$     local decl = decl_or_type
+$     if decl.metadata.hidden then return false end
+$     if decl:is(ast.Record) then
+$       if decl:is(ast.TemplateSpecialization) then
+$         if decl.specialized_name == "vec2" or
+$            decl.specialized_name == "Flags" 
+$         then
+$            return false  
+$         end
+$       end
+$       if decl:isDerivedFrom(importer.p:lookupDecl "struct Ref") then
+$         return true
+$       end
+$       if decl.local_name ~= "String" then
+$         return true
+$       end
+$     elseif decl:is(ast.TypedefDecl) then
+$       return mayHaveRefs(decl.subtype)
+$     end
+$   else 
+$     local type = decl_or_type:getDesugared()
+$     if type:is(ast.TypedefType) then
+$       return mayHaveRefs(type.decl.subtype)
+$     elseif type:is(ast.TagType) then
+$       return mayHaveRefs(type:getDecl())
+$     end
+$   end
+$   return false
+$ end
+
 /* ----------------------------------------------------------------------------
  *  RTTI version.
  */
@@ -1069,40 +1116,17 @@ void CompiledData::getRefs(Refs* refs)
 $ -- * ------------------------------------------------------------------------
 $ -- Used for types that we know will never contain refs.
 
-$ local function putGetRefsNoop(name, decl)
-/* ----------------------------------------------------------------------------
- */
-template<>
-void getRefs(CompiledData::Refs* refs, $(name)* ptr)
-{
-  // Noop case...
-}
-$ end
-
-@putGetRefsNoop "u8"
-@putGetRefsNoop "u16"
-@putGetRefsNoop "u32"
-@putGetRefsNoop "u64"
-@putGetRefsNoop "s8"
-@putGetRefsNoop "s16"
-@putGetRefsNoop "s32"
-@putGetRefsNoop "s64"
-@putGetRefsNoop "f32"
-@putGetRefsNoop "f64"
-@putGetRefsNoop "void"
-@putGetRefsNoop "void*"
-@putGetRefsNoop "String"
-
 $ -- * ------------------------------------------------------------------------
 
 $ local function putGetStructRefs(name, decl)
 /* ----------------------------------------------------------------------------
  */
-template<>
-void getRefs(CompiledData::Refs* refs, $(name)* ptr)
+void $(getRefsName(decl))(CompiledData::Refs* refs, $(name)* ptr)
 {
 $ for field in decl:eachFieldWithIndex() do
-  getRefs(refs, &ptr->$(field.name));
+$   if mayHaveRefs(field.type) then
+  $(getRefsName(field.type))(refs, &ptr->$(field.name));
+$   end
 $ end
 }
 $ end
@@ -1112,13 +1136,12 @@ $ -- * ------------------------------------------------------------------------
 $ local function putGetTypedPtrRefs(name, decl)
 /* ----------------------------------------------------------------------------
  */
-template<>
-void getRefs(CompiledData::Refs* refs, $(name)* ptr)
+void $(getRefsName(decl))(CompiledData::Refs* refs, $(name)* ptr)
 {
 $ if decl.template_args[1].name == "void" then
   getRefs(ptr->type, refs, ptr->ptr);
 $ else
-  getRefs(refs, ptr->ptr);
+  $(getRefsName(decl.template_args[1]))(refs, ptr->ptr);
 $ end
 }
 $ end
@@ -1128,22 +1151,20 @@ $ -- * ------------------------------------------------------------------------
 $ local function putGetArrayDefRefs(name, decl)
 /* ----------------------------------------------------------------------------
  */
-template<>
-void getRefs(CompiledData::Refs* refs, $(name)* ptr)
+void $(getRefsName(decl))(CompiledData::Refs* refs, $(name)* ptr)
 {
   for (auto& elem : *ptr)
-    getRefs(refs, &elem);
+    $(getRefsName(decl.template_args[1]))(refs, &elem);
 }
 $ end
 
 $ -- * ------------------------------------------------------------------------
 
 $ local function putGetStringMapRefs(name, decl)
-template<>
-void getRefs(CompiledData::Refs* refs, $(name)* ptr)
+void $(getRefsName(decl))(CompiledData::Refs* refs, $(name)* ptr)
 {
   for (s32 i = 0; i < ptr->len; ++i)
-    getRefs(refs, &ptr->slots[i].elem);
+    $(getRefsName(decl.template_args[1]))(refs, &ptr->slots[i].elem);
 }
 $ end
 
@@ -1152,10 +1173,9 @@ $ -- * ------------------------------------------------------------------------
 $ local function putGetTypedStringMapRefs(name, decl)
 /* ----------------------------------------------------------------------------
  */
-template<>
-void getRefs(CompiledData::Refs* refs, $(name)* ptr)
+void $(getRefsName(decl))(CompiledData::Refs* refs, $(name)* ptr)
 {
-  getRefs(refs, &ptr->map);
+  $(getRefsName(decl:getField("map").type))(refs, &ptr->map);
 }
 $ end
 
@@ -1164,11 +1184,10 @@ $ -- * ------------------------------------------------------------------------
 $ local function putGetEnumArrayRefs(name, decl)
 /* ----------------------------------------------------------------------------
  */
-template<>
-void getRefs(CompiledData::Refs* refs, $(name)* ptr)
+void $(getRefsName(decl))(CompiledData::Refs* refs, $(name)* ptr)
 {
   for (auto& elem : *ptr)
-    getRefs(refs, &elem);
+    $(getRefsName(decl.template_args[2]))(refs, &elem);
 }
 $ end
 
@@ -1187,9 +1206,9 @@ $     return (putGetTypedStringMapRefs(name, decl))
 $   elseif "EnumArray" == spec then
 $     return (putGetEnumArrayRefs(name, decl))
 $   elseif "vec2" == spec then
-$     return (putGetRefsNoop(name, decl))
+$     -- return (putGetRefsNoop(name, decl))
 $   elseif "Flags" == spec then
-$     return (putGetRefsNoop(name, decl))
+$     -- return (putGetRefsNoop(name, decl))
 $   end
 $   clog:warn("unhandled template spec (getRefs): ", name, "\n")
 $ end
@@ -1199,8 +1218,7 @@ $ -- * ------------------------------------------------------------------------
 $ local function putGetRefRefs(name, decl)
 /* ----------------------------------------------------------------------------
  */
-template<>
-void getRefs(CompiledData::Refs* refs, $(name)* ptr)
+void $(getRefsName(decl))(CompiledData::Refs* refs, $(name)* ptr)
 {
   refs->push({"$(name)"_str, ptr});
 }
@@ -1209,6 +1227,8 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local function putGetRecordRefs(name, decl)
+$   if decl.metadata.hidden then return end
+$ 
 $   local TRef = importer.p:lookupDecl "struct Ref"
 $   if decl == TRef or decl:isDerivedFrom(TRef) then
 $     return (putGetRefRefs(name, decl))
@@ -1227,13 +1247,28 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
+$ local function putGetTypedefRefs(name, decl)
+$   local TRef = importer.p:lookupDecl "struct Ref"
+$   local subdecl = decl:getSubDecl()
+$   if subdecl and subdecl:is(ast.Record) and subdecl:isDerivedFrom(TRef) then
+void $(getRefsName(decl))(CompiledData::Refs* refs, $(name)* ptr)
+{
+  refs->push({"$(name)"_str, ptr});
+}
+$   end
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
 $ local function putGetRefs(decl)
 $   if decl:is(ast.TagDecl) then
 $     if decl:is(ast.Record) then
 $       putGetRecordRefs(importer.removeTag(decl.name), decl)
 $     else
-$       putGetRefsNoop(importer.removeTag(decl.name), decl)
+$       -- putGetRefsNoop(importer.removeTag(decl.name), decl)
 $     end
+$   elseif decl:is(ast.TypedefDecl) then
+$     putGetTypedefRefs(importer.removeTag(decl.name), decl)
 $   end
 $ end
 
@@ -1253,7 +1288,9 @@ void getRefs(String type, CompiledData::Refs* refs, void* ptr)
   switch (type.hash())
   {
 $ placeRuntimeCases(function(decl)
-    getRefs(refs, ($(decl.name)*)ptr);
+$   if mayHaveRefs(decl) then
+    $(getRefsName(decl))(refs, ($(decl.name)*)ptr);
+$   end
     return;
 $ end)
   }
