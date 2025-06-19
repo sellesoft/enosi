@@ -47,6 +47,6 @@ void* create(CreateParams& params);
 
 /* ----------------------------------------------------------------------------
  */
-void destroy();
+void destroy(void* server_thread);
 
 } // namespace sv

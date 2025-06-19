@@ -50,6 +50,8 @@ struct Session
 {
   net::Connection connection;
   u64 last_packet_tick_index;
+  TimePoint last_challenge_time;
+  u32 challenge_value;
 
   static constexpr u64 MAX_NAME_LENGTH = 64;
   io::StaticBuffer<MAX_NAME_LENGTH-1> name;
@@ -72,6 +74,8 @@ struct Server
   sv::ServerPublicity publicity;
   io::StaticBuffer<sv::MAX_PASSWORD_LENGTH-1> password;
 
+  // TODO(delle) update sessions to a pool so we're not copying the large
+  // Connection struct when a client disconnects
   u16 max_sessions;
   Array<sv::Session> sessions;
 
@@ -182,26 +186,60 @@ static void stopMatch(Server* server)
 
 /* ----------------------------------------------------------------------------
  */
-static void handleConnectionEvent(void* server_ptr, ConnectionNetEvent& event)
+static void handleConnectionlessPacket(
+  Server* server,
+  net::Address address,
+  net::Fragment& fragment)
 {
   using namespace sv;
 
-  Server* server = (Server*)server_ptr;
-  Session* session = (Session*)event.session;
+  u64 connectionless_protocol_id = *(u64*)(fragment.arr);
+  if (   fragment.len < sizeof(net::CONNECTIONLESS_PROTOCOL_ID)
+      || connectionless_protocol_id != net::CONNECTIONLESS_PROTOCOL_ID)
+    return;
 
-  session->name.len = event.name_length;
-  mem::copy(session->name.buffer, event.name, event.name_length);
-  session->connection.state = net::Connection::State::Connected;
-  @log.info("CONNECTED [", session->name, "] from [",
-            session->connection.address, "]\n");
+  if (server->sessions.len() >= server->max_sessions)
+  {
+    assert(server->publicity != ServerPublicity::Offline);
+
+    iro::String string = "server_full"_str;
+    if (!net::sendOnlinePacket(address, string.ptr, string.len))
+      @log.error("failed to send server full message\n");
+
+    @log.info("Rejecting connection from ", address,
+              " because the server is full\n");
+    return;
+  }
+
+  Session* session = server->sessions.push();
+  assertpointer(session);
+  session->connection.init(address, &server->global_allocator);
+  session->connection.state = net::Connection::State::Challenging;
+  session->last_packet_tick_index = server->tick_index;
+  session->challenge_value = (u32)TimePoint::monotonic().ns;
+
+  @log.info("CHALLENGED [", address, "]\n");
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static void handleChallengeEvent(void* server_ptr, ChallengeNetEvent& event)
+{
+  using namespace sv;
+
+  Session* session = (Session*)event.session;
+  assertpointer(session);
+  if (event.challenge_value == session->challenge_value)
+  {
+    session->connection.state = net::Connection::State::Connected;
+    @log.info("CONNECTED [", session->connection.address, "]\n");
+  }
 }
 
 /* ----------------------------------------------------------------------------
  */
 static void handleMessageEvent(void* server_ptr, MessageNetEvent& event)
 {
-  using namespace sv;
-
   if (event.message_length > 0 && event.message_length < 513)
   {
     @log.info("Message Received: \"",
@@ -280,25 +318,16 @@ static Server* createServer(thread::Context* ctx, sv::CreateParams* params)
   }
   server->engine = &params->engine;
 
-  if (server->publicity == ServerPublicity::Offline)
+  if (   server->publicity != ServerPublicity::Offline
+      && !net::bind(net::SERVER_PORT))
   {
-    Session* offline_session = server->sessions.push();
-    offline_session->connection.init(net::Address::createOffline(),
-                                    &server->global_allocator);
-    offline_session->name.write("offlineplayer"_str);
-  }
-  else
-  {
-    if (!net::bind(net::SERVER_PORT))
-    {
-      @log.error("failed to bind server port\n");
-      return nullptr;
-    }
+    @log.error("failed to bind server port\n");
+    return nullptr;
   }
 
   server->net_event_bus.init(&server->global_allocator);
-  server->net_event_bus.subscribe<ConnectionNetEvent>(server,
-                                                      handleConnectionEvent);
+  server->net_event_bus.subscribe<ChallengeNetEvent>(server,
+                                                     handleChallengeEvent);
   server->net_event_bus.subscribe<MessageNetEvent>(server, handleMessageEvent);
 
   server_running.store(true);
@@ -313,47 +342,35 @@ static void receiveNetMessages(Server* server)
   assertpointer(server);
   using namespace sv;
 
+  // receive messages from clients
   if (server->publicity == ServerPublicity::Offline)
   {
-    assert(server->sessions.len() > 0);
-    Session& session = server->sessions[0];
+    //NOTE(delle) lock during offline packet processing
+    net::lockOfflinePacketMutex(net::Source::Client);
+    defer { net::unlockOfflinePacketMutex(net::Source::Client); };
 
-    session.connection.lock(net::Source::Client);
-    defer { session.connection.unlock(net::Source::Client); };
+    net::Fragment fragment;
+    if (!net::receiveOfflinePacket(net::Source::Client, fragment))
+      return;
 
-    // TODO(delle) better offline connection handling
-    StackArray<u8, net::MAX_FRAGMENT_SIZE> packet_data;
-    session.connection.receive(net::Source::Client, packet_data);
-    session.last_packet_tick_index = server->tick_index;
-
-    // check for connection requests
-    if (session.connection.state == net::Connection::State::Disconnected)
+    if (server->sessions.len() == 0)
     {
-      session.connection.state = net::Connection::State::Challenging;
-
-      net::Message message;
-      message.init(session.connection.incoming_message_data,
-                  session.connection.incoming_message_size);
-      u16 netevent = message.readU16();
-      assert(netevent == 1); // TODO(delle) non-hardcoded netevent
-      {
-        session.name.len = message.readU8();
-        message.readData(session.name.buffer,
-                          min(sv::Session::MAX_NAME_LENGTH,
-                              (u64)session.name.len));
-        @log.info("CONNECTED [", session.name, "] from [",
-                  session.connection.address, "]\n");
-      }
+      handleConnectionlessPacket(server, net::Address::createOffline(),
+                                 fragment);
+    }
+    else
+    {
+      server->sessions[0].connection.receive(net::Source::Client, fragment);
     }
   }
   else
   {
     net::Address packet_address;
-    StackArray<u8, net::MAX_FRAGMENT_SIZE> packet_data;
-    while (net::checkForPackets(packet_address, packet_data))
+    net::Fragment fragment;
+    while (net::receiveOnlinePacket(packet_address, fragment))
     {
-      // range validated in net::checkForPackets
-      assertrange(packet_data.len,
+      // range validated in net::receiveOnlinePacket
+      assertrange(fragment.len,
         sizeof(net::FragmentHeader), net::MAX_FRAGMENT_SIZE);
 
       b8 packet_handled = false;
@@ -361,7 +378,7 @@ static void receiveNetMessages(Server* server)
       {
         if (mem::equal(session.connection.address, packet_address))
         {
-          session.connection.receive(net::Source::Client, packet_data);
+          session.connection.receive(net::Source::Client, fragment);
           session.last_packet_tick_index = server->tick_index;
           packet_handled = true;
           break;
@@ -370,37 +387,8 @@ static void receiveNetMessages(Server* server)
       if (packet_handled)
         continue;
 
-      // check for connection requests
-      net::Message message;
-      message.init(packet_data.arr, packet_data.len);
-      u32 protocol = message.readU32();
-      u32 sequence = message.readU32();
-      u32 ack_index = message.readU32();
-      u32 ack_bitfield = message.readU32();
-      u16 fragment_offset = message.readU16();
-      u16 data_size = message.readU16();
-      u16 netevent = message.readU16();
-      if (netevent == 1) // TODO(delle) non-hardcoded netevent
-      {
-        Session* new_session = server->sessions.push();
-
-        new_session->connection.init(packet_address,
-                                      &server->global_allocator);
-        new_session->connection.state = net::Connection::State::Challenging;
-        new_session->last_packet_tick_index = server->tick_index;
-
-        new_session->name.len = message.readU8();
-        message.readData(new_session->name.buffer,
-                        min(sv::Session::MAX_NAME_LENGTH,
-                            (u64)new_session->name.len));
-
-        @log.info("CONNECTED [", new_session->name, "] from [",
-                  packet_address, "]\n");
-      }
+      handleConnectionlessPacket(server, packet_address, fragment);
     }
-
-    // ping the server list
-    // TODO(delle) server list
   }
 
   // parse messages from clients
@@ -426,22 +414,36 @@ static void sendNetMessages(Server* server)
   assertpointer(server);
   using namespace sv;
 
+  //NOTE(delle) lock before offline connection receive/send
+  if (server->publicity == ServerPublicity::Offline)
+  {
+    net::lockOfflinePacketMutex(net::Source::Server);
+    defer { net::unlockOfflinePacketMutex(net::Source::Server); };
+  }
+
   u8 message_data[net::Message::MAX_SIZE];
   for (Session& session : server->sessions)
   {
-    session.connection.lock(net::Source::Server);
-    defer { session.connection.unlock(net::Source::Server); };
-
     net::Message message;
     message.init(message_data, 0);
 
     if (session.connection.state == net::Connection::State::Challenging)
     {
-      session.connection.state = net::Connection::State::Connected;
-      
-      ConnectionNetEvent event = {};
-      event.session = &session;
-      server->net_event_bus.queue(event);
+      TimeSpan time_since_challenge = TimePoint::monotonic()
+                                    - session.last_challenge_time;
+      if (time_since_challenge.toMilliseconds() > 1000)
+      {
+        //TODO(delle) drop connection if time since challenge is too long
+        @log.info("CHALLENGE TIMED OUT [", session.connection.address, "]\n");
+        continue;
+      }
+
+      ChallengeNetEvent challenge_event = {
+        .session = &session,
+        .challenge_value = session.challenge_value,
+      };
+      server->net_event_bus.queue(challenge_event);
+      session.last_challenge_time = TimePoint::monotonic();
     }
 
     // pack pending events into the message
@@ -450,9 +452,7 @@ static void sendNetMessages(Server* server)
     {
       session.connection.send(net::Source::Server, message, false);
       if (session.connection.outgoing_message_pending_fragments)
-      {
         session.connection.sendNextFragment();
-      }
     }
     else
     {

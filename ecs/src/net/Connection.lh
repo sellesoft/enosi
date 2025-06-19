@@ -40,7 +40,15 @@ struct FragmentHeader
 static constexpr u16 MAX_FRAGMENT_SIZE = 1200;
 static constexpr u16 MAX_FRAGMENT_DATA_SIZE =
   MAX_FRAGMENT_SIZE - sizeof(FragmentHeader);
+
+// Protocol ID: <3><C><dollar><version>
+static constexpr u32 PROTOCOL_VERSION = 0;
+static constexpr u32 PROTOCOL_ID = 0x33422400 + PROTOCOL_VERSION;
+static constexpr u64 CONNECTIONLESS_PROTOCOL_ID =
+  0xFFFFFFFF | (u64)PROTOCOL_ID << 32;
 static constexpr u16 SERVER_PORT = 40230;
+
+typedef iro::StackArray<u8, MAX_FRAGMENT_SIZE> Fragment;
 
 /* ============================================================================
  */
@@ -49,7 +57,8 @@ struct Connection
   enum struct State
   {
     Disconnected,
-    Challenging,
+    Connecting, // sending challenge request
+    Challenging, // sending/receiving challenge response
     Connected,
   } state;
 
@@ -77,16 +86,13 @@ struct Connection
 
   b8 init(Address address, iro::mem::Allocator* allocator);
 
-  // priority messages are sent out-of-sequence
+  void deinit();
+
   // returns true if the message was sent, fragmented, or queued
   b8 send(Source source, const Message& message, b8 priority);
   b8 sendNextFragment();
 
-  void receive(Source source, iro::StackArray<u8, MAX_FRAGMENT_SIZE>& data);
-
-  // locks the connection on the thread for offline messages
-  void lock(Source source);
-  void unlock(Source source);
+  void receive(Source source, Fragment& fragment);
 };
 
 /* ----------------------------------------------------------------------------
@@ -103,9 +109,33 @@ void deinit();
 b8 bind(u16 port);
 
 /* ----------------------------------------------------------------------------
+ * Returns true if the packet was sent.
  */
-b8 checkForPackets(
-  Address& from_address,
-  iro::StackArray<u8, MAX_FRAGMENT_SIZE>& data);
+b8 sendOnlinePacket(Address to_address, void* data, u16 size);
 
-}
+/* ----------------------------------------------------------------------------
+ * Returns true if a packet was received.
+ */
+b8 receiveOnlinePacket(Address& address, Fragment& fragment);
+
+/* ----------------------------------------------------------------------------
+ * Returns true if the packet was sent.
+ */
+b8 sendOfflinePacket(Source source, void* data, u16 size);
+
+/* ----------------------------------------------------------------------------
+ * Returns true if a packet was received.
+ */
+b8 receiveOfflinePacket(Source source, Fragment& fragment);
+
+/* ----------------------------------------------------------------------------
+ * Locks the mutex for offline messages.
+ */
+void lockOfflinePacketMutex(Source source);
+
+/* ----------------------------------------------------------------------------
+ * Unlocks the mutex for offline messages.
+ */
+void unlockOfflinePacketMutex(Source source);
+
+} // namespace net

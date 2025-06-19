@@ -40,14 +40,12 @@ $ local metadata = require "reflect.Metadata"
 /* ============================================================================
  */
 @metadata.netevent({priority = true, broadcast = false})
-struct ConnectionNetEvent
+struct ChallengeNetEvent
 {
   @metadata.netfield_ignore({})
   void* session;
 
-  u8 name_length;
-  @metadata.netfield_blob(event.name_length)
-  u8* name;
+  u32 challenge_value;
 };
 
 /* ============================================================================

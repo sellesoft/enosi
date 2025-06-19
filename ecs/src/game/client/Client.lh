@@ -34,6 +34,7 @@ struct Client
 
   net::Connection connection;
   TimePoint last_challenge_time;
+  u32 challenge_value;
   net::EventBus net_event_bus;
 
   // Client only systems.
@@ -57,4 +58,6 @@ struct Client
   b8 wantHotReload();
 
   b8 connectToServer(net::Address address);
+
+  void disconnectFromServer();
 };

@@ -47,9 +47,6 @@ namespace net
 
 /* ============================================================================
  */
-// Protocol ID: <3><C><dollar><version>
-static constexpr u32 PROTOCOL_VERSION = 0;
-static constexpr u32 PROTOCOL_ID = 0x33422400 + PROTOCOL_VERSION;
 static constexpr u32 PRIORITY_SEQUENCE = -1;
 static constexpr u16 FRAGMENT_BIT = (1 << 15);
 
@@ -206,92 +203,9 @@ $ end -- if not IRO_WIN32
 
 /* ----------------------------------------------------------------------------
  */
-b8 checkForPackets(
-  Address& from_address,
-  StackArray<u8, MAX_FRAGMENT_SIZE>& data)
+b8 sendOnlinePacket(Address address, void* data, u16 size)
 {
-  @log.trace("checking for packets\n");
-
-$ if IRO_WIN32 then
-  typedef int socklen_t;
-$ end -- if IRO_WIN32
-
-  // check for ipv6 packets
-  if (s_ipv6_socket)
-  {
-    sockaddr_in6 from;
-    socklen_t from_len = sizeof(from);
-    int bytes_received = recvfrom(s_ipv6_socket, (char*)data.arr,
-                                  MAX_FRAGMENT_SIZE, 0,
-                                  (sockaddr*)&from, &from_len);
-$ if IRO_WIN32 then
-    if (SOCKET_ERROR == bytes_received)
-    {
-      int error = WSAGetLastError();
-      if (WSAEWOULDBLOCK != error)
-        @log.error("Failed to receive an IPv6 packet due to WSA error: ",
-                   platform::Win32ErrMsg(error));
-      return false;
-    }
-$ else -- if IRO_WIN32
-    if (-1 == bytes_received)
-    {
-      if (EWOULDBLOCK != errno)
-         @log.error("Failed to receive an IPv6 packet due to error: ",
-                    strerror(errno), "\n");
-      return false;
-    }
-$ end -- if not IRO_WIN32
-
-    if (bytes_received < sizeof(FragmentHeader))
-      return false;
-
-    u8 ipv6[16];
-    //for (int i = 0; i < 8; i++)
-    //  ((u16*)ipv6)[i] = ntohs(((u16*)&from.sin6_addr)[i]);
-    mem::copy(ipv6, &from.sin6_addr, 16);
-    from_address = Address(ipv6, ntohs(from.sin6_port));
-
-    data.len = (u64)bytes_received;
-    return true;
-  }
-
-  return false;
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 Connection::init(Address address, iro::mem::Allocator* allocator)
-{
-  assertpointer(allocator);
-  @log.trace("initializing a connection\n");
-
-  this->state = State::Disconnected;
-  this->address = address;
-  if (this->address.port == 0)
-    this->address.port = SERVER_PORT;
-  this->acknowledged_sequence = 0;
-  this->acknowledged_bitfield = 0;
-  this->incoming_message_sequence = 0;
-  this->incoming_fragment_sequence = 0;
-  this->incoming_message_size = 0;
-  this->incoming_message_pending_fragments = true;
-  this->outgoing_message_sequence = 1;
-  this->outgoing_message_size = 0;
-  this->outgoing_message_pending_offset = 0;
-  this->outgoing_message_pending_fragments = false;
-  this->message_queue_start = nullptr;
-  this->message_queue_end = &this->message_queue_start;
-  this->allocator = allocator;
-
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-static b8 sendPacket(const Address& address, void* data, u16 size)
-{
-  @log.trace("sending a packet of ", size, " bytes\n");
+  @log.trace("sending an online packet of ", size, " bytes\n");
 
   sockaddr_in6 socket_address;
   memset(&socket_address, 0, sizeof(socket_address));
@@ -339,6 +253,154 @@ $ end -- if not IRO_WIN32
 
 /* ----------------------------------------------------------------------------
  */
+b8 receiveOnlinePacket(Address& address, Fragment& fragment)
+{
+  @log.trace("checking for packets\n");
+
+$ if IRO_WIN32 then
+  typedef int socklen_t;
+$ end -- if IRO_WIN32
+
+  // check for ipv6 packets
+  if (s_ipv6_socket)
+  {
+    sockaddr_in6 from;
+    socklen_t from_len = sizeof(from);
+    int bytes_received = recvfrom(s_ipv6_socket, (char*)fragment.arr,
+                                  MAX_FRAGMENT_SIZE, 0,
+                                  (sockaddr*)&from, &from_len);
+$ if IRO_WIN32 then
+    if (SOCKET_ERROR == bytes_received)
+    {
+      int error = WSAGetLastError();
+      if (WSAEWOULDBLOCK != error)
+        @log.error("Failed to receive an IPv6 packet due to WSA error: ",
+                   platform::Win32ErrMsg(error));
+      return false;
+    }
+$ else -- if IRO_WIN32
+    if (-1 == bytes_received)
+    {
+      if (EWOULDBLOCK != errno)
+         @log.error("Failed to receive an IPv6 packet due to error: ",
+                    strerror(errno), "\n");
+      return false;
+    }
+$ end -- if not IRO_WIN32
+
+    if (bytes_received < sizeof(FragmentHeader))
+      return false;
+
+    u8 ipv6[16];
+    //for (int i = 0; i < 8; i++)
+    //  ((u16*)ipv6)[i] = ntohs(((u16*)&from.sin6_addr)[i]);
+    mem::copy(ipv6, &from.sin6_addr, 16);
+    address = Address(ipv6, ntohs(from.sin6_port));
+
+    fragment.len = (u64)bytes_received;
+    return true;
+  }
+
+  return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 sendOfflinePacket(Source source, void* data, u16 size)
+{
+  @log.trace("saving a message via an offline connection\n");
+  if (size <= Message::MAX_SIZE)
+  {
+    s_offline_messages[(int)source].size = size;
+    mem::copy(s_offline_messages[(int)source].data, data, size);
+    return true;
+  }
+  else
+  {
+    return @log.error("Message size [", size, "] is greater than max offline"
+                      " message size [", Message::MAX_SIZE, "].\n");
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 receiveOfflinePacket(Source source, Fragment& fragment)
+{
+  @log.trace("receiving an offline packet\n");
+  if (s_offline_messages[(int)source].size == 0)
+  {
+    return false;
+  }
+  else
+  {
+    mem::copy(fragment.arr, s_offline_messages[(int)source].data,
+              s_offline_messages[(int)source].size);
+    fragment.len = s_offline_messages[(int)source].size;
+    s_offline_messages[(int)source].size = 0;
+    return true;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void lockOfflinePacketMutex(Source source)
+{
+  s_offline_messages[(int)source].mutex.lock();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void unlockOfflinePacketMutex(Source source)
+{
+  s_offline_messages[(int)source].mutex.unlock();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Connection::init(Address address, iro::mem::Allocator* allocator)
+{
+  assertpointer(allocator);
+  @log.trace("initializing a connection\n");
+
+  this->state = State::Disconnected;
+  this->address = address;
+  if (this->address.port == 0)
+    this->address.port = SERVER_PORT;
+  this->acknowledged_sequence = 0;
+  this->acknowledged_bitfield = 0;
+  this->incoming_message_sequence = 0;
+  this->incoming_fragment_sequence = 0;
+  this->incoming_message_size = 0;
+  this->incoming_message_pending_fragments = true;
+  this->outgoing_message_sequence = 1;
+  this->outgoing_message_size = 0;
+  this->outgoing_message_pending_offset = 0;
+  this->outgoing_message_pending_fragments = false;
+  this->message_queue_start = nullptr;
+  this->message_queue_end = &this->message_queue_start;
+  this->allocator = allocator;
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Connection::deinit()
+{
+  @log.trace("deinitializing a connection\n");
+
+  for (QueuedMessage* message = this->message_queue_start; message != nullptr;)
+  {
+    QueuedMessage* next = message->next;
+    this->allocator->free(message);
+    message = next;
+  }
+
+  this->state = State::Disconnected;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 Connection::sendNextFragment()
 {
   @log.trace("sending a message fragment\n");
@@ -363,7 +425,7 @@ b8 Connection::sendNextFragment()
   }
 
   u32 packet_size = sizeof(FragmentHeader) + header->data_size;
-  if (!sendPacket(this->address, header, packet_size))
+  if (!sendOnlinePacket(this->address, header, packet_size))
     return false;
 
   this->outgoing_message_pending_offset += header->data_size;
@@ -410,15 +472,8 @@ b8 Connection::send(Source source, const Message& message, b8 priority)
 {
   assertrange(message.size, 1, Message::MAX_SIZE);
 
-  // save offline message
   if (this->address.type == AddressType::Offline)
-  {
-    @log.trace("saving a message via an offline connection\n");
-    s_offline_messages[(int)source].size = message.size;
-    mem::copy(s_offline_messages[(int)source].data, message.data,
-              message.size);
-    return true;
-  }
+    return sendOfflinePacket(source, message.data, message.size);
 
   if (s_ipv6_socket == 0)
     return @log.error("Attempted to send a message with an unbound socket.");
@@ -487,8 +542,8 @@ b8 Connection::send(Source source, const Message& message, b8 priority)
   this->outgoing_message_size = sizeof(*header) + message.size;
 
   // send the packet
-  if (!sendPacket(this->address, this->outgoing_message_data,
-                  this->outgoing_message_size))
+  if (!sendOnlinePacket(this->address, this->outgoing_message_data,
+                        this->outgoing_message_size))
   {
     @log.warn("Failed to send a message. This means that we might have"
               " to allocate, copy, and queue future messages.\n");
@@ -511,25 +566,12 @@ void Connection::receive(
 {
   if (this->address.type == AddressType::Offline)
   {
-    if (s_offline_messages[(int)source].size == 0)
-    {
-      this->incoming_message_pending_fragments = true;
-      return;
-    }
-    else
-    {
-      @log.trace("loading a message via an offline connection\n");
-      mem::copy(this->incoming_message_data,
-                s_offline_messages[(int)source].data,
-                s_offline_messages[(int)source].size);
-      this->incoming_message_size = s_offline_messages[(int)source].size;
-      this->incoming_message_pending_fragments = false;
-      s_offline_messages[(int)source].size = 0;
-      return;
-    }
+    this->incoming_message_pending_fragments =
+      !receiveOfflinePacket(source, data);
+    return;
   }
 
-  // range validated in net::checkForPackets
+  // range validated in net::receiveOnlinePacket
   assertrange(data.len, sizeof(FragmentHeader), MAX_FRAGMENT_SIZE);
   @log.trace("receiving a packet via a remote connection\n");
 
@@ -620,20 +662,6 @@ void Connection::receive(
 
   this->incoming_message_pending_fragments = false;
   this->incoming_message_sequence = sequence;
-}
-
-/* ----------------------------------------------------------------------------
- */
-void Connection::lock(Source source)
-{
-  if (this->address.type == AddressType::Offline)
-    s_offline_messages[(int)source].mutex.lock();
-}
-
-void Connection::unlock(Source source)
-{
-  if (this->address.type == AddressType::Offline)
-    s_offline_messages[(int)source].mutex.unlock();
 }
 
 } // namespace net
