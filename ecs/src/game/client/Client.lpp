@@ -20,40 +20,14 @@ $ local ui = require "ui.UI"
 @@lpp.import "graphics/Renderer.lh"
 @@lpp.import "input/InputMgr.lh"
 @@lpp.import "graphics/Ref.defs.lh"
-@@lpp.import "net/Net.events.lh"
 
 @log.ger(client, Debug)
-
-/* ----------------------------------------------------------------------------
- */
-static void handleChallengeEvent(void* client_ptr, ChallengeNetEvent& event)
-{
-  Client* client = (Client*)client_ptr;
-  client->challenge_value = event.challenge_value;
-  client->connection.state = net::Connection::State::Challenging;
-}
-
-/* ----------------------------------------------------------------------------
- */
-static void handleMessageEvent(void* client_ptr, MessageNetEvent& event)
-{
-  if (event.message_length > 0 && event.message_length < 513)
-  {
-    io::StaticBuffer<512> string_buffer;
-    string_buffer.len = event.message_length;
-    mem::copy(string_buffer.buffer, event.message, event.message_length);
-    @log.info("Message Received: \"", string_buffer, "\"\n");
-  }
-}
-
 
 /* ----------------------------------------------------------------------------
  */
 b8 Client::init(Engine* engine)
 {
   this->engine = engine;
-
-  connection.address.type = net::AddressType::Invalid;
 
 $ local function init(act, name)
   {
@@ -148,6 +122,9 @@ $ end
   };
   @init(ui.init(ui_params), UI);
 
+  // TODO(delle) client allocators
+  @init(netmgr.init(&mem::stl_allocator), NetMgr);
+
   cl::GameSim::InitParams sim_params =
   {
     .loader   = asset_loader,
@@ -162,155 +139,8 @@ $ end
 
   asset_loader.load(&test_skin, "assets/skins/Test.skin"_str);
 
-  this->net_event_bus.init(&mem::stl_allocator);
-  this->net_event_bus.subscribe<ChallengeNetEvent>(this, handleChallengeEvent);
-  this->net_event_bus.subscribe<MessageNetEvent>(this, handleMessageEvent);
 
   return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-static void receiveNetMessages(Client* client)
-{
-  assertpointer(client);
-
-  net::Connection& connection = client->connection;
-  if (connection.address.type == net::AddressType::Offline)
-  {
-    //NOTE(delle) lock during offline packet processing
-    net::lockOfflinePacketMutex(net::Source::Server);
-    defer { net::unlockOfflinePacketMutex(net::Source::Server); };
-
-    net::Fragment fragment;
-    connection.receive(net::Source::Server, fragment);
-    if (connection.incoming_message_pending_fragments)
-      return;
-    @log.trace("received packet from [offline]\n");
-
-    net::Message message;
-    message.init(connection.incoming_message_data,
-                connection.incoming_message_size);
-    if (!client->net_event_bus.parseMessage(message, client))
-      @log.error("failed to parse network message\n");
-  }
-  else
-  {
-    net::Address packet_address;
-    net::Fragment fragment;
-    while (net::receiveOnlinePacket(packet_address, fragment))
-    {
-      // range validated in net::receiveOnlinePacket
-      assertrange(fragment.len,
-        sizeof(net::FragmentHeader), net::MAX_FRAGMENT_SIZE);
-
-      if (!mem::equal(connection.address, packet_address))
-        continue;
-
-      connection.receive(net::Source::Server, fragment);
-      if (connection.incoming_message_pending_fragments)
-        continue;
-      @log.trace("received packet from ", connection.address, "\n");
-
-      net::Message message;
-      message.init(connection.incoming_message_data,
-                  connection.incoming_message_size);
-      if (!client->net_event_bus.parseMessage(message, client))
-        @log.error("failed to parse network message\n");
-    }
-  }
-}
-
-/* ----------------------------------------------------------------------------
- */
-static void sendNetMessages(Client* client)
-{
-  assertpointer(client);
-
-  //NOTE(delle) lock before offline connection receive/send
-  if (client->connection.address.type == net::AddressType::Offline)
-  {
-    net::lockOfflinePacketMutex(net::Source::Client);
-    defer { net::unlockOfflinePacketMutex(net::Source::Client); };
-  }
-
-  net::Connection& connection = client->connection;
-  if (connection.state == net::Connection::State::Connected)
-  {
-    u8 message_data[net::Message::MAX_SIZE];
-    net::Message message;
-    message.init(message_data, 0);
-    client->net_event_bus.packEvents(message);
-    if (!message.writeOverflowed())
-    {
-      connection.send(net::Source::Client, message, false);
-      if (connection.outgoing_message_pending_fragments)
-        connection.sendNextFragment();
-    }
-    else
-    {
-      @log.error("message overflow when packing events\n");
-    }
-  }
-  else if (connection.state == net::Connection::State::Challenging)
-  {
-    TimeSpan time_since_challenge = TimePoint::monotonic()
-                                  - client->last_challenge_time;
-    if (time_since_challenge.toMilliseconds() > 1000)
-    {
-      //TODO(delle) drop connection if time since challenge is too long
-      @log.info("CHALLENGE TIMED OUT [", connection.address, "]\n");
-      return;
-    }
-
-    u8 message_data[256]; // TODO(delle) fix this hardcoded size
-    net::Message message;
-    message.init(message_data, 0);
-
-    ChallengeNetEvent challenge_event = {
-      .challenge_value = client->challenge_value,
-    };
-    client->net_event_bus.queue(challenge_event);
-    
-    client->net_event_bus.packEvents(message);
-    if (!message.writeOverflowed())
-    {
-      connection.send(net::Source::Client, message, true);
-      if (connection.outgoing_message_pending_fragments)
-        connection.sendNextFragment();
-    }
-    else
-    {
-      @log.error("message overflow when packing events\n");
-    }
-
-    @log.info("CHALLENGING [", connection.address, "]\n");
-    client->last_challenge_time = TimePoint::monotonic();
-  }
-  else
-  {
-    assert(connection.state == net::Connection::State::Connecting);
-
-    auto time_since_challenge = TimePoint::monotonic()
-                              - client->last_challenge_time;
-    if (time_since_challenge.toMilliseconds() > 1000)
-    {
-      u8 message_data[64];
-      net::Message message;
-      message.init(message_data, 0);
-
-      message.writeU64(net::CONNECTIONLESS_PROTOCOL_ID);
-      iro::String string = "connect"_str;
-      message.writeData(string.ptr, string.len);
-      //TODO(delle) password
-
-      if (!connection.send(net::Source::Client, message, true))
-        @log.error("failed to send challenge message\n");
-
-      @log.info("CONNECTING [", connection.address, "]\n");
-      client->last_challenge_time = TimePoint::monotonic();
-    }
-  }
 }
 
 /* ----------------------------------------------------------------------------
@@ -326,9 +156,7 @@ b8 Client::update()
   if (!window.update(input))
     return ERROR("failed to update window\n");
 
-  // Check for and parse incoming packets.
-  if (connection.address.type != net::AddressType::Invalid)
-    receiveNetMessages(this);
+  netmgr.receiveNetMessages();
 
   gfx::Renderer::UpdateParams renderer_params =
   {
@@ -400,9 +228,7 @@ b8 Client::update()
   }
   ui.endFrame();
 
-  // Send messages to the server.
-  if (connection.address.type != net::AddressType::Invalid)
-    sendNetMessages(this);
+  netmgr.sendNetMessages();
 
   return true;
 }
@@ -443,19 +269,14 @@ b8 Client::connectToServer(net::Address address)
       return FATAL("failed to create server thread\n");
   }
 
-  // TODO(delle) client allocators
-  if(!connection.init(address, &mem::stl_allocator))
-    return @log.error("failed to initialize connection\n");
-  connection.state = net::Connection::State::Connecting;
-  last_challenge_time = TimePoint::monotonic();
-  return true;
+  return netmgr.connectToServer(address);
 }
 
 /* ----------------------------------------------------------------------------
  */
 void Client::disconnectFromServer()
 {
-  if (connection.address.type == net::AddressType::Offline)
+  if (netmgr.connection.address.type == net::AddressType::Offline)
     sv::destroy(engine->server_thread);
-  connection.deinit();
+  netmgr.disconnectFromServer();
 }

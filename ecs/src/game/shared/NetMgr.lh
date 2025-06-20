@@ -1,0 +1,143 @@
+$ require "common"
+
+@@lpp.import "net/Address.lh"
+@@lpp.import "net/Message.lh"
+
+#include "iro/Common.h"
+#include "iro/containers/StackArray.h"
+
+namespace iro::mem { struct Allocator; }
+struct SharedNetMgr;
+
+namespace net
+{
+
+/* ============================================================================
+ */
+enum struct Source
+{
+  Client,
+  Server,
+};
+
+/* ============================================================================
+ */
+// TODO(delle) networking data_size might be unnecessary
+struct FragmentHeader
+{
+  u32 protocol; // validate this is a packet we care about
+  u32 sequence_index; // sequence index of this message
+  u32 ack_index; // sequence index of the last message received
+  u32 ack_bitfield; // each bit acknowledges the indexes before ack_index
+  u16 fragment_offset; // offset into the message
+  u16 data_size; // number of bytes after this header
+};
+
+static constexpr u16 MAX_FRAGMENT_SIZE = 1200;
+static constexpr u16 MAX_FRAGMENT_DATA_SIZE =
+  MAX_FRAGMENT_SIZE - sizeof(FragmentHeader);
+
+typedef iro::StackArray<u8, MAX_FRAGMENT_SIZE> Fragment;
+
+/* ============================================================================
+ * Protocol ID: <3><C><dollar><version>
+ */
+static constexpr u32 PROTOCOL_VERSION = 0;
+static constexpr u32 PROTOCOL_ID = 0x33422400 + PROTOCOL_VERSION;
+static constexpr u64 CONNECTIONLESS_PROTOCOL_ID =
+  0xFFFFFFFF | (u64)PROTOCOL_ID << 32;
+static constexpr u16 SERVER_PORT = 40230;
+
+/* ============================================================================
+ */
+struct QueuedMessage
+{
+  u16 size;
+  u8 data[Message::MAX_SIZE];
+  QueuedMessage* next;
+};
+
+/* ============================================================================
+ */
+struct Connection
+{
+  enum struct State
+  {
+    Disconnected,
+    Connecting, // sending challenge request
+    Challenging, // sending/receiving challenge response
+    Connected,
+  } state;
+
+  SharedNetMgr* netmgr;
+  Address address;
+
+  u32 acknowledged_sequence;
+  u32 acknowledged_bitfield;
+
+  u32 incoming_message_sequence;
+  u32 incoming_fragment_sequence;
+  u16 incoming_message_size;
+  b8 incoming_message_pending_fragments;
+  u8 incoming_message_data[Message::MAX_SIZE];
+
+  u32 outgoing_message_sequence;
+  u16 outgoing_message_size;
+  u16 outgoing_message_pending_offset;
+  b8 outgoing_message_pending_fragments;
+  u8 outgoing_message_data[Message::MAX_SIZE + sizeof(FragmentHeader)];
+
+  QueuedMessage* message_queue_start;
+  QueuedMessage** message_queue_end;
+
+
+  b8 init(Address address, SharedNetMgr* netmgr);
+
+  void deinit();
+
+  // returns true if the message was sent, fragmented, or queued
+  b8 send(Source source, const Message& message, b8 priority);
+  b8 sendNextFragment();
+
+  void receive(Source source, Fragment& fragment);
+};
+
+} // namespace net
+
+/* ============================================================================
+ */
+struct SharedNetMgr
+{
+  iro::mem::Allocator* allocator;
+  struct NetEventBusData* event_bus_data;
+
+  b8 init(iro::mem::Allocator* allocator);
+  void deinit();
+
+  b8 bind(u16 port);
+
+  // returns true if the packet was sent or received
+  b8 sendOnlinePacket(net::Address to_address, void* data, u16 size);
+  b8 receiveOnlinePacket(net::Address& address, net::Fragment& fragment);
+  b8 sendOfflinePacket(net::Source source, void* data, u16 size);
+  b8 receiveOfflinePacket(net::Source source, net::Fragment& fragment);
+
+  void lockOfflinePacketMutex(net::Source source);
+  void unlockOfflinePacketMutex(net::Source source);
+
+  template<typename EventType>
+  void subscribeToEvent(
+    void* subscriber,
+    void (*callback)(void*, EventType&));
+
+  template<typename EventType>
+  void unsubscribeFromEvent(
+    void* subscriber,
+    void (*callback)(void*, EventType&));
+
+  template<typename EventType>
+  void queueEvent(EventType& event);
+
+  void packEventsIntoMessage(net::Message& message, void* session = nullptr);
+  b8 parseEventsFromMessage(net::Message& message, void* session = nullptr);
+};

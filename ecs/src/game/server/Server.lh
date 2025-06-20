@@ -38,7 +38,7 @@ struct CreateParams
   s64 target_tickrate_ms;
   ServerPublicity publicity;
   u16 max_sessions;
-  io::StaticBuffer<MAX_PASSWORD_LENGTH-1> password;
+  iro::io::StaticBuffer<MAX_PASSWORD_LENGTH-1> password;
 };
 
 /* ----------------------------------------------------------------------------
