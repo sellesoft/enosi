@@ -118,7 +118,7 @@ void NetMgr::deinit()
 
 /* ----------------------------------------------------------------------------
  */
-void NetMgr::receiveNetMessages()
+void NetMgr::receiveMessages()
 {
   // receive messages from clients
   if (this->publicity == ServerPublicity::Offline)
@@ -179,7 +179,7 @@ void NetMgr::receiveNetMessages()
 
 /* ----------------------------------------------------------------------------
  */
-void NetMgr::sendNetMessages()
+void NetMgr::sendMessages()
 {
   //NOTE(delle) lock before offline connection receive/send
   if (this->publicity == ServerPublicity::Offline)

@@ -41,8 +41,8 @@ struct NetMgr : public SharedNetMgr
           u16 max_sessions);
   void deinit();
 
-  void receiveNetMessages();
-  void sendNetMessages();
+  void receiveMessages();
+  void sendMessages();
 };
 
 } // namespace sv

@@ -156,7 +156,7 @@ b8 Client::update()
   if (!window.update(input))
     return ERROR("failed to update window\n");
 
-  netmgr.receiveNetMessages();
+  netmgr.receiveMessages();
 
   gfx::Renderer::UpdateParams renderer_params =
   {
@@ -228,7 +228,7 @@ b8 Client::update()
   }
   ui.endFrame();
 
-  netmgr.sendNetMessages();
+  netmgr.sendMessages();
 
   return true;
 }

@@ -257,7 +257,7 @@ static void* updateServer(thread::Context* ctx)
     server->tick_allocator.clear();
 
     // Receive messages from clients.
-    server->netmgr.receiveNetMessages();
+    server->netmgr.receiveMessages();
 
     // Update the game simulation.
     if (server->state == ServerState::Ingame)
@@ -270,7 +270,7 @@ static void* updateServer(thread::Context* ctx)
     }
 
     // Send messages to clients.
-    server->netmgr.sendNetMessages();
+    server->netmgr.sendMessages();
 
     // Sleep if we're under tickrate budget.
     // NOTE(delle) hardcoded 200ms tickrate in the lobby

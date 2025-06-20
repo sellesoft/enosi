@@ -25,8 +25,8 @@ struct NetMgr : public SharedNetMgr
   b8 connectToServer(net::Address address);
   void disconnectFromServer();
 
-  void receiveNetMessages();
-  void sendNetMessages();
+  void receiveMessages();
+  void sendMessages();
 };
 
 } // namespace cl
