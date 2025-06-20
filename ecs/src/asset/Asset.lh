@@ -118,6 +118,9 @@ struct TypedSourceAssetRef : AssetRef
   }
 };
 
+template<>
+b8 TypedSourceAssetRef<int>::load(String type, LoadParams& params);
+
 /* ============================================================================
  */
 template<typename T>
@@ -149,3 +152,6 @@ struct TypedAssetRef : AssetRef
 
   b8 load(String type, LoadParams& params);
 };
+
+template<>
+b8 TypedAssetRef<int>::load(String type, LoadParams& params);

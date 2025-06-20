@@ -82,6 +82,7 @@ namespace sv
  */
 b8 NetMgr::init(
   mem::Allocator* allocator,
+  PasswordBuffer& password,
   ServerPublicity publicity,
   u16 max_sessions)
 {
@@ -92,6 +93,7 @@ b8 NetMgr::init(
   if (!this->sessions.init(max_sessions, allocator))
     return @log.error("failed to init the server sessions array\n");
 
+  this->password.copy(password);
   this->publicity = publicity;
   if (publicity != ServerPublicity::Offline)
   {

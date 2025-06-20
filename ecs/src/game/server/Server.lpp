@@ -52,9 +52,7 @@ struct Server
 
   TimeSpan target_timespan;
   u64 tick_index;
-
   sv::ServerState state;
-  io::StaticBuffer<sv::MAX_PASSWORD_LENGTH-1> password;
 
   Engine* engine;
   sv::GameSim sim;
@@ -222,10 +220,10 @@ static Server* createServer(thread::Context* ctx, sv::CreateParams* params)
     TimeSpan::fromMilliseconds(params->target_tickrate_ms);
   server->tick_index = 0;
   server->state = ServerState::Lobby;
-  server->password = params->password;
   server->engine = &params->engine;
 
   if (!server->netmgr.init(&server->global_allocator,
+                          params->password,
                           params->publicity,
                           params->max_sessions))
   {

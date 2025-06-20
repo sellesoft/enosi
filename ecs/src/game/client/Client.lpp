@@ -44,6 +44,9 @@ $ end
 
   @init(input.init(), InputMgr);
 
+  // TODO(delle) client allocators
+  @init(netmgr.init(&mem::stl_allocator), NetMgr);
+
   @init(Window::initializeBackend(), Window backend);
   @init(window.init("ecs"_str, input), Window);
 
@@ -110,13 +113,9 @@ $ end
   };
   @init(ui.init(ui_params), UI);
 
-  @dbgBreak;
   EntityDefRef test_spawner;
   asset_loader.load(&test_spawner, 
     "assets/entities/spawners/Player.entity"_str);
-
-  // TODO(delle) client allocators
-  @init(netmgr.init(&mem::stl_allocator), NetMgr);
 
   cl::GameSim::InitParams sim_params =
   {
@@ -163,6 +162,7 @@ b8 Client::update()
   if (!window.update(input))
     return ERROR("failed to update window\n");
 
+  // Receives messages from the server.
   netmgr.receiveMessages();
 
   gfx::Renderer::UpdateParams renderer_params =
@@ -202,6 +202,7 @@ b8 Client::update()
   }
   ui.endFrame();
 
+  // Sends messages to the server.
   netmgr.sendMessages();
 
   return true;

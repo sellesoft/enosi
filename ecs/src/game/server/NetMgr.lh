@@ -33,10 +33,12 @@ struct NetMgr : public SharedNetMgr
   // Connection structs when a client disconnects
   u16 max_sessions;
   iro::Array<Session> sessions;
+  PasswordBuffer password;
   ServerPublicity publicity;
 
 
   b8 init(iro::mem::Allocator* allocator,
+          PasswordBuffer& password,
           ServerPublicity publicity,
           u16 max_sessions);
   void deinit();
