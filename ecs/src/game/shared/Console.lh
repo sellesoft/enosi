@@ -1,0 +1,31 @@
+$ require "common"
+
+#include "iro/Common.h"
+#include "iro/containers/FixedPool.h"
+#include "iro/containers/StackArray.h"
+#include "iro/Unicode.h"
+
+/* ============================================================================
+ */
+struct SharedConsole
+{
+  typedef iro::StackArray<iro::String, 8> CommandArgs;
+  typedef void(*CommandFunc)(const CommandArgs& args);
+
+  struct Command
+  {
+$ if ECS_DEBUG
+    iro::String name;
+$ end
+    u64 name_hash = 0;
+    CommandFunc func;
+  };
+
+
+  iro::FixedPool<Command, 100> commands;
+
+
+  void init();
+  void addCommand(iro::String name, CommandFunc func);
+  void runCommand(iro::String input);
+};
