@@ -1,0 +1,32 @@
+$ require "common"
+
+@@lpp.import "game/shared/NetMgr.lh"
+@@lpp.import "net/Address.lh"
+
+#include "iro/Common.h"
+#include "iro/time/Time.h"
+
+namespace iro::mem { struct Allocator; }
+
+namespace cl
+{
+
+/* ============================================================================
+ */
+struct NetMgr : public SharedNetMgr
+{
+  net::Connection connection;
+  iro::TimePoint last_challenge_time;
+  u32 challenge_value;
+
+  b8 init(iro::mem::Allocator* allocator);
+  void deinit();
+
+  b8 connectToServer(net::Address address);
+  void disconnectFromServer();
+
+  void receiveMessages();
+  void sendMessages();
+};
+
+} // namespace cl

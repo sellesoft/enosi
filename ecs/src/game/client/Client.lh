@@ -18,9 +18,7 @@ $ require "common"
 @@lpp.import "window/Window.lh"
 @@lpp.import "input/InputMgr.lh"
 @@lpp.import "graphics/Renderer.lh"
-@@lpp.import "net/Address.lh"
-@@lpp.import "net/Connection.lh"
-@@lpp.import "net/EventBus.lh"
+@@lpp.import "game/client/NetMgr.lh"
 @@lpp.import "game/client/TestSkin.defs.lh"
 @@lpp.import "ui/TextEdit.lh"
 
@@ -32,12 +30,9 @@ $ require "common"
  */
 struct Client
 {
-  cl::GameSim sim;
   Engine* engine;
-
-  net::Connection connection;
-  TimePoint last_challenge_time;
-  net::EventBus net_event_bus;
+  cl::NetMgr netmgr;
+  cl::GameSim sim;
 
   // Client only systems.
   gfx::Renderer renderer;
@@ -61,4 +56,6 @@ struct Client
   b8 wantHotReload();
 
   b8 connectToServer(net::Address address);
+
+  void disconnectFromServer();
 };
