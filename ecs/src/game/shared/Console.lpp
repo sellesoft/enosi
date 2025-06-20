@@ -1,0 +1,183 @@
+$ require "common"
+
+@@lpp.import "game/shared/Console.lh"
+
+#include "iro/Common.h"
+#include "iro/Logger.h"
+
+using namespace iro;
+
+@log.ger(sh.console, Info)
+
+void SharedConsole::init()
+{
+  commands.init();
+}
+
+void SharedConsole::addCommand(iro::String name, CommandFunc func)
+{
+  if (isnil(name))
+    return;
+  if (func == nullptr)
+    return;
+
+  u64 name_hash = name.hash();
+  for (const Command& c : commands)
+  {
+    if (c.name_hash == name_hash)
+    {
+$ if ECS_DEBUG
+      // check for a hash collision
+      assert(c.name.len == name.len);
+      assert(mem::equal(c.name.ptr, name.ptr, name.len));
+$ end
+
+      @log.error("Command '", name, "' already exists\n");
+      return;
+    }
+  }
+
+  Command* cmd = commands.add();
+  if (cmd == nullptr)
+  {
+    @log.fatal("Maximum number of commands reached;"
+               " bump the limit in SharedConsole.lh\n");
+    return;
+  }
+
+$ if ECS_DEBUG
+  cmd->name = name.allocateCopy();
+$ end
+  cmd->name_hash = name_hash;
+  cmd->func = func;
+}
+
+void SharedConsole::runCommand(iro::String input)
+{
+  // split input by semicolons and execute each command
+  while(input.len > 0)
+  {
+    input.trimLeft();
+    if (isnil(input))
+      break;
+
+    // find the next semicolon not inside quotes
+    String command = input;
+    String cursor = input;
+    b8 in_quotes = false;
+    while(cursor.len > 0)
+    {
+      if (cursor.ptr[0] == '"')
+      {
+        in_quotes = !in_quotes;
+      }
+      else if (!in_quotes && cursor.ptr[0] == ';')
+      {
+        command.len = cursor.ptr - command.ptr;
+        input.ptr = cursor.ptr + 1;
+        input.len = input.len - command.len - 1;
+        break;
+      }
+      cursor.ptr += 1;
+      cursor.len -= 1;
+    }
+    if (cursor.len <= 0)
+    {
+      input = {}; // no more semicolons
+    }
+
+    // skip empty commands
+    command.trimRight();
+    if (isnil(command))
+      continue;
+
+    // split command by spaces
+    CommandArgs args;
+    cursor = command;
+    while(cursor.len > 0)
+    {
+      cursor.trimLeft();
+      if (isnil(cursor))
+        break;
+
+      String word = cursor;
+      if (cursor.ptr[0] == '"')
+      {
+        word.ptr += 1;
+        word.len -= 1;
+        word = word.subToFirst('"');
+        if (isnil(word))
+        {
+          if (!args.push(cursor))
+          {
+            @log.error("Maximum number of command arguments reached;"
+                       " bump the limit in SharedConsole.lh\n");
+            return;
+          }
+          break;
+        }
+        else
+        {
+          if (!args.push(cursor))
+          {
+            @log.error("Maximum number of command arguments reached;"
+                       " bump the limit in SharedConsole.lh\n");
+            return;
+          }
+          cursor.ptr = word.ptr + word.len + 1;
+          cursor.len -= word.len + 2;
+        }
+      }
+      else
+      {
+        word = word.subToFirst(' ');
+        if (isnil(word))
+        {
+          if (!args.push(cursor))
+          {
+            @log.error("Maximum number of command arguments reached;"
+                       " bump the limit in SharedConsole.lh\n");
+            return;
+          }
+          break;
+        }
+        else
+        {
+          if (!args.push(word))
+          {
+            @log.error("Maximum number of command arguments reached;"
+                       " bump the limit in SharedConsole.lh\n");
+            return;
+          }
+          cursor.ptr = word.ptr + word.len;
+          cursor.len -= word.len;
+        }
+      }
+      cursor.trimLeft();
+    }
+
+    // execute the command
+    if (args.len > 0)
+    {
+      b8 found = false;
+      u64 name_hash = args[0].hash();
+      for (const Command& c : commands)
+      {
+        if (c.name_hash == name_hash)
+        {
+          // NOTE(delle) "removing" the command name without copying memory
+          // which is safe because the array is on the stack
+          args.arr++;
+          args.len--;
+
+          c.func(args);
+
+          found = true;
+          break;
+        }
+      }
+      if (!found)
+        @log.warn("Unknown command '", args[0], "'\n");
+    }
+  }
+}

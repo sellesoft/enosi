@@ -1,0 +1,17 @@
+$ require "common"
+
+@@lpp.import "game/shared/Console.lh"
+
+#include "iro/Common.h"
+
+namespace cl
+{
+
+/* ============================================================================
+ */
+struct Console : SharedConsole
+{
+  
+};
+
+} // namespace cl
