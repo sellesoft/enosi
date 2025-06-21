@@ -3,8 +3,7 @@ $ local ui = require "ui.UI"
 $ local glob = require "Glob"
 $ local Processor = require "reflect.Processor"
 $ local ast = require "reflect.AST"
-
-$ if false then
+$ local List = require "List"
 
 $$$
 local importer = require "reflect.Importer"
@@ -38,73 +37,31 @@ $$$
 @@lpp.import "asset/SourceDataParser.lh"
 
 @@lpp.import "ui/UI.lh"
-@@lpp.import "ui/widgets/InputText.lh"
-@@lpp.import "ui/widgets/CollapsingHeader.lh"
+@@lpp.import "graphics/Geo.lh"
+
+using namespace ui;
 
 #include "math/util.h"
 
-namespace ui
-{ 
+$ local placed = {}
+$ local place_queue = List{}
+$ local putPacker
+$ local putTypePacker
+$ local TAssetRef = importer.p:lookupDecl "struct AssetRef"
+$ local TResourceRef = importer.p:lookupDecl "struct gfx::ResourceRef"
 
-@defFileLogger(srcdataedit, Info)
-
-using DatumTextEditKind = SourceDataEditor::DatumTextEdit::Kind;
-
-static const struct
-{
-  f32 font_height = 11.f;
-  Color text_color = 0xffffffff;
-
-  struct 
-  {
-    f32 height = 19.f;
-    f32 name_pad = 3.f;
-    f32 min_name_width = 60.f;
-    f32 name_value_spacing = 8.f;
-    Color even_color = 0x45404fff;
-    Color odd_color = 0x141b21ff;
-  } rows;
-
-  struct 
-  {
-    f32 min_comp_width = 50.f;
-    f32 comp_spacing = 5.f;
-  } vec;
-
-  struct 
-  {
-    f32 min_comp_width = 32.f;
-    f32 comp_spacing = 5.f;
-  } col;
-
-  struct
-  {
-    f32 text_horizontal_padding = 6.f;
-    f32 vertical_padding = 2.f;
-    vec4f borders = {-1.f, -1.f, -1.f, -1.f};
-    Color bg_color = 0x323349ff;
-    Color border_color = 0x7986a4ff;
-  } text_box;
-
-  struct 
-  {
-    f32 text_horizontal_padding = 6.f;
-    f32 vertical_padding = 2.f;
-    vec4f borders = {-1.f, -1.f, -1.f, -1.f};
-    Color bg_color = 0x323349ff;
-    Color border_color = 0x7986a4ff;
-  } enum_box;
-} skin;
+@log.ger(srcdataedit, Info)
 
 /* ============================================================================
  */
-template<typename T>
-struct StructState;
-
-struct DatumBase
+struct DatumState
 {
-  /* --------------------------------------------------------------------------
-   */
+  DatumState* parent = nullptr;
+  SourceData* data = nullptr;
+  b8 is_missing_data = false;
+
+  u32 datum_idx = 0;
+
   struct InitParams
   {
     DatumState* parent;
@@ -113,94 +70,7 @@ struct DatumBase
 
     String name;
     String default_data;
-
-    InitParams inherit(
-        DatumState* parent, 
-        SourceData* data, 
-        String name,
-        String default_data = nil) const
-    {
-      return 
-      {
-        .editor = editor,
-
-        .parent = parent,
-        .data = data,
-        .name = name,
-        .default_data = default_data,
-      };
-    }
   };
-
-  /* --------------------------------------------------------------------------
-   */
-  struct EvalParams
-  {
-    String name;
-    SourceData* data;
-    SourceDataEditor* editor;
-    f32 x;
-    f32* y;
-    u32* datum_count = 0;
-    String default_data;
-
-    EvalParams inherit(
-        String name,
-        SourceData* data,
-        f32 x,
-        String default_data) const
-    {
-      return
-      {
-        .editor = editor,
-        .y = y,
-        .datum_count = datum_count,
-
-        .name = name,
-        .data = data,
-        .x = x,
-        .default_data = default_data,
-      };
-    }
-  };
-
-  /* --------------------------------------------------------------------------
-   */
-  struct DrawParams
-  {
-    SourceDataEditor* editor;
-    String name;
-    u32* datum_count = 0;
-
-    DrawParams inherit(String name) const
-    {
-      return 
-      {
-        .editor = editor,
-        .datum_count = datum_count,
-
-        .name = name,
-      };
-    }
-  };
-};
-
-/* ============================================================================
- */
-struct DatumState : DatumBase
-{
-  DatumState* parent = nullptr;
-  SourceData* data = nullptr;
-  b8 is_missing_data = false;
-
-  vec2f pos = {};
-  vec2f size = {};
-
-  DrawCmd* name = nullptr;
-  DrawCmd* bg = nullptr;
-  DrawCmd* debug = nullptr;
-
-  u32 datum_idx = 0;
 
   /* --------------------------------------------------------------------------
    */
@@ -209,749 +79,237 @@ struct DatumState : DatumBase
     parent = params.parent;
     data = params.data;
 
-    name = ui.drawcmds.add();
-    name->tex = params.editor->font_texture;
-
-    bg = ui.drawcmds.add();
-    bg->alloc(&ui, gfx::putFilledRectCounts());
-
     if (data == nullptr)
     {
       is_missing_data = true;
-      resolveMissingData(params.name, params.default_data, params.editor);
+      resolveMissingData(params.name, params.editor);
+      assert(data != nullptr && "derived type failed to resolve missing data");
     }
 
     if (!datum_init(ui, params))
       return false;
 
-    debug = ui.drawcmds.add();
-
-    assert(data);
-
     return true;
   }
-
-  virtual b8 datum_init(UI& ui, const InitParams& params) { return true; }
 
   /* --------------------------------------------------------------------------
    */
   void deinit(UI& ui)
   {
-    ui.drawcmds.remove(name);
-    ui.drawcmds.remove(bg);
     datum_deinit(ui);
   }
 
-  virtual void datum_deinit(UI& ui) { }
-
   /* --------------------------------------------------------------------------
    */
-  void eval(UI& ui, const EvalParams& params)
+  struct UpdateParams
   {
-    if (params.data)
-    {
-      if (data != params.data)
-      {
-        data = params.data;
-        handleNewData(ui, params);
-      }
-      is_missing_data = false;
-    }
-    else if (data == nullptr)
-    {
-      if (!resolveMissingData(
-          params.name, 
-          params.default_data, 
-          params.editor))
-        return;
-      assert(data);
-      is_missing_data = true;
-    }
-
-    vec2f text_size = 
-      gfx::measureText(
-        params.name, 
-        params.editor->font, 
-        skin.font_height, 
-        1.f);
-
-    pos = { params.x, *params.y };
-
-    params.editor->max_name_width =
-      max(
-        params.editor->max_name_width, 
-        pos.x + text_size.x + skin.rows.name_pad + getNameXOffset());
-
-    *params.datum_count += 1;
-
-    datum_eval(ui, params);
-
-    size.x = params.editor->size.x - pos.x - 6.f;
-    size.y = *params.y - pos.y;
-  }
-
-  virtual void datum_eval(UI& ui, const EvalParams& params) {}
-
-  /* --------------------------------------------------------------------------
-   *  Invoked on instances of this type whenever we find missing data 
-   *  during init or eval. The instance is expected to resolve it into
-   *  some SourceData to fill in the gaps.
-   */
-  virtual b8 resolveMissingData(
-      String name,
-      String default_data, 
-      SourceDataEditor* editor) = 0;
-
-  /* --------------------------------------------------------------------------
-   */
-  virtual void handleNewData(UI& ui, const EvalParams& params) { }
-
-  /* --------------------------------------------------------------------------
-   */
-  void draw(UI& ui, const DrawParams& params)
-  {
-    auto [vp, ip] = name->realloc(&ui, gfx::putTextCounts(params.name));
-  
-    name->counts_used = {};
-
-    if (parent == nullptr || !parent->embedsChildren())
-    {
-      drawText(
-        ui,
-        params.name,
-        { skin.rows.name_pad + getNameXOffset(), calcRowTextY() },
-        name,
-        params);
-    }
-
-    datum_idx = *params.datum_count += 1;
-
-    {
-      auto [vp,ip] = debug->realloc(&ui, gfx::putBordersCounts());
-      debug->counts_used = {};
-
-      gfx::putBorders(
-        vp, ip,
-        &debug->counts_used,
-        { -1.f, -1.f, -1.f, -1.f },
-        pos,
-        size,
-        0xff0000ff);
-    }
-
-    datum_draw(ui, params);
-
-    drawBackground(ui, params);
-  }
-
-  virtual void datum_draw(UI& ui, const DrawParams& params) {}
-
-  /* --------------------------------------------------------------------------
-   */
-  virtual f32 getNameXOffset() const { return 0.f; }
-
-  /* --------------------------------------------------------------------------
-   *  Kinda scuffed but used for TypedPointerState's.
-   */
-  virtual b8 embedsChildren() const { return false; }
-
-  /* --------------------------------------------------------------------------
-   *  Kinda scuffed but used for TypedPointerState's.
-   */
-  virtual b8 isOpen() const { return true; }
-
-  /* --------------------------------------------------------------------------
-   */
-  f32 calcRowTextY() const
-  {
-    return ceil(0.5f * (skin.rows.height - skin.font_height));
-  }
-  /* --------------------------------------------------------------------------
-   */
-  f32 calcInlineValueX(f32 max_name_width) const
-  {
-    return max(
-      (max_name_width - pos.x) + skin.rows.name_value_spacing, 
-      skin.rows.min_name_width - pos.x);
-  }
-
-  struct DatumTextBox
-  {
-    SourceData*       data;
-    vec2f             pos;
-    vec2f             size;
-    DatumTextEditKind kind;
-
-    struct 
-    {
-      DrawCmd* text;
-      DrawCmd* decor;
-    } dc;
-    
-    b8 init(
-        UI& ui, 
-        SourceData* data, 
-        DatumTextEditKind kind, 
-        SourceDataEditor* editor)
-    {
-      this->data = data;
-      this->kind = kind;
-
-      dc.text = ui.drawcmds.add();
-      dc.text->tex = editor->font_texture;
-
-      dc.decor = ui.drawcmds.add();
-      dc.decor->alloc(
-        &ui, gfx::putFilledRectCounts() + gfx::putBordersCounts());
-
-      return true;
-    }
-
-    void deinit(UI& ui)
-    {
-      dc.text->remove(&ui);
-      dc.decor->remove(&ui);
-    }
-
-    void setData(SourceData* data) { this->data = data; }
-
-    vec4f calcTextPosAndSize() const
-    {
-      return vec4f(
-        pos + vec2f(
-          skin.text_box.text_horizontal_padding,
-          ceil(0.5f * (size.y - skin.font_height))),
-        vec2f(
-          size.x - 2 * skin.text_box.text_horizontal_padding,
-          skin.font_height));
-    }
-
-    vec2f draw(UI& ui, vec2f pos, vec2f size, const DrawParams& params)
-    {
-      this->pos = pos;
-      this->size = size;
-
-      String text;
-      switch (kind)
-      {
-      case DatumTextEditKind::Name:
-        text = data->name;
-        break;
-      case DatumTextEditKind::Type:
-        text = data->type;
-        break;
-      case DatumTextEditKind::Value:
-        text = data->val.str;
-        break;
-      }
-
-      if (params.editor->isEditingDatumText(data, kind))
-        return gfx::measureText(
-          text, 
-          params.editor->font, 
-          skin.font_height, 
-          1.f);
-
-      auto rect = calcTextPosAndSize();
-      vec2f text_size;
-
-      {
-        auto [vp, ip] = dc.text->realloc(&ui, gfx::putTextCounts(text));
-        dc.text->counts_used = {};
-        dc.text->scissor = vec4f(rect.xy(), rect.zw());
-
-        gfx::putText(
-          vp, ip,
-          &dc.text->counts_used,
-          rect.xy(),
-          text,
-          params.editor->font,
-          skin.font_height, 
-          1.f, 
-          skin.text_color,
-          &text_size);
-      }
-
-      {
-        auto [vp, ip] = dc.decor->getPtrs(&ui);
-        dc.decor->counts_used = {};
-
-        vec2f decor_pos = 
-          vec2f(pos.x, pos.y + skin.text_box.vertical_padding);
-        vec2f decor_size = 
-          vec2f(size.x, size.y - 2 * skin.text_box.vertical_padding);
-
-        gfx::putFilledRect(
-          vp, ip,
-          &dc.decor->counts_used,
-          decor_pos,
-          decor_size,
-          skin.text_box.bg_color);
-
-        gfx::putBorders(
-          vp, ip,
-          &dc.decor->counts_used,
-          skin.text_box.borders,
-          decor_pos,
-          decor_size,
-          skin.text_box.border_color);
-      }
-      
-      return text_size;
-    }
-
-    void update(
-        UI& ui, 
-        DatumState* datum, 
-        UpdateReason reason, 
-        SourceDataEditor* editor)
-    {
-      if (reason == UpdateReason::MouseReleased)
-      {
-        if (ui.testFocusableRegion(pos, size))
-        {
-          auto rect = calcTextPosAndSize();
-          editor->beginEditDatumText(
-            ui, datum ,data, kind, rect.xy(), rect.zw());
-        }
-        else
-          editor->endEditDatumText(data, kind);
-      }
-    }
-
-    void reportDrawCmds(UI& ui, DrawCmdLists& lists, SourceDataEditor* editor)
-    {
-      lists.pre_children.push(dc.decor);
-
-      if (editor->isEditingDatumText(data, kind))
-        return;
-
-      lists.pre_children.push(dc.text);
-    }
-  };  
-
-  struct DatumComboBox
-  {
-    SourceData*       data;
-    vec2f             pos;
-    vec2f             size;
-    DatumTextEditKind kind;
-    b8                open;
-
-    typedef Slice<String> Options;
-
-    struct
-    {
-      DrawCmd* text;
-      DrawCmd* decor;
-    } dc;
-    
-    b8 init(
-        UI& ui,
-        SourceData* data,
-        DatumTextEditKind kind,
-        SourceDataEditor* editor)
-    {
-      this->data = data;
-      this->kind = kind;
-
-      dc.text = ui.drawcmds.add();
-      dc.text->tex = editor->font_texture;
-
-      dc.decor = ui.drawcmds.add();
-      dc.decor->alloc(
-        &ui, gfx::putFilledRectCounts() + gfx::putBordersCounts());
-
-      open = false;
-
-      return true;
-    }
-
-    void deinit(UI& ui)
-    {
-      dc.text->remove(&ui);
-      dc.decor->remove(&ui);
-    }
-
-    void setData(SourceData* data) { this->data = data; }
-
-    struct TextLayout
-    {
-      vec2f pos;
-      vec2f size;
-    };
-
-    TextLayout calcTextLayout() const
-    {
-      TextLayout layout = {};
-      layout.pos = vec2f(
-        pos.x + skin.enum_box.text_horizontal_padding,
-        pos.y + ceil(0.5f * (size.y - skin.font_height)));
-      layout.size = vec2f(
-        size.x - 2 * skin.enum_box.text_horizontal_padding,
-        skin.font_height);
-      return layout;
-    }
-
-    String getSelected() const
-    {
-      switch (kind)
-      {
-      case DatumTextEditKind::Name:
-        return data->name;
-        break;
-      case DatumTextEditKind::Type:
-        return data->type;
-        break;
-      case DatumTextEditKind::Value:
-        return data->val.str;
-        break;
-      }
-    }
-
-    void setSelected(String s)
-    {
-      switch (kind)
-      {
-      case DatumTextEditKind::Name:
-        data->name = s;
-        break;
-      case DatumTextEditKind::Type:
-        data->type = s;
-        break;
-      case DatumTextEditKind::Value:
-        data->val.str = s;
-        break;
-      }
-    }
-
-    void draw(
-        UI& ui, 
-        vec2f pos, 
-        vec2f size, 
-        const Options& options,
-        const DrawParams& params)
-    {
-      this->pos = pos;
-      this->size = size;
-
-      auto [text_pos, text_size] = calcTextLayout();
-
-      u32 char_count = 0;
-      for (String opt : options)
-        char_count += opt.countCharacters();
-      
-      b8 has_selected = false;
-
-      // Place options.
-      {
-        String selected = getSelected();
-       
-        auto [vp, ip] = dc.text->realloc(
-          &ui, s32(char_count) * gfx::putFilledRectCounts());
-        dc.text->counts_used = {};
-
-        gfx::putText(
-          vp, ip,
-          &dc.text->counts_used,
-          text_pos,
-          selected,
-          params.editor->font,
-          skin.font_height,
-          1.f,
-          skin.text_color,
-          nullptr);
-
-        if (open)
-        {
-          f32 y = 0.f;
-
-          for (String opt : options)
-          {
-            if (selected != opt)
-            {
-              y += skin.rows.height;
-
-              gfx::putText(
-                vp, ip,
-                &dc.text->counts_used,
-                text_pos.yadd(y),
-                opt,
-                params.editor->font,
-                skin.font_height,
-                1.f,
-                skin.text_color,
-                nullptr);
-            }
-            else
-              has_selected = true;
-          }
-        }
-      }
-
-      // Place decor.
-      {
-        auto [vp, ip] = dc.decor->getPtrs(&ui);
-        dc.decor->counts_used = {};
-
-        auto decor_pos = 
-          vec2f(pos.x, pos.y + skin.enum_box.vertical_padding);
-        auto decor_size = 
-          vec2f(size.x, skin.rows.height - 2 * skin.enum_box.vertical_padding);
-
-        if (open)
-          decor_size.y += 
-            (options.len - (has_selected? 1 : 0)) * skin.rows.height;
-
-        gfx::putFilledRect(
-          vp, ip,
-          &dc.decor->counts_used,
-          decor_pos,
-          decor_size,
-          skin.enum_box.bg_color);
-
-        gfx::putBorders(
-          vp, ip,
-          &dc.decor->counts_used,
-          skin.enum_box.borders,
-          decor_pos,
-          decor_size,
-          skin.enum_box.border_color);
-      }
-    }
-
-    b8 update(
-        UI& ui, 
-        UpdateReason reason, 
-        DatumState* datum,
-        const Options& options,
-        SourceDataEditor* editor)
-    {
-      if (reason != UpdateReason::MouseReleased)
-        return false;
-
-      b8 selected_elem = false;
-
-      @log.info("update combo box\n");
-  
-      if (open)
-      {
-        f32 y = pos.y;
-
-        String selected = getSelected();
-        auto [text_pos, text_size] = calcTextLayout();
-
-        for (String opt : options)
-        {
-          if (selected != opt)
-          {
-            y += skin.rows.height;
-
-            INFO("test ", vec2f(pos.x, y), " ", 
-                 vec2f(size.x, skin.rows.height), "\n");
-
-            if (ui.testFocusableRegion({pos.x, y}, {size.x, skin.rows.height}))
-            {
-              INFO("hit\n");
-              setSelected(opt);
-              datum->onEdit(editor);
-              selected_elem = true;
-              break;
-            }
-          }
-        }
-
-        open = false;
-      }
-      else if (ui.testFocusableRegion(pos, size))
-      {
-        open = true;
-      }
-
-      editor->dirty = true;
-      return selected_elem;
-    }
-
-    b8 onHitTest(vec2f local_cursor, const Options& options) 
-    {
-      if (open)
-        return 
-          math::pointInRect(local_cursor, pos, {size.x, options.len * size.y});
-      return math::pointInRect(local_cursor, pos, size);
-    }
-
-    void reportDrawCmds(UI& ui, DrawCmdLists& lists, SourceDataEditor* editor)
-    {
-      DrawCmdList* list = open? &lists.top_most : &lists.pre_children;
-      list->push(dc.decor);
-      list->push(dc.text);
-    }
+    String name;
+    String default_data;
+    vec2f pos;
+    const SourceDataEditorSkinDef& skin;
+    SourceDataEditor& editor;
+    u32* datum_idx;
   };
 
   /* --------------------------------------------------------------------------
    */
-  virtual b8 onHitTest(vec2f local_cursor) { return false; }
-
-  /* --------------------------------------------------------------------------
-   */
-  void drawGlyph(
-      UI& ui,
-      u32 codepoint,
-      vec2f pos,
-      DrawCmd* dc,
-      const DrawParams& params)
+  f32 update(UI& ui, const UpdateParams& params)
   {
-    auto [vp,ip] = dc->realloc(&ui, dc->counts_used + gfx::putGlyphCounts());
+    vec2f name_pos = 
+    {
+      params.skin.row.name_padding + params.pos.x + getNameXOffset(), 
+      getRowTextY(params),
+    };
 
-    gfx::putGlyph(
-      vp, ip, 
-      &dc->counts_used,
-      params.editor->font,
-      codepoint,
-      pos + this->pos,
-      skin.text_color);
-  }
+    vec2f text_size = 
+      gfx::measureText(
+        params.name, 
+        &*params.skin.text.font, 
+        params.skin.text.font_height,
+        1.f);
 
-  /* --------------------------------------------------------------------------
-   */
-  vec2f drawText(
-      UI& ui, 
-      String s, 
-      vec2f pos, 
-      DrawCmd* dc, 
-      const DrawParams& params)
-  {
-    auto [vp,ip] = dc->realloc(&ui, dc->counts_used + gfx::putTextCounts(s));
-  
-    vec2f size;
-    gfx::putText(
-      vp, ip,
-      &dc->counts_used,
-      pos + this->pos,
-      s,
-      params.editor->font,
-      skin.font_height,
-      1.f,
-      skin.text_color,
-      &size);
+    params.editor.max_name_extent = 
+      max<f32>(name_pos.x + text_size.x, params.editor.max_name_extent);
 
-    return size;
-  }
+    ui.putText(
+      {name_pos.x, getRowTextY(params), 100.f, 100.f}, 
+      params.name, 
+      params.skin.text);
 
-  /* --------------------------------------------------------------------------
-   */
-  f32 drawInlineValueText(
-      UI& ui,
-      String s, 
-      f32 x_offset, 
-      DrawCmd* dc, 
-      const DrawParams& params)
-  {
-    auto [vp, ip] = dc->realloc(&ui, gfx::putTextCounts(s));
-    
-    vec2f size;
-    gfx::putText(
-      vp, ip,
-      &dc->counts_used,
-      vec2f(
-        calcInlineValueX(params.editor->max_name_width) + x_offset,
-        calcRowTextY()),
-      s,
-      params.editor->font,
-      skin.font_height,
-      1.f,
-      skin.text_color,
-      &size);
+    if (ui.frame_input.isKeyDown(Key::LCtrl))
+    {
+      if (ui.putFocusableBounds(
+            ui.generateIdFromPointer(this), 
+            Rect::from(params.pos, text_size))
+          .test(FocusFlag::PrimaryReleased))
+      {
+        @dbgBreak;
+      }
+    }
 
-    return size.x;
-  }
+    f32 height = datum_update(ui, params);
 
-  /* --------------------------------------------------------------------------
-   */
-  void drawBackground(UI& ui, const DrawParams& params)
-  {
-    auto [vp, ip] = bg->getPtrs(&ui);
+    // Inject background at the front of the layer's command list now that 
+    // we know the height of this datum's content.
+    ui.beginCmdFrontInjection();
 
-    bg->counts_used = {};
+    Color row_color = 
+      *params.datum_idx % 2 
+      ? params.skin.row.odd_color 
+      : params.skin.row.even_color;
 
-    Color color = 
-      datum_idx % 2 
-      ? skin.rows.odd_color
-      : skin.rows.even_color;
+    vec2f bg_size = 
+      vec2f(ui.getWidth() - params.pos.x, max(height, params.skin.row.height));
+    Rect bg_bounds = Rect::from(params.pos, bg_size);
 
+    ui.putQuad(bg_bounds, row_color);
+
+    // TODO(sushi) indicate this better, like greying out or something.
     if (is_missing_data)
-      color = 0x440011ff;
+      ui.putQuad(bg_bounds, params.skin.missing_data_color);
 
-    bg->counts_used += 
-      gfx::putFilledRect(
-        vp, ip,
-        bg->counts_used,
-        pos,
-        vec2f(params.editor->size.x, size.y),
-        color);
+    ui.endCmdFrontInjection();
+
+    *params.datum_idx += 1;
+
+    return height;
   }
 
   /* --------------------------------------------------------------------------
    */
-  void reportDrawCmds(
+  f32 calcInlineValueX(const UpdateParams& params) const
+  {
+    return 0.f;
+  }
+
+  //
+  // Interface to behavior defined by derivations of this type. This is set
+  // up this way so that we can always call into DatumState first, then
+  // call down into the more specific behaviors that other types implement,
+  // allowing us to wrap code around that behavior as needed. Each of the 
+  // derived types that may also be derived from use this pattern as well.
+  // 
+
+  virtual b8 datum_init(UI& ui, const InitParams& params) { return true; }
+  virtual void datum_deinit(UI& ui) { }
+  virtual f32 datum_update(UI&ui, const UpdateParams& params) { return 0.f; }
+
+  // Allows adjusting where the name is placed, eg. Object states need 
+  // to place a +/- before the name to indicate opened state.
+  virtual f32 getNameXOffset() const { return 0.f; }
+
+  // Whether or not this datum state embeds its children.
+  // TODO(sushi) this is a bit scuffed and I would like for it to be removed
+  //             in favor of something else. It exists because TypedPtrStates
+  //             allocate a 'subdatum' of the proper type and when that is 
+  //             an ObjectState, we don't want it to double nest the chilren.
+  virtual b8 embedsChildren() const { return false; }
+
+  // Whether or not this datum state is open.
+  // NOTE(sushi) this, like the above function, also sucks and is just a 
+  //             hacky way to handle typed pointer stuff. Really need 
+  //             to figure out a better way to handle this.
+  virtual b8 isOpen() const { return false; }
+
+  f32 getRowTextY(const UpdateParams& params) const 
+  {
+    return params.pos.y + floor(
+      0.5f * (params.skin.row.height - params.skin.text.font_height));
+  }
+
+  // Invoked on instances of this type whenever we find missing data during
+  // init or an update and a default value was not provided. The type is 
+  // expected to set 'data' to some value it feels is an appropriate default.
+  virtual void resolveMissingData(String name, SourceDataEditor* editor) = 0;
+
+  // Returns a Rect where inline value stuff can be placed.
+  Rect getInlineBounds(UI& ui, const UpdateParams& params) const
+  {
+    f32 x = 
+      params.editor.name_column_width + params.skin.row.name_value_spacing;
+    f32 y = params.pos.y;
+    f32 w = ui.getWidth() - x - params.skin.row.right_padding;
+    f32 h = params.skin.row.height;
+
+    return Rect::from(x, y, w, h);
+  }
+};
+
+/* ============================================================================
+ *  A helper for managing the state of a text box used to edit some part 
+ *  of SourceData.
+ */
+struct DatumTextBox
+{
+  enum class Part
+  {
+    Name,
+    Value,
+    Type,
+  };  
+
+  enum 
+  {
+    c_BufferSize = 255,
+  };
+
+  u8 buffer[c_BufferSize];
+  s32 buffer_len = 0;
+
+  ui::TextFieldState state;
+
+  b8 init(
       UI& ui, 
-      DrawCmdLists& lists, 
-      SourceDataEditor* editor)
+      SourceData* data, 
+      Part part,
+      const DatumState::InitParams& params)
   {
-    lists.pre_children.push(bg);
-    lists.pre_children.push(name);
-    datum_reportDrawCmds(ui, lists, editor);
-    /*if (editor->hovered == this)*/
-    /*  lists.top_most.push(debug);*/
+    state.edit.setBuffer({buffer, &buffer_len, c_BufferSize});
+
+    String val;
+
+    switch (part)
+    {
+    case Part::Name:
+      val = data->name;
+      break;
+    case Part::Value:
+      val = data->val.str;
+      break;
+    case Part::Type:
+      val = data->type;
+      break;
+    }
+
+    if (data->val.str.len > c_BufferSize)
+    {
+      // TODO(sushi) fix this somehow.
+      WARN("data ", data->name, " is too long to fit in a "
+           "text box (", data->val.str.len, " > ", c_BufferSize, ")\n");
+    }
+
+    if (notnil(val))
+    {
+      mem::copy(buffer, val.ptr, min<u64>(val.len, c_BufferSize));
+      buffer_len = val.len;
+    }
+
+    return true;
   }
 
-  /* --------------------------------------------------------------------------
-   */
-  virtual void datum_reportDrawCmds(
-      UI& ui, 
-      DrawCmdLists& lists, 
-      SourceDataEditor* editor) {}
-
-  /* --------------------------------------------------------------------------
-   */
-  void update(
-      UI& ui, 
-      UpdateReason reason, 
-      SourceDataEditor* editor)
+  b8 update(
+    UI& ui,
+    const DatumState::UpdateParams& params,
+    Rect bounds,
+    Part part,
+    SourceData* data,
+    const TextFieldSkin& skin)
   {
-    datum_update(ui, reason, editor);
-
-    if (editor->hovered == nullptr && ui.testHoverableRegion(pos, size))
-      editor->hovered = this;
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  virtual void datum_update(
-    UI& ui, 
-    UpdateReason reason, 
-    SourceDataEditor* editor) {}
-
-  /* --------------------------------------------------------------------------
-   */
-  void onEdit(SourceDataEditor* editor)
-  {
-    INFO("onEdit\n");
-    if (is_missing_data)
-      data = parent->fillMissingData(editor, data);
-    editor->onEdit(data);
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  SourceData* fillMissingData(SourceDataEditor* editor, SourceData* mdata)
-  {
-    if (is_missing_data)
-      data = parent->fillMissingData(editor, data);
-
-    SourceData* ndata = mdata->deepCopy(editor->sfile);
-    data->children.push(ndata);
-    return ndata;
+    return ui.putTextField(
+      ui.generateIdFromPointer(this), 
+      bounds,
+      &state,
+      skin);
   }
 };
 
@@ -959,13 +317,13 @@ struct DatumState : DatumBase
  */
 struct ValueState : DatumState
 {
-  DatumTextBox value_box;
+  DatumTextBox textbox;
 
   /* --------------------------------------------------------------------------
    */
   b8 datum_init(UI& ui, const InitParams& params) override
   {
-    if (!value_box.init(ui, data, DatumTextEditKind::Value, params.editor))
+    if (!textbox.init(ui, data, DatumTextBox::Part::Value, params))
       return false;
 
     return true;
@@ -975,74 +333,136 @@ struct ValueState : DatumState
    */
   void datum_deinit(UI& ui) override
   {
-    value_box.deinit(ui);
-  }
-  
-  /* --------------------------------------------------------------------------
-   */
-  void datum_eval(UI& ui, const EvalParams& params) override
-  {
-    value_box.setData(data);
-
-    *params.y += skin.rows.height;
+ 
   }
 
   /* --------------------------------------------------------------------------
    */
-  b8 resolveMissingData(
-      String name,
-      String default_data, 
-      SourceDataEditor* editor) override
+  f32 datum_update(UI& ui, const UpdateParams& params) override
   {
-    if (notnil(default_data))
-    {
-      data = editor->parseDefaultData(default_data);
-      if (data == nullptr)
-        return false;
+    const f32 text_field_vertical_padding = 2.f;
+    const f32 text_field_height = 
+      params.skin.row.height - 2.f * text_field_vertical_padding;
 
-      if (data->hasObjectData())
-        return ERROR("default value resulted in a SourceData object\n");
-    }
-    else
-    {
-      data = editor->sfile->allocateSourceData();
-      data->name = name;
-    }
+    auto inline_pos = 
+      vec2f(
+        params.editor.name_column_width + params.skin.row.name_value_spacing, 
+        params.pos.y + text_field_vertical_padding);
+
+    auto inline_size = vec2f(
+      ui.getWidth() - params.editor.name_column_width - 5.f, 
+      text_field_height);
+
+    auto bounds = Rect::from(inline_pos, inline_size);
+
+    textbox.update(
+      ui, 
+      params, 
+      bounds, 
+      DatumTextBox::Part::Value,
+      data, 
+      params.skin.text_field);
+
+    return params.skin.row.height;
+  }
+
+  /* --------------------------------------------------------------------------
+   */
+  void resolveMissingData(String name, SourceDataEditor* editor) override
+  {
+    // Resolve to empty field.
+    data = editor->sfile->allocateSourceData();
+    data->name = name;
+  }
+};
+
+/* ============================================================================
+ */
+struct Vec2State : DatumState
+{
+  DatumTextBox x_box;
+  DatumTextBox y_box;
+
+  /* --------------------------------------------------------------------------
+   */
+  b8 datum_init(UI& ui, const InitParams& params) override
+  {
+    x_box.init(ui, data->children[0], DatumTextBox::Part::Value, params);
+    y_box.init(ui, data->children[1], DatumTextBox::Part::Value, params);
 
     return true;
   }
 
   /* --------------------------------------------------------------------------
    */
-  void datum_draw(UI& ui, const DrawParams& params) override
+  void datum_deinit(UI& ui) override
   {
-    f32 inline_x = calcInlineValueX(params.editor->max_name_width);
+  }
 
-    value_box.draw(
+  /* --------------------------------------------------------------------------
+   */
+  f32 datum_update(UI& ui, const UpdateParams& params) override
+  {
+    const SourceDataEditorVectorSkin& skin = params.skin.vec2_data;
+
+    Rect bounds = getInlineBounds(ui, params);
+
+    const f32 text_field_vertical_padding = 2.f;
+    const f32 text_field_height = bounds.h - 2.f * text_field_vertical_padding;
+    const f32 text_field_y = bounds.y + text_field_vertical_padding;
+
+    f32 x = bounds.x;
+
+    const gfx::Font& font = *params.skin.text.font;
+
+    ui::TextSkin comp_name_skin = params.skin.text;
+    comp_name_skin.align = {0.f, 0.5f};
+
+    x += 
+      ui.putText({x, bounds.y, 999.f, bounds.h}, "x"_str, comp_name_skin).x;
+    x += skin.comp_name_spacing;
+
+    Rect field_bounds = {};
+    field_bounds.x = x;
+    field_bounds.y = text_field_y;
+    field_bounds.w = skin.min_comp_width;
+    field_bounds.h = text_field_height;
+
+    x_box.update(
+      ui, 
+      params, 
+      field_bounds,
+      DatumTextBox::Part::Value,
+      data,
+      params.skin.text_field);
+
+    x += field_bounds.w + skin.comp_spacing;
+
+    x +=
+      ui.putText({x, bounds.y, 999.f, bounds.h}, "y"_str, comp_name_skin).x;
+    x += skin.comp_name_spacing;
+
+    field_bounds.x = x;
+
+    y_box.update(
       ui,
-      vec2f(pos.x + inline_x, pos.y),
-      vec2f(size.x - inline_x, skin.rows.height),
-      params);
+      params, 
+      field_bounds, 
+      DatumTextBox::Part::Value, 
+      data, 
+      params.skin.text_field);
+
+    return bounds.h;
   }
 
   /* --------------------------------------------------------------------------
    */
-  void datum_update(
-      UI& ui, 
-      UpdateReason reason, 
-      SourceDataEditor* editor) override
+  void resolveMissingData(String name, SourceDataEditor* editor) override
   {
-    value_box.update(ui, this, reason, editor);
-  }
+    data = editor->default_data.allocateSourceData();
 
-  /* --------------------------------------------------------------------------
-   */
-  void datum_reportDrawCmds(
-      UI& ui, 
-      DrawCmdLists& lists, 
-      SourceDataEditor* editor) override
-  {
-    value_box.reportDrawCmds(ui, lists, editor);
+    data->setObject(name);
+    data->setVec2(editor->default_data, {0.f,0.f});
   }
 };
 
@@ -1056,6 +476,7 @@ struct ObjectState : DatumState
    */
   b8 datum_init(UI& ui, const InitParams& params) override
   {
+    // The top-level datum is always open.
     if (parent == nullptr)
       open = true;
 
@@ -1071,69 +492,45 @@ struct ObjectState : DatumState
     obj_deinit(ui);
   }
 
-  virtual void obj_deinit(UI& ui) {}
+  virtual void obj_deinit(UI& ui) { }
 
   /* --------------------------------------------------------------------------
    */
-  void datum_eval(UI& ui, const EvalParams& params) override
+  f32 datum_update(UI& ui, const UpdateParams& params) override
   {
     if (parent != nullptr)
     {
-      if (parent->embedsChildren())
-        open = parent->isOpen();
-    }
-    else
-      open = true;
+      vec2f text_pos = vec2f(
+        params.pos.x + params.skin.row.name_padding,
+        getRowTextY(params));
 
-    obj_eval(ui, params);
+      // TODO(sushi) make a proper texture for editor icons.
+      ui.putText(
+        Rect::from(text_pos, {100.f, 100.f}), 
+        (open? "-"_str : "+ "_str), 
+        params.skin.text);
+
+      vec2f hit_area = vec2f(
+        params.editor.name_column_width - params.pos.x,
+        params.skin.row.height);
+
+      Rect name_bounds = Rect::from(params.pos, hit_area);
+
+      // TODO(sushi) using 'this' as the id is prob fragile, need a better way.
+      //             Maybe merging the pointer with a string id.
+      FocusFlags focus = 
+        ui.putFocusableBounds(ui.generateIdFromPointer(this), name_bounds);
+
+      if (focus.test(FocusFlag::PrimaryReleased))
+        open = !open;
+    }
+
+    f32 height = obj_update(ui, params);
+
+    return height;
   }
 
-  virtual void obj_eval(UI& ui, const EvalParams& params) {}
-
-  /* --------------------------------------------------------------------------
-   */
-  b8 resolveMissingData(
-      String name, 
-      String default_data, 
-      SourceDataEditor* editor) override
-  {
-    if (notnil(default_data))
-    {
-      data = editor->parseDefaultData(default_data);
-      if (data == nullptr)
-        return false;
-
-      if (!data->hasObjectData())
-        return ERROR("default value resulted in a source data value\n");
-    }
-    else
-    {
-      data = editor->default_data.allocateSourceData();
-      data->children.init();
-      data->name = name;
-    }
-    
-    return true;
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void datum_draw(UI& ui, const DrawParams& params) override
-  {
-    if (parent == nullptr || !parent->embedsChildren())
-    {
-      drawGlyph(
-        ui,
-        (open? '-' : '+'),
-        vec2f(skin.rows.name_pad, calcRowTextY()),
-        name,
-        params);
-    }
-
-    obj_draw(ui, params);
-  }
-
-  virtual void obj_draw(UI& ui, const DrawParams& params) {}
+  virtual f32 obj_update(UI& ui, const UpdateParams& params) { return 0.f; }
 
   /* --------------------------------------------------------------------------
    */
@@ -1149,692 +546,111 @@ struct ObjectState : DatumState
   {
     return 12.f;
   }
-  
+
   /* --------------------------------------------------------------------------
    */
-  void datum_update(
-      UI& ui, 
-      UpdateReason reason, 
-      SourceDataEditor* editor) override
+  void resolveMissingData(String name, SourceDataEditor* editor) override
   {
-    if (parent != nullptr && reason == UpdateReason::MouseReleased &&
-        !parent->embedsChildren())
-    {
-      vec2f local_cursor = 
-        ui.input->mouse.window - editor->pos_screen;
-
-      f32 name_extent = calcInlineValueX(editor->max_name_width);
-
-      if (ui.testFocusableRegion(pos, {name_extent, skin.rows.height}))
-      {
-        if (ui.input->isKeyDown(Key::LAlt))
-        {
-          data->dump();
-        }
-        else
-        {
-          open = !open;
-          editor->dirty = true;
-        }
-      }
-    }
-
-    obj_update(ui, reason, editor);
+    data = editor->default_data.allocateSourceData();
+    data->children.init();
+    data->name = name;
   }
+};  
 
-  virtual void obj_update(
-    UI& ui, 
-    UpdateReason reason, 
-    SourceDataEditor* editor) {}
-
-  /* --------------------------------------------------------------------------
-   */
-  void datum_reportDrawCmds(
-      UI& ui, 
-      DrawCmdLists& lists, 
-      SourceDataEditor* editor) override
-  {
-    obj_reportDrawCmds(ui, lists, editor);
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  virtual void obj_reportDrawCmds(
-    UI& ui, 
-    DrawCmdLists& lists, 
-    SourceDataEditor* editor) {}
-};
-
-/* ============================================================================
- */
-struct Vec2State : DatumState
-{
-  DrawCmd* component_names;
-
-  DatumTextBox x_box;
-  DatumTextBox y_box;
-
-  /* --------------------------------------------------------------------------
-   */
-  b8 datum_init(UI& ui, const InitParams& params) override
-  {
-    auto* editor = params.editor;
-
-    SourceData* x = data->findChildByName("x"_str);
-    SourceData* y = data->findChildByName("y"_str);
-
-    if (!x_box.init(ui, x, DatumTextEditKind::Value, editor))
-      return false;
-
-    if (!y_box.init(ui, y, DatumTextEditKind::Value, editor))
-      return false;
-    
-    component_names = ui.drawcmds.add();
-    component_names->alloc(&ui, 2 * gfx::putFilledRectCounts());
-    component_names->tex = editor->font_texture;
-
-    return true;
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void datum_deinit(UI& ui) override
-  {
-    x_box.deinit(ui);
-    y_box.deinit(ui);
-    component_names->remove(&ui);
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void datum_eval(UI& ui, const EvalParams& params) override
-  {
-    SourceData* x = data->findChildByName("x"_str);
-    SourceData* y = data->findChildByName("y"_str);
-
-    x_box.setData(x);
-    y_box.setData(y);
-
-    *params.y += skin.rows.height;
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  b8 resolveMissingData(
-      String name,
-      String default_data,
-      SourceDataEditor* editor) override
-  {
-    if (notnil(default_data))
-    {
-      data = editor->parseDefaultData(default_data);
-      if (data == nullptr)
-        return false;
-
-      if (!data->hasObjectData())
-      {
-        ERROR("default vec2 data resulted in a SourceData value\n");
-        return false;
-      }
-    }
-    else
-    {
-      data = editor->parseDefaultData("{x=0,y=0}"_str);
-      if (data == nullptr)
-        return false;
-      data->name = name;
-    }
-    
-    return true;
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void datum_draw(UI& ui, const DrawParams& params) override
-  {
-    f32 row_text_y = calcRowTextY();
-
-    // Component values.
-    {
-      auto [vp, ip] = component_names->getPtrs(&ui);
-      component_names->counts_used = {};
-
-      f32 pos_x = calcInlineValueX(params.editor->max_name_width);
-      
-      pos_x += 
-        drawText(
-          ui,
-          "x"_str, 
-          vec2f(pos_x, row_text_y), 
-          component_names,
-          params).x;
-
-      pos_x += 6.f;
-      x_box.draw(
-        ui, 
-        vec2f(pos.x + pos_x, pos.y), 
-        vec2f(skin.vec.min_comp_width, skin.rows.height),
-        params);
-
-      pos_x += skin.vec.min_comp_width + skin.vec.comp_spacing;
-
-      pos_x += 
-        drawText(
-          ui,
-          "y"_str,
-          vec2f(pos_x, row_text_y), 
-          component_names,
-          params).x;
-
-      pos_x += 6.f;
-      y_box.draw(
-        ui,
-        vec2f(pos.x + pos_x, pos.y),
-        vec2f(skin.vec.min_comp_width, skin.rows.height),
-        params);
-    }
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void datum_update(
-      UI& ui, 
-      UpdateReason reason, 
-      SourceDataEditor* editor) override
-  {
-    x_box.update(ui, this, reason, editor);
-    y_box.update(ui, this, reason, editor);
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void datum_reportDrawCmds(
-      UI& ui, 
-      DrawCmdLists& lists, 
-      SourceDataEditor* editor) override
-  {
-    lists.pre_children.push(component_names);
-    x_box.reportDrawCmds(ui, lists, editor);
-    y_box.reportDrawCmds(ui, lists, editor);
-  }
-};
-
-/* ============================================================================
- */
-struct ColorState : ValueState
-{
-  DatumTextBox r_box;
-  DatumTextBox g_box;
-  DatumTextBox b_box;
-  DatumTextBox a_box;
-
-  DrawCmd* component_names = nullptr;
-
-  /* --------------------------------------------------------------------------
-   */
-  b8 datum_init(UI& ui, const InitParams& params) override
-  {
-    auto* editor = params.editor;
-
-    SourceData* r = data->findChildByName("r"_str);
-    SourceData* g = data->findChildByName("g"_str);
-    SourceData* b = data->findChildByName("b"_str);
-    SourceData* a = data->findChildByName("a"_str);
-
-    if (!r_box.init(ui, r, DatumTextEditKind::Value, editor))
-      return false;
-    if (!g_box.init(ui, g, DatumTextEditKind::Value, editor))
-      return false;
-    if (!b_box.init(ui, b, DatumTextEditKind::Value, editor))
-      return false;
-    if (!a_box.init(ui, a, DatumTextEditKind::Value, editor))
-      return false;
-
-    component_names = ui.drawcmds.add();
-    component_names->alloc(&ui, 4 * gfx::putFilledRectCounts());
-    component_names->tex = editor->font_texture;
-
-    return true;
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void datum_deinit(UI& ui) override
-  {
-    r_box.deinit(ui);
-    g_box.deinit(ui);
-    b_box.deinit(ui);
-    a_box.deinit(ui);
-    component_names->remove(&ui);
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void datum_eval(UI& ui, const EvalParams& params) override
-  {
-    r_box.setData(data->findChildByName("r"_str));
-    g_box.setData(data->findChildByName("g"_str));
-    b_box.setData(data->findChildByName("b"_str));
-    a_box.setData(data->findChildByName("a"_str));
-
-    *params.y += skin.rows.height;
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  b8 resolveMissingData(
-      String name,
-      String default_data,
-      SourceDataEditor* editor) override
-  {
-    if (notnil(default_data))
-    {
-      data = editor->parseDefaultData(default_data);
-      if (data == nullptr)
-        return false;
-
-      if (!data->hasObjectData())
-      {
-        ERROR("default vec2 data resulted in a SourceData value\n");
-        return false;
-      }
-
-      data->name = name;
-    }
-    else
-    {
-      data = editor->parseDefaultData("{r=255,g=255,b=255,a=255}"_str);
-      if (data == nullptr)
-        return false;
-      data->name = name;
-    }
-    
-    return true;
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void drawComponent(
-      UI& ui, 
-      String name, 
-      f32* pos_x, 
-      DatumTextBox* box,
-      const DrawParams& params)
-  {
-    *pos_x += 
-      drawText(
-        ui,
-        name,
-        vec2f(*pos_x, calcRowTextY()), 
-        component_names,
-        params).x;
-
-    *pos_x += 6.f;
-    box->draw(
-      ui, 
-      vec2f(pos.x + *pos_x, pos.y), 
-      vec2f(skin.col.min_comp_width, skin.rows.height),
-      params);
-
-    *pos_x += skin.col.min_comp_width + skin.vec.comp_spacing;
-
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void datum_draw(UI& ui, const DrawParams& params) override
-  {
-    // Component values.
-    {
-      auto [vp, ip] = component_names->getPtrs(&ui);
-      component_names->counts_used = {};
-
-      f32 pos_x = calcInlineValueX(params.editor->max_name_width);
-      
-      drawComponent(ui, "r"_str, &pos_x, &r_box, params);
-      drawComponent(ui, "g"_str, &pos_x, &g_box, params);
-      drawComponent(ui, "b"_str, &pos_x, &b_box, params);
-      drawComponent(ui, "a"_str, &pos_x, &a_box, params);
-    }
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void datum_update(
-      UI& ui, 
-      UpdateReason reason, 
-      SourceDataEditor* editor) override
-  {
-    r_box.update(ui, this, reason, editor);
-    g_box.update(ui, this, reason, editor);
-    b_box.update(ui, this, reason, editor);
-    a_box.update(ui, this, reason, editor);
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void datum_reportDrawCmds(
-      UI& ui, 
-      DrawCmdLists& lists, 
-      SourceDataEditor* editor) override
-  {
-    lists.pre_children.push(component_names);
-    r_box.reportDrawCmds(ui, lists, editor);
-    g_box.reportDrawCmds(ui, lists, editor);
-    b_box.reportDrawCmds(ui, lists, editor);
-    a_box.reportDrawCmds(ui, lists, editor);
-  }
-
-};
-
-$ -- * ------------------------------------------------------------------------
+$ local putTypeDatumState
+$ local putDatumState
 
 $ local getTypeDatumType
 
 $ local function getDeclDatumType(decl)
+$   if decl:is(ast.Record) then
+$     if decl:getRootBase().metadata.ref or not decl.is_complete then 
+$       return "ValueState" 
+$     end
+$   end
+$
 $   if decl:is(ast.TemplateSpecialization) then
-$     if decl.specialized_name == "vec2" then
+$     if "vec2" == decl.specialized_name then
 $       return "Vec2State"
-$     elseif decl.specialized_name == "TypedPtr" then
-$       local TPtr = decl.template_args[1]
-$       local DPtr = TPtr:getDecl()
-$       local name = DPtr and importer.removeTag(DPtr.name) or "void"
-$       return "TypedPointerState<"..name..">"
-$     elseif decl.specialized_name == "ArrayDef" then
-$       local subtype = decl.template_args[1]
-$       local subdecl = subtype:getDecl()
-$       if subdecl then
-$         return "ArrayState<"..importer.removeTag(subdecl.name)..">"
-$       elseif subtype:is(ast.PointerType) then
-$         return "ArrayState<"..getTypeDatumType(subtype)..">"
-$       end
+$     elseif "ArrayDef" == decl.specialized_name then
+$       return "ArrayState<"..decl.template_args[1].name..">"
 $     end
 $   elseif decl:is(ast.Struct) then
-$     if not decl.metadata.inline_value then
-$       local name = importer.removeTag(decl.name)
-$       if name == "Color" then
-$         return "ColorState"
-$       else
-$         return "StructState<"..importer.removeTag(decl.name)..">"
-$       end
-$     end
+$     return "StructState<"..importer.removeTag(decl.name)..">"
 $   elseif decl:is(ast.Enum) then
 $     return "EnumState<"..importer.removeTag(decl.name)..">"
+$   elseif decl:is(ast.TypedefDecl) then
+$     return (getTypeDatumType(decl.subtype))
 $   end
+$   
 $   return "ValueState"
 $ end
-
-$ -- * ------------------------------------------------------------------------
 
 $ getTypeDatumType = function(type)
 $   if type.name == "String" then
 $     return "ValueState"
 $   end
-$  
-$  type = type:getDesugared()
-$  if type:is(ast.Builtin) then
-$    return "ValueState"
-$  elseif type:is(ast.PointerType) then
-$    local decl = type.subtype:getDecl()
-$    if decl then
-$      if decl.derived then
-$        return "TypedPointerState<"..importer.removeTag(decl.name)..">"
-$      end
-$    end
-$  end
-$ 
-$  if type:is(ast.TagType) then
-$    local decl = type:getDecl()
-$    return getDeclDatumType(decl)
-$  end
-$  return "ValueState"
+$
+$   type = type:getDesugared()
+$   if type:is(ast.Builtin) then
+$     return "ValueState"
+$   end
+$
+$   if type:is(ast.TagType) then
+$     return (getDeclDatumType(type:getDecl()))
+$   elseif type:is(ast.TypedefType) then
+$     return (getDeclDatumType(type.decl))
+$   end
+$   
+$   return "ValueState"
 $ end
 
 $ -- * ------------------------------------------------------------------------
 
 template<typename T>
-struct TypedPointerState;
-
-template<typename T>
-TypedPointerState<T> __typed_pointer_state_dummy_;
-
-$ local function putTypedPointerState(name, decl)
-/* ============================================================================
- */
-template<>
-struct TypedPointerState<$(name)> : ObjectState
-{
-  DatumState* subdatum;
-
-  DatumComboBox combo_box;
-
-  typedef SmallArray<String, $(#decl.derived)> Options;
-
-  /* --------------------------------------------------------------------------
-   */
-  b8 obj_init(UI& ui, const InitParams& params) override
-  {
-    if (notnil(data->type))
-    {
-      if (!allocateSubdatum(
-          ui, params.name, params.default_data, params.editor))
-        return false;
-    }
-    else
-      subdatum = nullptr;
-
-    if (!combo_box.init(ui, data, DatumTextEditKind::Type, params.editor))
-      return false;
-
-    return true;
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  b8 allocateSubdatum(
-      UI& ui,
-      String name, 
-      String default_data, 
-      SourceDataEditor* editor)
-  {
-    switch (data->type.hash())
-    {
-$ for derived in decl.derived:each() do
-$   local datum_type  = getDeclDatumType(derived)
-    case "$(importer.removeTag(derived.name))"_hashed:
-      subdatum = 
-        (DatumState*)mem::stl_allocator.construct<$(datum_type)>();
-      if (!subdatum->init(ui, 
-            {
-              this, 
-              data,
-              editor,
-              name,
-              default_data
-            }))
-        return ERROR("failed to init typed sub data\n");
-      break;
-$ end 
-    default:
-      return ERROR("invalid type for typed pointer (", data->type, "does "
-                   "not derive from $(name))\n");
-    }
-
-    return true;
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void obj_deinit(UI& ui) override
-  {
-    if (subdatum != nullptr)
-      subdatum->deinit(ui);
-
-    combo_box.deinit(ui);
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void obj_eval(UI& ui, const EvalParams& params) override
-  {
-    *params.y += skin.rows.height;
-
-    if (subdatum != nullptr)
-      subdatum->eval(ui, params);
-
-    combo_box.setData(data);
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  b8 embedsChildren() const override { return true; }
-
-  /* --------------------------------------------------------------------------
-   */
-  b8 isOpen() const override { return open; }
-
-  /* --------------------------------------------------------------------------
-   */
-  void getTypeOptions(Options* options) const
-  {
-$ for derived in decl.derived:each() do
-    options->push("$(importer.removeTag(derived.name))"_str);
-$ end
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void obj_draw(UI& ui, const DrawParams& params) override
-  {
-    if (subdatum != nullptr)
-      subdatum->draw(ui, params);
-
-    Options options;
-    getTypeOptions(&options);
-
-    f32 inline_x = calcInlineValueX(params.editor->max_name_width);
-
-    combo_box.draw(
-      ui, 
-      {pos.x + inline_x, pos.y}, 
-      {size.x - inline_x, skin.rows.height},
-      options.asSlice(),
-      params);
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void obj_update(
-      UI& ui, 
-      UpdateReason reason, 
-      SourceDataEditor* editor) override
-  {
-    Options options;
-    getTypeOptions(&options);
-
-    if (combo_box.update(ui, reason, this, options.asSlice(), editor))
-    {
-      if (subdatum != nullptr)
-      {
-        subdatum->deinit(ui);
-        mem::stl_allocator.free(subdatum);
-      }
-
-      if (!allocateSubdatum(ui, nil, nil, editor))
-        return;
-
-      open = true;
-    }
-
-    if (subdatum != nullptr)
-      subdatum->update(ui, reason, editor);
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  b8 onHitTest(vec2f local_cursor) override
-  {
-    Options options;
-    getTypeOptions(&options);
-
-    return combo_box.onHitTest(local_cursor, options.asSlice());
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void obj_reportDrawCmds(
-      UI& ui,
-      DrawCmdLists& lists,
-      SourceDataEditor* editor) override
-  {
-    combo_box.reportDrawCmds(ui, lists, editor);
-
-    if (subdatum != nullptr)
-      subdatum->reportDrawCmds(ui, lists, editor);
-  }
-};
-
-// NOTE(sushi) this is here because for whatever reason if a type is only 
-//             ever referred to via pointers it wont show up in GDB's debug
-//             symbols. So we instantiate a dummy global for each 
-//             specialization of this type. This is only because only Array
-//             data uses this atm so once StructStates also use it, this 
-//             can be removed.
-template<>
-TypedPointerState<$(name)> __typed_pointer_state_dummy_<$(name)> = {};
-$ end
-
-template<>
-struct TypedPointerState<void> : ValueState
-{
-
-};
-
-$ -- * ------------------------------------------------------------------------
+struct StructState;
 
 $ local function putStructState(name, decl)
-/* ============================================================================
- */
+$   local function eachField(f)
+$     for field,i in decl:eachFieldWithIndex() do
+$       if not field.metadata.hidden then
+$         f(field, i)
+$       end
+$     end
+$   end
+$  
+$   eachField(function(field)
+$     putTypeDatumState(field.type)
+$   end)
+
 template<>
 struct StructState<$(name)> : ObjectState
 {
-$ local function eachField(f)
-$   for field,i in decl:eachFieldWithIndex() do
-$     if not field.metadata.hidden then
-$       f(field, i)
-$     end
-$   end
-$ end
 
 $ eachField(function(field, i)
-  // $(field.name): $(field.type:tostring())
-$     if field.type:is(ast.PointerType) then
-  ValueState member$(i);
-$     else
   $(getTypeDatumType(field.type)) member$(i);
-$     end
 $ end)
-
-$ local function getFieldDefaultValue(field)
-$   if not field.metadata.default then
-$     return "nil"
-$   end
-$   return '"'..field.metadata.default..'"_str'
-$ end
 
   /* --------------------------------------------------------------------------
    */
   b8 obj_init(UI& ui, const InitParams& params) override
   {
-    if (!data->hasObjectData())
-      return ERROR("improper data for $(name) (", params.name, ")\n");
-
 $ eachField(function(field, i)
-    member$(i).init(ui, params.inherit(
-      this,
-      data->findChildByName("$(field.name)"_str),
-      "$(field.name)"_str,
-      $(getFieldDefaultValue(field))));
+    SourceData* member$(i)_data = 
+      params.data != nullptr
+      ? params.data->findChildByName("$(field.name)"_str) 
+      : nullptr;
+
+    InitParams member$(i)_params = 
+    {
+      .parent = this,
+      .data = member$(i)_data,
+      .editor = params.editor,
+      .name = "$(field.name)"_str,
+      .default_data = nil,
+    };
+
+    member$(i).init(ui, member$(i)_params);
 $ end)
 
     return true;
@@ -1842,371 +658,42 @@ $ end)
 
   /* --------------------------------------------------------------------------
    */
-  void obj_deinit(UI& ui) override
+  f32 obj_update(UI& ui, const UpdateParams& params) override
   {
-$ eachField(function(field, i)
-    member$(i).deinit(ui);
-$ end)
-  }
+    f32 y = parent != nullptr? params.skin.row.height : 0.f;
+    const f32 x_offset = parent == nullptr? 0.f : params.skin.children_indent;
 
-  /* --------------------------------------------------------------------------
-   */
-  void obj_eval(UI& ui, const EvalParams& params) override
-  {
-    if (parent != nullptr && !parent->embedsChildren())
-      *params.y += skin.rows.height;
+    u32 datum_idx = *params.datum_idx + 1;
 
     if (open)
     {
 $ eachField(function(field, i)
-      member$(i).eval(ui, params.inherit(
-        "$(field.name)"_str,
-        data->findChildByName("$(field.name)"_str),
-        params.x + (parent != nullptr? 6.f : 0.f),
-        $(getFieldDefaultValue(field))));
-$ end)
-    }
-  }
+      UpdateParams member$(i)_params = 
+      {
+        .name = "$(field.name)"_str,
+        .default_data = nil,
+        .pos = params.pos + vec2f(x_offset, y),
+        .skin = params.skin,
+        .editor = params.editor,
+        .datum_idx = &datum_idx,
+      };
 
-  /* --------------------------------------------------------------------------
-   */
-  void obj_draw(UI& ui, const DrawParams& params) override
-  {
-    if (open)
-    {
-$ eachField(function(field, i)
-      member$(i).draw(ui, params.inherit("$(field.name)"_str));
+      y += member$(i).update(ui, member$(i)_params);
 $ end)
     }
-  }
 
-  /* --------------------------------------------------------------------------
-   */
-  void obj_update(
-      UI& ui, 
-      UpdateReason reason, 
-      SourceDataEditor* editor) override
-  {
-    if (open)
-    {
-$ eachField(function(field, i)
-      member$(i).update(ui, reason, editor);
-$ end)
-    }
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  b8 onHitTest(vec2f local_cursor) override
-  {
-    if (open)
-    {
-$ eachField(function(field, i)
-      if (member$(i).onHitTest(local_cursor))
-        return true;
-$ end)
-    }
-    return false;
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void obj_reportDrawCmds(
-      UI& ui, 
-      DrawCmdLists& lists, 
-      SourceDataEditor* editor) override
-  {
-    if (open)
-    {
-$ eachField(function(field, i)
-      member$(i).reportDrawCmds(ui, lists, editor);
-$ end)
-    }
+    return y;
   }
 };
 $ end
-
-$ -- * ------------------------------------------------------------------------
-
-template<typename T>
-struct ArrayState;
-
-$ local function putArrayState(name, decl)
-$   local subtype = decl.template_args[1]
-$   local subdecl = subtype:getDecl()
-$   local subname
-$   if subdecl then 
-$     subname = importer.removeTag(subdecl.name)
-$     if subdecl:is(ast.TemplateSpecialization) then
-$       if subdecl.specialized_name == "TypedPtr" then
-$         local TPtr = subdecl.template_args[1]:getDesugared()
-$         local DPtr = TPtr:getDecl()
-$         putTypedPointerState(importer.removeTag(DPtr.name), DPtr)
-$       end
-$     end
-$   else
-$     if subtype:is(ast.PointerType) then
-$       subdecl = subtype:tryUnwrapToRecordDecl()
-$       subname = getTypeDatumType(subtype)
-$       putTypedPointerState(importer.removeTag(subdecl.name), subdecl)
-$     else
-$       error("decl passed to ArrayState has no decl and is not a pointer")
-$     end
-$   end
-/* ============================================================================
- */
-template<>
-struct ArrayState<$(subname)> : ObjectState
-{
-  Array<$(getTypeDatumType(subtype))> arr;
-
-  struct 
-  {
-    DrawCmd* buttons;
-    DrawCmd* text;
-  } dc;
-
-  /* --------------------------------------------------------------------------
-   */
-  b8 obj_init(UI& ui, const InitParams& params) override
-  {
-    if (!arr.init(data->children.len()))
-      return false;
-
-    io::SmallBuffer<8> idx_name;
-    for (u32 i = 0; i < data->children.len(); ++i)
-    {
-      io::format(&idx_name, i);
-      auto* sub = arr.push();
-      if (!sub->init(ui, params.inherit(
-          this, 
-          data->children[i], 
-          idx_name.asStr(),
-          nil)))
-        return false;
-      idx_name.clear();
-    }
-
-    dc.buttons = ui.drawcmds.add();
-    dc.text = ui.drawcmds.add();
-    dc.text->tex = params.editor->font_texture;
-
-    return true;
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void obj_deinit(UI& ui) override
-  {
-    for (auto& state : arr)
-      state.deinit(ui);
-
-    arr.destroy();
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void obj_eval(UI& ui, const EvalParams& params) override
-  {
-    *params.y += skin.rows.height;
-
-    if (open)
-    {
-      io::SmallBuffer<8> idx_name;
-      for (u32 i = 0; i < arr.len(); ++i)
-      {
-        io::format(&idx_name, i);
-        arr[i].eval(ui, params.inherit(
-          idx_name.asStr(),
-          data->children[i],
-          params.x + 6.f,
-          nil));
-        idx_name.clear();
-      }
-    }
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void handleNewData(UI& ui, const EvalParams& params) override
-  {
-    for (auto& state : arr)
-      state.deinit(ui);
-    arr.clear();
-    
-    io::SmallBuffer<8> idx_name;
-    for (u32 i = 0; i < data->children.len(); ++i)
-    {
-      io::format(&idx_name, i);
-      auto* sub = arr.push();
-      if (!sub->init(ui, 
-            {
-              this, 
-              data->children[i], 
-              params.editor, 
-              idx_name.asStr()
-            }))
-        ERROR("failed to initialize new data child ", i, "\n");
-      idx_name.clear();
-    }
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  struct AddButtonLayout
-  {
-    vec2f button_pos;
-    vec2f button_size;
-    vec2f text_pos;
-  };
-
-  AddButtonLayout calcAddButtonPosAndSize(SourceDataEditor* editor) const
-  {
-    vec2f plus_size = editor->font->getGlyphSize('+');
-
-    f32 max_dim = max(plus_size.x, plus_size.y);
-
-    auto plus_button_size = vec2f(max_dim + 4.f, max_dim + 4.f);
-
-    auto plus_button_pos = vec2f(
-      pos.x + size.x - plus_button_size.x,
-      pos.y + floor(0.5f * (skin.rows.height - plus_button_size.y)));
-
-
-    auto plus_pos = plus_button_pos + ceil(vec2f(
-        0.5f * (plus_button_size.x - plus_size.x),
-        0.5f * (plus_button_size.y - plus_size.y)));
-
-    return {plus_button_pos, plus_button_size, plus_pos};
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void obj_draw(UI& ui, const DrawParams& params) override
-  {
-    auto* editor = params.editor;
-
-    auto [vp, ip] = 
-      dc.buttons->realloc(&ui, 
-        gfx::putFilledRectCounts() + 
-        gfx::putBordersCounts());
-
-    dc.buttons->counts_used = {};
-
-    auto [bp, bs, tp] = calcAddButtonPosAndSize(editor);
-
-    gfx::putFilledRect(
-      vp, ip,
-      &dc.buttons->counts_used,
-      bp, bs,
-      0x323349ff);
-
-    gfx::putBorders(
-      vp, ip,
-      &dc.buttons->counts_used,
-      { -1.f, -1.f, -1.f, -1.f },
-      bp, bs,
-      0x7986a4ff);
-    
-    auto [tvp, tip] = dc.text->realloc(&ui, gfx::putTextCounts("+"_str));
-    dc.text->counts_used = {};
-
-    gfx::putGlyph(
-      tvp, tip,
-      &dc.text->counts_used,
-      params.editor->font,
-      '+',
-      tp,
-      skin.text_color);
-
-    if (open)
-    {
-      io::SmallBuffer<8> idx_name;
-      for (u32 i = 0; i < arr.len(); ++i)
-      {
-        io::format(&idx_name, i);
-        arr[i].draw(ui, params.inherit(idx_name.asStr()));
-        idx_name.clear();
-      }
-    }
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void obj_update(
-      UI& ui, 
-      UpdateReason reason, 
-      SourceDataEditor* editor) override
-  {
-    if (open)
-    {
-      for (auto& state : arr)
-        state.update(ui, reason, editor);
-    }
-
-    if (reason == UpdateReason::MouseReleased)
-    {
-      auto [bp,bs,_] = calcAddButtonPosAndSize(editor);
-
-      if (ui.testFocusableRegion(bp, bs))
-      {
-        io::SmallBuffer<8> idx_name;
-        io::format(&idx_name, arr.len());
-        auto* sub = arr.push();
-        if (!sub->init(
-            ui, 
-            { this, nullptr, editor, idx_name.asStr() }))
-          ERROR("failed to initialize new data child \n");
-
-        sub->onEdit(editor);
-        sub->data->name = nil;
-        data->dump();
-        open = true;
-      }
-    }
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  b8 onHitTest(vec2f local_cursor) override
-  {
-    if (open)
-    {
-      for (auto& state : arr)
-      {
-        if (state.onHitTest(local_cursor))
-          return true;
-      }
-    }
-
-    return false;
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void obj_reportDrawCmds(
-      UI& ui, 
-      DrawCmdLists& lists, 
-      SourceDataEditor* editor) override
-  {
-    lists.pre_children.push(dc.buttons);
-    lists.pre_children.push(dc.text);
-
-    if (open)
-    {
-      for (auto& state : arr)
-        state.reportDrawCmds(ui, lists, editor);
-    }
-  }
-};
-$end
 
 $ -- * ------------------------------------------------------------------------
 
 template<typename T>
 struct EnumState;
 
-$ local function putEnumState(name, decl)
+$ local function putEnumDatumState(name, decl)
+
 $   local elem_count = 0
 $   local elem_char_count = 0
 $   for elem in decl.elems:each() do
@@ -2220,623 +707,279 @@ $   end
 template<>
 struct EnumState<$(name)> : DatumState
 {
-  DatumComboBox combo_box;
-
-  typedef SmallArray<String, $(elem_count)> Options;
-
-  /* --------------------------------------------------------------------------
-   */
-  b8 datum_init(UI& ui, const InitParams& params) override
+  f32 datum_update(UI& ui, const UpdateParams& params) override
   {
-    if (!combo_box.init(ui, data, DatumTextEditKind::Value, params.editor))
-      return false;
+    Rect bounds = getInlineBounds(ui, params);
 
-    return true;
-  }
+    const f32 button_height = 14.f;
+    const f32 dropdown_height = $(elem_count - 1) * button_height;
 
-  /* --------------------------------------------------------------------------
-   */
-  void datum_deinit(UI& ui) override
-  {
-    combo_box.deinit(ui);
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void datum_eval(UI& ui, const EvalParams& params) override
-  {
-    *params.y += skin.rows.height;
-    combo_box.setData(data);
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  b8 resolveMissingData(
-      String name,
-      String default_data,
-      SourceDataEditor* editor) override
-  {
-    if (notnil(default_data))
+    f32 y = 0.f;
+    if (ui.beginDropDown(
+          "enum_drop_down"_fid, 
+          bounds,
+          dropdown_height,
+          data->val.str,
+          params.skin.dropdown))
     {
-      data = editor->parseDefaultData(default_data);
-      if (data == nullptr)
-        return false;
+      ui.putQuad(ui.getBounds(), 0x222222ff);
 
-      if (data->hasObjectData())
-        return ERROR("default enum value resulted in a SourceData object\n");
-    }
-    else
-    {
-      data = editor->default_data.allocateSourceData();
-      data->name = name;
-      data->val.kind = SourceData::Value::Kind::String;
-      data->val.str = "$(decl.elems[1].name)"_str;
-    }
-
-    return true;
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void getOptions(Options* options) const
-  {
+      b8 set = false;
 $ for elem in decl.elems:each() do
-$   if not elem.metadata.hidden then
-    options->push("$(elem.name)"_str);
-$   end
+      if (!set && data->val.str != "$(elem.name)"_str)
+      {
+        if (ui.putButton(
+              "$(elem.name)_button"_fid, 
+              Rect::from(0.f, y, ui.getWidth(), button_height),
+              "$(elem.name)"_str,
+              params.skin.button))
+        {
+          data->val.str = "$(elem.name)"_str;
+          set = true;
+          ui.closePopup();
+        }
+
+        y += button_height;
+      }
 $ end
+
+      ui.endDropDown();
+    }
+
+    return params.skin.row.height;
   }
 
-  /* --------------------------------------------------------------------------
-   */
-  void datum_draw(UI& ui, const DrawParams& params) override
+  void resolveMissingData(String name, SourceDataEditor* editor) override
   {
-    Options options;
-    getOptions(&options);
-
-    f32 inline_x = calcInlineValueX(params.editor->max_name_width);
-
-    combo_box.draw(
-      ui, 
-      {pos.x + inline_x, pos.y}, 
-      {size.x - inline_x, size.y},
-      options.asSlice(),
-      params);
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void datum_update(
-      UI& ui, 
-      UpdateReason reason, 
-      SourceDataEditor* editor) override
-  {
-    Options options;
-    getOptions(&options);
-
-    combo_box.update(ui, reason, this, options.asSlice(), editor);
-  }
-
-  /* --------------------------------------------------------------------------
-   */
-  void datum_reportDrawCmds(
-      UI& ui, 
-      DrawCmdLists& lists, 
-      SourceDataEditor* editor) override
-  {
-    combo_box.reportDrawCmds(ui, lists, editor);
+    data = editor->default_data.allocateSourceData();
+    data->name = name;
   }
 };
 $ end
 
 $ -- * ------------------------------------------------------------------------
 
-$ importer:eachDecl(function(name, decl)
-$   if decl:is(ast.TemplateSpecialization) then
-$     if decl.specialized_name == "ArrayDef" then
-$       putArrayState(name, decl)
-$     end
-$   elseif decl:is(ast.Struct) then
-$     if not decl.metadata.inline_value then
-$       putStructState(name, decl)
-$     end
-$   elseif decl:is(ast.Enum) then
-$     putEnumState(name, decl)
-$   end
-$ end)
+template<typename T>
+struct ArrayState;
 
+$ local function putArrayState(name, decl)
+$   local subtype = decl.template_args[1]
+$   putTypeDatumState(subtype)
 /* ============================================================================
  */
-struct FieldInputText : public InputText
+template<>
+struct ArrayState<$(subtype.name)> : ObjectState
 {
-  SourceData* sdata;
+  Array<$(getTypeDatumType(subtype))> arr;
 
-  static FieldInputText* make(UI& ui, SourceData* data)
+  b8 obj_init(UI& ui, const InitParams& params) override
   {
-    auto* fit = ui.allocateAndInitItem<FieldInputText>(nil);
-    if (fit == nullptr)
-      return nullptr;
+    if (!arr.init(data->children.len()))
+      return false;
 
-    fit->sdata = data;
-
-    if (!fit->InputText::init(ui, data->val.str))
+    io::SmallBuffer<8> idx_name;
+    for (s32 i = 0; i < data->children.len(); ++i)
     {
-      ui.destroyItem(fit);
-      return nullptr;
-    }
+      idx_name.clear();
+      io::format(&idx_name, i);
+      auto* sub = arr.push();
 
-    return fit;
+      InitParams sub_params = params;
+      sub_params.parent = this;
+      sub_params.data = data->children[i];
+      sub_params.name = idx_name.asStr();
+
+      if (!sub->init(ui, sub_params))
+        return ERROR("failed to initialize array element ", i, "\n");
+    }
+    
+    return true;
   }
 
-  void onTextChanged() override
+  f32 obj_update(UI& ui, const UpdateParams& params) override
   {
-    sdata->val.str = text.asStr();
-    sdata->dump();
-  };
+    u32 datum_idx = *params.datum_idx + 1;
+
+    f32 y = parent != nullptr? params.skin.row.height : 0.f;
+    const f32 indent = params.skin.children_indent;
+
+    if (open)
+    {
+      io::SmallBuffer<8> idx_name;
+      for (s32 i = 0; i < arr.len(); ++i)
+      {
+        idx_name.clear();
+        io::format(&idx_name, i);
+
+        UpdateParams sub_params = params;
+        sub_params.name = idx_name.asStr();
+        sub_params.pos += vec2f(indent, y);
+
+        y += arr[i].update(ui, sub_params);
+      }
+    }
+
+    return y;
+  }
 };
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putRefState(name, decl)
+$   print(decl)
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putTemplateSpecializationState(name, decl)
+$   local spec = decl.specialized_name
+$   
+$   if "ArrayDef" == spec then
+$     return (putArrayState(name, decl))
+$   end
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putRecordDatumState(name, decl)
+$   if decl:findMetadata "ref" then
+$     print(decl)
+$   elseif decl:is(ast.TemplateSpecialization) then
+$     return (putTemplateSpecializationState(name, decl))
+$   elseif decl:is(ast.Struct) and decl.is_complete then
+$     return (putStructState(name, decl))
+$   end
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ putDatumState = function(decl)
+$   if placed[decl.name] then return end
+$  
+$   placed[decl.name] = decl
+$  
+$   if decl:is(ast.TagDecl) then
+$     if decl:is(ast.Record) then
+$       putRecordDatumState(importer.removeTag(decl.name), decl)
+$     elseif decl:is(ast.Enum) then
+$       putEnumDatumState(importer.removeTag(decl.name), decl)
+$     end
+$   elseif decl:is(ast.TypedefDecl) then
+$     putTypeDatumState(decl.subtype)
+$   end
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ putTypeDatumState = function(type)
+$   type = type:getDesugared()
+$   -- print(type:tostring())
+$   if type:is(ast.TagType) then
+$     return (putDatumState(type:getDecl()))
+$   elseif type:is(ast.TypedefType) then
+$     return (putDatumState(type.decl))
+$   end
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
+$ importer:eachDecl(function(name, decl)
+$   putDatumState(decl)
+$ end)
 
 /* ----------------------------------------------------------------------------
  */
-SourceDataEditor* SourceDataEditor::create(UI& ui, Interface* interface)
+b8 SourceDataEditor::init(UI& ui)
 {
-  auto* editor = ui.allocateAndInitItem<SourceDataEditor>(
-    "source_data_editor"_str);
-  if (editor == nullptr)
-    return nullptr;
+  if (!datum_allocator.init())
+    return ERROR("failed to initialize datum allocator\n");
 
-  editor->interface = interface;
+  default_data.init();
 
-  if (!editor->datum_text_edit.input_text.init(ui, nil, nil))
-  {
-    ui.destroyItem(editor);
-    return nullptr;
-  }
-
-  ui.beginItem(editor);
-
-  @ui.style(editor, SourceDataEditor,
-  | size: 100% 100%
-  | background_color: 0x000000ff)
-
-  auto* default_text = ui::Text::make(ui, "No source data selected.."_str);
-  @ui.style(default_text, Text, alignment: 0.5 0.5)
-
-  editor->font = 
-    gfx::Font::load(
-      "assets/fonts/gohu"_str,
-      *ui.assetmgr,
-      *ui.renderer);
-
-  editor->font_texture = editor->font->texture->gfx_texture;
-
-  editor->update_triggers = 
-      UpdateReason::MouseReleased
-    | UpdateReason::FocusedKeyPress
-    | UpdateReason::FocusLost
-    | UpdateReason::MouseHover;
-
-  editor->default_data.init();
-
-  ui.endItem();
-
-  return editor;
+  return true;
 }
 
 /* ----------------------------------------------------------------------------
  */
 void SourceDataEditor::setSourceData(
     UI& ui, 
-    SourceData* data, 
-    SourceDataFile* file,
+    SourceData* sdata, 
+    SourceDataFile* sfile, 
     u64 type_id)
 {
-  ui.destroyItemChildren(this);
+  this->sdata = sdata;
+  this->sfile = sfile;
+  this->type_id = type_id;
 
-  sdata = data;
-  sfile = file;
-
-  assert(data->hasObjectData());
-
-  if (current_datum)
+  if (current_datum != nullptr)
   {
     current_datum->deinit(ui);
     mem::stl_allocator.free(current_datum);
     current_datum = nullptr;
   }
 
-  ui.beginItem(this);
-
-  this->type_id = type_id;
   switch (type_id)
   {
-  case 0:
+$ for k,v in pairs(placed) do
+$   local datum_type = getDeclDatumType(v)
+  case "$(k)"_hashed:
     {
-      if (notnil(data->name))
-      {
-        placeSourceDataItems(ui, sdata);
-      }
-      else
-      {
-        for (SourceData* child : data->children)
-        {
-          placeSourceDataItems(ui, child);
-        }
-      }
-    }
-    break;
-
-  default:
-    WARN("SourceDataEditor::setSourceData passed an unknown type id (", 
-         type_id, ")\n");
-    break;
-
-$ importer:eachDecl(function(name, decl)
-$   local datum_type = getDeclDatumType(decl)
-  case "$(name)"_hashed:
-    {
-      current_datum = 
-        mem::stl_allocator.construct<$(datum_type)>();
-
-      DatumBase::InitParams params = 
+      current_datum = mem::stl_allocator.construct<$(datum_type)>();
+      
+      DatumState::InitParams params = 
       {
         .parent = nullptr,
-        .data = data,
+        .data = sdata,
         .editor = this,
 
         .name = nil,
         .default_data = nil,
       };
 
-      if (!(($(datum_type)*)current_datum)->init(ui, params))
-      {
-        ERROR("failed to initialize datum state for $(name)\n");
-        mem::stl_allocator.free(current_datum);
-        current_datum = nullptr;
-      }
+      current_datum->init(ui, params);
     }
     break;
-$ end)
-  }
-
-  ui.endItem();
-
-  dirty = true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-void SourceDataEditor::placeSourceDataItems(UI& ui, SourceData* data)
-{
-  if (data->hasObjectData())
-  {
-    auto* header = CollapsingHeader::begin(ui, data->name);
-    {
-      @ui.style(header, CollapsingHeader, 
-      | size: 100% auto
-      | background_color: 0x111133ff)
-
-      for (SourceData* child : data->children)
-      {
-        placeSourceDataItems(ui, child);
-      }
-    }
-    ui.endItem();
-  }
-  else
-  {
-    auto* container = Item::begin(ui);
-    {
-      @ui.style(container, Item, 
-      | size: 100% auto
-      | display: horizontal flex
-      | background_color: 0x331111ff)
-
-      auto* name = Text::make(ui, data->name);
-      @ui.style(name, Text, 
-      | size: flex(1) auto)
-
-      auto* value = FieldInputText::make(ui, data);
-      @ui.style(value, InputText, size: flex(1) auto)
-    }
-    ui.endItem();
-  }
-}
-
-/* ----------------------------------------------------------------------------
- */
-void SourceDataEditor::evaluate(UI* ui)
-{
-  if (current_datum)
-  {
-    max_name_width = 0.f;
-
-    f32 y = 0;
-    u32 datum_count = 0;
-
-    DatumState::EvalParams params = 
-    {
-      .name = nil,
-      .data = sdata,
-      .editor = this,
-      .x = 0.f,
-      .y = &y, 
-      .datum_count = &datum_count,
-    };
-
-    current_datum->eval(*ui, params);
-
-    size.y = y;
-  }
-}
-
-/* ----------------------------------------------------------------------------
- */
-void SourceDataEditor::generate(UI* ui)
-{
-  if (current_datum)
-  {
-    if (datum_text_edit.datum != nullptr)
-    {
-      // InputTextState::DrawParams text_edit_params = 
-      // {
-      //   .bounds = vec4f(datum_text_edit.pos, datum_text_edit.size),
-      //   .font = font,
-      //   .is_focused = true,
-      //   .font_height = skin.font_height,
-      //   .cursor_color = {255, 255, 255, 255},
-      //   .text_color = {255,255,255,255},
-      // };
-      //
-      // datum_text_edit.input_text.draw(*ui, text_edit_params);
-    }
-
-    u32 datum_count = 0;
-
-    DatumState::DrawParams params = 
-    {
-      .editor = this,
-      .name = nil,
-      .datum_count = &datum_count,
-    };
-
-    current_datum->draw(*ui, params);
-  }
-}
-
-/* ----------------------------------------------------------------------------
- */
-void SourceDataEditor::reportDrawCmds(UI* ui, DrawCmdLists& lists)
-{
-  if (current_datum)
-  {
-    current_datum->reportDrawCmds(*ui, lists, this);
-
-    if (datum_text_edit.datum != nullptr)
-      datum_text_edit.input_text.reportDrawCmds(*ui, lists, true);
-  }
-}
-
-/* ----------------------------------------------------------------------------
- */
-void SourceDataEditor::DatumTextEdit::update(
-    UI& ui, 
-    UpdateReason reason,
-    SourceDataEditor* editor)
-{
-  if (reason == UpdateReason::FocusLost)
-    onFocusLost(editor);
-
-  if (sdata == nullptr)
-    return;
-
-  // InputTextState::UpdateParams params = 
-  // {
-  //   .local_mouse = 
-  //     ui.input->mouse.window - (editor->pos_screen + pos),
-  //   .font = editor->font,
-  //   .is_focused = true,
-  //   .font_height = skin.font_height,
-  //   .reason = reason,
-  // };
-  //
-  // b8 state_changed = false;
-  // switch (reason)
-  // {
-  // case UpdateReason::MouseReleased:
-  //   if (input_text.update(ui, params) == 
-  //       InputTextState::StateChange::CursorMoved)
-  //     editor->dirty = true;
-  //   break;
-  //
-  // case UpdateReason::FocusedKeyPress:
-  //   if (input_text.update(ui, params) != 
-  //       InputTextState::StateChange::None)
-  //   {
-  //     state_changed = true;
-  //   }
-  //   else if (ui.input->wasKeyPressed(Key::Enter))
-  //   {
-  //     datum->onEdit(editor);
-  //     state_changed = true;
-  //   }
-  //   break;
-  // }
-  //
-  // if (state_changed)
-  // {
-  //   switch (kind)
-  //   {
-  //   case Kind::Name:
-  //     sdata->name = input_text.asStr();
-  //     break;
-  //
-  //   case Kind::Type:
-  //     sdata->type = input_text.asStr();
-  //     break;
-  //
-  //   case Kind::Value:
-  //     sdata->val.str = input_text.asStr();
-  //     break;
-  //   }
-  //
-  //   editor->dirty = true;
-  // }
-}
-
-/* ----------------------------------------------------------------------------
- */
-void SourceDataEditor::DatumTextEdit::onFocusLost(SourceDataEditor* editor)
-{
-  if (sdata == nullptr)
-    return;
-
-  SourceDataFile* file = editor->sfile;
-
-  // Give the new text up to the source data file.
-  switch (kind)
-  {
-  case DatumTextEditKind::Name:
-    sdata->name = sdata->name.allocateCopy(&file->string_cache);
-    break;
-  case DatumTextEditKind::Type:
-    sdata->type = sdata->type.allocateCopy(&file->string_cache);
-    break;
-  case DatumTextEditKind::Value:
-    sdata->val.str = sdata->val.str.allocateCopy(&file->string_cache);
-    break;
-  }
-
-  datum->onEdit(editor);
-  sdata = nullptr;
-  datum = nullptr;
-}
-
-/* ----------------------------------------------------------------------------
- */
-void SourceDataEditor::update(UI* ui, UpdateReason reason)
-{
-  if (current_datum)
-  {
-    hovered = nullptr;
-    datum_text_edit.update(*ui, reason, this);
-    current_datum->update(*ui, reason, this);
-  }
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 SourceDataEditor::onHitTest(vec2f local_cursor)
-{
-  if (current_datum)
-    return current_datum->onHitTest(local_cursor); 
-
-  return false;
-}
-
-/* ----------------------------------------------------------------------------
- */
-void SourceDataEditor::beginEditDatumText(
-    UI& ui,
-    DatumState* datum,
-    SourceData* sdata,
-    DatumTextEdit::Kind kind,
-    vec2f pos,
-    vec2f size)
-{
-  if (!isEditingDatumText(sdata, kind))
-  {
-    INFO("beginEdit ", sdata, " was (", datum_text_edit.sdata, ")\n");
-
-    datum_text_edit.onFocusLost(this);
-
-    switch (kind)
-    {
-    case DatumTextEdit::Kind::Name:
-      datum_text_edit.input_text.set(sdata->name);
-      sdata->name = datum_text_edit.input_text.asStr();
-      break;
-    case DatumTextEdit::Kind::Type:
-      datum_text_edit.input_text.set(sdata->type);
-      sdata->type = datum_text_edit.input_text.asStr();
-      break;
-    case DatumTextEdit::Kind::Value:
-      datum_text_edit.input_text.set(sdata->val.str);
-      sdata->val.str = datum_text_edit.input_text.asStr();
-      break;
-    }
-    
-    datum_text_edit.pos = pos;
-    datum_text_edit.size = size;
-    datum_text_edit.datum = datum;
-    datum_text_edit.sdata = sdata;
-    datum_text_edit.kind = kind;
-
-    // Perform an initial update on the input text to position the 
-    // cursor where the mouse was clicked.
-    datum_text_edit.input_text.update(ui,
-    {
-      .local_mouse = 
-        ui.input->mouse.window - (pos_screen + pos),
-      .font = font,
-      .is_focused = true,
-      .font_height = skin.font_height,
-      .reason = UpdateReason::MouseReleased,
-    });
-
-    dirty = true;
-  }
-}
-
-/* --------------------------------------------------------------------------
- */
-b8 SourceDataEditor::isEditingDatumText(
-    SourceData* sdata,
-    DatumTextEditKind kind) const
-{
-  return datum_text_edit.sdata == sdata && datum_text_edit.kind == kind;
-}
-
-/* ----------------------------------------------------------------------------
- */
-void SourceDataEditor::endEditDatumText(
-    SourceData* sdata, 
-    DatumTextEditKind kind)
-{
-  if (isEditingDatumText(sdata, kind))
-  {
-    INFO("end edit ", sdata, "\n");
-    datum_text_edit.onFocusLost(this);
-    dirty = true;
-    onEdit(sdata);
-  }
-}
-
-/* ----------------------------------------------------------------------------
- */
-SourceData* SourceDataEditor::parseDefaultData(String s)
-{
-  auto view = io::StringView::from(s);
-  SourceDataParser parser;
-
-  if (!parser.init(&default_data, &view, "default_data"_str))
-  {
-    ERROR("failed to initialize parser for '", s, "'\n");
-    return nullptr;
-  }
-
-  defer { parser.deinit(); };
-
-  SourceData* data = sfile->allocateSourceData();
-
-  if (!parser.parsePossiblyTypedData(data))
-  {
-    ERROR("failed to parse default source data: ", s, "\n");
-    return nullptr;
-  }
-
-  return data;
-}
-
-}
-
 $ end
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SourceDataEditor::update(
+    UI& ui,
+    Rect bounds,
+    const SourceDataEditorSkinDef& skin)
+{
+  if (current_datum)
+  {
+    Rect content_bounds = bounds.contracted(skin.padding);
+
+    ui.beginPanel("source_data_editor"_fid, bounds);
+    ui.beginScrollGroup("hello"_fid, content_bounds, skin.scroll_bar);
+
+    u32 datum_idx = 0;
+
+    DatumState::UpdateParams params = 
+    {
+      .name = nil,
+      .default_data = nil,
+      .pos = {0.f,0.f},
+      .skin = skin,
+      .editor = *this,
+      .datum_idx = &datum_idx,
+    };
+
+    f32 height = current_datum->update(ui, params);
+    
+    name_column_width = max(max_name_extent, skin.row.min_name_width);
+    max_name_extent = 0.f;
+
+    ui.endScrollGroup(skin.scroll_bar);
+    ui.beginCmdFrontInjection();
+    ui.putQuad(ui.getBounds(), skin.bg_color);
+    ui.endCmdFrontInjection();
+    ui.endPanel();
+
+  }
+}
