@@ -256,8 +256,10 @@ b8 GameRenderer::update(const UpdateParams& params)
   ///////////////////////////////////////////////
   // 0. Update Scene
   {
-    renderer.setViewport(params.viewport.pos(), params.viewport.size());
-    renderer.setScissor(params.viewport.pos(), params.viewport.size());
+    renderer.setViewport(
+      vec2i(params.viewport.pos()), vec2i(params.viewport.size()));
+    renderer.setScissor(
+      vec2i(params.viewport.pos()), vec2i(params.viewport.size()));
 
     mat3x2 proj = mat3x2::identity();
     proj.set(0, 0, EyeSys::pixels_per_meter * 2.f / (f32)params.viewport.w);
@@ -382,7 +384,10 @@ b8 GameRenderer::update(const UpdateParams& params)
       {
         Layer& layer = map.layers[transform->placement_layer];
 
-        vec2f pos = layer.pos + transform->pos;
+        vec2f pos = transform->pos;
+        pos.x += layer.pos.x;
+        pos.y += layer.pos.y;
+
         Color color = sprite.color;
         if (texture == null_texture->gfx_texture)
           color = 0xff0000ff;

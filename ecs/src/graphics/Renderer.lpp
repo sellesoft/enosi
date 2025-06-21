@@ -2215,7 +2215,7 @@ void Renderer::setScissor(vec2i pos, vec2i size)
   DrawCmd cmd =
   {
     .kind = DrawCmd::Kind::SetScissor,
-    .set_scissor = { pos, size },
+    .set_scissor = { pos, vec2u(size) },
   };
   drawcmds.push(cmd);
 }
@@ -2233,7 +2233,7 @@ void Renderer::setViewport(vec2i pos, vec2i size)
   DrawCmd cmd =
   {
     .kind = DrawCmd::Kind::SetViewport,
-    .set_viewport = { pos, size },
+    .set_viewport = { vec2f(pos), vec2f(size) },
   };
   drawcmds.push(cmd);
 }

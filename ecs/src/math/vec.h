@@ -31,11 +31,11 @@ struct vec2
   vec2(T x, T y) { this->x = x; this->y = y; }
 
   template<typename X>
-  vec2(const vec2<X>& in) { x = in.x; y = in.y; }
+  explicit vec2(const vec2<X>& in) { x = in.x; y = in.y; }
 
   /* --------------------------------------------------------------------------
    */
-  inline vec2 operator+ (const vec2& rhs) const
+  inline vec2<T> operator+ (const vec2<T>& rhs) const
   {
     return { x + rhs.x, y + rhs.y };
   }

@@ -116,7 +116,7 @@ $ end
   cl::GameSim::InitParams sim_params =
   {
     .loader   = asset_loader,
-    .viewport = Rect::from({0,0}, window.size),
+    .viewport = Rect::from({0,0}, vec2f(window.size)),
     .renderer = renderer,
     .assetmgr = engine->assetmgr,
     .sfilereg = engine->source_data_file_reg,

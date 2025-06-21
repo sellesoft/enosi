@@ -250,8 +250,8 @@ b8 MapSys::getTileAndLayerAtPos(
   for (s32 layer_idx = layers.len()-1; layer_idx >= 0; --layer_idx)
   {
     Layer* layer = &layers[layer_idx];
-    vec2f layer_pos = layer->pos;
-    vec2f layer_size = layer->size;
+    vec2f layer_pos = vec2f(layer->pos);
+    vec2f layer_size = vec2f(layer->size);
     if (math::pointInRect<f32>(pos, layer_pos, layer_size))
     {
       for (s32 tile_idx = layer->tiles.len()-1; tile_idx >= 0; --tile_idx)
@@ -280,5 +280,5 @@ b8 MapSys::getTileAndLayerAtPos(
  */
 vec2f MapSys::getTilePos(const Layer& layer, const Tile& tile) const
 {
-  return layer.pos + layer.getTilePos(tile);
+  return vec2f(layer.pos) + layer.getTilePos(tile);
 }

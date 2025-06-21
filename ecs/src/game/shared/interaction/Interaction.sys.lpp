@@ -42,7 +42,7 @@ void InteractionSys::onUsePrimary(UsePrimaryInputEvent& ev)
 
     const Layer& transform_layer = map->layers[transform->placement_layer];
     vec2f interactable_pos =
-      transform_layer.pos +
+      vec2f(transform_layer.pos) +
       transform->pos;
 
     Layer* layer;

@@ -25,16 +25,26 @@ struct GameSim;
 
 struct Editor
 {
-  Client* client;
+  Client* client = nullptr;
 
   EditorSkinDefRef skin;
 
   b8 paused = false;
 
+  enum class Tool
+  {
+    None,
+    Map,
+  };
+
+  Tool active_tool = Tool::None;
+
   b8   init(Client* client, AssetLoader& loader);
   void deinit();
 
   b8 update(ui::UI& ui, cl::GameSim& sim);
+
+  void putUI(ui::UI& ui, const EditorSkinDef& skin);
 };
 
 }

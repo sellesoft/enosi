@@ -57,7 +57,7 @@ b8 Editor::update(UI& ui, cl::GameSim& sim)
   ui::UI::FrameParams ui_params = 
   {
     .input = ui_input,
-    .viewport = Rect::from(vec2f(0,0), client->window.size),
+    .viewport = Rect::from(vec2f(0,0), vec2f(client->window.size)),
   };
 
   ui.beginFrame(ui_params);
@@ -72,7 +72,6 @@ b8 Editor::update(UI& ui, cl::GameSim& sim)
   }
 
   ui.endFrame();
-
   
   return true;
 }

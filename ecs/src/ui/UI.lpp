@@ -1420,7 +1420,7 @@ void ScissorCmd::execute(UI& ui, gfx::Renderer& renderer)
 {
   TRACE("execute scissor ", bounds.pos(), " ", bounds.size(), "\n");
 
-  renderer.setScissor(bounds.pos(), bounds.size());
+  renderer.setScissor(vec2i(bounds.pos()), vec2i(bounds.size()));
 }
 
 /* ----------------------------------------------------------------------------
