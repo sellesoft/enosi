@@ -68,4 +68,11 @@ b8 GameSim::render(gfx::Renderer& renderer)
   return gamemgr.render(renderer);
 }
 
+/* ----------------------------------------------------------------------------
+ */
+b8 GameSim::render(gfx::Renderer& renderer, const gfx::View& view)
+{
+  return gamemgr.render(renderer, view);
+}
+
 }

@@ -13,6 +13,8 @@ $ require "common"
 
 #include "math/Rect.h"
 
+namespace gfx { struct View; }
+
 namespace cl
 {
 
@@ -47,7 +49,9 @@ struct GameSim : SharedGameSim
   };
 
   b8 update(UpdateParams& params);
+
   b8 render(gfx::Renderer& renderer);
+  b8 render(gfx::Renderer& renderer, const gfx::View& view);
 
   void setViewport(Rect viewport) 
   {

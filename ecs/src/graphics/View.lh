@@ -1,0 +1,32 @@
+/*
+ *  Helper type for storing a 'view' over the 2D world and translating 
+ *  points between it and the screen.
+ */ 
+
+#include "math/vec.h"
+#include "math/mat.h"
+
+namespace gfx
+{
+
+struct View
+{
+  enum
+  {
+    // How many pixels should span a unit of length when rotation and 
+    // zoom are 0 and 1 respectively.
+    PixelsPerMeter = 64,
+  };
+
+  vec2f pos = {};
+  f32   rotation = 0.f;
+  f32   zoom = 1.f;
+
+  mat3x2 getViewMat() const;
+  
+  vec2f viewportPointToWorld(vec2f point, vec2f viewport_size) const;
+  vec2f worldPointToViewport(vec2f point, vec2f viewport_size) const;
+  
+};
+
+};

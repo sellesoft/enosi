@@ -15,6 +15,7 @@ $ local ui = require "ui.UI"
 
 @@lpp.import "ui/UI.lh"
 @@lpp.import "game/client/editor/Skin.defs.lh"
+@@lpp.import "graphics/View.lh"
 
 struct Client;
 
@@ -28,6 +29,8 @@ struct Editor
   Client* client = nullptr;
 
   EditorSkinDefRef skin;
+
+  gfx::View view;
 
   b8 paused = false;
 

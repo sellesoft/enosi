@@ -48,7 +48,7 @@ b8 Editor::update(UI& ui, cl::GameSim& sim)
       return ERROR("failed to update game sim\n");
   }
 
-  if (!sim.render(client->renderer))
+  if (!sim.render(client->renderer, view))
     return ERROR("failed to render game sim\n");
 
   InputState ui_input = {};
@@ -75,5 +75,9 @@ b8 Editor::update(UI& ui, cl::GameSim& sim)
   
   return true;
 }
+
+/* ----------------------------------------------------------------------------
+ */
+
 
 }

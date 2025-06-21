@@ -7,6 +7,8 @@ $ require "common"
 @@lpp.import "game/shared/entity/EntityId.lh"
 @@lpp.import "game/shared/entity/EntitySys.lh"
 
+@@lpp.import "graphics/View.lh"
+
 struct MapSys;
 
 /* ============================================================================
@@ -17,9 +19,11 @@ struct EyeSys : EntitySys
 
   MapSys* map;
 
-  vec2f pos = {};
-  f32   rotation = 0.f;
-  f32   zoom = 1.f;
+  gfx::View view;
+
+  // vec2f pos = {};
+  // f32   rotation = 0.f;
+  // f32   zoom = 1.f;
 
   vec2f viewport_size = {};
 

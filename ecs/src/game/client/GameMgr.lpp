@@ -78,15 +78,22 @@ b8 GameMgr::update(UpdateParams& params)
  */
 b8 GameMgr::render(gfx::Renderer& renderer)
 {
+  return render(renderer, entsysmgr.get<EyeSys>().view);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 GameMgr::render(gfx::Renderer& renderer, const gfx::View& view)
+{
   GameRenderer::UpdateParams render_params =
   {
     .viewport = sim->viewport,
     .renderer = renderer,
     .map = &entsysmgr.get<MapSys>(),
     .entmgr = &sim->entmgr,
+    .view = view.getViewMat(),
   };
 
-  entsysmgr.get<EyeSys>().getViewMat(&render_params.view);
   if (!game_renderer.update(render_params))
     return false;
 

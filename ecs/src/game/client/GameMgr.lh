@@ -14,6 +14,8 @@ $ local cmn = require "common"
 
 struct InputState;
 
+namespace gfx { struct View; }
+
 namespace cl
 {
 
@@ -49,7 +51,9 @@ struct GameMgr
   };
 
   b8 update(UpdateParams& params);
+
   b8 render(gfx::Renderer& renderer);
+  b8 render(gfx::Renderer& renderer, const gfx::View& view);
 
   /* --------------------------------------------------------------------------
    *  Loads the client into some map.

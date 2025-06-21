@@ -1,0 +1,42 @@
+$ require "common"
+
+@@lpp.import "graphics/View.lh"
+
+namespace gfx
+{
+
+/* ----------------------------------------------------------------------------
+ */
+mat3x2 View::getViewMat() const
+{
+  return mat3x2::createInverseTransform(pos, rotation, {zoom,zoom});
+}
+
+/* ----------------------------------------------------------------------------
+ */
+vec2f View::viewportPointToWorld(vec2f point, vec2f viewport_size) const
+{
+  vec2f world_point = point - (viewport_size / 2.f);
+  world_point.x /= f32(PixelsPerMeter);
+  world_point.y /= -f32(PixelsPerMeter);
+
+  auto tm = mat3x2::createTransform(pos, rotation, {zoom,zoom});
+  return tm.transformVec(world_point);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+vec2f View::worldPointToViewport(vec2f point, vec2f viewport_size) const
+{
+  auto tm = mat3x2::createInverseTransform(pos, rotation, {zoom,zoom});
+  vec2f vp_pos = tm.transformVec(point);
+
+  vp_pos.x *= PixelsPerMeter;
+  vp_pos.y *= -PixelsPerMeter;
+
+  vp_pos += viewport_size / 2.f;
+
+  return vp_pos;
+}
+
+}
