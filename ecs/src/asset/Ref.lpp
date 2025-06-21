@@ -1,4 +1,4 @@
-$ require "common"
+$ local cmn = require "common"
 $ local ast = require "reflect.AST"
 
 #include "iro/Logger.h"
@@ -19,42 +19,60 @@ using namespace iro;
 
 @log.ger(ref, Debug);
 
+$ local function isRefDecl(decl)
+$   if not decl:is(ast.Record) then return end
+$   if decl.metadata.ref then
+$     return true
+$   end
+$   for derived in decl.bases:each() do
+$     if isRefDecl(derived) then
+$       return true
+$     end
+$   end
+$ end
+
+$ local ref_types = cmn.List {}
+$ local ref_bases = {}
+
+$ importer:eachDecl(function(name, decl)
+$   local function getBase(decl)
+$     if decl.bases:isEmpty() then
+$       return decl
+$     end
+$     -- NOTE(sushi) we just take the first base, as we don't use 
+$     --             multi-inheritance in the project. We should probably 
+$     --             make this an explicit rule somewhere.
+$     return getBase(decl.bases[1])
+$   end
+$   if decl:is(ast.Record) then
+$     local base = getBase(decl)
+$     if base.metadata.ref then
+$       ref_bases[base] = true
+$     end
+$   end
+$ end)
+
 /* ----------------------------------------------------------------------------
  */
-b8 Ref::load(String type, LoadParams& params)
+b8 loadRef(void* ptr, const RefLoadParams& params)
 {
-$ local TRef = importer.p.decls.map["struct Ref"]
-
-  switch (type.hash())
+  switch (params.type.hash())
   {
-  case "Ref"_hashed:
-    return ERROR("Ref::load called with type Ref\n");
-
-$ local function placeDer(der)
-$   local name = importer.removeTag(der.name)
-  case "$(name)"_hashed:
-  {
-    TRACE("loading $(name)\n");
-    SCOPED_INDENT;
-    return (($(name)*)this)->load(params);
-  }
-$   for td in der.typedefs:each() do
-  case "$(td.name)"_hashed:
-  {
-    TRACE("loading $(td.name)\n");
-    SCOPED_INDENT;
-    return (($(name)*)this)->load("$(td.name)"_str, params);
-  }
+$ local function placeLoadCall(decl, has_load)
+$   local has_load = has_load or decl:hasMethod "load"
+$   if has_load then
+  case "$(importer.removeTag(decl.name))"_hashed:
+    return (($(decl.name)*)ptr)->load(params);
 $   end
-$   for der in der.derived:each() do
-$     placeDer(der)
+$   for derived in decl.derived:each() do
+$     placeLoadCall(derived, has_load)
 $   end
 $ end
-
-$ for der in TRef.derived:each() do
-$   placeDer(der)
+$ for base in pairs(ref_bases) do
+$   placeLoadCall(base, base:hasMethod "load")
 $ end
   }
 
-  return ERROR("unhandled type in Ref::load: ", type, "\n");
+  return ERROR("unhandled type passed to loadRef (", params.type, ")\n");
 }
+

@@ -2,17 +2,21 @@ $ require "common"
 $ local metadata = require "reflect.Metadata"
 
 @@lpp.import "asset/Ref.lh"
+@@lpp.import "asset/CompiledDataInterfaces.lh"
 
 #include "iro/Unicode.h"
 
 using namespace iro;
+
+struct SourceData;
 
 namespace gfx
 {
 
 /* ============================================================================
  */
-struct ResourceRef : Ref
+@metadata.ref
+struct ResourceRef
 {
   String name = {};
 
@@ -23,6 +27,19 @@ struct ResourceRef : Ref
   {
     return resource != nullptr;
   }
+
+  void compiledData_compile(IDataCompiler* interface) const
+  {
+    interface->writeString(name);
+    interface->writeData(&resource);
+  }
+
+  void compiledData_fixPointers(IFixPointers* interface)
+  {
+    interface->fixString(&name);
+  }
+
+  b8 pack(const SourceData& data, mem::Allocator* allocator);
 };
 
 /* ============================================================================
@@ -30,48 +47,28 @@ struct ResourceRef : Ref
 template<typename TResource>
 struct TypedResourceRef : ResourceRef
 {
-  b8 load(LoadParams&);
-
-  b8 load(String type, LoadParams& params)
-  {
-    // NOTE(sushi) ignoring the type string here until we get to a point 
-    //             where we have a reason to typedef a resource handle.
-    //             Good luck future me.
-    return load(params);
-  }
-
-  b8 isValid() const
-  {
-    return resource != nullptr;
-  }
-
   TResource* operator->()
   {
-    assert(resource != nullptr);
+    assert(isValid());
     return (TResource*)resource;
   }
 
   const TResource* operator->() const
   {
-    assert(resource != nullptr);
+    assert(isValid());
     return (TResource*)resource;
   }
 
   TResource& operator*()
   {
-    assert(resource != nullptr);
+    assert(isValid());
     return *(TResource*)resource;
   }
 
   const TResource& operator*() const
   {
-    assert(resource != nullptr);
+    assert(isValid());
     return *(TResource*)resource;
-  }
-
-  TResource* deref()
-  {
-    return (TResource*)resource;
   }
 };
 
@@ -79,8 +76,19 @@ struct CompiledTexture;
 struct CompiledShader;
 struct Font;
 
-typedef TypedResourceRef<CompiledTexture> TextureRef;
-typedef TypedResourceRef<CompiledShader>  ShaderRef;
-typedef TypedResourceRef<Font>            FontRef;
+struct TextureRef : TypedResourceRef<CompiledTexture> 
+{
+  b8 load(const RefLoadParams& params);
+};
+
+struct ShaderRef : TypedResourceRef<CompiledShader> 
+{
+  b8 load(const RefLoadParams& params);
+};
+
+struct FontRef : TypedResourceRef<Font> 
+{
+  b8 load(const RefLoadParams& params);
+};
 
 }

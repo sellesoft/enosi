@@ -73,7 +73,7 @@ CompiledTexture* CompiledTexture::load(
   texture->asset.name = asset->name;
   texture->asset.asset = asset;
 
-  Ref::LoadParams load_params = 
+  RefLoadParams load_params = 
   {
     .assetmgr = assetmgr,
     .renderer = renderer,

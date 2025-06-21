@@ -11,6 +11,8 @@ $ require "common"
 #include "iro/Common.h"
 #include "iro/Unicode.h"
 
+@@lpp.import "reflect/RTR.lh"
+
 using namespace iro;
 
 namespace gfx 
@@ -22,47 +24,45 @@ struct AssetMgr;
 struct SourceDataFileReg;
 
 /* ============================================================================
+ *  Parameters needed to load referenced data.
  */
-struct Ref 
-{ 
-  struct LoadParams
-  { 
-    gfx::Renderer& renderer;
-    AssetMgr& assetmgr;
-    // Optional, if we want to compile the asset this is referencing.
-    // TODO(sushi) separate compiling and loading.
-    SourceDataFileReg* sfile_reg;
+struct RefLoadParams
+{
+  gfx::Renderer& renderer;
+  AssetMgr& assetmgr;
+  SourceDataFileReg* sfile_reg = nullptr;
 
-    // Whether to try and load nested references.
-    b8 recursive = true;
-  };
+  // The type of data being loaded.
+  String type = nil;
 
-  b8 load(String type, LoadParams&);
+  // Whether to automatically load references contained by the loaded data
+  // recursively.
+  b8 recursive = true;
+};
 
-protected:
+b8 loadRef(void* ptr, const RefLoadParams& params);
 
-  b8 load(LoadParams&) { return false; }
-}; 
+template<typename T>
+b8 loadRef(T* ptr, const RefLoadParams& params)
+{
+  return ptr->load(params);
+}
 
 /* ============================================================================
+ *  Asset loading helper that contains the stuff needed to load an asset
+ *  and can be passed around nicely, yay!
  */
 struct AssetLoader
 {
   gfx::Renderer& renderer;
   AssetMgr& assetmgr;
   SourceDataFileReg& sfilereg;
-
+  
   template<typename T>
   b8 load(T* ref)
   {
-    Ref::LoadParams params = 
-    {
-      .renderer = renderer,
-      .assetmgr = assetmgr,
-      .sfile_reg = &sfilereg,
-    };
-
-    return ref->load(params);
+    return loadRef(
+      ref, {renderer, assetmgr, &sfilereg, rtr::getTypename<T>()});
   }
 
   template<typename T>
@@ -72,3 +72,5 @@ struct AssetLoader
     return load(ref);
   }
 };
+
+

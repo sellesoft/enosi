@@ -1,3 +1,14 @@
+/*
+ *  TODO(sushi) it would be nice to move a lot of the special cases for 
+ *              certain types (such as refs) out of this file and allow 
+ *              types to override certain behaviors here where they are 
+ *              defined. I'm getting kinda tired of having to define special
+ *              cases for types here anytime I change something. Ideally 
+ *              we would be able to define methods (though ideally something
+ *              else) on special types to handle a lot of the stuff we do here
+ *              as this is meant to stay generic.
+ */
+
 $ local cmn = require "common"
 $ local glob = require "Glob"
 $ local Processor = require "reflect.Processor"
@@ -186,6 +197,26 @@ struct Compiler
   // Runtime type variant of the above function. Will select the correct
   // function based on the type provided in the given String.
   b8 compile(String type, void* ptr);
+};
+
+template<>
+b8 Compiler::compile<String>(const String& s);
+
+/* ============================================================================
+ */
+struct ExternalCompiler : IDataCompiler
+{
+  Compiler* compiler;
+
+  void writeData(const void* x, u64 size) override
+  {
+    compiler->data_buffer->write({(u8*)x, size});
+  }
+
+  void writeString(const String& s) override
+  {
+    compiler->compile(s);
+  }
 };
 
 $ -- * ------------------------------------------------------------------------
@@ -617,17 +648,32 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
+$ local function putHandledCompiler(name, decl)
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 Compiler::compile(const $(name)& x)
+{
+  ExternalCompiler ext = {};
+  ext.compiler = this;
+
+  x.compiledData_compile(&ext);
+
+  return true;
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
 $ local function putRecordCompiler(name, decl)
+$   if not decl.is_complete then return end
+$
 $   for base in decl.bases:each() do
 $     putCompiler(base)
 $   end
 $
-$   if decl == TAssetRef or decl:isDerivedFrom(TAssetRef) then
-$     return (putAssetRefCompiler(name, decl))
-$   end
-$
-$   if decl == TResourceRef or decl:isDerivedFrom(TResourceRef) then
-$     return (putResourceRefCompiler(name, decl))
+$   if decl:hasMethod "compiledData_compile" then
+$     return (putHandledCompiler(name, decl))
 $   end
 $
 $   if decl:is(ast.TemplateSpecialization) then
@@ -790,7 +836,9 @@ b8 Compiler::compile(String type, void* ptr)
   switch (type.hash())
   {
 $ placeRuntimeCases(function(decl)
+$   if not decl:is(ast.Record) or decl.is_complete then
     return compile(*($(decl.name)*)ptr);
+$   end
 $ end)
   }
 
@@ -1073,6 +1121,7 @@ $   if decl_or_type.is_decl then
 $     local decl = decl_or_type
 $     if decl.metadata.hidden then return false end
 $     if decl:is(ast.Record) then
+$       if not decl.is_complete then return false end
 $       if decl:is(ast.TemplateSpecialization) then
 $         if decl.specialized_name == "vec2" or
 $            decl.specialized_name == "Flags" 
@@ -1080,7 +1129,7 @@ $         then
 $            return false  
 $         end
 $       end
-$       if decl:isDerivedFrom(importer.p:lookupDecl "struct Ref") then
+$       if decl:getRootBase().metadata.ref then
 $         return true
 $       end
 $       if decl.local_name ~= "String" then
@@ -1193,9 +1242,20 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
+$ local function putGetRefRefs(name, decl)
+/* ----------------------------------------------------------------------------
+ */
+void $(getRefsName(decl))(CompiledData::Refs* refs, $(name)* ptr)
+{
+  refs->push({"$(name)"_str, ptr});
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
 $ local function putGetTemplateSpecializationRefs(name, decl)
 $   local spec = decl.specialized_name
-$   if     "TypedPtr" == spec then
+$   if "TypedPtr" == spec then
 $     return (putGetTypedPtrRefs(name, decl))
 $   elseif "ArrayDef" == spec then
 $     return (putGetArrayDefRefs(name, decl))
@@ -1215,25 +1275,13 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
-$ local function putGetRefRefs(name, decl)
-/* ----------------------------------------------------------------------------
- */
-void $(getRefsName(decl))(CompiledData::Refs* refs, $(name)* ptr)
-{
-  refs->push({"$(name)"_str, ptr});
-}
-$ end
-
-$ -- * ------------------------------------------------------------------------
-
 $ local function putGetRecordRefs(name, decl)
 $   if decl.metadata.hidden then return end
-$ 
-$   local TRef = importer.p:lookupDecl "struct Ref"
-$   if decl == TRef or decl:isDerivedFrom(TRef) then
+$  
+$   if decl:getRootBase().metadata.ref then
 $     return (putGetRefRefs(name, decl))
 $   end
-$
+$ 
 $   if name == "iro::utf8::String" then
 $     return -- Explicitly a noop.
 $   end
@@ -1488,17 +1536,57 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
+$ local function putFixRefPointers(name, decl)
+template<>
+void fixPointers($(name)* ptr)
+{
+$ for field in decl:eachFieldWithIndex() do
+$   -- TODO(sushi) we should have more explicit metadata for this OR
+$   --             set up something like I've mentioned at the top of this file
+$   if not field.metadata.hidden then
+  fixPointers(&ptr->$(field.name));
+$   end
+$ end
+  
+}
+$ end
+
+struct PointerFixer : IFixPointers
+{
+  void fixString(String* ptr) override
+  {
+    fixPointers(ptr); 
+  }
+};
+
+$ -- * ------------------------------------------------------------------------
+
+$ local function putHandledFixPointers(name, decl)
+/* ----------------------------------------------------------------------------
+ */
+template<>
+void fixPointers($(name)* ptr)
+{
+  PointerFixer fixer;
+  ptr->compiledData_fixPointers(&fixer);
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
 $ local function putFixRecordPointers(name, decl)
-$   if decl == TAssetRef or decl:isDerivedFrom(TAssetRef) then
-$     return (putFixAssetRefPointers(name, decl))
-$   end
-$
-$   if decl == TResourceRef or decl:isDerivedFrom(TResourceRef) then
-$     return (putFixResourceRefPointers(name, decl))
-$   end
-$
 $   if name == "iro::utf8::String" then
 $     return -- Explicitly implemented.
+$   end
+$ 
+$   if not decl.is_complete then return end
+$
+$   if decl:getRootBase():hasMethod "compiledData_fixPointers" then
+$     return (putHandledFixPointers(name, decl))
+$   end
+$
+$   if decl:getRootBase().metadata.ref then
+$     return (putFixRefPointers(name, decl))
 $   end
 $
 $   if decl:is(ast.TemplateSpecialization) then
@@ -1536,7 +1624,9 @@ void fixPointers(String type, void* ptr)
   switch (type.hash())
   {
 $ placeRuntimeCases(function(decl)
+$   if decl.is_complete then
     fixPointers(($(decl.name)*)ptr);
+$   end
     return;
 $ end)
   }

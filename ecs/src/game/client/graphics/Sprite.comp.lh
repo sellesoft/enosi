@@ -20,13 +20,14 @@ struct CompiledTexture;
 
 /* ============================================================================
  */
+@metadata.def
 struct SpriteStatesDef
 {
   StringMap<gfx::TextureRef> map;
 };
 
 @metadata.source_types(sprite_states)
-typedef TypedSourceAssetRef<SpriteStatesDef> SpriteStatesRef;
+struct SpriteStatesRef : TypedSourceAssetRef<SpriteStatesDef> {};
 
 namespace cl
 {

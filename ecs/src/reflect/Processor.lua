@@ -469,6 +469,13 @@ Processor.processTemplateSpecialization = function(self, cdecl, ctype)
 
   if cdecl:isComplete() then
     self:collectBaseAndDerived(cdecl, spec)
+
+    spec.comment = cdecl:getComment()
+    if spec.comment then
+      spec.metadata = metadata.__parse(spec.comment)
+    end
+
+    spec.is_complete = true
   end
 
   self:processRecordMembers(cdecl, ctype, spec)

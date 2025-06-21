@@ -6,6 +6,7 @@ $ require "common"
 
 @@lpp.import "asset/AssetMgr.lh"
 @@lpp.import "asset/CompiledData.lh"
+@@lpp.import "asset/SourceData.lh"
 
 @@lpp.import "graphics/Renderer.lh"
 
@@ -19,6 +20,18 @@ namespace gfx
 
 /* ----------------------------------------------------------------------------
  */
+b8 ResourceRef::pack(const SourceData& data, mem::Allocator* allocator)
+{
+  if (!data.hasStringValue())
+    return ERROR("expected string value to pack ResourceRef\n");
+
+  name = data.val.str.allocateCopy(allocator);
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 static String formName(PathBuffer* buf, String name, String ext)
 {
   io::formatv(buf, name, ext);
@@ -28,14 +41,17 @@ static String formName(PathBuffer* buf, String name, String ext)
 /* ----------------------------------------------------------------------------
  */
 template<typename T>
-static T* loadDef(String name, String ext, AssetRef::LoadParams& params)
+static T* loadDef(String name, String ext, const RefLoadParams& params)
 {
   TypedSourceAssetRef<T> defref;
 
   PathBuffer path;
   defref.name = formName(&path, name, ext);
 
-  if (!defref.load(params))
+  RefLoadParams def_params = params;
+  def_params.type = rtr::getTypename<T>();
+
+  if (!defref.load(def_params))
   {
      ERROR("failed to load def ", defref.name, "\n");
      return nullptr;
@@ -46,8 +62,7 @@ static T* loadDef(String name, String ext, AssetRef::LoadParams& params)
 
 /* ----------------------------------------------------------------------------
  */
-template<>
-b8 TextureRef::load(LoadParams& params)
+b8 TextureRef::load(const RefLoadParams& params)
 {
   // TODO(sushi) need a way to determine this outside of this function.
   //             like when we have TextureDefs that are not set in data.
@@ -88,8 +103,7 @@ b8 TextureRef::load(LoadParams& params)
 
 /* ----------------------------------------------------------------------------
  */
-template<>
-b8 FontRef::load(LoadParams& params)
+b8 FontRef::load(const RefLoadParams& params)
 {
   if (isnil(name))
     return true;
@@ -125,8 +139,7 @@ b8 FontRef::load(LoadParams& params)
 
 /* ----------------------------------------------------------------------------
  */
-template<>
-b8 ShaderRef::load(LoadParams& params)
+b8 ShaderRef::load(const RefLoadParams& params)
 {
   if (isnil(name))
     return true;
@@ -174,3 +187,4 @@ b8 ShaderRef::load(LoadParams& params)
 }
 
 }
+

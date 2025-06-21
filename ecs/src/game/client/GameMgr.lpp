@@ -122,7 +122,7 @@ b8 GameMgr::loadMap(
 
   data->getRefs(&refs);
 
-  Ref::LoadParams load_params = 
+  RefLoadParams load_params = 
   {
     .renderer = renderer,
     .assetmgr = assetmgr,
@@ -131,11 +131,10 @@ b8 GameMgr::loadMap(
 
   for (auto& ref : refs)
   {
-    if (!ref.ptr->load(ref.type, load_params))
-    {
-      ERROR("failed to load ref of type ", ref.type, "\n");
-      break;
-    }
+    RefLoadParams ref_params = load_params;
+    ref_params.type = ref.type;
+    if (!loadRef(ref.ptr, ref_params))
+      return false;
   }
 
   MapSys::LoadParams map_params =

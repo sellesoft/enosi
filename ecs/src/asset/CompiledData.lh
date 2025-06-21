@@ -5,6 +5,7 @@
 $ require "common"
 
 @@lpp.import "asset/OffsetPtr.lh"
+@@lpp.import "asset/CompiledDataInterfaces.lh"
 
 #include "iro/Common.h"
 #include "iro/containers/SmallArray.h"
@@ -81,7 +82,7 @@ struct CompiledData
   struct DataRef
   {
     String type;
-    Ref* ptr;
+    void* ptr;
   };
 
   typedef SmallArray<DataRef, 16> Refs;

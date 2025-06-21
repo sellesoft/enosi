@@ -10,7 +10,6 @@ namespace gfx
 /* ============================================================================
  */
 @m.def
-@m.source_types(pipeline)
 struct PipelineDef
 {
   String name;
@@ -19,6 +18,7 @@ struct PipelineDef
   ShaderRef fragment_shader;
 };
 
-typedef TypedSourceAssetRef<PipelineDef> PipelineDefRef;
+@m.source_types(pipeline)
+struct PipelineDefRef : TypedSourceAssetRef<PipelineDef> {};
 
 }

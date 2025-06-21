@@ -16,5 +16,5 @@ struct EntityDef
   ArrayDef<TypedStringMap<Component>> components;
 };
 
-@metadata.source_types(entity)
-typedef TypedSourceAssetRef<EntityDef> EntityDefRef;
+struct EntityDefRef : TypedSourceAssetRef<EntityDef> {};
+

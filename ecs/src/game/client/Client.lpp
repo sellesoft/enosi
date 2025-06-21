@@ -135,11 +135,6 @@ $ end
   };
   @init(ui.init(ui_params), UI);
 
-  @dbgBreak;
-  EntityDefRef test_spawner;
-  asset_loader.load(&test_spawner, 
-    "assets/entities/spawners/Player.entity"_str);
-
   cl::GameSim::InitParams sim_params =
   {
     .loader   = asset_loader,

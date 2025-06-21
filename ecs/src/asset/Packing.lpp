@@ -854,7 +854,6 @@ $   local spec = decl.specialized_name
 $   if     "Array" == spec then
 $     error("Arrays are not allowed in source data! use ArrayDef")
 $   elseif "TypedPtr" == spec then
-$     print(name)
 $     return (putTypedPtrPacker(name, decl))
 $   elseif "ArrayDef" == spec then
 $     return (putArrayDefPacker(name, decl))
@@ -878,8 +877,28 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
+$ local function putHandledPacker(name, decl)
+/* ----------------------------------------------------------------------------
+ */
+template<>
+b8 Packer::pack(const SourceData& data, $(name)* out)
+{
+  return out->pack(data, &packed->buffer);
+}
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
 $ local function putRecordPacker(name, decl)
 $   placeLayer "record"
+$ 
+$   -- TODO(sushi) this needs to be detected and handled better
+$   --             but just need to get it working. What we should (probably)
+$   --             be doing is search for this when we dont have a packing
+$   --             thing for it in this file.
+$   if decl:getRootBase():hasMethod "pack" then
+$     return (putHandledPacker(name, decl))
+$   end
 $ 
 $   for derv in decl.derived:each() do
 $     putPacker(derv)

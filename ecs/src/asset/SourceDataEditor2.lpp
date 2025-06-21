@@ -563,6 +563,12 @@ $ local putDatumState
 $ local getTypeDatumType
 
 $ local function getDeclDatumType(decl)
+$   if decl:is(ast.Record) then
+$     if decl:getRootBase().metadata.ref or not decl.is_complete then 
+$       return "ValueState" 
+$     end
+$   end
+$
 $   if decl:is(ast.TemplateSpecialization) then
 $     if "vec2" == decl.specialized_name then
 $       return "Vec2State"
@@ -820,6 +826,12 @@ $ end
 
 $ -- * ------------------------------------------------------------------------
 
+$ local function putRefState(name, decl)
+$   print(decl)
+$ end
+
+$ -- * ------------------------------------------------------------------------
+
 $ local function putTemplateSpecializationState(name, decl)
 $   local spec = decl.specialized_name
 $   
@@ -831,7 +843,9 @@ $ end
 $ -- * ------------------------------------------------------------------------
 
 $ local function putRecordDatumState(name, decl)
-$   if decl:is(ast.TemplateSpecialization) then
+$   if decl:findMetadata "ref" then
+$     print(decl)
+$   elseif decl:is(ast.TemplateSpecialization) then
 $     return (putTemplateSpecializationState(name, decl))
 $   elseif decl:is(ast.Struct) and decl.is_complete then
 $     return (putStructState(name, decl))

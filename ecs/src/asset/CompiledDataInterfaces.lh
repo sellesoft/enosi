@@ -1,0 +1,55 @@
+/*
+ *  Interfaces passed to handlers defined external to CompiledData.lpp.
+ *
+ *  These are used to help alleviate some of the annoyance of trying to 
+ *  completely handle all types used in defs throughout the project in
+ *  CompiledData.lpp. As things get added, removed, or changed we typically 
+ *  have to go into that file to adjust the logic around those things to 
+ *  work with whatever has changed, which tends to be very difficult to 
+ *  do correctly. With this, we can define a set of basic operations 
+ *  that CompiledData performs internally so that types may override the 
+ *  behavior of them as needed, moving the headache elsewhere and decoupling
+ *  them from the single file.
+ */
+
+/* ============================================================================
+ *  Interface passed to 'compiledData_compile' handlers. These are called 
+ *  when actually writing the data to disk and involve outputting the raw 
+ *  bytes of a type. The type must output an amount of data equal to its 
+ *  size otherwise BAD things will happen!
+ */
+struct IDataCompiler
+{
+  // Writes some generic data directly to the output data stream.
+  virtual void writeData(const void* x, u64 size) = 0;
+
+  // Convenience wrapper around the above that writes data of type 'T'
+  // directly to the output data stream.
+  template<typename T>
+  void writeData(const T& x)
+  {
+    writeData(&x, sizeof(T));
+  }
+
+  // Writes a String to the data stream as an OffsetString.
+  virtual void writeString(const String& s) = 0;
+};
+
+/* ============================================================================
+ *  Interface passed to 'compiledData_getRefs' handlers. These are expected
+ *  to output any Refs they contain so that they can be loaded.
+ */
+struct IGetRefs
+{
+  virtual void pushRef(void* ptr, String type) = 0;
+};
+
+/* ============================================================================
+ *  Interface passed to 'compiledData_fixPointers' handlers. This interface
+ *  is primarily for convenience as it defines methods to fix common types 
+ *  of data that would have been adjusted during compilation.
+ */
+struct IFixPointers
+{
+  virtual void fixString(String* ptr) = 0;
+};

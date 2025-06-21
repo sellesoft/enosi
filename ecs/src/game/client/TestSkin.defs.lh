@@ -13,4 +13,4 @@ struct TestSkinDef
   ui::TextFieldSkin text_field;
 };
 
-typedef TypedSourceAssetRef<TestSkinDef> TestSkinRef;
+struct TestSkinRef : TypedSourceAssetRef<TestSkinDef> {};

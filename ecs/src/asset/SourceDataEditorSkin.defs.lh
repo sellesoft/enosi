@@ -70,5 +70,5 @@ struct SourceDataEditorSkinDef
   f32 children_indent;
 };
 
-typedef TypedSourceAssetRef<SourceDataEditorSkinDef> 
-  SourceDataEditorSkinDefRef;
+struct SourceDataEditorSkinDefRef : 
+  TypedSourceAssetRef<SourceDataEditorSkinDef> {};

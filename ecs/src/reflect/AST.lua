@@ -393,6 +393,10 @@ Enum.dump = function(self, out)
   end
 end
 
+Enum.__tostring = function(self)
+  return "Enum("..self.name..")"
+end
+
 local Record = TagDecl:derive()
 ast.Record = Record
 
@@ -504,6 +508,22 @@ Record.getIdSafeName = function(self, name)
   end
 
   return name
+end
+
+Record.getRootBase = function(self)
+  if self.bases:isEmpty() then
+    return self
+  end
+
+  return self.bases[1]:getRootBase()
+end
+
+Record.findMetadata = function(self, name)
+  local v = self.metadata[name]
+  if v then return v end
+  if self.bases[1] then
+    return self.bases[1]:findMetadata(name)
+  end
 end
 
 local Field = Decl:derive()

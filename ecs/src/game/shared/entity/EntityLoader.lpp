@@ -46,7 +46,7 @@ $$$
 #include "iro/Unicode.h"
 #include "iro/Logger.h"
 
-@cmn.defFileLogger(ent.loader, Info);
+@log.ger(ent.loader, Debug)
 
 $ local TComponent = importer.p:lookupDecl "struct Component"
 $ local function eachComp(f)
@@ -81,6 +81,8 @@ b8 loadComponentType<$(name)>(
     gfx::Renderer& renderer)
 {
   using TComp = $(name);
+
+  DEBUG("loading component $(name) for entity ", ent, "\n");
 
   TComp* comp = cmpmgr.allocateComponent<TComp>();
 

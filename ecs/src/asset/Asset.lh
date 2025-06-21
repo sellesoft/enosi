@@ -22,6 +22,7 @@ $ local metadata = require "reflect.Metadata"
 using namespace iro;
 
 struct AssetMgr;
+struct SourceData;
 
 /* ============================================================================
  *  The base of all Assets, including an interface that allows an Asset 
@@ -48,8 +49,8 @@ struct Asset
 
 /* ============================================================================
  */
-@metadata.inline_value(name)
-struct AssetRef : Ref
+@metadata.ref
+struct AssetRef
 {
   // The name of the asset, which is specified in source data.
   String name = {};
@@ -74,12 +75,38 @@ struct AssetRef : Ref
   {
     return asset == rhs.asset;
   }
+
+  void compiledData_compile(IDataCompiler* interface) const
+  {
+    interface->writeString(name);
+    interface->writeData(&asset);
+  }
+
+  void compiledData_fixPointers(IFixPointers* interface)
+  {
+    interface->fixString(&name);
+  }
+
+  b8 pack(const SourceData& data, mem::Allocator* allocator);
+
+  b8 load(const RefLoadParams& params);
 };
 
 /* ============================================================================
+ *  A reference to an asset providing source data.
+ */
+struct SourceDataAssetRef : AssetRef 
+{ 
+  b8 load(const RefLoadParams& params);
+};
+
+/* ============================================================================
+ *  A typed variant of the above for convenience. Aliases the loaded asset 
+ *  as CompiledData representing the type 'T' and returns the data that was 
+ *  loaded.
  */
 template<typename T>
-struct TypedSourceAssetRef : AssetRef
+struct TypedSourceAssetRef : SourceDataAssetRef
 {
   T* operator ->()
   {
@@ -103,18 +130,6 @@ struct TypedSourceAssetRef : AssetRef
   {
     assert(isValid());
     return *((CompiledData*)asset->data)->getRootAs<T>();
-  }
-
-  b8 load(LoadParams& params)
-  {
-    return 
-      ((TypedSourceAssetRef<int>*)this)->load(rtr::getTypename<T>(), params);
-  }
-
-  b8 load(String type, LoadParams& params)
-  {
-    return
-      ((TypedSourceAssetRef<int>*)this)->load(type, params);
   }
 };
 
@@ -140,12 +155,4 @@ struct TypedAssetRef : AssetRef
     assert(isValid());
     return *(T*)getData();
   }
-
-  b8 load(LoadParams& params)
-  {
-    return 
-      ((TypedAssetRef<int>*)this)->load(rtr::getTypename<T>(), params);
-  }
-
-  b8 load(String type, LoadParams& params);
 };

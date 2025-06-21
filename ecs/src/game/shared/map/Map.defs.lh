@@ -63,7 +63,7 @@ struct TileKindDef
 };
 
 @metadata.source_types(tile_kind)
-typedef TypedSourceAssetRef<TileKindDef> TileKindRef;
+struct TileKindRef : TypedSourceAssetRef<TileKindDef> {};
   
 /* ============================================================================
  */
@@ -71,6 +71,8 @@ struct MapTileDef
 {
   TileKindRef kind;
   ArrayDef<EntityDefRef> entities;
+
+  TileKindDef& getKind() { return *kind; }
 };
 
 /* ============================================================================
