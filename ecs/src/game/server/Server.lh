@@ -17,6 +17,8 @@ namespace sv
  */
 static constexpr u64 MAX_PASSWORD_LENGTH = 64;
 
+typedef iro::io::StaticBuffer<MAX_PASSWORD_LENGTH-1> PasswordBuffer;
+
 /* ============================================================================
  */
 enum struct ServerPublicity : u8
@@ -38,7 +40,7 @@ struct CreateParams
   s64 target_tickrate_ms;
   ServerPublicity publicity;
   u16 max_sessions;
-  io::StaticBuffer<MAX_PASSWORD_LENGTH-1> password;
+  PasswordBuffer password;
 };
 
 /* ----------------------------------------------------------------------------
@@ -47,6 +49,6 @@ void* create(CreateParams& params);
 
 /* ----------------------------------------------------------------------------
  */
-void destroy();
+void destroy(void* server_thread);
 
 } // namespace sv

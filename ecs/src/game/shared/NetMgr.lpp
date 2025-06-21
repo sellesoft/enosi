@@ -1,0 +1,893 @@
+/*
+ * Packet header and fragmentation explanation goes here.
+ *
+ * TODOs:
+ *   explain message fragmentation and MTU
+ *   crc32 instead of protocol
+ *   avoid congestion
+ *
+ * References:
+ *   https://github.com/id-Software/Quake-III-Arena/blob/master/code/qcommon/qcommon.h
+ *   https://gafferongames.com/post/sending_and_receiving_packets/
+ */
+$ require "common"
+
+$ if IRO_WIN32 then
+#define WIN32_LEAN_AND_MEAN
+#include <Winsock2.h>
+#include <Ws2ipdef.h>
+#include "iro/Platform_Win32.h"
+$ else -- if IRO_WIN32
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <fcntl.h>
+#include "errno.h"
+#include "string.h"
+#include "unistd.h"
+#include "sys/ioctl.h"
+$ end -- if not IRO_WIN32
+
+$$$
+local importer = require "reflect.Importer"
+{
+  patterns = { "src/**/*.events.lh" },
+  filter = function(p, decl)
+    return decl.metadata.netevent ~= nil
+  end,
+}
+$$$
+@@importer:get
+
+@@lpp.import "game/shared/NetMgr.lh"
+
+#include "iro/Common.h"
+#include "iro/containers/FixedPool.h"
+#include "iro/Logger.h"
+#include "iro/memory/Allocator.h"
+
+#include <mutex>
+
+using namespace iro;
+using namespace net;
+
+@log.ger(sh.NetMgr, Info)
+
+/* ============================================================================
+ * Net Event Iterator Macro
+ */
+$$$
+local event_count = 1
+local function eachNetEvent(f)
+  importer:eachDecl(function(name, decl)
+    local args = loadstring("return " .. decl.metadata.netevent)()
+    local priority = args.priority and 1 or 0
+    local max_subscribers = args.max_subscribers or 10
+    f(name, event_count, decl, priority, args.broadcast, max_subscribers)
+    event_count = event_count + 1
+  end)
+end
+$$$
+
+/* ============================================================================
+ */
+union NetEventUnion
+{
+$ eachNetEvent(function(name, id, decl, priority, broadcast, max_subscribers)
+  $(name) $(name)_data;
+$ end)
+}; // union NetEventUnion
+
+/* ============================================================================
+ */
+struct NetEventEntry
+{
+  u16 type_id;
+  NetEventUnion data;
+};
+
+/* ============================================================================
+ */
+struct NetEventBusData
+{
+  iro::Array<NetEventEntry> queued_events;
+
+$ eachNetEvent(function(name, id, decl, priority, broadcast, max_subscribers)
+  struct $(name)Subscriber
+  {
+    static constexpr b8 PRIORITY = $(priority);
+    void* subscriber;
+    void (*callback)(void*, $(name)& event);
+  };
+  iro::FixedPool<$(name)Subscriber, $(max_subscribers)> $(name)Subscriber_pool;
+
+$ end)
+}; // struct NetEventBusData
+
+/* ============================================================================
+ */
+int s_ipv6_socket;
+b8 s_ipv6_socket_is_bound;
+
+/* ============================================================================
+ */
+struct OfflineMessage
+{
+  std::mutex mutex;
+  u16 size;
+  u8 data[Message::MAX_SIZE];
+};
+
+static OfflineMessage s_offline_messages[2];
+
+/* ============================================================================
+ */
+static constexpr u32 PRIORITY_SEQUENCE = -1;
+static constexpr u16 FRAGMENT_BIT = (1 << 15);
+
+namespace net
+{
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Connection::init(Address address, SharedNetMgr* netmgr)
+{
+  assertpointer(netmgr);
+  @log.trace("initializing a connection\n");
+
+  this->state = State::Disconnected;
+  this->netmgr = netmgr;
+  this->address = address;
+  if (this->address.port == 0)
+    this->address.port = SERVER_PORT;
+  this->acknowledged_sequence = 0;
+  this->acknowledged_bitfield = 0;
+  this->incoming_message_sequence = 0;
+  this->incoming_fragment_sequence = 0;
+  this->incoming_message_size = 0;
+  this->incoming_message_pending_fragments = true;
+  this->outgoing_message_sequence = 1;
+  this->outgoing_message_size = 0;
+  this->outgoing_message_pending_offset = 0;
+  this->outgoing_message_pending_fragments = false;
+  this->message_queue_start = nullptr;
+  this->message_queue_end = &this->message_queue_start;
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Connection::deinit()
+{
+  @log.trace("deinitializing a connection\n");
+
+  for (QueuedMessage* message = this->message_queue_start; message != nullptr;)
+  {
+    QueuedMessage* next = message->next;
+    this->netmgr->allocator->free(message);
+    message = next;
+  }
+
+  this->state = State::Disconnected;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Connection::sendNextFragment()
+{
+  @log.trace("sending a message fragment\n");
+
+  u8* cursor = (  this->outgoing_message_data + sizeof(FragmentHeader)
+                + this->outgoing_message_pending_offset);
+
+  FragmentHeader* header = (FragmentHeader*)cursor - 1;
+  header->protocol = PROTOCOL_ID;
+  header->sequence_index = this->outgoing_message_sequence;
+  header->ack_index = this->acknowledged_sequence;
+  header->ack_bitfield = this->acknowledged_bitfield;
+  header->fragment_offset =
+    this->outgoing_message_pending_offset | FRAGMENT_BIT;
+
+  header->data_size = MAX_FRAGMENT_DATA_SIZE;
+  if (  this->outgoing_message_pending_offset + header->data_size
+      > this->outgoing_message_size)
+  {
+    header->data_size = (  this->outgoing_message_size
+                         - this->outgoing_message_pending_offset);
+  }
+
+  u32 packet_size = sizeof(FragmentHeader) + header->data_size;
+
+  if (!this->netmgr->sendOnlinePacket(this->address, header, packet_size))
+    return false;
+
+  this->outgoing_message_pending_offset += header->data_size;
+
+  // NOTE(delle) We must send an extra fragment if we exactly match the max
+  // size because we determine if this is the final fragment on receival by
+  // comparing against that max size.
+  b8 sent_final_fragment = (   this->outgoing_message_pending_offset
+                            == this->outgoing_message_size);
+  if (sent_final_fragment && header->data_size != MAX_FRAGMENT_DATA_SIZE)
+  {
+    this->outgoing_message_sequence++;
+
+    if (this->message_queue_start)
+    {
+      @log.debug("Popping a message of [", this->message_queue_start->size,
+                 "] bytes off the message queue for [", this->address, "].\n");
+
+      this->outgoing_message_pending_offset = 0;
+      this->outgoing_message_size = this->message_queue_start->size;
+      mem::copy(this->outgoing_message_data + sizeof(FragmentHeader),
+                this->message_queue_start->data,
+                this->message_queue_start->size);
+
+      this->message_queue_start = this->message_queue_start->next;
+      if (this->message_queue_start == nullptr)
+      {
+        @log.debug("Emptied the message queue for [", this->address, "].\n");
+        this->message_queue_end = &this->message_queue_start;
+      }
+    }
+    else
+    {
+      this->outgoing_message_pending_fragments = false;
+    }
+  }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Connection::send(Source source, const Message& message, b8 priority)
+{
+  assertrange(message.size, 1, Message::MAX_SIZE);
+
+  if (this->address.type == AddressType::Offline)
+  {
+    return this->netmgr->sendOfflinePacket(source, message.data, message.size);
+  }
+
+  if (s_ipv6_socket == 0)
+    return @log.error("Attempted to send a message with an unbound socket.");
+
+  @log.trace("sending a message to a remote connection\n");
+
+  // queue message if there are pending fragments
+  if (!priority && this->outgoing_message_pending_fragments)
+  {
+    QueuedMessage* queued_message =
+      this->netmgr->allocator->allocateType<QueuedMessage>();
+    if (queued_message == nullptr)
+      return @log.error("Failed to allocate a queued message when attempting"
+                        " to send a message to [", this->address, "].\n");
+
+    queued_message->size = message.size;
+    mem::copy(queued_message->data, message.data, message.size);
+    queued_message->next = nullptr;
+    *this->message_queue_end = queued_message;
+    this->message_queue_end = &(*this->message_queue_end)->next;
+
+    this->sendNextFragment();
+    return false;
+  }
+
+  // fragment large messages
+  if (message.size > MAX_FRAGMENT_DATA_SIZE)
+  {
+    if (priority)
+    {
+      return @log.error("Attempted to send a priority message with size [",
+                        message.size, "] which is greater than max fragment"
+                        " data size [", MAX_FRAGMENT_DATA_SIZE, "]. This would"
+                        " result in the message being fragmented which is"
+                        " disallowed for priority messages since they are not"
+                        " sequenced.\n");
+    }
+
+    @log.warn("Message size [", message.size, "] is greater than max fragment"
+              " data size [", MAX_FRAGMENT_DATA_SIZE, "]. This means that we"
+              " might have to allocate, copy, and queue future messages.\n");
+
+    this->outgoing_message_pending_fragments = true;
+    this->outgoing_message_pending_offset = 0;
+    this->outgoing_message_size = message.size;
+    mem::copy(this->outgoing_message_data + sizeof(FragmentHeader),
+              message.data, message.size);
+
+    // send first fragment now
+    this->sendNextFragment();
+    return false;
+  }
+
+  // build the packet
+  FragmentHeader* header = (FragmentHeader*)this->outgoing_message_data;
+  header->protocol = PROTOCOL_ID;
+  header->sequence_index =
+    (priority) ? PRIORITY_SEQUENCE : this->outgoing_message_sequence;
+  header->ack_index = this->acknowledged_sequence;
+  header->ack_bitfield = this->acknowledged_bitfield;
+  header->fragment_offset = 0;
+  header->data_size = message.size;
+  mem::copy(this->outgoing_message_data + sizeof(*header), message.data,
+            message.size);
+  this->outgoing_message_size = sizeof(*header) + message.size;
+
+  // send the packet
+  if (!this->netmgr->sendOnlinePacket(this->address,
+                                      this->outgoing_message_data,
+                                      this->outgoing_message_size))
+  {
+    @log.warn("Failed to send a message. This means that we might have"
+              " to allocate, copy, and queue future messages.\n");
+    this->outgoing_message_pending_fragments = true;
+    this->outgoing_message_pending_offset = 0;
+    this->outgoing_message_size = message.size;
+    return false;
+  }
+
+  this->outgoing_message_sequence++;
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Connection::receive(
+  Source source,
+  StackArray<u8, MAX_FRAGMENT_SIZE>& data)
+{
+  if (this->address.type == AddressType::Offline)
+  {
+    this->incoming_message_pending_fragments =
+      !this->netmgr->receiveOfflinePacket(source, data);
+    return;
+  }
+
+  // range validated in net::receiveOnlinePacket
+  assertrange(data.len, sizeof(FragmentHeader), MAX_FRAGMENT_SIZE);
+  @log.trace("receiving a packet via a remote connection\n");
+
+  Message message;
+  message.init(data.arr, data.len);
+  u32 protocol = message.readU32();
+  u32 sequence = message.readU32();
+  u32 ack_index = message.readU32();
+  u32 ack_bitfield = message.readU32();
+  u16 fragment_offset = message.readU16();
+  u16 data_size = message.readU16();
+
+  // discard invalid protocol packets
+  if (protocol != PROTOCOL_ID)
+  {
+    @log.debug("Incorrect protocol [", protocol, "] from [", this->address,
+               "]; expected [", PROTOCOL_ID, "].\n");
+    return;
+  }
+
+  // discard out of order or duplicate packets
+  // TODO(delle) handle sequence integer overflow
+  if (sequence <= this->incoming_message_sequence)
+  {
+    @log.debug("Out of order or duplicate sequence [", sequence, "] from [",
+               this->address, "]; expected [", this->incoming_message_sequence,
+               "].\n");
+    return;
+  }
+
+  // log dropped packets
+  u32 dropped = sequence - (this->incoming_message_sequence + 1);
+  if (dropped > 0)
+  {
+    @log.debug("Dropped [", dropped, "] packets at sequence [", sequence,
+               "] from [", this->address, "].\n");
+  }
+
+  // check if this is a message fragment
+  if (fragment_offset & FRAGMENT_BIT)
+  {
+    fragment_offset &= ~FRAGMENT_BIT;
+
+    // reset message buffer if incoming fragment has a later sequence
+    if (sequence != this->incoming_fragment_sequence)
+    {
+      this->incoming_fragment_sequence = sequence;
+      this->incoming_message_size = 0;
+    }
+
+    // discard out of order fragments
+    if (fragment_offset != this->incoming_message_size)
+    {
+      @log.debug("Dropped a message fragment with offset [", fragment_offset,
+                 "] and sequence [", sequence, "] from [",
+                 this->address, "].\n");
+      return;
+    }
+
+    // discard if we would overflow the message buffer
+    u16 new_message_size = this->incoming_message_size + data_size;
+    if (new_message_size > Message::MAX_SIZE)
+    {
+      @log.debug("Fragments with sequence [", sequence, "] from [",
+                 this->address, "] are too large [", new_message_size,
+                 "] to fit in a message [", Message::MAX_SIZE, "].\n");
+      return;
+    }
+
+    // add the fragment to the message buffer
+    mem::copy(this->incoming_message_data + this->incoming_message_size,
+              data.arr + sizeof(FragmentHeader), data_size);
+    this->incoming_message_size = new_message_size;
+
+    // the final message fragment size is less than MAX_FRAGMENT_DATA_SIZE
+    if (data_size == MAX_FRAGMENT_DATA_SIZE)
+    {
+      this->incoming_message_pending_fragments = true;
+      return;
+    }
+  }
+  else // not fragmented
+  {
+    mem::copy(this->incoming_message_data, data.arr + sizeof(FragmentHeader),
+              data_size);
+    this->incoming_message_size = data_size;
+  }
+
+  this->incoming_message_pending_fragments = false;
+  this->incoming_message_sequence = sequence;
+}
+
+} // namespace net
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SharedNetMgr::init(mem::Allocator* allocator)
+{
+  assertpointer(allocator);
+  @log.trace("initializing network manager\n");
+
+  assert(!s_ipv6_socket_is_bound);
+  s_ipv6_socket = 0;
+  s_ipv6_socket_is_bound = false;
+
+$ if IRO_WIN32 then
+  WSADATA wsa_data;
+  if (NO_ERROR != WSAStartup(MAKEWORD(2,2), &wsa_data))
+    return @log.error("Failed to startup WSA due to error: ",
+      platform::Win32ErrMsg(WSAGetLastError()));
+$ end -- if IRO_WIN32
+
+  // create the ipv6 socket
+  s_ipv6_socket = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+$ if IRO_WIN32 then
+  if (s_ipv6_socket == INVALID_SOCKET)
+    return @log.error("Failed to open the IPv6 socket due to error: ",
+                      platform::Win32ErrMsg(WSAGetLastError()));
+$ else -- if IRO_WIN32
+  if (s_ipv6_socket < 0)
+    return @log.error("Failed to open the IPv6 socket due to error: ",
+                      strerror(errno), "\n");
+$ end -- if not IRO_WIN32
+  @log.debug("Opened the IPv6 socket\n");
+
+  auto close_ipv6_socket_if_failure = deferWithCancel
+  {
+$ if IRO_WIN32 then
+    closesocket(s_ipv6_socket);
+$ else -- if IRO_WIN32
+    close(s_ipv6_socket);
+$ end -- if not IRO_WIN32
+  };
+
+  // set the sockets to non-blocking
+  u_long non_blocking = true;
+$ if IRO_WIN32 then
+  if (SOCKET_ERROR == ioctlsocket(s_ipv6_socket, FIONBIO, &non_blocking))
+    return @log.error("Failed to make the IPv6 socket non-blocking due to"
+                      " error: ", platform::Win32ErrMsg(WSAGetLastError()));
+$ else -- if IRO_WIN32
+  if (-1 == fcntl(s_ipv6_socket, F_SETFL,
+                  fcntl(s_ipv6_socket, F_GETFL, 0) | O_NONBLOCK))
+    return @log.error("Failed to make the IPv6 socket non-blocking"
+                      " due to error: ", strerror(errno), "\n");
+$ end -- if not IRO_WIN32
+  @log.debug("Setting the IPv6 socket to non-blocking\n");
+
+  // set the socket to be broadcast capable
+  int i = 1;
+$ if IRO_WIN32 then
+  if (SOCKET_ERROR == setsockopt(s_ipv6_socket, SOL_SOCKET, SO_BROADCAST,
+                                 (char*)&i, sizeof(i)))
+    return @log.error("Failed to make the IPv6 socket broadcast capable due"
+                      " to error: ", platform::Win32ErrMsg(WSAGetLastError()));
+$ else -- if IRO_WIN32
+  if (-1 == setsockopt(s_ipv6_socket, SOL_SOCKET, SO_BROADCAST,
+                       (char*)&i, sizeof(i)))
+    return @log.error("Failed to make the IPv6 socket broadcast capable"
+                      " due to error: ", strerror(errno), "\n");
+$ end -- if not IRO_WIN32
+  @log.debug("Setting the IPv6 socket to be broadcast capable\n");
+
+  // disable IPv6-only mode to allow IPv4 connections
+  i = 0;
+$ if IRO_WIN32 then
+  if (SOCKET_ERROR == setsockopt(s_ipv6_socket, IPPROTO_IPV6, IPV6_V6ONLY, 
+                                 (char*)&i, sizeof(i)))
+    return @log.error("Failed to disable IPv6-only mode due to error: ",
+                      platform::Win32ErrMsg(WSAGetLastError()));
+$ else -- if IRO_WIN32
+  if (-1 == setsockopt(s_ipv6_socket, IPPROTO_IPV6, IPV6_V6ONLY,
+                       (char*)&i, sizeof(i)))
+    return @log.error("Failed to disable IPv6-only mode due to error: ",
+                      strerror(errno), "\n");
+$ end -- if not IRO_WIN32
+  @log.debug("Disabled IPv6-only mode\n");
+
+  // initialize the event bus
+  this->event_bus_data = allocator->allocateType<NetEventBusData>();
+  if (!this->event_bus_data->queued_events.init(200, allocator))
+    return @log.error("Failed to initialize net event bus queued events.\n");
+$ eachNetEvent(function(name, id, decl, priority, broadcast, max_subscribers)
+  this->event_bus_data->$(name)Subscriber_pool.init();
+$ end)
+
+  close_ipv6_socket_if_failure.cancel();
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SharedNetMgr::deinit()
+{
+  @log.trace("deinitializing network manager\n");
+
+$ if IRO_WIN32 then
+  if (s_ipv6_socket != 0)
+    closesocket(s_ipv6_socket);
+  WSACleanup();
+$ else -- if IRO_WIN32
+  if (s_ipv6_socket != 0)
+    close(s_ipv6_socket);
+$ end -- if not IRO_WIN32
+
+  s_ipv6_socket = 0;
+  s_ipv6_socket_is_bound = false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SharedNetMgr::bind(u16 port)
+{
+  @log.trace("binding socket to port ", port, "\n");
+
+  sockaddr_in6 ipv6_socket_address;
+  memset(&ipv6_socket_address, 0, sizeof(ipv6_socket_address));
+  ipv6_socket_address.sin6_family = AF_INET6;
+  ipv6_socket_address.sin6_port = htons(port);
+  ipv6_socket_address.sin6_addr = in6addr_any;
+
+  int ipv6_bind_result = ::bind(s_ipv6_socket,
+                                (sockaddr*)&ipv6_socket_address,
+                                sizeof(ipv6_socket_address));
+$ if IRO_WIN32 then
+  if (SOCKET_ERROR == ipv6_bind_result)
+    return @log.error("Failed to bind the IPv6 socket due to error: ",
+                      platform::Win32ErrMsg(WSAGetLastError()));
+$ else -- if IRO_WIN32
+  if (-1 == ipv6_bind_result)
+    return @log.error("Failed to bind the IPv6 socket due to error: ",
+                      strerror(errno), "\n");
+$ end -- if not IRO_WIN32
+
+  @log.debug("Bound the IPv6 socket to port [", port, "]\n");
+  s_ipv6_socket_is_bound = true;
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SharedNetMgr::sendOnlinePacket(Address address, void* data, u16 size)
+{
+  @log.trace("sending an online packet of ", size, " bytes\n");
+
+  sockaddr_in6 socket_address;
+  memset(&socket_address, 0, sizeof(socket_address));
+  socket_address.sin6_family = AF_INET6;
+  socket_address.sin6_port = htons(address.port);
+  if (address.type == AddressType::Local)
+  {
+    // IPv6 loopback address (::1)
+    socket_address.sin6_addr.s6_addr[15] = 1;
+  }
+  else
+  {
+    memcpy(&socket_address.sin6_addr, &address.ipv6,
+           sizeof(socket_address.sin6_addr));
+  }
+
+  int bytes_sent = sendto(s_ipv6_socket, (const char*)data, size, 0,
+                         (sockaddr*)&socket_address, sizeof(socket_address));
+
+$ if IRO_WIN32 then
+  if (SOCKET_ERROR == bytes_sent)
+  {
+    int error = WSAGetLastError();
+    if (WSAEWOULDBLOCK == error)
+      return false;
+    else
+      return @log.error("Failed to send a packet due to WSA error: ",
+                        platform::Win32ErrMsg(error));
+  }
+$ else -- if IRO_WIN32
+  if (-1 == bytes_sent)
+  {
+    if (EWOULDBLOCK == errno)
+      return false;
+    else
+      return @log.error("Failed to send a packet due to error: ",
+                        strerror(errno), "\n");
+  }
+$ end -- if not IRO_WIN32
+
+  @log.debug("Sent ", bytes_sent, " bytes to: ", address, "\n");
+  assert(size == (u16)bytes_sent);
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SharedNetMgr::receiveOnlinePacket(Address& address, Fragment& fragment)
+{
+  @log.trace("checking for packets\n");
+
+$ if IRO_WIN32 then
+  typedef int socklen_t;
+$ end -- if IRO_WIN32
+
+  if (s_ipv6_socket)
+  {
+    sockaddr_in6 from;
+    socklen_t from_len = sizeof(from);
+    int bytes_received = recvfrom(s_ipv6_socket, (char*)fragment.arr,
+                                  MAX_FRAGMENT_SIZE, 0,
+                                  (sockaddr*)&from, &from_len);
+$ if IRO_WIN32 then
+    if (SOCKET_ERROR == bytes_received)
+    {
+      int error = WSAGetLastError();
+      if (WSAEWOULDBLOCK != error)
+        @log.error("Failed to receive an IPv6 packet due to WSA error: ",
+                   platform::Win32ErrMsg(error));
+      return false;
+    }
+$ else -- if IRO_WIN32
+    if (-1 == bytes_received)
+    {
+      if (EWOULDBLOCK != errno)
+         @log.error("Failed to receive an IPv6 packet due to error: ",
+                    strerror(errno), "\n");
+      return false;
+    }
+$ end -- if not IRO_WIN32
+
+    if (bytes_received < sizeof(FragmentHeader))
+      return false;
+
+    u8 ipv6[16];
+    mem::copy(ipv6, &from.sin6_addr, 16);
+    address = Address(ipv6, ntohs(from.sin6_port));
+
+    fragment.len = (u64)bytes_received;
+    return true;
+  }
+
+  return false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SharedNetMgr::sendOfflinePacket(Source source, void* data, u16 size)
+{
+  @log.trace("saving a message via an offline connection\n");
+  if (size <= Message::MAX_SIZE)
+  {
+    s_offline_messages[(int)source].size = size;
+    mem::copy(s_offline_messages[(int)source].data, data, size);
+    return true;
+  }
+  else
+  {
+    return @log.error("Message size [", size, "] is greater than max offline"
+                      " message size [", Message::MAX_SIZE, "].\n");
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SharedNetMgr::receiveOfflinePacket(Source source, Fragment& fragment)
+{
+  @log.trace("receiving an offline packet\n");
+  if (s_offline_messages[(int)source].size == 0)
+  {
+    return false;
+  }
+  else
+  {
+    mem::copy(fragment.arr, s_offline_messages[(int)source].data,
+              s_offline_messages[(int)source].size);
+    fragment.len = s_offline_messages[(int)source].size;
+    s_offline_messages[(int)source].size = 0;
+    return true;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SharedNetMgr::lockOfflinePacketMutex(Source source)
+{
+  s_offline_messages[(int)source].mutex.lock();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SharedNetMgr::unlockOfflinePacketMutex(Source source)
+{
+  s_offline_messages[(int)source].mutex.unlock();
+}
+
+$ eachNetEvent(function(name, id, decl, priority, broadcast, max_subscribers)
+/* ----------------------------------------------------------------------------
+ */
+template<>
+void SharedNetMgr::subscribeToEvent<$(name)>(
+  void* subscriber,
+  void (*callback)(void*, $(name)&))
+{
+  for (auto& sub : this->event_bus_data->$(name)Subscriber_pool)
+  {
+    if (sub.subscriber == subscriber && sub.callback == callback)
+    {
+      WARN("Duplicate subscription to $(name) event.\n");
+      return;
+    }
+  }
+
+  this->event_bus_data->$(name)Subscriber_pool.add({
+    .subscriber = subscriber,
+    .callback = callback,
+  });
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+void SharedNetMgr::unsubscribeFromEvent<$(name)>(
+  void* subscriber,
+  void (*callback)(void*, $(name)&))
+{
+  for (auto& sub : this->event_bus_data->$(name)Subscriber_pool)
+  {
+    if (sub.subscriber == subscriber && sub.callback == callback)
+    {
+      this->event_bus_data->$(name)Subscriber_pool.remove(&sub);
+      break;
+    }
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+template<>
+void SharedNetMgr::queueEvent<$(name)>($(name)& event)
+{
+  auto* entry = this->event_bus_data->queued_events.push();
+  entry->type_id = $(id);
+  entry->data.$(name)_data = event;
+
+  for (auto& sub : this->event_bus_data->$(name)Subscriber_pool)
+    if (sub.callback != nullptr)
+      sub.callback(sub.subscriber, event);
+}
+
+$ end) -- eachNetEvent
+
+/* ----------------------------------------------------------------------------
+ */
+void SharedNetMgr::packEventsIntoMessage(Message& message, void* session)
+{
+  for (auto& entry : this->event_bus_data->queued_events)
+  {
+    switch (entry.type_id)
+    {
+$ eachNetEvent(function(name, id, decl, priority, broadcast, max_subscribers)
+
+    case $(id): // $(name)
+    {
+      auto& event = entry.data.$(name)_data;
+$   if broadcast == false then
+$     local found_session_field = false
+$     for field in decl:eachFieldWithIndex() do
+$       if field.name == "session" then
+      if (event.session == nullptr)
+      {
+        ERROR("A queued $(name) did not specify a session despite"
+              " being non-broadcast event.\n");
+        continue;
+      }
+      if (session != event.session)
+        continue;
+
+$         found_session_field = true
+$         break
+$       end
+$     end
+$     if not found_session_field then
+$       clog:error("non-broadcast netevent $(name) has no session field\n")
+$     end
+$   end
+      message.writeU16($(id));
+$   for field in decl:eachFieldWithIndex() do
+$     if not field.metadata.netfield_ignore then
+$       if field.metadata.netfield_blob then
+      message.writeData(event.$(field.name), (u16)event.$(field.name)_length);
+$       else
+$         local type = field.type.name:gsub("([us])(%d+)", "%1%2")
+      message.write$(type:gsub("^%l", string.upper))(event.$(field.name));
+$       end
+$     end
+$   end
+    }
+    break;
+$ end) -- eachNetEvent
+
+    }
+  }
+
+  this->event_bus_data->queued_events.clear();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SharedNetMgr::parseEventsFromMessage(Message& message, void* session)
+{
+  while (!message.readComplete())
+  {
+    u16 event_id = message.readU16();
+    switch (event_id)
+    {
+$ eachNetEvent(function(name, id, decl, priority, broadcast, max_subscribers)
+
+    case $(id): // $(name)
+    {
+      $(name) event;
+      event.session = session;
+
+$   for field in decl:eachFieldWithIndex() do
+$     if not field.metadata.netfield_ignore then
+$       if field.metadata.netfield_blob then
+      message.readData(event.$(field.name), $(field.metadata.netfield_blob));
+$       else
+$         local type = field.type.name:gsub("([us])(%d+)", "%1%2")
+      event.$(field.name) = message.read$(type:gsub("^%l", string.upper))();
+$       end
+$     end
+$   end
+
+      for (auto& sub : this->event_bus_data->$(name)Subscriber_pool)
+        if (sub.callback != nullptr)
+          sub.callback(sub.subscriber, event);
+    }
+    break;
+$ end) -- eachNetEvent
+
+    default:
+      return @log.error("unknown netevent: ", event_id, "\n");
+
+    }
+  }
+
+  assert(message.readComplete());
+  assert(!message.readOverflowed());
+  return true;
+}

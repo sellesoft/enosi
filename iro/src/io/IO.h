@@ -283,6 +283,13 @@ struct StaticBuffer : public IO
     len = 0;
     buffer[0] = '\0';
   }
+
+  void copy(StaticBuffer<N>& other)
+  {
+    len = other.len;
+    mem::copy(buffer, other.buffer, len);
+    buffer[len] = '\0';
+  }
 };
 
 /* ============================================================================

@@ -1,0 +1,50 @@
+$ require "common"
+
+@@lpp.import "game/server/Server.lh"
+@@lpp.import "game/shared/NetMgr.lh"
+@@lpp.import "net/Address.lh"
+
+#include "iro/Common.h"
+#include "iro/containers/Array.h"
+#include "iro/time/Time.h"
+#include "iro/io/IO.h"
+
+namespace iro::mem { struct Allocator; }
+
+namespace sv
+{
+
+/* ============================================================================
+ */
+struct NetMgr : public SharedNetMgr
+{
+  struct Session
+  {
+    net::Connection connection;
+    iro::TimePoint last_challenge_time;
+    u32 challenge_value;
+
+    static constexpr u64 MAX_NAME_LENGTH = 64;
+    iro::io::StaticBuffer<MAX_NAME_LENGTH-1> name;
+  };
+
+
+  // TODO(delle) change sessions to a pool so we're not copying the large
+  // Connection structs when a client disconnects
+  u16 max_sessions;
+  iro::Array<Session> sessions;
+  PasswordBuffer password;
+  ServerPublicity publicity;
+
+
+  b8 init(iro::mem::Allocator* allocator,
+          PasswordBuffer& password,
+          ServerPublicity publicity,
+          u16 max_sessions);
+  void deinit();
+
+  void receiveMessages();
+  void sendMessages();
+};
+
+} // namespace sv

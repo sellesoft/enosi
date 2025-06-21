@@ -17,7 +17,6 @@ using namespace iro;
 @@lpp.import "event/BroadcastEventBus.lh"
 @@lpp.import "graphics/Font.lh"
 @@lpp.import "graphics/CompiledShader.lh"
-@@lpp.import "net/Connection.lh"
 
 @@lpp.import "game/client/Client.lh"
 @@lpp.import "game/server/Server.lh"
@@ -47,7 +46,6 @@ $ end
 
   @initSystem(source_data_file_reg.init(),              source data file reg);
   @initSystem(eventbus.broadcast.init(),                broadcast event bus);
-  @initSystem(net::init(),                              net);
   @initSystem(assetmgr.init(&mem::stl_allocator),       asset mgr);
 
   if (launch_args.find("-dedicated"_hashed))

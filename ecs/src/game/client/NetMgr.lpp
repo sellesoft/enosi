@@ -1,0 +1,235 @@
+$ require "common"
+
+@@lpp.import "game/client/NetMgr.lh"
+@@lpp.import "game/shared/NetMgr.lh"
+@@lpp.import "game/shared/Net.events.lh"
+
+#include "iro/Common.h"
+#include "iro/Logger.h"
+#include "iro/memory/Allocator.h"
+
+using namespace iro;
+using namespace net;
+
+@log.ger(cl.NetMgr, Info)
+
+/* ----------------------------------------------------------------------------
+ */
+static void handleChallengeEvent(void* client_ptr, ChallengeNetEvent& event)
+{
+  cl::NetMgr* netmgr = (cl::NetMgr*)client_ptr;
+  netmgr->challenge_value = event.challenge_value;
+  netmgr->connection.state = Connection::State::Challenging;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+static void handleMessageEvent(void* client_ptr, MessageNetEvent& event)
+{
+  if (event.message_length > 0 && event.message_length < 513)
+  {
+    io::StaticBuffer<512> string_buffer;
+    string_buffer.len = event.message_length;
+    mem::copy(string_buffer.buffer, event.message, event.message_length);
+    @log.info("Message Received: \"", string_buffer, "\"\n");
+  }
+}
+
+namespace cl
+{
+
+/* ----------------------------------------------------------------------------
+ */
+b8 NetMgr::init(iro::mem::Allocator* allocator)
+{
+  if (!SharedNetMgr::init(allocator))
+    return false;
+
+  this->connection.address.type = AddressType::Invalid;
+  this->last_challenge_time = TimePoint::monotonic();
+  this->challenge_value = 0;
+
+  this->subscribeToEvent<ChallengeNetEvent>(this, handleChallengeEvent);
+  this->subscribeToEvent<MessageNetEvent>(this, handleMessageEvent);
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void NetMgr::deinit()
+{
+  this->disconnectFromServer();
+  SharedNetMgr::deinit();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 NetMgr::connectToServer(Address address)
+{
+  @log.trace("connecting to a server\n");
+  if (address.type == AddressType::Invalid)
+    return @log.error("invalid address\n");
+
+  if (!this->connection.init(address, this))
+    return @log.error("failed to initialize connection\n");
+
+  this->connection.state = Connection::State::Connecting;
+  this->last_challenge_time = TimePoint::monotonic();
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void NetMgr::disconnectFromServer()
+{
+  this->connection.deinit();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void NetMgr::receiveMessages()
+{
+  Connection& connection = this->connection;
+  if (connection.address.type == AddressType::Invalid)
+    return;
+
+  if (connection.address.type == AddressType::Offline)
+  {
+    //NOTE(delle) lock during offline packet processing
+    this->lockOfflinePacketMutex(Source::Server);
+    defer { this->unlockOfflinePacketMutex(Source::Server); };
+
+    Fragment fragment;
+    connection.receive(Source::Server, fragment);
+    if (connection.incoming_message_pending_fragments)
+      return;
+    @log.trace("received packet from [offline]\n");
+
+    Message message;
+    message.init(connection.incoming_message_data,
+                 connection.incoming_message_size);
+    if (!this->parseEventsFromMessage(message, this))
+      @log.error("failed to parse network message\n");
+  }
+  else
+  {
+    Address packet_address;
+    Fragment fragment;
+    while (this->receiveOnlinePacket(packet_address, fragment))
+    {
+      // range validated in receiveOnlinePacket
+      assertrange(fragment.len,
+        sizeof(FragmentHeader), MAX_FRAGMENT_SIZE);
+
+      if (!mem::equal(connection.address, packet_address))
+        continue;
+
+      connection.receive(Source::Server, fragment);
+      if (connection.incoming_message_pending_fragments)
+        continue;
+      @log.trace("received packet from ", connection.address, "\n");
+
+      Message message;
+      message.init(connection.incoming_message_data,
+                  connection.incoming_message_size);
+      if (!this->parseEventsFromMessage(message, this))
+        @log.error("failed to parse network message\n");
+    }
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void NetMgr::sendMessages()
+{
+  Connection& connection = this->connection;
+  if (connection.address.type == AddressType::Invalid)
+    return;
+
+  //NOTE(delle) lock before offline connection receive/send
+  if (connection.address.type == AddressType::Offline)
+  {
+    this->lockOfflinePacketMutex(Source::Client);
+    defer { this->unlockOfflinePacketMutex(Source::Client); };
+  }
+
+  if (connection.state == Connection::State::Connected)
+  {
+    u8 message_data[Message::MAX_SIZE];
+    Message message;
+    message.init(message_data, 0);
+    this->packEventsIntoMessage(message);
+    if (!message.writeOverflowed())
+    {
+      connection.send(Source::Client, message, false);
+      if (connection.outgoing_message_pending_fragments)
+        connection.sendNextFragment();
+    }
+    else
+    {
+      @log.error("message overflow when packing events\n");
+    }
+  }
+  else if (connection.state == Connection::State::Challenging)
+  {
+    TimeSpan time_since_challenge = TimePoint::monotonic()
+                                  - this->last_challenge_time;
+    if (time_since_challenge.toMilliseconds() > 1000)
+    {
+      //TODO(delle) drop connection if time since challenge is too long
+      @log.info("CHALLENGE TIMED OUT [", connection.address, "]\n");
+      return;
+    }
+
+    u8 message_data[256]; // TODO(delle) fix this hardcoded size
+    Message message;
+    message.init(message_data, 0);
+
+    ChallengeNetEvent challenge_event = {
+      .challenge_value = this->challenge_value,
+    };
+    this->queueEvent(challenge_event);
+
+    this->packEventsIntoMessage(message);
+    if (!message.writeOverflowed())
+    {
+      connection.send(Source::Client, message, true);
+      if (connection.outgoing_message_pending_fragments)
+        connection.sendNextFragment();
+    }
+    else
+    {
+      @log.error("message overflow when packing events\n");
+    }
+
+    @log.info("CHALLENGING [", connection.address, "]\n");
+    this->last_challenge_time = TimePoint::monotonic();
+  }
+  else
+  {
+    assert(connection.state == Connection::State::Connecting);
+
+    auto time_since_challenge = TimePoint::monotonic()
+                              - this->last_challenge_time;
+    if (time_since_challenge.toMilliseconds() > 1000)
+    {
+      u8 message_data[64];
+      Message message;
+      message.init(message_data, 0);
+
+      message.writeU64(CONNECTIONLESS_PROTOCOL_ID);
+      String string = "connect"_str;
+      message.writeData(string.ptr, string.len);
+      //TODO(delle) password
+
+      if (!connection.send(Source::Client, message, true))
+        @log.error("failed to send challenge message\n");
+
+      @log.info("CONNECTING [", connection.address, "]\n");
+      this->last_challenge_time = TimePoint::monotonic();
+    }
+  }
+}
+
+} // namespace cl
