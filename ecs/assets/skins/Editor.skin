@@ -1,0 +1,46 @@
+// Night
+black = 0x0d0c0cff
+
+// Red (CMYK)
+red = 0xe82424ff
+
+// Silver
+white = 0xc5c9c5ff
+
+// Prussian blue
+dark_blue = 0x223249ff
+
+// Indigo dye
+blue = 0x2d4f67ff
+
+// Non Photo blue
+light_blue = 0x6396bbff
+
+// Rich black
+rich_black = 0x13212bff
+
+// Eerie black
+grey = 0x201d1dff
+
+text = 
+{
+  font = "assets/fonts/gohu",
+  wrap = "Word",
+  font_height = 11,
+  tab_spaces = 1,
+  color = white,
+}
+
+button_base = { text = text }
+
+button = 
+{
+  normal = button_base : { item = { color = dark_blue, } },
+  hovered = button_base : { item = { color = blue, } },
+  pressed = button_base : { item = { color = light_blue, } },
+}
+
+return EditorSkinDef
+{
+  button = button,
+}

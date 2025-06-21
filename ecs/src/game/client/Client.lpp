@@ -123,24 +123,7 @@ $ end
   };
   @init(sim.init(sim_params), cl::GameSim);
 
-  // \@init(editor.init(this), Editor);
-
-  asset_loader.load(&test_skin, "assets/skins/Test.skin"_str);
-  asset_loader.load(&editor_skin, "assets/skins/SourceDataEditor.skin"_str);
-
-  sdata_editor.init(ui);
-
-  SourceDataFileHandle h_editor_skin_sdata = 
-    engine->source_data_file_reg.loadFromDisk(
-      "assets/maps/Test.map"_str);
-
-  SourceDataFile* editor_skin_sfile = h_editor_skin_sdata.getFile();
-  sdata_editor.setSourceData(
-    ui, 
-    editor_skin_sfile->returned_data, 
-    editor_skin_sfile,
-    "struct MapDef"_hashed);
-
+  @init(editor.init(this, asset_loader), Editor);
 
   return true;
 }
@@ -169,34 +152,30 @@ b8 Client::update()
   if (!renderer.update(renderer_params))
     return ERROR("failed to update renderer\n");
 
-  InputState sim_input = {};
-  input.cloneInputState(&sim_input);
+  if (input.real_state.wasKeyPressed(Key::F1))
+    editor_active = !editor_active;
 
-  cl::GameSim::UpdateParams sim_params =
+  if (editor_active)
   {
-    .input = sim_input,
-  };
-
-  if (!sim.update(sim_params))
-    return ERROR("failed to update game sim\n");
-
-  if (!sim.render(renderer))
-    return ERROR("failed to render game sim\n");
-
-  InputState ui_input = {};
-  input.cloneInputState(&ui_input);
-
-  ui::UI::FrameParams ui_params = 
-  {
-    .input = ui_input,
-    .viewport = Rect::from(vec2f(0,0), window.size),
-  };
-
-  ui.beginFrame(ui_params);
-  {
-    sdata_editor.update(ui, {0.f, 0.f, 300.f, 300.f}, *editor_skin);
+    if (!editor.update(ui, sim))
+      return ERROR("failed to update editor\n");
   }
-  ui.endFrame();
+  else
+  {
+    InputState sim_input = {};
+    input.cloneInputState(&sim_input);
+
+    cl::GameSim::UpdateParams sim_params =
+    {
+      .input = sim_input,
+    };
+
+    if (!sim.update(sim_params))
+      return ERROR("failed to update game sim\n");
+
+    if (!sim.render(renderer))
+      return ERROR("failed to render game sim\n");
+  }
 
   // Sends messages to the server.
   netmgr.sendMessages();
@@ -209,7 +188,7 @@ b8 Client::update()
 b8 Client::wantHotReload()
 {
   // TODO(sushi) do this some other way later.
-  if (input.real_state.wasKeyPressed(Key::F1))
+  if (input.real_state.wasKeyPressed(Key::F11))
     return true;
   return false;
 }

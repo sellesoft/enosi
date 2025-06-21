@@ -5,7 +5,6 @@
  *  helpers for interacting with assets and game state.
  */
 
-$ if false then
 $ require "common"
 
 $ local ui = require "ui.UI"
@@ -15,30 +14,27 @@ $ local ui = require "ui.UI"
 #include "iro/Flags.h"
 
 @@lpp.import "ui/UI.lh"
+@@lpp.import "game/client/editor/Skin.defs.lh"
 
 struct Client;
-
-namespace ui
-{
-  struct EditorMenuBar;
-}
 
 namespace cl
 {
 
+struct GameSim;
+
 struct Editor
 {
-  ui::EditorMenuBar* menubar;
-
-  Array<ui::Item*> documents;
-
   Client* client;
 
-  b8   init(Client* client);
+  EditorSkinDefRef skin;
+
+  b8 paused = false;
+
+  b8   init(Client* client, AssetLoader& loader);
   void deinit();
 
-  b8 update();
+  b8 update(ui::UI& ui, cl::GameSim& sim);
 };
 
 }
-$ end

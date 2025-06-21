@@ -1,5 +1,3 @@
-$ if false then
-
 $ require "common"
 
 @@lpp.import "game/client/editor/Editor.lh"
@@ -7,19 +5,22 @@ $ require "common"
 @@lpp.import "game/client/Client.lh"
 @@lpp.import "game/client/editor/MenuBar.lh"
 
+using namespace ui;
+
+@log.ger(editor, Info)
+
 namespace cl
 {
 
 /* ----------------------------------------------------------------------------
  */
-b8 Editor::init(Client* client)
+b8 Editor::init(Client* client, AssetLoader& loader)
 {
   this->client = client;
 
-  documents.init();
+  if (!loader.load(&skin, "assets/skins/Editor.skin"_str))
+    return ERROR("failed to load editor skin\n");
 
-  menubar = ui::EditorMenuBar::create(client->ui, this);
-  
   return true;
 }
 
@@ -27,17 +28,53 @@ b8 Editor::init(Client* client)
  */
 void Editor::deinit()
 {
-  documents.destroy();
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 Editor::update()
+b8 Editor::update(UI& ui, cl::GameSim& sim)
 {
+  if (!paused)
+  {
+    InputState sim_input = {};
+    client->input.cloneInputState(&sim_input);
+
+    cl::GameSim::UpdateParams sim_params = 
+    {
+      .input = sim_input,
+    };
+
+    if (!sim.update(sim_params))
+      return ERROR("failed to update game sim\n");
+  }
+
+  if (!sim.render(client->renderer))
+    return ERROR("failed to render game sim\n");
+
+  InputState ui_input = {};
+  client->input.cloneInputState(&ui_input);
+
+  ui::UI::FrameParams ui_params = 
+  {
+    .input = ui_input,
+    .viewport = Rect::from(vec2f(0,0), client->window.size),
+  };
+
+  ui.beginFrame(ui_params);
+
+  if (ui.putButton(
+        "pause"_fid, 
+        {0.f, 0.f, 80.f, 20.f}, 
+        "pause"_str, 
+        skin->button))
+  {
+    paused = !paused;
+  }
+
+  ui.endFrame();
+
   
   return true;
 }
 
 }
-
-$ end

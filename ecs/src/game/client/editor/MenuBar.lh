@@ -29,13 +29,7 @@ struct EditorMenuBar : Item
 {
   cl::Editor* editor;
 
-  static EditorMenuBar* create(UI& ui, cl::Editor* editor);
-
-  void destroy();
-
-  void evaluate(UI& ui) override;
-  void update(ItemUpdateContext& ctx) override;
-  void reportDrawCmds(UI& ui, DrawCmdLists& lists) override;
+  void draw();
 };
 
 }

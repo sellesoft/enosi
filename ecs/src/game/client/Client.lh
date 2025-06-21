@@ -19,7 +19,7 @@ $ require "common"
 @@lpp.import "input/InputMgr.lh"
 @@lpp.import "graphics/Renderer.lh"
 @@lpp.import "game/client/NetMgr.lh"
-@@lpp.import "game/client/TestSkin.defs.lh"
+@@lpp.import "game/client/editor/Editor.lh"
 @@lpp.import "ui/TextEdit.lh"
 
 @@lpp.import "asset/SourceDataEditor.lh"
@@ -39,13 +39,11 @@ struct Client
   ui::UI ui;
   InputMgr input;
   Window window;
-
-  SourceDataEditorSkinDefRef editor_skin;
-  SourceDataEditor sdata_editor;
-
-  TestSkinRef test_skin;
+  cl::Editor editor;
 
   gfx::Texture white_texture;
+
+  b8 editor_active = false;
 
   b8 init(Engine* engine);
 

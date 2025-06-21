@@ -43,14 +43,14 @@ b8 GameMgr::init(InitParams& params)
   if (!entsysmgr.init({sim->entmgr}))
     return @log.error("failed to initialize entsysmgr\n");
 
-  RenderSys::InitParams render_params = 
+  GameRenderer::InitParams render_params = 
   {
     .renderer = params.renderer,
     .assetmgr = params.assetmgr,
     .white_texture = params.white_texture,
     .loader = params.loader,
   };
-  if (!rendersys.init(render_params))
+  if (!game_renderer.init(render_params))
     return @log.error("failed to initialize rendersys\n");
 
   return true;
@@ -78,7 +78,7 @@ b8 GameMgr::update(UpdateParams& params)
  */
 b8 GameMgr::render(gfx::Renderer& renderer)
 {
-  RenderSys::UpdateParams render_params =
+  GameRenderer::UpdateParams render_params =
   {
     .viewport = sim->viewport,
     .renderer = renderer,
@@ -87,7 +87,7 @@ b8 GameMgr::render(gfx::Renderer& renderer)
   };
 
   entsysmgr.get<EyeSys>().getViewMat(&render_params.view);
-  if (!rendersys.update(render_params))
+  if (!game_renderer.update(render_params))
     return false;
 
   return true;

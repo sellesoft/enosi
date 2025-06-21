@@ -9,8 +9,6 @@ $ require "common"
 @@lpp.import "game/shared/power/Power.comp.lh"
 @@lpp.import "game/shared/component/Component.events.lh"
 
-struct RenderSys;
-
 /* ============================================================================
  */
 struct PowerSys : EntitySys

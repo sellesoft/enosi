@@ -10,7 +10,7 @@ $ local cmn = require "common"
 @@lpp.import "game/shared/component/Component.lh"
 
 @@lpp.import "game/client/entity/EntitySysMgr.lh"
-@@lpp.import "game/client/graphics/RenderSys.lh"
+@@lpp.import "game/client/graphics/GameRenderer.lh"
 
 struct InputState;
 
@@ -26,7 +26,7 @@ struct GameMgr
   GameSim* sim;
 
   EntitySysMgr entsysmgr;
-  RenderSys    rendersys;
+  GameRenderer game_renderer;
 
   struct InitParams
   {
