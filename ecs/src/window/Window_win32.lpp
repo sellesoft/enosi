@@ -140,7 +140,7 @@ LRESULT CALLBACK win32WindowCallback(
       ClientToScreen((HWND)window->handle, (LPPOINT)&rect.right);
       window->size.x = rect.right - rect.left;
       window->size.y = rect.bottom - rect.top;
-      window->raise<WindowResized>(*window->eng, {window->size});
+      window->raise<WindowResized>(*window->eng, {vec2f(window->size)});
       INFO("window resized to ", window->size, "\n");
     }
     return 0;
