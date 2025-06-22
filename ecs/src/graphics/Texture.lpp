@@ -515,6 +515,9 @@ Texture Texture::create(
  */
 b8 Texture::deinit(Renderer& renderer)
 {
+  if (isnil(*this))
+    return true;
+
   RendererInternal& ri = *(RendererInternal*)renderer.internal;
   TRACE("deinitializing a texture at index ", index, "\n");
 

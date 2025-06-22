@@ -29,11 +29,7 @@ b8 GameSim::init(InitParams& params)
 
   setViewport(params.viewport);
 
-  loadMap(
-    "assets/maps/Test.map"_str,
-    params.assetmgr,
-    params.sfilereg,
-    params.renderer);
+  loadMap("assets/maps/Test.map"_str, params.loader);
 
   return true;
 }

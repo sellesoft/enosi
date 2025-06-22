@@ -15,9 +15,10 @@ $ local ui = require "ui.UI"
 #include "iro/time/Time.h"
 #include "iro/io/IO.h"
 
+@@lpp.import "game/client/editor/GameView.lh"
+
 @@lpp.import "ui/UI.lh"
 @@lpp.import "game/client/editor/Skin.defs.lh"
-@@lpp.import "graphics/View.lh"
 
 struct Client;
 
@@ -30,24 +31,11 @@ struct Editor
 {
   Client* client = nullptr;
 
-  EditorSkinDefRef skin;
-
-  gfx::View view;
+  EditorSkinDefRef skinref;
 
   TimePoint start_time;
 
   b8 paused = false;
-
-  // TODO(sushi) have a view document or something that we put this in.
-  enum class ControlState
-  {
-    None,
-    Dragging,
-  };
-
-  ControlState control_state = ControlState::None;
-  vec2f drag_start_viewport = {};
-  vec2f drag_start_world = {};
 
   enum class Tool
   {
@@ -67,7 +55,12 @@ struct Editor
 
   b8 update(ui::UI& ui, cl::GameSim& sim);
 
-  InputState putUI(ui::UI& ui, const EditorSkinDef& skin);
+  void putUI(ui::UI& ui, cl::GameSim& sim, const EditorSkinDef& skin);
+
+  Editor_GameView view;
+
+  // Places the left tool panel.
+  void putToolPanel(ui::UI& ui, const EditorSkinDef& skin);
 
   struct MapTool
   {

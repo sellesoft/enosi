@@ -9,7 +9,11 @@ return TileKindDef
     TopLeftCorner       = "assets/walls/olive/TopLeft",
     TopRightCorner      = "assets/walls/olive/TopRight",
     Horizontal          = "assets/walls/olive/Horizontal",
+    HorizontalLeftCap   = "assets/walls/olive/HorizontalLeftCap",
+    HorizontalRightCap  = "assets/walls/olive/HorizontalRightCap",
     Vertical            = "assets/walls/olive/Vertical",
+    VerticalTopCap      = "assets/walls/olive/VerticalTopCap",
+    VerticalBottomCap   = "assets/walls/olive/VerticalBottomCap",
     FourWayIntersection = "assets/walls/olive/Intersection",
   }
 }

@@ -8,6 +8,7 @@ $ local cmn = require "common"
 
 @@lpp.import "game/shared/entity/EntityMgr.lh"
 @@lpp.import "game/shared/component/Component.lh"
+@@lpp.import "game/shared/map/Map.defs.lh"
 
 @@lpp.import "game/client/entity/EntitySysMgr.lh"
 @@lpp.import "game/client/graphics/GameRenderer.lh"
@@ -29,6 +30,8 @@ struct GameMgr
 
   EntitySysMgr entsysmgr;
   GameRenderer game_renderer;
+
+  MapDefRef loaded_map;
 
   struct InitParams
   {
@@ -58,11 +61,7 @@ struct GameMgr
   /* --------------------------------------------------------------------------
    *  Loads the client into some map.
    */
-  b8 loadMap(
-    String name,
-    AssetMgr& assetmgr,
-    SourceDataFileReg& sfilereg,
-    gfx::Renderer& renderer);
+  b8 loadMap(String name, AssetLoader loader);
 
   void setViewport(Rect viewport);
 };

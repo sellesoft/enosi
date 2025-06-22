@@ -86,7 +86,6 @@ struct MapLayerDef
 
 /* ============================================================================
  */
-@metadata.source_types(map)
 @metadata.def
 struct MapDef
 {
@@ -94,3 +93,6 @@ struct MapDef
   vec2i size;
   ArrayDef<MapLayerDef> layers;
 };
+
+@metadata.source_types(map)
+struct MapDefRef : TypedSourceAssetRef<MapDef> {};

@@ -102,56 +102,21 @@ b8 GameMgr::render(gfx::Renderer& renderer, const gfx::View& view)
 
 /* ----------------------------------------------------------------------------
  */
-b8 GameMgr::loadMap(
-    String name,
-    AssetMgr& assetmgr,
-    SourceDataFileReg& sfilereg,
-    gfx::Renderer& renderer)
+b8 GameMgr::loadMap(String name, AssetLoader loader)
 {
   INFO("setting map to ", name, "\n");
 
-  CompiledData::CompileParams params = 
-  {
-    .name = "assets/maps/Test"_str,
-    .type = "MapDef"_str,
-    .assetmgr = assetmgr,
-    .sfile_reg = sfilereg,
-  };
-
-  CompiledData::compile(params);
-
-  auto* data = CompiledData::load(
-    "assets/maps/Test.map"_str, "MapDef"_str, assetmgr);
-
-  auto* mapdef = data->getRootAs<MapDef>();
-
-  CompiledData::Refs refs;
-
-  data->getRefs(&refs);
-
-  RefLoadParams load_params = 
-  {
-    .renderer = renderer,
-    .assetmgr = assetmgr,
-    .sfile_reg = &sfilereg,
-  };
-
-  for (auto& ref : refs)
-  {
-    RefLoadParams ref_params = load_params;
-    ref_params.type = ref.type;
-    if (!loadRef(ref.ptr, ref_params))
-      return false;
-  }
+  if (!loader.load(&loaded_map, name))
+    return ERROR("failed to load map asset ", name, '\n');
 
   MapSys::LoadParams map_params =
   {
-    .assetmgr = assetmgr,
+    .assetmgr = loader.assetmgr,
     .entmgr   = sim->entmgr,
   };
 
-  if(!entsysmgr.get<MapSys>().load(*mapdef, map_params))
-    return ERROR("failed to load map '", mapdef->name, "'\n");
+  if(!entsysmgr.get<MapSys>().load(*loaded_map, map_params))
+    return ERROR("failed to load map '", name, "'\n");
 
   return true;
 }

@@ -99,71 +99,7 @@ struct MapLoader
         return false;
     }
 
-    // Determine tile configurations. This can probably be done in the loop
-    // above but keeping it separated for simplicity for now.
-    for (s32 x = 0; x < def.size.x; ++x)
-    {
-      for (s32 y = 0; y < def.size.y; ++y)
-      {
-        if (debug_tile && debug_tile_pos == vec2i(x,y) && 
-            debug_tile_layer_idx == idx)
-        {
-          debug_tile = false;
-          platform::debugBreak();
-        }
-
-        Tile* tile = layer->getTileAtPos(x,y);
-        assert(tile != nullptr);
-
-        Tile* top    = layer->getTileAtPos(x,y+1);
-        Tile* bottom = layer->getTileAtPos(x,y-1);
-        Tile* right  = layer->getTileAtPos(x+1,y);
-        Tile* left   = layer->getTileAtPos(x-1,y);
-
-        u8 mask = 
-            ((top    && top->kind    == tile->kind) ? 1 << 0 : 0)
-          | ((bottom && bottom->kind == tile->kind) ? 1 << 1 : 0)
-          | ((right  && right->kind  == tile->kind) ? 1 << 2 : 0)
-          | ((left   && left->kind   == tile->kind) ? 1 << 3 : 0);
-
-        static const TileKindConfig configs[] = 
-        {
-          [0b0000] = TileKindConfig::Default,
-          // Bordered only on top.
-          [0b0001] = TileKindConfig::VerticalBottomCap,
-          // Bordered only on bottom.
-          [0b0010] = TileKindConfig::VerticalTopCap,
-          // Bordered on top and bottom.
-          [0b0011] = TileKindConfig::Vertical,
-          // Bordered only on right.
-          [0b0100] = TileKindConfig::HorizontalLeftCap,
-          // Bordered on top and right.
-          [0b0101] = TileKindConfig::BottomLeftCorner,
-          // Bordered on bottom and right.
-          [0b0110] = TileKindConfig::TopLeftCorner,
-          // Bordered on top, bottom and right.
-          [0b0111] = TileKindConfig::ThreeWayIntersection,
-          // Bordered only on left.
-          [0b1000] = TileKindConfig::HorizontalRightCap,
-          // Bordered on left and top.
-          [0b1001] = TileKindConfig::BottomRightCorner,
-          // Bordered on left and bottom.
-          [0b1010] = TileKindConfig::TopRightCorner,
-          // Bordered on left, bottom, and top,
-          [0b1011] = TileKindConfig::ThreeWayIntersection,
-          // Bordered on left and right.
-          [0b1100] = TileKindConfig::Horizontal,
-          // Bordered on left, right, and top.
-          [0b1101] = TileKindConfig::ThreeWayIntersection,
-          // Bordered on left, right, and bottom.
-          [0b1110] = TileKindConfig::ThreeWayIntersection,
-          // Bordered on all sides.
-          [0b1111] = TileKindConfig::FourWayIntersection,
-        };
-
-        tile->configuration = configs[mask];
-      }
-    }
+    layer->reevaluateTileConfigurations();
 
     return true;
   }
@@ -206,6 +142,61 @@ Tile* Layer::getTileAtPos(s32 x, s32 y)
   if (tile_idx < size.y * size.x)
     return &tiles[tile_idx];
   return nullptr;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Layer::reevaluateTileConfigurations()
+{
+  for (s32 x = 0; x < size.x; ++x)
+  {
+    for (s32 y = 0; y < size.y; ++y)
+    {
+      Tile* tile = getTileAtPos(x,y);
+      assert(tile != nullptr);
+
+      Tile* top    = getTileAtPos(x,y+1);
+      Tile* bottom = getTileAtPos(x,y-1);
+      Tile* right  = getTileAtPos(x+1,y);
+      Tile* left   = getTileAtPos(x-1,y);
+
+      enum
+      {
+        R = 1 << 0,
+        T = 1 << 1,
+        L = 1 << 2,
+        B = 1 << 3,
+      };
+
+      u8 mask = 0;
+      mask |= (top    && top->kind    == tile->kind)? T : 0;
+      mask |= (bottom && bottom->kind == tile->kind)? B : 0;
+      mask |= (right  && right->kind  == tile->kind)? R : 0;
+      mask |= (left   && left->kind   == tile->kind)? L : 0;
+
+      static const TileKindConfig configs[] = 
+      {
+        [0]       = TileKindConfig::Default,
+        [T]       = TileKindConfig::VerticalBottomCap,
+        [B]       = TileKindConfig::VerticalTopCap,
+        [T|B]     = TileKindConfig::Vertical,
+        [R]       = TileKindConfig::HorizontalLeftCap,
+        [T|R]     = TileKindConfig::BottomLeftCorner,
+        [B|R]     = TileKindConfig::TopLeftCorner,
+        [T|B|R]   = TileKindConfig::ThreeWayIntersection,
+        [L]       = TileKindConfig::HorizontalRightCap,
+        [L|T]     = TileKindConfig::BottomRightCorner,
+        [L|B]     = TileKindConfig::TopRightCorner,
+        [L|B|T]   = TileKindConfig::ThreeWayIntersection,
+        [L|R]     = TileKindConfig::Horizontal,
+        [L|R|T]   = TileKindConfig::ThreeWayIntersection,
+        [L|R|B]   = TileKindConfig::ThreeWayIntersection,
+        [T|L|R|B] = TileKindConfig::FourWayIntersection,
+      };
+
+      tile->configuration = configs[mask];
+    }
+  }
 }
 
 /* ----------------------------------------------------------------------------

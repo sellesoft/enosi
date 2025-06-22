@@ -224,8 +224,8 @@ void UI::endFrame(InputState* consumed_input)
   Group* active_render_group = nullptr;
   for (Layer* layer = root_layer; layer; layer = layer->next, layer_idx++)
   {
+    debug_layer_name.clear();
     io::formatv(&debug_layer_name, "layer ", layer_idx);
-
     renderer->debugBeginLabel(0x3d405bff, debug_layer_name.asStr());
 
     for (Cmd* cmd = layer->cmd_list.first;
@@ -352,10 +352,8 @@ void UI::endFrame(InputState* consumed_input)
   root_layer = nullptr;
   current_layer = nullptr;
 
-  b8 consume_click = false;
-
   if (notnil(next_focus_state.hovered.id) &&
-      frame_input.tryConsumePressedMouseButton(MouseButton::Left))
+      frame_input.wasMouseButtonPressed(MouseButton::Left))
   {
     next_focus_state.focused = next_focus_state.hovered;
     next_focus_state.pressed_cursor_offset = hovered_cursor_offset;

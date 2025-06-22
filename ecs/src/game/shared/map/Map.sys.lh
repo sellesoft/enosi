@@ -70,6 +70,8 @@ struct Layer
   {
     return getTileAtPos(s32(pos.x), s32(pos.y));
   }
+
+  void reevaluateTileConfigurations();
 };
 
 /* ============================================================================

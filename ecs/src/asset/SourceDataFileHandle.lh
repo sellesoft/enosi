@@ -2,6 +2,8 @@
  *  Ref counted handle to a SourceDataFile.
  *  
  *  These are retrieved from the SourceDataFileReg.
+ *
+ *  TODO(sushi) remove this as we don't really use ref counting anymore.
  */
 
 $ local cmn = require "common"

@@ -1,0 +1,246 @@
+$ local cmn = require "common"
+$ local Processor = require "reflect.Processor"
+$ local ast = require "reflect.AST"
+
+$$$
+local imported = cmn.buffer.new()
+
+imported:put(
+  lpp.import "game/client/editor/Editor.lh",
+  lpp.import "game/shared/map/Map.defs.lh")
+
+local p = Processor.new(tostring(imported))
+p:run()
+$$$
+@imported:get
+
+@@lpp.import "game/client/editor/GameView.lh"
+
+@@lpp.import "game/shared/Eye.sys.lh"
+@@lpp.import "game/shared/map/Map.sys.lh"
+
+@@lpp.import "ui/UI.lh"
+@@lpp.import "game/client/Client.lh"
+
+#include "math/util.h"
+
+@log.ger(editor.view, Info)
+
+$$$
+local Editor = p:lookupDecl "struct cl::Editor"
+local Tools = Editor:getMember "Tool"
+local TileKindDef = p:lookupDecl "struct TileKindDef"
+local TileKindConfig = p:lookupDecl "enum TileKindConfig"
+$$$
+
+namespace cl
+{
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Editor_GameView::init(Editor* editor, AssetLoader& loader)
+{
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Editor_GameView::deinit(Editor* editor)
+{
+  framebuffer.deinit(editor->client->renderer);
+  texture.deinit(editor->client->renderer);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Editor_GameView::update(
+    Editor* editor, 
+    ui::UI& ui,
+    cl::GameSim& sim, 
+    const EditorSkinDef& skin)
+{
+  Client& client = *editor->client;
+  gfx::Renderer& renderer = client.renderer;
+
+  Rect bounds = ui.getBounds();
+
+  ui::FocusFlags focus = 
+    ui.putFocusableBounds(
+      "editor.gameview.viewport"_fid,
+      bounds);
+
+  // Reinitialize the framebuffer and texture if the viewport size happens
+  // to change. Also set the viewport of the simulation.
+  if (bounds.size() != view_size)
+  {
+    view_size = bounds.size();
+    sim.setViewport(bounds);
+
+    if (!reinitializeGraphicsObjects(renderer))
+      return ERROR("failed to reinitialize graphics objects due to view size "
+                   "change\n");
+  }
+
+  // Step the simulation if its not paused.
+  if (!editor->paused)
+  {
+    // TODO(sushi) should we be adjusting the cursor pos to be local 
+    //             to the viewport here ? 
+    InputState sim_input = {};
+    client.input.cloneInputState(&sim_input);
+
+    cl::GameSim::UpdateParams sim_params = 
+    {
+      .input = sim_input,
+    };
+
+    if (!sim.update(sim_params))
+      return ERROR("failed to update game sim\n");
+  }
+
+  hovered = focus.test(ui::FocusFlag::Hovered);
+  cursor_pos = ui.getLocalCursorPos() - bounds.pos();
+  cursor_world_pos = view.viewportPointToWorld(cursor_pos, view_size);
+
+  // Render the state of the simulation to our framebuffer and texture.
+  renderer.bindFramebuffer(framebuffer);
+
+  // TODO(sushi) this probably doesn't need to be a hard error.
+  if (!sim.render(renderer, view))
+    return ERROR("failed to render game sim\n");
+
+  renderer.bindFramebuffer(nil);
+  // TODO(sushi) it would be nice to avoid needing to doing this somehow,
+  //             and I figure this may break somehow.
+  renderer.setViewport({0, 0}, client.window.size);
+
+  // Draw the resulting texture.
+  ui.putQuad(bounds, texture, 0xffffffff);
+
+  b8 select = false;
+
+  switch (control_state)
+  {
+  case ControlState::None:
+    if (focus.test(ui::FocusFlag::PrimaryPressed))
+    {
+      drag_start_viewport = cursor_pos;
+      drag_start_world = view.pos;
+      control_state = ControlState::DragOrSelect;
+    }
+    break;
+
+  case ControlState::DragOrSelect:
+    {
+      if (focus.test(ui::FocusFlag::PrimaryReleased))
+      {
+        select = true;
+        control_state = ControlState::None;
+      }
+      else if (drag_start_viewport != cursor_pos)
+      {
+        control_state = ControlState::Dragging;
+      }
+    }
+    break;
+
+  case ControlState::Dragging:
+    {
+      vec2f offset = view.viewportPointToWorld(drag_start_viewport, view_size);
+
+      view.pos = drag_start_world + offset - cursor_world_pos;
+
+      if (focus.test(ui::FocusFlag::PrimaryReleased))
+        control_state = ControlState::None;
+    }
+    break;
+  }
+
+  f32 scroll = ui.frame_input.getScroll();
+  if (scroll != 0.f)
+  {
+    ui.frame_input.consumeScroll();
+
+    if (ui.frame_input.tryConsumeDownKey(Key::LShift))
+    {
+      view.rotation += scroll * math::degreesToRadians(1.f);
+    }
+    else
+    {
+      view.zoom -= view.zoom / 10.f * scroll;
+
+      vec2f new_cw = view.viewportPointToWorld(cursor_pos, view_size);
+
+      view.pos -= new_cw - cursor_world_pos;
+    }
+  }
+
+  if (ui.frame_input.wasKeyPressed(Key::F10))
+  {
+    // Reset view to the game's incase it gets messed up too much.
+    // TODO(sushi) make other ways to do this.
+    view = sim.gamemgr.entsysmgr.get<EyeSys>().view;
+  }
+
+  MapSys& map = sim.gamemgr.entsysmgr.get<MapSys>();
+
+  {
+    Tile* tile = nullptr;
+    Layer* layer = nullptr;
+    if (map.getTileAndLayerAtPos(&layer, &tile, cursor_world_pos))
+    {
+      hovered_tile = tile;
+      hovered_layer = layer;
+
+    }
+
+    if (select)
+    {
+      selected_tile = tile;
+      selected_layer = layer;
+    }
+  }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Editor_GameView::reinitializeGraphicsObjects(gfx::Renderer& renderer)
+{
+  texture.deinit(renderer);
+  framebuffer.deinit(renderer);
+
+  texture = gfx::Texture::create(
+    renderer,
+    view_size.x,
+    view_size.y,
+    gfx::ImageFormat::RGBA,
+      gfx::ImageUsage::Sampled
+    | gfx::ImageUsage::FramebufferColor,
+    gfx::ImageAddressMode::ClampToBlack,
+    gfx::ImageFilter::Nearest,
+    nullptr,
+    "editor.gameview.texture"_str);
+
+  if (isnil(texture))
+    return ERROR("failed to create editor.gameview.texture\n");
+
+  // NOTE(sushi) we could maybe just size the frame buffer to the 
+  //             size of the window as that will always be able to contain
+  //             the texture to avoid needing to reinitialize it whenever 
+  //             the view size changes. It's probably not a big deal though
+  //             as the size really shouldn't change that often.
+  if (!framebuffer.init(
+        renderer,
+        view_size.x,
+        view_size.y,
+        texture,
+        {0,0,0,255},
+        "editor.gameview.framebuffer"_str))
+    return ERROR("failed to initialize editor.gameview framebuffer\n");
+
+  return true;
+}
+
+}

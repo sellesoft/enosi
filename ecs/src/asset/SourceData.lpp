@@ -51,7 +51,7 @@ void SourceData::dump(io::IO* out, u32 depth) const
 
   if (notnil(val.str))
   {
-    if (val.kind == Value::Kind::Number)
+    if (matchAny(val.kind, Value::Kind::Number, Value::Kind::NumberHex))
       io::format(out, val.str);
     else
       io::formatv(out, '"', val.str, '"');

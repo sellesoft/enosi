@@ -134,6 +134,9 @@ b8 Framebuffer::init(
  */
 b8 Framebuffer::deinit(Renderer& renderer)
 {
+  if (isnil(*this))
+    return true;
+
   RendererInternal& ri = *(RendererInternal*)renderer.internal;
   TRACE("deinitializing a framebuffer at index ", index, "\n");
 

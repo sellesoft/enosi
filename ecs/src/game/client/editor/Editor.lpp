@@ -3,11 +3,11 @@ $ local Processor = require "reflect.Processor"
 $ local ast = require "reflect.AST"
 
 $$$
-
 local imported = cmn.buffer.new()
 
 imported:put(
-  lpp.import "game/client/editor/Editor.lh")
+  lpp.import "game/client/editor/Editor.lh",
+  lpp.import "game/shared/map/Map.defs.lh")
 
 local p = Processor.new(tostring(imported))
 p:run()
@@ -17,17 +17,19 @@ $$$
 $$$
 local Editor = p:lookupDecl "struct cl::Editor"
 local Tools = Editor:getMember "Tool"
+local TileKindDef = p:lookupDecl "struct TileKindDef"
+local TileKindConfig = p:lookupDecl "enum TileKindConfig"
 $$$
 
 @@lpp.import "game/client/Client.lh"
 @@lpp.import "game/client/editor/MenuBar.lh"
 @@lpp.import "game/shared/Eye.sys.lh"
-@@lpp.import "game/shared/map/Map.defs.lh"
+@@lpp.import "game/shared/map/Map.sys.lh"
+
+@@lpp.import "asset/SourceDataFileReg.lh"
 
 #include "math/util.h"
 #include "iro/fs/Glob.h"
-
-using namespace ui;
 
 @log.ger(editor, Info)
 
@@ -40,7 +42,7 @@ b8 Editor::init(Client* client, AssetLoader& loader)
 {
   this->client = client;
 
-  if (!loader.load(&skin, "assets/skins/Editor.skin"_str))
+  if (!loader.load(&skinref, "assets/skins/Editor.skin"_str))
     return ERROR("failed to load editor skin\n");
 
   start_time = TimePoint::monotonic();
@@ -52,100 +54,15 @@ b8 Editor::init(Client* client, AssetLoader& loader)
  */
 void Editor::deinit()
 {
+  view.deinit(this);
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 Editor::update(UI& ui, cl::GameSim& sim)
+b8 Editor::update(ui::UI& ui, cl::GameSim& sim)
 {
-  if (!paused)
-  {
-    InputState sim_input = {};
-    client->input.cloneInputState(&sim_input);
+  const EditorSkinDef& skin = *skinref;
 
-    cl::GameSim::UpdateParams sim_params = 
-    {
-      .input = sim_input,
-    };
-
-    if (!sim.update(sim_params))
-      return ERROR("failed to update game sim\n");
-  }
-
-  if (!sim.render(client->renderer, view))
-    return ERROR("failed to render game sim\n");
-
-  InputState game_input = putUI(ui, *skin);
-
-  vec2f cursor_pos = game_input.getCursorPos();
-  vec2f viewport_size = vec2f(client->window.size);
-
-  switch (control_state)
-  {
-  case ControlState::None:
-    if (game_input.tryConsumePressedMouseButton(MouseButton::Left))
-    {
-      drag_start_viewport = cursor_pos;
-      drag_start_world = view.pos;
-      control_state = ControlState::Dragging;
-    }
-    break;
-
-  case ControlState::Dragging:
-    {
-      vec2f cursor_world = view.viewportPointToWorld(
-        cursor_pos,
-        vec2f(client->window.size));
-
-      vec2f offset = view.viewportPointToWorld(
-        drag_start_viewport,
-        vec2f(client->window.size));
-
-      view.pos = drag_start_world + offset - cursor_world;
-
-      if (game_input.wasMouseButtonReleased(MouseButton::Left))
-        control_state = ControlState::None;
-    }
-    break;
-  }
-
-  f32 scroll = game_input.getScroll();
-  if (scroll != 0.f)
-  {
-    game_input.consumeScroll();
-
-    if (game_input.tryConsumeDownKey(Key::LShift))
-    {
-      view.rotation += scroll * math::degreesToRadians(1.f);
-    }
-    else
-    {
-      vec2f old_cw = view.viewportPointToWorld(
-        game_input.getCursorPos(), vec2f(client->window.size));
-
-      view.zoom -= view.zoom / 10.f * scroll;
-
-      vec2f new_cw = view.viewportPointToWorld(
-        game_input.getCursorPos(), vec2f(client->window.size));
-
-      view.pos -= new_cw - old_cw;
-    }
-  }
-
-  if (game_input.wasKeyPressed(Key::F10))
-  {
-    // Reset view to the game's incase it gets messed up too much.
-    // TODO(sushi) make other ways to do this.
-    view = sim.gamemgr.entsysmgr.get<EyeSys>().view;
-  }
-
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-InputState Editor::putUI(UI& ui, const EditorSkinDef& skin)
-{
   const f32 content_padding = 5.f;
 
   const u32 tool_count = $(Tools.elems:len());
@@ -158,10 +75,6 @@ InputState Editor::putUI(UI& ui, const EditorSkinDef& skin)
   InputState ui_input = {};
   client->input.cloneInputState(&ui_input);
 
-  // Make sure that UI doesn't get any mouse input when dragging the view.
-  if (control_state == ControlState::Dragging)
-    ui_input.consumeAllMouseButtons();
-
   ui::UI::FrameParams ui_params = 
   {
     .input = ui_input,
@@ -170,7 +83,21 @@ InputState Editor::putUI(UI& ui, const EditorSkinDef& skin)
 
   ui.beginFrame(ui_params);
 
-  ui.beginPanel("editor.left_panel"_fid, {0.f, 0.f, 250.f, ui.getHeight()});
+  Rect left_panel_bounds = {0.f, 0.f, 250.f, ui.getHeight()};
+  Rect game_view_bounds = 
+  { 
+    left_panel_bounds.extent().x, 
+    0.f,  
+    ui.getWidth() - left_panel_bounds.w,
+    ui.getHeight(),
+  };
+
+  // Draw the game view.
+  ui.beginGroup(game_view_bounds);
+  view.update(this, ui, sim, skin);
+  ui.endGroup();
+
+  ui.beginPanel("editor.left_panel"_fid, left_panel_bounds);
 
   ui.putQuad(ui.getBounds(), skin.bg_color);
 
@@ -232,11 +159,9 @@ $ end
 
   ui.endGroup();
   ui.endPanel();
+  ui.endFrame();
 
-  InputState game_input = {};
-  ui.endFrame(&game_input);
-
-  return game_input;
+  return true;
 }
 
 /* ----------------------------------------------------------------------------
@@ -331,7 +256,7 @@ void Editor::putMapTool(ui::UI& ui, const EditorSkinDef& skin)
       if (clicked)
       {
         tool_map.selected_tile_kind.clear();
-        io::formatv(&tool_map.selected_tile_kind, path.asStr());
+        io::formatv(&tool_map.selected_tile_kind, name);
         ui.closePopup();
         return false;
       }

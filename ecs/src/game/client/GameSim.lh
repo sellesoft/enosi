@@ -59,18 +59,9 @@ struct GameSim : SharedGameSim
     gamemgr.setViewport(viewport);
   }
 
-  b8 loadMap(
-      String name, 
-      AssetMgr& assetmgr, 
-      SourceDataFileReg& sfilereg,
-      gfx::Renderer& renderer)
+  b8 loadMap(String name, AssetLoader loader)
   {
-    return 
-      gamemgr.loadMap(
-        name,
-        assetmgr,
-        sfilereg,
-        renderer);
+    return gamemgr.loadMap(name, loader);
   }
 };
 

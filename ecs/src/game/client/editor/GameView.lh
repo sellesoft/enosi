@@ -1,0 +1,84 @@
+/*
+ *  State and UI related to viewing the game in the Editor.
+ */
+
+$ require "common"
+
+@@lpp.import "graphics/View.lh"
+@@lpp.import "graphics/Framebuffer.lh"
+@@lpp.import "graphics/Texture.lh"
+
+struct Tile;
+struct Layer;
+struct AssetLoader;
+struct EditorSkinDef;
+
+namespace ui
+{
+struct UI;
+}
+
+namespace cl
+{
+
+struct Editor;
+struct GameSim;
+
+struct Editor_GameView
+{
+  // True when the cursor is directly over the game view.
+  b8 hovered;
+
+  // The position of the cursor local to the game view. 
+  // This is not valid when hovered == false.
+  vec2f cursor_pos;
+
+  // The position of the cursor in the world while the view is hovered.
+  // This is not valid when hovered == false.
+  vec2f cursor_world_pos;
+
+  // The last tile and layer clicked, if any.
+  Tile* selected_tile;
+  Layer* selected_layer;
+
+  // The currently hovered tile and layer.
+  Tile* hovered_tile;
+  Layer* hovered_layer;
+
+  enum class ControlState
+  {
+    None,
+    DragOrSelect,
+    Dragging,
+  };
+
+  ControlState control_state = ControlState::None;
+  vec2f drag_start_viewport = {};
+  vec2f drag_start_world = {};
+
+  // The graphics view over the game, eg. the position, rotation and scale
+  // we are viewing it with.
+  gfx::View view;
+
+  // Graphics objects used to control where the game renders to so we may 
+  // nicely display it in the UI.
+  gfx::Framebuffer framebuffer;
+  gfx::Texture texture;
+
+  // Tracked view size, used to reinitialize the framebuffer and texture
+  // if the visual size of the view is ever changed.
+  vec2f view_size;
+
+  b8 init(Editor* editor, AssetLoader& loader);
+  void deinit(Editor* editor);
+
+  b8 update(
+    Editor* editor, 
+    ui::UI& ui,
+    cl::GameSim& sim, 
+    const EditorSkinDef& skin);
+
+  b8 reinitializeGraphicsObjects(gfx::Renderer& renderer);
+};
+
+}

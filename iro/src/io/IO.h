@@ -290,6 +290,11 @@ struct StaticBuffer : public IO
     mem::copy(buffer, other.buffer, len);
     buffer[len] = '\0';
   }
+
+  b8 isEmpty() const
+  {
+    return len == 0;
+  }
 };
 
 /* ============================================================================
