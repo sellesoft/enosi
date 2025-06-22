@@ -69,8 +69,10 @@ static int window_event_masks =
 
 /* ----------------------------------------------------------------------------
  */
-b8 Window::init(String title, InputMgr& inputmgr)
+b8 Window::init(Engine& eng, String title, InputMgr& inputmgr)
 {
+  this->eng = &eng;
+
   Display* display = x11.display;
   int screen = x11.screen;
 

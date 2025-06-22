@@ -10,6 +10,7 @@ $ require "common"
 @@lpp.import "game/server/Server.lh"
 @@lpp.import "game/server/ServerAllocator.lh"
 @@lpp.import "game/shared/entity/EntityId.lh"
+@@lpp.import "game/shared/Console.lh"
 
 #include "iro/Common.h"
 #include "iro/containers/Array.h"
@@ -57,6 +58,7 @@ struct Server
   Engine* engine;
   sv::GameSim sim;
   sv::NetMgr netmgr;
+  SharedConsole console;
 };
 
 namespace sv
@@ -231,6 +233,12 @@ static Server* createServer(thread::Context* ctx, sv::CreateParams* params)
     return nullptr;
   }
 
+  if (!server->console.init(params->engine, true))
+  {
+    @log.error("failed to init the server console\n");
+    return nullptr;
+  }
+
   server_running.store(true);
   return server;
 }
@@ -253,6 +261,8 @@ static void* updateServer(thread::Context* ctx)
     @log.trace("updating the server\n");
 
     server->tick_allocator.clear();
+
+    server->console.update();
 
     // Receive messages from clients.
     server->netmgr.receiveMessages();

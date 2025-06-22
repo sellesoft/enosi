@@ -1,0 +1,26 @@
+$ require "common"
+
+@@lpp.import "Engine.lh"
+@@lpp.import "game/client/Console.lh"
+@@lpp.import "ui/UI.lh"
+
+#include "iro/Common.h"
+
+namespace cl
+{
+
+/* ----------------------------------------------------------------------------
+ */
+void Console::updateInput()
+{
+  SharedConsole::update();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Console::updateUI(ui::UI& ui)
+{
+  
+}
+
+}

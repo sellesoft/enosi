@@ -1,0 +1,312 @@
+$ require "common"
+
+@@lpp.import "Engine.lh"
+@@lpp.import "game/shared/Console.lh"
+@@lpp.import "game/shared/Console.events.lh"
+
+#include "iro/Common.h"
+#include "iro/Logger.h"
+#include "iro/Thread.h"
+
+#include <cstdio>
+
+using namespace iro;
+
+@log.ger(sh.console, Info)
+
+/* ----------------------------------------------------------------------------
+ */
+static void* consoleStdinThread(thread::Context* context)
+{
+  assert(!thread::isMainThread());
+  assertpointer(context);
+  assertpointer(context->data);
+  @log.info("Starting the console input thread\n");
+
+  SharedConsole* console = (SharedConsole*)context->data;
+  iro::StackArray<u8, SharedConsole::INPUT_BUFFER_SIZE> input_buffer;
+  while (true)
+  {
+    if (fgets((char*)input_buffer.arr, SharedConsole::INPUT_BUFFER_SIZE, stdin))
+    {
+      size_t len = strlen((const char*)input_buffer.arr);
+      if (len == 0)
+        continue;
+
+      if (input_buffer.arr[len - 1] == '\n')
+      {
+        input_buffer.arr[len - 1] = '\0';
+        len -= 1;
+      }
+      if (len == 0)
+        continue;
+
+      console->stdin_mutex.lock();
+      mem::copy(console->stdin_buffer.arr, input_buffer.arr, len+1);
+      console->stdin_buffer.len = len;
+      console->stdin_mutex.unlock();
+    }
+  }
+  return nullptr;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 SharedConsole::init(Engine& eng, b8 stdin_enabled)
+{
+  this->commands.init();
+
+  if (stdin_enabled)
+  {
+    this->stdin_mutex.init();
+    this->stdin_thread = thread::create(consoleStdinThread, this, 0);
+    if (this->stdin_thread == nullptr)
+      @log.error("Failed to create the console input thread\n");
+  }
+
+  mem::zero(this->command_name_arena, MAX_COMMAND_NAME_ARENA_SIZE);
+  this->command_name_arena_used = 0;
+
+  eng.subscribeToBroadcast<AddCommandEvent>(this, &SharedConsole::addCommand);
+  eng.subscribeToBroadcast<RunCommandEvent>(this, &SharedConsole::runCommand);
+
+  AddCommandEvent help_cmd =
+  {
+    .context = this,
+    .name = "help"_str,
+    .func = [](void* context, const CommandArgs& args)
+    {
+      SharedConsole* console = (SharedConsole*)context;
+      @log.info("Available commands:\n");
+      for (const Command& c : console->commands)
+      {
+        if (c.name_hash == 0)
+          continue;
+
+        if (c.name.len > 0)
+          @log.info("  ", c.name, "\n");
+        else
+          @log.info("  ", c.name_hash, "\n");
+      }
+    }
+  };
+  addCommand(help_cmd);
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SharedConsole::deinit()
+{
+  if (this->stdin_thread != nullptr)
+  {
+    this->stdin_mutex.deinit();
+    thread::detach(this->stdin_thread);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SharedConsole::update()
+{
+  if (this->stdin_thread == nullptr)
+    return;
+  if (!this->stdin_mutex.tryLock())
+    return;
+  if (!this->stdin_buffer.isEmpty())
+  {
+    iro::String input = {this->stdin_buffer.arr, (u64)this->stdin_buffer.len};
+    RunCommandEvent event = {input};
+    runCommand(event);
+    this->stdin_buffer.clear();
+  }
+  this->stdin_mutex.unlock();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SharedConsole::addCommand(AddCommandEvent& event)
+{
+  if (isnil(event.name))
+    return;
+  if (event.func == nullptr)
+    return;
+
+  u64 name_hash = event.name.hash();
+  for (const Command& c : this->commands)
+  {
+    if (c.name_hash == name_hash)
+    {
+$ if ECS_DEBUG then
+      // check for a hash collision
+      assert(c.name.len == event.name.len);
+      assert(mem::equal(c.name.ptr, event.name.ptr, event.name.len));
+$ end
+
+      @log.error("Command '", event.name, "' already exists\n");
+      return;
+    }
+  }
+
+  Command* cmd = this->commands.add();
+  if (cmd == nullptr)
+  {
+    @log.fatal("Maximum number of commands reached;"
+               " bump the limit in SharedConsole.lh\n");
+    return;
+  }
+
+  cmd->context = event.context;
+  cmd->name_hash = name_hash;
+  cmd->func = event.func;
+
+  u64 new_used = this->command_name_arena_used + event.name.len + 1;
+  if (new_used <= MAX_COMMAND_NAME_ARENA_SIZE)
+  {
+    cmd->name =
+    {
+      .ptr = this->command_name_arena + this->command_name_arena_used,
+      .len = event.name.len
+    };
+    mem::copy(cmd->name.ptr, event.name.ptr, event.name.len);
+    cmd->name.ptr[event.name.len] = '\0';
+    this->command_name_arena_used = new_used;
+  }
+  else
+  {
+    cmd->name = {};
+    @log.error("Console command name arena is full (",
+               new_used, " > ", MAX_COMMAND_NAME_ARENA_SIZE, ");"
+               " bump the limit in SharedConsole.lh\n");
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SharedConsole::runCommand(RunCommandEvent& event)
+{
+  iro::String input = event.input;
+
+  // split input by semicolons and execute each command
+  while(input.len > 0)
+  {
+    input.trimLeft();
+    if (isnil(input))
+      break;
+
+    // find the next semicolon not inside quotes
+    String command = input;
+    String cursor = input;
+    b8 in_quotes = false;
+    while(cursor.len > 0)
+    {
+      if (cursor.ptr[0] == '"')
+      {
+        in_quotes = !in_quotes;
+      }
+      else if (!in_quotes && cursor.ptr[0] == ';')
+      {
+        command.len = cursor.ptr - command.ptr;
+        input.ptr = cursor.ptr + 1;
+        input.len = input.len - command.len - 1;
+        break;
+      }
+      cursor.ptr += 1;
+      cursor.len -= 1;
+    }
+    if (cursor.len <= 0)
+    {
+      input = {}; // no more semicolons
+    }
+
+    // skip empty commands
+    command.trimRight();
+    if (isnil(command))
+      continue;
+
+    // split command by spaces
+    CommandArgs args;
+    cursor = command;
+    while(cursor.len > 0)
+    {
+      cursor.trimLeft();
+      if (isnil(cursor))
+        break;
+
+      String word = cursor;
+      if (cursor.ptr[0] == '"')
+      {
+        word.ptr += 1;
+        word.len -= 1;
+        word = word.subToFirst('"');
+        if (isnil(word))
+        {
+          if (!args.push(cursor))
+          {
+            @log.error("Maximum number of command arguments reached;"
+                       " bump the limit in SharedConsole.lh\n");
+            return;
+          }
+          break;
+        }
+        else
+        {
+          if (!args.push(cursor))
+          {
+            @log.error("Maximum number of command arguments reached;"
+                       " bump the limit in SharedConsole.lh\n");
+            return;
+          }
+          cursor.ptr = word.ptr + word.len + 1;
+          cursor.len -= word.len + 2;
+        }
+      }
+      else
+      {
+        word = word.subToFirst(' ');
+        if (isnil(word))
+        {
+          if (!args.push(cursor))
+          {
+            @log.error("Maximum number of command arguments reached;"
+                       " bump the limit in SharedConsole.lh\n");
+            return;
+          }
+          break;
+        }
+        else
+        {
+          if (!args.push(word))
+          {
+            @log.error("Maximum number of command arguments reached;"
+                       " bump the limit in SharedConsole.lh\n");
+            return;
+          }
+          cursor.ptr = word.ptr + word.len;
+          cursor.len -= word.len;
+        }
+      }
+      cursor.trimLeft();
+    }
+
+    // execute the command
+    if (args.len > 0)
+    {
+      b8 found = false;
+      u64 name_hash = args[0].hash();
+      for (const Command& c : commands)
+      {
+        if (c.name_hash == name_hash)
+        {
+          args.remove(0);
+          c.func(c.context, args);
+          found = true;
+          break;
+        }
+      }
+      if (!found)
+        @log.warn("Unknown command '", args[0], "'\n");
+    }
+  }
+}

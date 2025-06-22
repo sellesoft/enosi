@@ -44,6 +44,7 @@ struct FixedPool
   {
     for (s32 i = 0; i < N_slots; i++)
     {
+      new (&slots[i].element) T;
       slots[i].next_free_slot = &slots[i + 1];
     }
     slots[N_slots - 1].next_free_slot = nullptr;
