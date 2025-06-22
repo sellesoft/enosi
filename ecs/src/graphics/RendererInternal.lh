@@ -68,7 +68,7 @@ struct RendererHeap
   VkDeviceSize alignment;
   VkDeviceSize preferred_block_size;
   Array<RendererHeapBlock> blocks;
-  Pool<RendererHeapAllocation, 512, false> allocations;
+  Array<RendererHeapAllocation> allocations;
   Array<RendererHeapAllocation> free_chunks;
 };
 

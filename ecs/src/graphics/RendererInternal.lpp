@@ -35,7 +35,7 @@ RendererHeapAllocation* allocate(
       if (size_after_alloc < alignment)
       {
         RendererHeapBlock& block = heap.blocks[free_chunk.block_index];
-        heap.allocations.add(free_chunk);
+        heap.allocations.push(free_chunk);
         heap.free_chunks.remove(&free_chunk);
 
         free_chunk.aligned_offset = chunk_aligned_offset;
@@ -49,7 +49,7 @@ RendererHeapAllocation* allocate(
       {
         RendererHeapBlock& block = heap.blocks[free_chunk.block_index];
 
-        RendererHeapAllocation* allocation = heap.allocations.add();
+        RendererHeapAllocation* allocation = heap.allocations.push();
         allocation->memory_type = free_chunk.memory_type;
         allocation->block_index = free_chunk.block_index;
         allocation->offset = free_chunk.offset;
@@ -96,7 +96,7 @@ RendererHeapAllocation* allocate(
   u32 block_index = heap.blocks.len() - 1;
   RendererHeapBlock& block = heap.blocks[block_index];
 
-  RendererHeapAllocation* allocation = heap.allocations.add();
+  RendererHeapAllocation* allocation = heap.allocations.push();
   allocation->memory_type = memory_type;
   allocation->block_index = block_index;
   allocation->offset = (VkDeviceSize)block.cursor;

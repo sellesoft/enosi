@@ -816,7 +816,7 @@ $ end -- if IRO_LINUX
         ri.heaps[i].preferred_block_size = unit::megabytes(256);
       }
       ri.heaps[i].blocks.init(8, allocator);
-      ri.heaps[i].allocations.init(allocator);
+      ri.heaps[i].allocations.init(512, allocator);
       ri.heaps[i].free_chunks.init(8, allocator);
     }
   }
@@ -1381,7 +1381,7 @@ b8 Renderer::deinit()
       vkFreeMemory(ri.device, block.memory, &ri.allocator);
     }
     heap.blocks.destroy();
-    heap.allocations.deinit();
+    heap.allocations.destroy();
     heap.free_chunks.destroy();
   }
 
