@@ -40,7 +40,46 @@ button =
   pressed = button_base : { item = { color = light_blue, } },
 }
 
+dropdown_button_base =
+{
+  text = text : { align = {0, 0.5} },
+  text_padding = {0, 5},
+}
+
+dropdown_button = 
+{
+  normal = dropdown_button_base :
+  {
+    item = { color = dark_blue },
+  },
+
+  hovered = dropdown_button_base :
+  {
+    item = { color = blue },
+  },
+
+  pressed = dropdown_button_base :
+  {
+    item = { color = light_blue },
+  },
+}
+
 return EditorSkinDef
 {
+  bg_color = black,
+  tool_panel_bg_color = rich_black,
+
   button = button,
+
+  dropdown = 
+  {
+    selection = 
+    {
+      text = text : { align = {0, 0.5}, },
+      item = { color = grey },
+      text_padding = {5, 0},
+    }
+  },
+
+  dropdown_option = dropdown_button,
 }

@@ -661,6 +661,11 @@ struct UI
     return ItemId{(u64)ptr};
   }
 
+  ItemId generateIdFromInteger(s64 i) const
+  {
+    return ItemId{ (u64)i };
+  }
+
   Layer* getCurrentLayer() const { return current_layer; }
   Panel* getCurrentPanel() const { return getCurrentLayer()->current_panel; }
   Group* getCurrentGroup() const { return getCurrentPanel()->current_group; }

@@ -417,6 +417,10 @@ Record.addMember = function(self, name, obj)
   self.members.list:push{ name=name, obj=obj }
 end
 
+Record.getMember = function(self, name)
+  return self.members.map[name]
+end
+
 Record.tostring = function(self)
   return self.ast_kind.."("..self.name..")"
 end

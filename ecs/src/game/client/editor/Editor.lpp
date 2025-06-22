@@ -1,12 +1,31 @@
-$ require "common"
+$ local cmn = require "common"
+$ local Processor = require "reflect.Processor"
+$ local ast = require "reflect.AST"
 
-@@lpp.import "game/client/editor/Editor.lh"
+$$$
+
+local imported = cmn.buffer.new()
+
+imported:put(
+  lpp.import "game/client/editor/Editor.lh")
+
+local p = Processor.new(tostring(imported))
+p:run()
+$$$
+@imported:get
+
+$$$
+local Editor = p:lookupDecl "struct cl::Editor"
+local Tools = Editor:getMember "Tool"
+$$$
 
 @@lpp.import "game/client/Client.lh"
 @@lpp.import "game/client/editor/MenuBar.lh"
 @@lpp.import "game/shared/Eye.sys.lh"
+@@lpp.import "game/shared/map/Map.defs.lh"
 
 #include "math/util.h"
+#include "iro/fs/Glob.h"
 
 using namespace ui;
 
@@ -23,6 +42,8 @@ b8 Editor::init(Client* client, AssetLoader& loader)
 
   if (!loader.load(&skin, "assets/skins/Editor.skin"_str))
     return ERROR("failed to load editor skin\n");
+
+  start_time = TimePoint::monotonic();
 
   return true;
 }
@@ -54,40 +75,17 @@ b8 Editor::update(UI& ui, cl::GameSim& sim)
   if (!sim.render(client->renderer, view))
     return ERROR("failed to render game sim\n");
 
-  InputState ui_input = {};
-  client->input.cloneInputState(&ui_input);
+  InputState game_input = putUI(ui, *skin);
 
-  // Make sure that UI doesn't get any mouse input when dragging the view.
-  if (control_state == ControlState::Dragging)
-    ui_input.consumeAllMouseButtons();
-
-  ui::UI::FrameParams ui_params = 
-  {
-    .input = ui_input,
-    .viewport = Rect::from(vec2f(0,0), vec2f(client->window.size)),
-  };
-
-  ui.beginFrame(ui_params);
-
-  if (ui.putButton(
-        "pause"_fid, 
-        {0.f, 0.f, 80.f, 20.f}, 
-        "pause"_str, 
-        skin->button))
-  {
-    paused = !paused;
-  }
-
-  InputState game_input = {};
-
-  ui.endFrame(&game_input);
+  vec2f cursor_pos = game_input.getCursorPos();
+  vec2f viewport_size = vec2f(client->window.size);
 
   switch (control_state)
   {
   case ControlState::None:
     if (game_input.tryConsumePressedMouseButton(MouseButton::Left))
     {
-      drag_start_viewport = game_input.getCursorPos();
+      drag_start_viewport = cursor_pos;
       drag_start_world = view.pos;
       control_state = ControlState::Dragging;
     }
@@ -96,7 +94,7 @@ b8 Editor::update(UI& ui, cl::GameSim& sim)
   case ControlState::Dragging:
     {
       vec2f cursor_world = view.viewportPointToWorld(
-        game_input.getCursorPos(),
+        cursor_pos,
         vec2f(client->window.size));
 
       vec2f offset = view.viewportPointToWorld(
@@ -141,13 +139,212 @@ b8 Editor::update(UI& ui, cl::GameSim& sim)
     view = sim.gamemgr.entsysmgr.get<EyeSys>().view;
   }
 
-  INFO(view.zoom, '\n');
-  
   return true;
 }
 
 /* ----------------------------------------------------------------------------
  */
+InputState Editor::putUI(UI& ui, const EditorSkinDef& skin)
+{
+  const f32 content_padding = 5.f;
 
+  const u32 tool_count = $(Tools.elems:len());
+  const f32 tool_option_height = 16.f;
+  const f32 tool_select_height = tool_count * tool_option_height;
+
+  const f32 tool_select_tool_panel_spacing = 10.f;
+  const f32 tool_y = tool_option_height + tool_select_tool_panel_spacing;
+
+  InputState ui_input = {};
+  client->input.cloneInputState(&ui_input);
+
+  // Make sure that UI doesn't get any mouse input when dragging the view.
+  if (control_state == ControlState::Dragging)
+    ui_input.consumeAllMouseButtons();
+
+  ui::UI::FrameParams ui_params = 
+  {
+    .input = ui_input,
+    .viewport = Rect::from(vec2f(0,0), vec2f(client->window.size)),
+  };
+
+  ui.beginFrame(ui_params);
+
+  ui.beginPanel("editor.left_panel"_fid, {0.f, 0.f, 250.f, ui.getHeight()});
+
+  ui.putQuad(ui.getBounds(), skin.bg_color);
+
+  // Begin a padded group.
+  ui.beginGroup(ui.getBounds().contracted(content_padding));
+
+  Rect bounds = ui.getBounds();
+
+  static const String tool_names[] = 
+  {
+$ for elem in Tools.elems:each() do
+    "$(elem.name)"_str,
+$ end
+  };
+
+  if (ui.beginDropDown(
+        "editor.tool_select"_fid,
+        {0.f, 0.f, bounds.w, 16.f},
+        tool_select_height,
+        tool_names[(u32)active_tool],
+        skin.dropdown))
+  {
+    f32 y = 0.f;
+    for (s32 i = 0; i < tool_count; ++i)
+    {
+      if (i == (u32)active_tool)
+        continue;
+
+      if (ui.putButton(
+            ui.generateIdFromInteger(i),
+            {0.f, y, ui.getWidth(), tool_option_height},
+            tool_names[i],
+            skin.dropdown_option))
+      {
+        active_tool = (Tool)i;
+        ui.closePopup();
+        break;
+      }
+
+      y += tool_option_height;
+    }
+    
+    ui.endDropDown();
+  }
+
+  if (active_tool != Tool::None)
+  {
+    ui.beginGroup({ 0.f, tool_y, bounds.w, bounds.h - tool_y });
+
+    ui.putQuad(ui.getBounds(), skin.tool_panel_bg_color);
+
+    switch(active_tool)
+    {
+    case Tool::Map: putMapTool(ui, skin); break;
+    }
+
+    ui.endGroup();
+  }
+
+  ui.endGroup();
+  ui.endPanel();
+
+  InputState game_input = {};
+  ui.endFrame(&game_input);
+
+  return game_input;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Editor::putMapTool(ui::UI& ui, const EditorSkinDef& skin)
+{
+  TileKindRef tile_kind_ref;
+
+  Rect bounds = ui.getBounds();
+
+  const f32 tile_kind_select_height = 16.f;
+  const f32 tile_kind_select_option_height = 32.f;
+  const f32 tile_kind_preview_time = 2.f;
+
+  if (ui.beginDropDown(
+        "tile_kind_select"_fid,
+        {0.f, 0.f, bounds.w, tile_kind_select_height},
+        999.f,
+        tool_map.selected_tile_kind.asStr(),
+        skin.dropdown))
+  {
+    AssetLoader loader = client->getAssetLoader();
+
+    // Begin a group so contents are clipped nicely (drop down doesn't do this
+    // and I don't remember exactly why, but its nice that it doesn't I guess).
+    ui.beginGroup(ui.getBounds());
+
+    f32 y = 0.f;
+    
+    static const u32 config_count = u32(TileKindConfig::COUNT);
+
+    u32 preview_index = 
+      u32(getTimer() / tile_kind_preview_time) % config_count;
+
+    auto glob = fs::Globber::create("assets/**/*.tile_kind"_str);
+    glob.run([&](fs::Path& path)
+    {
+      loader.load(&tile_kind_ref, path.asStr());
+
+      const TileKindDef& tile_kind = *tile_kind_ref;
+
+      const f32 texture_size = tile_kind_select_option_height;
+
+      u32 valid_count = 0;
+      for (const gfx::TextureRef& ref : tile_kind.textures)
+      {
+        if (ref.isValid())
+          valid_count += 1;
+      }
+
+      gfx::Texture preview_texture = nil;
+
+      if (valid_count != 0)
+      {
+        u32 index = preview_index % valid_count;
+        for (const gfx::TextureRef& ref : tile_kind.textures)
+        {
+          if (ref.isValid())
+          {
+            if (index == 0)
+            {
+              preview_texture = ref->gfx_texture;
+              break;
+            }
+            else
+              index -= 1;
+          }
+        }
+      }
+
+      ui.putQuad(
+        {0.f, y, texture_size, texture_size}, 
+        preview_texture, 0xffffffff);
+
+      Rect button_bounds = 
+      {
+        texture_size,
+        y,
+        ui.getWidth() - texture_size,
+        tile_kind_select_option_height,
+      };
+
+      String name = path.asStr().subToLast('.');
+
+      b8 clicked = 
+        ui.putButton(
+          ui.generateIdFromInteger(path.asStr().hash()),
+          button_bounds,
+          name,
+          skin.dropdown_option);
+
+      if (clicked)
+      {
+        tool_map.selected_tile_kind.clear();
+        io::formatv(&tool_map.selected_tile_kind, path.asStr());
+        ui.closePopup();
+        return false;
+      }
+
+      y += tile_kind_select_option_height;
+
+      return true;
+    });
+    glob.destroy();
+
+    ui.endGroup();
+    ui.endDropDown();
+  }
+}
 
 }

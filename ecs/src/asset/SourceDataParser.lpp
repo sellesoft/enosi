@@ -247,8 +247,6 @@ void Parser::ScopedStage::log(T... args)
   ScopedStage stage(*this, __func__)
 
 /* ----------------------------------------------------------------------------
- *   <id>
- *   'return'
  */
 b8 Parser::parse()
 {
@@ -276,7 +274,6 @@ b8 Parser::parse()
 }
 
 /* ----------------------------------------------------------------------------
- *  <id> '=' <val> | <obj>
  */
 b8 Parser::parseAuxData(Token tok)
 {
@@ -674,6 +671,12 @@ Token Parser::nextToken(b8 peek)
   {
     out.kind = TK::String;
     out.raw = scanner.scanString().allocateCopy(&file->string_cache);
+  }
+  else if (scanner.at('!'))
+  {
+    @dbgBreak;
+    scanner.advance();
+    return nextToken(peek);
   }
   else
   {

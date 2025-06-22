@@ -230,3 +230,15 @@ void Client::disconnectFromServer()
     sv::destroy(engine->server_thread);
   netmgr.disconnectFromServer();
 }
+
+/* ----------------------------------------------------------------------------
+ */
+AssetLoader Client::getAssetLoader()
+{
+  return 
+  { 
+    .renderer = renderer,
+    .assetmgr = engine->assetmgr,
+    .sfilereg = engine->source_data_file_reg,
+  };
+}

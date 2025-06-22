@@ -1,8 +1,7 @@
 $ local cmn = require "common"
 $ local ast = require "reflect.AST"
 
-
-@log.ger(asset, Trace)
+@log.ger(asset, Info)
 
 $$$
 local importer = require "reflect.Importer"
@@ -62,30 +61,19 @@ b8 SourceDataAssetRef::load(const RefLoadParams& params)
   String actual_type = resolveExpectedType(params.type);
   String source_type = rtr::getMetadataValue(params.type, "source_types"_str);
 
+  // TODO(sushi) this is fragile. Really need to redo a lot of the asset 
+  //             loading system. We should take in the name and type of an 
+  //             asset separately (where the type is optional) because some 
+  //             assets (such as shader source data) can be appending the 
+  //             asset type to a name containing an extension.
+  //             eg. assets/shaders/UI.vert
+  //             being the asset name and its type being 'shader', in which
+  //             case we want to load the asset 
+  //             assets/shaders/UI.vert.shader
   if (notnil(source_type) && !name.endsWith(source_type))
     io::formatv(&src_path_buffer, name, '.', source_type);
   else
     io::format(&src_path_buffer, name);
-
-  // if (Path::hasExtension(name))
-  // {
-  //   io::formatv(&src_path_buffer, name);
-  //   asset_name = name.subToLast('.');
-  // }
-  // else
-  // {
-  //   String source_type = 
-  //     rtr::getMetadataValue(params.type, "source_types"_str);
-  //   if (isnil(source_type))
-  //   {
-  //     return ERROR(
-  //       "attempt to load asset '", name, "' of type ", params.type, " but "
-  //       "asset name has no extension and ", params.type, " does not specify "
-  //       "source_types metadata\n");
-  //   }
-
-  //   io::formatv(&src_path_buffer, name, '.', source_type);
-  // }
 
   String src_path = src_path_buffer.asStr();
 

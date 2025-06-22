@@ -12,6 +12,8 @@ $ local ui = require "ui.UI"
 #include "iro/Common.h"
 #include "iro/Unicode.h"
 #include "iro/Flags.h"
+#include "iro/time/Time.h"
+#include "iro/io/IO.h"
 
 @@lpp.import "ui/UI.lh"
 @@lpp.import "game/client/editor/Skin.defs.lh"
@@ -31,6 +33,8 @@ struct Editor
   EditorSkinDefRef skin;
 
   gfx::View view;
+
+  TimePoint start_time;
 
   b8 paused = false;
 
@@ -56,9 +60,22 @@ struct Editor
   b8   init(Client* client, AssetLoader& loader);
   void deinit();
 
+  f32 getTimer() const 
+  { 
+    return (TimePoint::monotonic() - start_time).toSeconds(); 
+  }
+
   b8 update(ui::UI& ui, cl::GameSim& sim);
 
-  void putUI(ui::UI& ui, const EditorSkinDef& skin);
+  InputState putUI(ui::UI& ui, const EditorSkinDef& skin);
+
+  struct MapTool
+  {
+    io::StaticBuffer<128> selected_tile_kind;
+  };
+
+  MapTool tool_map;
+  void putMapTool(ui::UI& ui, const EditorSkinDef& skin);
 };
 
 }

@@ -26,6 +26,8 @@ $ require "common"
 
 #include "iro/time/Time.h"
 
+struct AssetLoader;
+
 /* ============================================================================
  */
 struct Client
@@ -56,4 +58,6 @@ struct Client
   b8 connectToServer(net::Address address);
 
   void disconnectFromServer();
+
+  AssetLoader getAssetLoader();
 };

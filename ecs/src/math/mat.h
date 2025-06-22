@@ -56,8 +56,8 @@ struct mat3x2
 
     return
     {
-      c * scale.x,  s * scale.y, pos.x,
-      s * scale.x, -c * scale.y, pos.y,
+      c * scale.x, -s * scale.y, pos.x,
+      s * scale.x,  c * scale.y, pos.y,
     };
   }
 

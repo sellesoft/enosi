@@ -112,8 +112,8 @@ b8 Window::init(String title, InputMgr& inputmgr)
     }
   }
 
-  size.x = selection.width / 2;
-  size.y = selection.height / 2;
+  size.x = 0.75 * selection.width;
+  size.y = 0.75 * selection.height;
   pos.x = selection.x + size.x / 2;
   pos.y = selection.y + size.y / 2;
 

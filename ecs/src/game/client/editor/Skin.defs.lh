@@ -9,7 +9,12 @@ $ local m = require "reflect.Metadata"
 @m.def
 struct EditorSkinDef
 {
+  Color bg_color;
+  Color tool_panel_bg_color;
+
   ui::ButtonSkin button;
+  ui::DropDownSkin dropdown;
+  ui::ButtonSkin dropdown_option;
 };
 
 struct EditorSkinDefRef : TypedSourceAssetRef<EditorSkinDef> {};
