@@ -266,11 +266,7 @@ b8 GameRenderer::update(const UpdateParams& params)
     proj.set(1, 1, EyeSys::pixels_per_meter * -2.f / (f32)params.viewport.h);
     proj.toMat4(scene.proj);
 
-    params.view.toMat4(scene.view);
-    scene.view[12] = scene.view[2];
-    scene.view[13] = scene.view[6];
-    scene.view[2] = 0.0f;
-    scene.view[6] = 0.0f;
+    params.view.toTransposedMat4(scene.view);
 
     f32 time = (TimePoint::monotonic() - TimePoint{}).toSeconds();
 

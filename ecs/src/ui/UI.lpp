@@ -22,6 +22,8 @@ namespace ui
 
 @log.ger(ui, Info)
 
+static const CombinedItemId c_root_id = {"_ui_root_"_fid.val};
+
 /* ----------------------------------------------------------------------------
  */
 b8 UI::init(InitParams& params)
@@ -166,7 +168,7 @@ void UI::beginFrame(const FrameParams& params)
   current_layer = root_layer;
 
   id_stack.clear();
-  current_id = {"_root_id_"_fid.val};
+  current_id = c_root_id;
 }
 
 /* ----------------------------------------------------------------------------
@@ -194,7 +196,7 @@ void UI::pushConstantFromTransform(mat3x2 transform, gfx::Renderer& renderer)
 
 /* ----------------------------------------------------------------------------
  */
-void UI::endFrame()
+void UI::endFrame(InputState* consumed_input)
 {
   DEBUG("UI::endFrame\n");
 
@@ -350,7 +352,10 @@ void UI::endFrame()
   root_layer = nullptr;
   current_layer = nullptr;
 
-  if (frame_input.wasMouseButtonPressed(MouseButton::Left))
+  b8 consume_click = false;
+
+  if (notnil(next_focus_state.hovered.id) &&
+      frame_input.tryConsumePressedMouseButton(MouseButton::Left))
   {
     next_focus_state.focused = next_focus_state.hovered;
     next_focus_state.pressed_cursor_offset = hovered_cursor_offset;
@@ -366,29 +371,37 @@ void UI::endFrame()
 
   FocusFlags focus = {};
 
-  if (frame_input.wasMouseButtonPressed(MouseButton::Left))
-    focus.set(FocusFlag::PrimaryPressed);
+  if (notnil(next_focus_state.hovered.id))
+  {
+    if (frame_input.tryConsumePressedMouseButton(MouseButton::Left))
+      focus.set(FocusFlag::PrimaryPressed);
 
-  if (frame_input.wasMouseButtonReleased(MouseButton::Left))
-    focus.set(FocusFlag::PrimaryReleased);
+    if (frame_input.tryConsumeReleasedMouseButton(MouseButton::Left))
+      focus.set(FocusFlag::PrimaryReleased);
 
-  if (frame_input.isMouseButtonDown(MouseButton::Left))
-    focus.set(FocusFlag::PrimaryDown);
+    if (frame_input.tryConsumeDownMouseButton(MouseButton::Left))
+      focus.set(FocusFlag::PrimaryDown);
 
-  if (frame_input.wasMouseButtonPressed(MouseButton::Right))
-    focus.set(FocusFlag::SecondaryPressed);
+    if (frame_input.tryConsumePressedMouseButton(MouseButton::Right))
+      focus.set(FocusFlag::SecondaryPressed);
 
-  if (frame_input.wasMouseButtonReleased(MouseButton::Right))
-    focus.set(FocusFlag::SecondaryReleased);
+    if (frame_input.tryConsumeReleasedMouseButton(MouseButton::Right))
+      focus.set(FocusFlag::SecondaryReleased);
 
-  if (frame_input.isMouseButtonDown(MouseButton::Right))
-    focus.set(FocusFlag::SecondaryDown);
+    if (frame_input.tryConsumeDownMouseButton(MouseButton::Right))
+      focus.set(FocusFlag::SecondaryDown);
+  }
 
   next_focus_state.flags = focus;
 
   prev_focus_state = focus_state;
   focus_state = next_focus_state;
   next_focus_state = {};
+
+  // Output the consumed frame input so that stuff can prevent inputs to 
+  // systems that update after UI.
+  if (consumed_input != nullptr)
+    *consumed_input = frame_input;
 
   frame_input.clear();
 
@@ -1010,7 +1023,7 @@ b8 UI::putButton(
   {
     state_skin = &skin.hovered;
 
-    if (frame_input.wasMouseButtonReleased(MouseButton::Left))
+    if (focus.test(FocusFlag::PrimaryReleased))
       clicked = true;
   }
 
@@ -1115,6 +1128,13 @@ $ end
         else
           text_changed = true;
       }
+
+      // NOTE(sushi) I'm not a fan of doing this here but since UI doesn't 
+      //             have a concept of stuff consuming keys like it does 
+      //             mouse buttons there's really not a better place to do it 
+      //             I think.
+      frame_input.consumeCharInputs();
+      frame_input.consumeAllKeys();
     }
   }
 

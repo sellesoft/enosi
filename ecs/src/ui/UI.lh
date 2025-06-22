@@ -376,7 +376,7 @@ struct UI
   };
 
   void beginFrame(const FrameParams& params);
-  void endFrame();
+  void endFrame(InputState* consumed_input = nullptr);
 
   Rect getBounds() const 
   { 

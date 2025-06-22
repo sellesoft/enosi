@@ -4,6 +4,9 @@ $ require "common"
 
 @@lpp.import "game/client/Client.lh"
 @@lpp.import "game/client/editor/MenuBar.lh"
+@@lpp.import "game/shared/Eye.sys.lh"
+
+#include "math/util.h"
 
 using namespace ui;
 
@@ -54,6 +57,10 @@ b8 Editor::update(UI& ui, cl::GameSim& sim)
   InputState ui_input = {};
   client->input.cloneInputState(&ui_input);
 
+  // Make sure that UI doesn't get any mouse input when dragging the view.
+  if (control_state == ControlState::Dragging)
+    ui_input.consumeAllMouseButtons();
+
   ui::UI::FrameParams ui_params = 
   {
     .input = ui_input,
@@ -71,7 +78,70 @@ b8 Editor::update(UI& ui, cl::GameSim& sim)
     paused = !paused;
   }
 
-  ui.endFrame();
+  InputState game_input = {};
+
+  ui.endFrame(&game_input);
+
+  switch (control_state)
+  {
+  case ControlState::None:
+    if (game_input.tryConsumePressedMouseButton(MouseButton::Left))
+    {
+      drag_start_viewport = game_input.getCursorPos();
+      drag_start_world = view.pos;
+      control_state = ControlState::Dragging;
+    }
+    break;
+
+  case ControlState::Dragging:
+    {
+      vec2f cursor_world = view.viewportPointToWorld(
+        game_input.getCursorPos(),
+        vec2f(client->window.size));
+
+      vec2f offset = view.viewportPointToWorld(
+        drag_start_viewport,
+        vec2f(client->window.size));
+
+      view.pos = drag_start_world + offset - cursor_world;
+
+      if (game_input.wasMouseButtonReleased(MouseButton::Left))
+        control_state = ControlState::None;
+    }
+    break;
+  }
+
+  f32 scroll = game_input.getScroll();
+  if (scroll != 0.f)
+  {
+    game_input.consumeScroll();
+
+    if (game_input.tryConsumeDownKey(Key::LShift))
+    {
+      view.rotation += scroll * math::degreesToRadians(1.f);
+    }
+    else
+    {
+      vec2f old_cw = view.viewportPointToWorld(
+        game_input.getCursorPos(), vec2f(client->window.size));
+
+      view.zoom -= view.zoom / 10.f * scroll;
+
+      vec2f new_cw = view.viewportPointToWorld(
+        game_input.getCursorPos(), vec2f(client->window.size));
+
+      view.pos -= new_cw - old_cw;
+    }
+  }
+
+  if (game_input.wasKeyPressed(Key::F10))
+  {
+    // Reset view to the game's incase it gets messed up too much.
+    // TODO(sushi) make other ways to do this.
+    view = sim.gamemgr.entsysmgr.get<EyeSys>().view;
+  }
+
+  INFO(view.zoom, '\n');
   
   return true;
 }
