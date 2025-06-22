@@ -12,17 +12,16 @@
 
 $ require "common"
 
+@@lpp.import "asset/SourceDataEditor.lh"
+@@lpp.import "game/client/Console.lh"
+@@lpp.import "game/client/editor/Editor.lh"
 @@lpp.import "game/client/GameSim.lh"
-
+@@lpp.import "game/client/NetMgr.lh"
+@@lpp.import "graphics/Renderer.lh"
+@@lpp.import "input/InputMgr.lh"
+@@lpp.import "ui/TextEdit.lh"
 @@lpp.import "ui/UI.lh"
 @@lpp.import "window/Window.lh"
-@@lpp.import "input/InputMgr.lh"
-@@lpp.import "graphics/Renderer.lh"
-@@lpp.import "game/client/NetMgr.lh"
-@@lpp.import "game/client/editor/Editor.lh"
-@@lpp.import "ui/TextEdit.lh"
-
-@@lpp.import "asset/SourceDataEditor.lh"
 
 #include "iro/time/Time.h"
 
@@ -33,14 +32,15 @@ struct AssetLoader;
 struct Client
 {
   Engine* engine;
-  cl::NetMgr netmgr;
-  cl::GameSim sim;
 
   // Client only systems.
+  cl::Console console;
+  InputMgr input;
+  cl::NetMgr netmgr;
+  Window window;
   gfx::Renderer renderer;
   ui::UI ui;
-  InputMgr input;
-  Window window;
+  cl::GameSim sim;
   cl::Editor editor;
 
   gfx::Texture white_texture;

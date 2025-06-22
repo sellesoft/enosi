@@ -1,0 +1,22 @@
+$ require "common"
+$ local metadata = require "reflect.Metadata"
+
+#include "iro/containers/StackArray.h"
+#include "iro/Unicode.h"
+
+typedef iro::StackArray<iro::String, 8> CommandArgs;
+typedef void (*CommandFunc)(void* context, const CommandArgs& args);
+
+@metadata.event(broadcast)
+struct AddCommandEvent
+{
+  void* context;
+  iro::String name;
+  CommandFunc func;
+};
+
+@metadata.event(broadcast)
+struct RunCommandEvent
+{
+  iro::String input;
+};

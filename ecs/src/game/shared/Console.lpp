@@ -1,43 +1,155 @@
 $ require "common"
 
+@@lpp.import "Engine.lh"
 @@lpp.import "game/shared/Console.lh"
+@@lpp.import "game/shared/Console.events.lh"
 
 #include "iro/Common.h"
 #include "iro/Logger.h"
+#include "iro/Thread.h"
+
+#include <cstdio>
 
 using namespace iro;
 
 @log.ger(sh.console, Info)
 
-void SharedConsole::init()
+/* ----------------------------------------------------------------------------
+ */
+static void* consoleStdinThread(thread::Context* context)
 {
-  commands.init();
+  assert(!thread::isMainThread());
+  assertpointer(context);
+  assertpointer(context->data);
+  @log.info("Starting the console input thread\n");
+
+  SharedConsole* console = (SharedConsole*)context->data;
+  iro::StackArray<u8, SharedConsole::INPUT_BUFFER_SIZE> input_buffer;
+  while (true)
+  {
+    if (fgets((char*)input_buffer.arr, SharedConsole::INPUT_BUFFER_SIZE, stdin))
+    {
+      size_t len = strlen((const char*)input_buffer.arr);
+      if (len == 0)
+        continue;
+
+      if (input_buffer.arr[len - 1] == '\n')
+      {
+        input_buffer.arr[len - 1] = '\0';
+        len -= 1;
+      }
+      if (len == 0)
+        continue;
+
+      console->stdin_mutex.lock();
+      mem::copy(console->stdin_buffer.arr, input_buffer.arr, len+1);
+      console->stdin_buffer.len = len;
+      console->stdin_mutex.unlock();
+    }
+  }
+  return nullptr;
 }
 
-void SharedConsole::addCommand(iro::String name, CommandFunc func)
+/* ----------------------------------------------------------------------------
+ */
+b8 SharedConsole::init(Engine& eng, b8 stdin_enabled)
 {
-  if (isnil(name))
+  this->commands.init();
+
+  if (stdin_enabled)
+  {
+    this->stdin_mutex.init();
+    this->stdin_thread = thread::create(consoleStdinThread, this, 0);
+    if (this->stdin_thread == nullptr)
+      @log.error("Failed to create the console input thread\n");
+  }
+
+  mem::zero(this->command_name_arena, MAX_COMMAND_NAME_ARENA_SIZE);
+  this->command_name_arena_used = 0;
+
+  eng.subscribeToBroadcast<AddCommandEvent>(this, &SharedConsole::addCommand);
+  eng.subscribeToBroadcast<RunCommandEvent>(this, &SharedConsole::runCommand);
+
+  AddCommandEvent help_cmd =
+  {
+    .context = this,
+    .name = "help"_str,
+    .func = [](void* context, const CommandArgs& args)
+    {
+      SharedConsole* console = (SharedConsole*)context;
+      @log.info("Available commands:\n");
+      for (const Command& c : console->commands)
+      {
+        if (c.name_hash == 0)
+          continue;
+
+        if (c.name.len > 0)
+          @log.info("  ", c.name, "\n");
+        else
+          @log.info("  ", c.name_hash, "\n");
+      }
+    }
+  };
+  addCommand(help_cmd);
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SharedConsole::deinit()
+{
+  if (this->stdin_thread != nullptr)
+  {
+    this->stdin_mutex.deinit();
+    thread::detach(this->stdin_thread);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SharedConsole::update()
+{
+  if (this->stdin_thread == nullptr)
     return;
-  if (func == nullptr)
+  if (!this->stdin_mutex.tryLock())
+    return;
+  if (!this->stdin_buffer.isEmpty())
+  {
+    iro::String input = {this->stdin_buffer.arr, (u64)this->stdin_buffer.len};
+    RunCommandEvent event = {input};
+    runCommand(event);
+    this->stdin_buffer.clear();
+  }
+  this->stdin_mutex.unlock();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void SharedConsole::addCommand(AddCommandEvent& event)
+{
+  if (isnil(event.name))
+    return;
+  if (event.func == nullptr)
     return;
 
-  u64 name_hash = name.hash();
-  for (const Command& c : commands)
+  u64 name_hash = event.name.hash();
+  for (const Command& c : this->commands)
   {
     if (c.name_hash == name_hash)
     {
-$ if ECS_DEBUG
+$ if ECS_DEBUG then
       // check for a hash collision
-      assert(c.name.len == name.len);
-      assert(mem::equal(c.name.ptr, name.ptr, name.len));
+      assert(c.name.len == event.name.len);
+      assert(mem::equal(c.name.ptr, event.name.ptr, event.name.len));
 $ end
 
-      @log.error("Command '", name, "' already exists\n");
+      @log.error("Command '", event.name, "' already exists\n");
       return;
     }
   }
 
-  Command* cmd = commands.add();
+  Command* cmd = this->commands.add();
   if (cmd == nullptr)
   {
     @log.fatal("Maximum number of commands reached;"
@@ -45,15 +157,37 @@ $ end
     return;
   }
 
-$ if ECS_DEBUG
-  cmd->name = name.allocateCopy();
-$ end
+  cmd->context = event.context;
   cmd->name_hash = name_hash;
-  cmd->func = func;
+  cmd->func = event.func;
+
+  u64 new_used = this->command_name_arena_used + event.name.len + 1;
+  if (new_used <= MAX_COMMAND_NAME_ARENA_SIZE)
+  {
+    cmd->name =
+    {
+      .ptr = this->command_name_arena + this->command_name_arena_used,
+      .len = event.name.len
+    };
+    mem::copy(cmd->name.ptr, event.name.ptr, event.name.len);
+    cmd->name.ptr[event.name.len] = '\0';
+    this->command_name_arena_used = new_used;
+  }
+  else
+  {
+    cmd->name = {};
+    @log.error("Console command name arena is full (",
+               new_used, " > ", MAX_COMMAND_NAME_ARENA_SIZE, ");"
+               " bump the limit in SharedConsole.lh\n");
+  }
 }
 
-void SharedConsole::runCommand(iro::String input)
+/* ----------------------------------------------------------------------------
+ */
+void SharedConsole::runCommand(RunCommandEvent& event)
 {
+  iro::String input = event.input;
+
   // split input by semicolons and execute each command
   while(input.len > 0)
   {
@@ -165,13 +299,8 @@ void SharedConsole::runCommand(iro::String input)
       {
         if (c.name_hash == name_hash)
         {
-          // NOTE(delle) "removing" the command name without copying memory
-          // which is safe because the array is on the stack
-          args.arr++;
-          args.len--;
-
-          c.func(args);
-
+          args.remove(0);
+          c.func(c.context, args);
           found = true;
           break;
         }

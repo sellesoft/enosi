@@ -4,28 +4,49 @@ $ require "common"
 #include "iro/containers/FixedPool.h"
 #include "iro/containers/StackArray.h"
 #include "iro/Unicode.h"
+#include "iro/Mutex.h"
+
+
+struct Engine;
+struct AddCommandEvent;
+struct RunCommandEvent;
+
+typedef iro::StackArray<iro::String, 8> CommandArgs;
+typedef void (*CommandFunc)(void* context, const CommandArgs& args);
+
+/* ============================================================================
+ */
+struct Command
+{
+  void* context;
+  u64 name_hash = 0;
+  CommandFunc func;
+  iro::String name;
+};
 
 /* ============================================================================
  */
 struct SharedConsole
 {
-  typedef iro::StackArray<iro::String, 8> CommandArgs;
-  typedef void(*CommandFunc)(const CommandArgs& args);
+  static constexpr u64 MAX_COMMANDS = 100;
+  iro::FixedPool<Command, MAX_COMMANDS> commands;
 
-  struct Command
-  {
-$ if ECS_DEBUG
-    iro::String name;
-$ end
-    u64 name_hash = 0;
-    CommandFunc func;
-  };
+  static constexpr u64 INPUT_BUFFER_SIZE = 512;
+  iro::StackArray<u8, INPUT_BUFFER_SIZE> stdin_buffer;
+  iro::Mutex stdin_mutex;
+  void* stdin_thread;
+
+  static constexpr u64 MAX_COMMAND_NAME_LENGTH = 64;
+  static constexpr u64 MAX_COMMAND_NAME_ARENA_SIZE = 
+    MAX_COMMANDS * MAX_COMMAND_NAME_LENGTH;
+  u8 command_name_arena[MAX_COMMAND_NAME_ARENA_SIZE];
+  u64 command_name_arena_used;
 
 
-  iro::FixedPool<Command, 100> commands;
+  b8 init(Engine& eng, b8 stdin_enabled);
+  void deinit();
+  void update();
 
-
-  void init();
-  void addCommand(iro::String name, CommandFunc func);
-  void runCommand(iro::String input);
+  void addCommand(AddCommandEvent& event);
+  void runCommand(RunCommandEvent& event);
 };

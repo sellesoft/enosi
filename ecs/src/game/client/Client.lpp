@@ -42,6 +42,7 @@ $ local function init(act, name)
   }
 $ end
 
+  @init(console.init(*engine, true), Console);
   @init(input.init(), InputMgr);
 
   // TODO(delle) client allocators
@@ -141,6 +142,8 @@ b8 Client::update()
   if (!window.update(input))
     return ERROR("failed to update window\n");
 
+  console.updateInput();
+
   // Receives messages from the server.
   netmgr.receiveMessages();
 
@@ -159,6 +162,8 @@ b8 Client::update()
   {
     if (!editor.update(ui, sim))
       return ERROR("failed to update editor\n");
+
+    console.updateUI(ui);
   }
   else
   {
@@ -175,6 +180,8 @@ b8 Client::update()
 
     if (!sim.render(renderer))
       return ERROR("failed to render game sim\n");
+
+    console.updateUI(ui);
   }
 
   // Sends messages to the server.

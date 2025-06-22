@@ -4,6 +4,9 @@ $ require "common"
 
 #include "iro/Common.h"
 
+struct Engine;
+namespace ui{ struct UI; }
+
 namespace cl
 {
 
@@ -11,7 +14,8 @@ namespace cl
  */
 struct Console : SharedConsole
 {
-  
+  void updateInput();
+  void updateUI(ui::UI& ui);
 };
 
 } // namespace cl
