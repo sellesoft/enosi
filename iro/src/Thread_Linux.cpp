@@ -36,17 +36,21 @@ static void* linuxThreadFunc(void* data)
 {
   LinuxThread* thread = (LinuxThread*)data;
 
-  void* memory = platform::reserveMemory(thread->bytes);
-  if (memory == nullptr)
+  void* memory = nullptr;
+  if (thread->bytes > 0)
   {
-    ERROR("failed to reserve memory for linux thread");
-    return (void*)1;
-  }
+    memory = platform::reserveMemory(thread->bytes);
+    if (memory == nullptr)
+    {
+      ERROR("failed to reserve memory for linux thread");
+      return (void*)1;
+    }
 
-  if (!platform::commitMemory(memory, thread->bytes))
-  {
-    ERROR("failed to commit memory for linux thread");
-    return (void*)1;
+    if (!platform::commitMemory(memory, thread->bytes))
+    {
+      ERROR("failed to commit memory for linux thread");
+      return (void*)1;
+    }
   }
 
   Context context = {};
@@ -57,8 +61,11 @@ static void* linuxThreadFunc(void* data)
 
   void* result = thread->func(&context);
 
-  platform::decommitMemory(memory, thread->bytes);
-  platform::releaseMemory(memory, thread->bytes);
+  if (thread->bytes > 0)
+  {
+    platform::decommitMemory(memory, thread->bytes);
+    platform::releaseMemory(memory, thread->bytes);
+  }
 
   return result;
 }

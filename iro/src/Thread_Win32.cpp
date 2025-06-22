@@ -35,17 +35,21 @@ DWORD WINAPI win32ThreadFunc(void* data)
   Win32Thread* thread = (Win32Thread*)data;
   assertpointer(thread);
 
-  void* memory = platform::reserveMemory(thread->bytes);
-  if (memory == nullptr)
+  void* memory = nullptr;
+  if (thread->bytes > 0)
   {
-    ERROR("failed to reserve memory for win32 thread");
-    return 1;
-  }
+    memory = platform::reserveMemory(thread->bytes);
+    if (memory == nullptr)
+    {
+      ERROR("failed to reserve memory for win32 thread");
+      return 1;
+    }
 
-  if (!platform::commitMemory(memory, thread->bytes))
-  {
-    ERROR("failed to commit memory for win32 thread");
-    return 1;
+    if (!platform::commitMemory(memory, thread->bytes))
+    {
+      ERROR("failed to commit memory for win32 thread");
+      return 1;
+    }
   }
 
   Context context = {};
@@ -56,8 +60,11 @@ DWORD WINAPI win32ThreadFunc(void* data)
 
   void* result = thread->func(&context);
 
-  platform::decommitMemory(memory, thread->bytes);
-  platform::releaseMemory(memory, thread->bytes);
+  if (thread->bytes > 0)
+  {
+    platform::decommitMemory(memory, thread->bytes);
+    platform::releaseMemory(memory, thread->bytes);
+  }
 
   return (DWORD)(u64)result;
 }
