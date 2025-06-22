@@ -59,6 +59,8 @@ static void* linuxThreadFunc(void* data)
   context.allocator.used = 0;
   context.data = thread->data;
 
+  assert(thread->func != nullptr);
+
   void* result = thread->func(&context);
 
   if (thread->bytes > 0)
@@ -81,16 +83,19 @@ void* create(FuncType* func, void* data, u64 thread_memory_size)
     return nullptr;
   }
 
-  if (-1 == pthread_create(&thread->handle, nullptr, linuxThreadFunc, thread))
+  thread->func = func;
+  thread->data = data;
+  thread->bytes = thread_memory_size;
+
+  int r = pthread_create(&thread->handle, nullptr, linuxThreadFunc, thread);
+
+  if (r != 0)
   {
-    ERROR("failed to create linux thread: ", strerror(errno));
+    ERROR("failed to create linux thread: ", strerror(r));
     mem::stl_allocator.free(thread);
     return nullptr;
   }
 
-  thread->func = func;
-  thread->data = data;
-  thread->bytes = thread_memory_size;
   return thread;
 }
 

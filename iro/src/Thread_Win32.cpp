@@ -80,6 +80,10 @@ void* create(FuncType* func, void* data, u64 thread_memory_size)
     return nullptr;
   }
 
+  thread->func = func;
+  thread->data = data;
+  thread->bytes = thread_memory_size;
+
   HANDLE handle = CreateThread(0, 0, win32ThreadFunc, thread, 0, 0);
   if (handle == NULL)
   {
@@ -89,9 +93,7 @@ void* create(FuncType* func, void* data, u64 thread_memory_size)
   }
 
   thread->handle = handle;
-  thread->func = func;
-  thread->data = data;
-  thread->bytes = thread_memory_size;
+
   return thread;
 }
 
