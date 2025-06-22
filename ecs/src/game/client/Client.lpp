@@ -49,7 +49,7 @@ $ end
   @init(netmgr.init(&mem::stl_allocator), NetMgr);
 
   @init(Window::initializeBackend(), Window backend);
-  @init(window.init("ecs"_str, input), Window);
+  @init(window.init(*engine, "ecs"_str, input), Window);
 
   gfx::Renderer::InitParams renderer_params =
   {

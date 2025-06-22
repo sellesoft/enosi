@@ -330,8 +330,10 @@ b8 Window::initializeBackend()
 /* ----------------------------------------------------------------------------
  *  TODO(sushi) handle unicode window titles if ever necessary.
  */
-b8 Window::init(String name, InputMgr& inputmgr)
+b8 Window::init(Engine& eng, String name, InputMgr& inputmgr)
 {
+  this->eng = &eng;
+
   handle =
     CreateWindowEx(
       0,
