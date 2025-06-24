@@ -1414,8 +1414,7 @@ void UI::endScrollGroup(const ScrollBarSkin& skin)
   if (!drag_scroll && 
       screen_bounds.containsPoint(frame_input.getCursorPos()))
   {
-    *scroll_value -= frame_input.getScroll();
-    frame_input.consumeScroll();
+    *scroll_value -= frame_input.consumeScroll();
   }
 
   *scroll_value = floor(max(0.f, min(max_scroll, *scroll_value)));

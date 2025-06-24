@@ -158,9 +158,7 @@ String ItemUpdateContext::tryConsumeCharInput()
  */
 f32 ItemUpdateContext::tryConsumeScroll()
 {
-  f32 scroll = input.getScroll();
-  ui.frame_input.consumeScroll();
-  return scroll;
+  return ui.frame_input.consumeScroll();
 }
 
 /* ----------------------------------------------------------------------------
