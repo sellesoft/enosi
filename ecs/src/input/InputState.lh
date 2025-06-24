@@ -91,9 +91,16 @@ struct InputState
     return nil;
   }
 
-  void consumeAllKeys() { keys_consumed.setAll(); }
-  void consumeKey(Key key) { keys_consumed.set(key); }
-  
+  void consumeAllKeys()
+  {
+    keys_consumed.setAll();
+  }
+
+  void consumeKey(Key key)
+  {
+    keys_consumed.set(key);
+  }
+
   b8 wasKeyConsumed(Key key)
   {
     return keys_consumed.test(key);
@@ -181,9 +188,18 @@ struct InputState
     return out;
   }
 
-  void consumeScroll()
+  f32 consumeScroll()
   {
+    auto out = scroll;
     scroll = 0.f;
+    return out;
+  }
+
+  vec2f consumeCursorDelta()
+  {
+    auto out = cursor_delta;
+    cursor_delta = {};
+    return out;
   }
 
   // Clears all inputs. 
@@ -201,6 +217,7 @@ struct InputState
 
     consumeCharInputs();
     consumeScroll();
+    consumeCursorDelta();
   }
 
   enum
