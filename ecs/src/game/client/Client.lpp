@@ -42,7 +42,6 @@ $ local function init(act, name)
   }
 $ end
 
-  @init(console.init(*engine, true), Console);
   @init(input.init(), InputMgr);
 
   // TODO(delle) client allocators
@@ -114,6 +113,8 @@ $ end
   };
   @init(ui.init(ui_params), UI);
 
+  @init(console.init(*engine, asset_loader, true), Console);
+
   cl::GameSim::InitParams sim_params =
   {
     .loader   = asset_loader,
@@ -142,7 +143,7 @@ b8 Client::update()
   if (!window.update(input))
     return ERROR("failed to update window\n");
 
-  console.updateInput();
+  console.updateInput(input);
 
   // Receives messages from the server.
   netmgr.receiveMessages();
@@ -163,7 +164,7 @@ b8 Client::update()
     if (!editor.update(ui, sim))
       return ERROR("failed to update editor\n");
 
-    console.updateUI(ui);
+    console.updateUI(window, input, ui);
   }
   else
   {
@@ -181,7 +182,7 @@ b8 Client::update()
     if (!sim.render(renderer))
       return ERROR("failed to render game sim\n");
 
-    console.updateUI(ui);
+    console.updateUI(window, input, ui);
   }
 
   // Sends messages to the server.

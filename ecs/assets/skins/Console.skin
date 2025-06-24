@@ -1,0 +1,30 @@
+// Night
+black = 0x0d0c0cff
+
+// Silver
+white = 0xc5c9c5ff
+
+return ConsoleSkinDef
+{
+  text_field =
+  {
+    box =
+    {
+      text =
+      {
+        font = "assets/fonts/gohu",
+        wrap = "Word",
+        font_height = 11,
+        tab_spaces = 1,
+        color = white,
+      },
+      item =
+      {
+        color = black,
+      },
+      text_padding = { 0, 0 },
+    },
+    padding = { 0, 0 },
+    cursor_color = white,
+  },
+}
