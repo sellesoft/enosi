@@ -1,11 +1,16 @@
 $ require "common"
 
+@@lpp.import "game/client/ConsoleSkin.defs.lh"
 @@lpp.import "game/shared/Console.lh"
+@@lpp.import "ui/UI.lh"
 
 #include "iro/Common.h"
+#include "iro/containers/StackArray.h"
 
+struct AssetLoader;
 struct Engine;
-namespace ui{ struct UI; }
+struct InputMgr;
+struct Window;
 
 namespace cl
 {
@@ -14,8 +19,20 @@ namespace cl
  */
 struct Console : SharedConsole
 {
-  void updateInput();
-  void updateUI(ui::UI& ui);
+  enum struct State
+  {
+    Hidden,
+    Visible,
+  };
+
+  State state;
+  iro::StackArray<u8, SharedConsole::INPUT_BUFFER_SIZE> input_buffer;
+  ConsoleSkinDefRef skin;
+  ui::TextFieldState text_field_state;
+
+  b8 init(Engine& eng, AssetLoader& loader, b8 stdin_enabled);
+  void updateInput(InputMgr& input);
+  void updateUI(Window& window, InputMgr& input, ui::UI& ui);
 };
 
 } // namespace cl

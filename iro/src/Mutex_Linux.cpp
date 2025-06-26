@@ -1,11 +1,10 @@
-#include <cstring>
-#include <pthread.h>
 #if IRO_LINUX
 
 #include "Common.h"
 #include "Logger.h"
 #include "Mutex.h"
 
+#include <cstring>
 #include "errno.h"
 #include "pthread.h"
 #include "time.h"
