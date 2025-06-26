@@ -56,6 +56,10 @@ enum class FocusFlag
   SecondaryPressed,
   SecondaryReleased,
 
+  TertiaryDown,
+  TertiaryPressed,
+  TertiaryReleased,
+
   COUNT
 };
 typedef Flags<FocusFlag> FocusFlags;

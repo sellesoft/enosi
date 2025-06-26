@@ -388,6 +388,15 @@ void UI::endFrame(InputState* consumed_input)
 
     if (frame_input.tryConsumeDownMouseButton(MouseButton::Right))
       focus.set(FocusFlag::SecondaryDown);
+
+    if (frame_input.tryConsumePressedMouseButton(MouseButton::Middle))
+      focus.set(FocusFlag::TertiaryPressed);
+
+    if (frame_input.tryConsumeReleasedMouseButton(MouseButton::Middle))
+      focus.set(FocusFlag::TertiaryReleased);
+
+    if (frame_input.tryConsumeDownMouseButton(MouseButton::Middle))
+      focus.set(FocusFlag::TertiaryDown);
   }
 
   next_focus_state.flags = focus;
