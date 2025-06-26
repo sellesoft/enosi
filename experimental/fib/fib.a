@@ -1,0 +1,27 @@
+global _fib_wrap_main
+_fib_wrap_main:
+  mov rdi, r13
+  jmp r12
+
+global _fib_switch
+_fib_switch:
+  lea rax, dword [rel $ + 0x3d]
+  mov [rdi+0x00], rax
+  mov [rdi+0x10], rsp
+  mov [rdi+0x20], rbp
+  mov [rdi+0x30], rbx
+  mov [rdi+0x40], r12
+  mov [rdi+0x50], r13
+  mov [rdi+0x60], r14
+  mov [rdi+0x70], r15
+  mov r15, [rsi+0x70]
+  mov r14, [rsi+0x60]
+  mov r13, [rsi+0x50]
+  mov r12, [rsi+0x40]
+  mov rbx, [rsi+0x30]
+  mov rbp, [rsi+0x20]
+  mov rsp, [rsi+0x10]
+  mov rax, [rsi+0x00]
+  jmp [rsi]
+  ret
+
