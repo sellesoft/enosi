@@ -193,6 +193,28 @@ cmd.LuaObj.complete = function(self, lfile, ofile)
     ofile)
 end
 
+--- Generate an obj file from an asm file.
+---@class cmd.AsmObj
+cmd.AsmObj = Type.make()
+
+---@class cmd.AsmObj.Params
+---
+
+---@params params cmd.AsmObj.Params
+cmd.AsmObj.new = function(params)
+  local o = {}
+
+  o.partial = helpers.listBuilder(
+    "nasm", "-f", "elf64", "-g")
+
+  return setmetatable(o, cmd.AsmObj)
+end
+
+cmd.AsmObj.complete = function(self, afile, ofile)
+  return helpers.listBuilder(
+    self.partial, afile, "-o", ofile)
+end
+
 --- Generate an obj file from an lpp file.
 --- Note that this goes through two compilations, the first turning the lpp
 --- file into a cpp file and the second turning that into an obj file, so make

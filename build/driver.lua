@@ -172,6 +172,11 @@ local createBuildCmds = function(proj)
     cmds[build.obj.LppObj] = build.cmds.LppObj.new(params)
   end
 
+  ---@type cmd.AsmObj.Params | {}
+  do local params = {}
+    cmds[build.obj.AsmObj] = build.cmds.AsmObj.new(params)
+  end
+
   return cmds
 end
 

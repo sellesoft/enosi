@@ -414,6 +414,47 @@ end
 
 -- * --------------------------------------------------------------------------
 
+--- An obj file built from an assembly file.
+---@class object.AsmObj : object.Obj
+local AsmObj = Obj:derive()
+object.AsmObj = AsmObj
+
+-- * --------------------------------------------------------------------------
+
+AsmObj.new = function(src)
+  local o = {} 
+  o.src = src
+  return setmetatable(o, AsmObj)
+end
+
+-- * --------------------------------------------------------------------------
+
+AsmObj.declareTask = function(self)
+  self.task = 
+    lake.task(self:getOutputPath())
+      :workingDirectory(self.proj.root)
+end
+
+-- * --------------------------------------------------------------------------
+
+AsmObj.defineTask = function(self, cmd)
+  local afile = self.proj.root..'/'..self.src
+  local ofile = self.task.name
+  ensureDirExists(ofile)
+
+  local comp = cmd:complete(self.src, ofile)
+
+  setFileExistanceAndModTimeCondition(self.task)
+
+  self.task
+    :dependsOn(lake.task(afile))
+    :recipe(function()
+      runAndReportResult(comp, afile, ofile)
+    end)
+end
+
+-- * --------------------------------------------------------------------------
+
 --- An executable built from some collection of object files.
 ---@class object.Exe : object.BuildObject
 --- The name of the executable.
@@ -674,129 +715,6 @@ end
 
 SharedLib.defineTask = function(self)
   defineLinkerTask(self, true, self.lib_filter)
-end
-
--- * --------------------------------------------------------------------------
-
---- A special build object that specifies a makefile that needs to be run.
---- This should only be used for compiling external libraries that use
---- make for compilation.
----@class object.Makefile : object.BuildObject
-local Makefile = BuildObject:derive()
-object.Makefile = Makefile
-
--- * --------------------------------------------------------------------------
-
---- The directory make should run in.
----@param root string
-Makefile.new = function(root, cond)
-  local o = {}
-  o.root = root
-  o.cond = cond or function()
-    return 0 ~= os.execute "make -q"
-  end
-  return setmetatable(o, Makefile)
-end
-
--- * --------------------------------------------------------------------------
-
-Makefile.getOutputPath = function()
-  error("getOutputPath should never be called on a Makefile")
-end
-
--- * --------------------------------------------------------------------------
-
-Makefile.declareTask = function(self)
-  self.task =
-    lake.task("make "..self.proj.name)
-      :cond(self.cond)
-      :workingDirectory(self.proj.root.."/"..self.root)
-end
-
--- * --------------------------------------------------------------------------
-
-Makefile.defineTask = function(self)
-  self.task
-    :recipe(function()
-      local result = lake.cmd({"make", "-j"},
-      {
-        onRead = io.write
-      })
-    end)
-end
-
--- * --------------------------------------------------------------------------
-
---- A special build object that specifies a CMake project thing that needs
---- to be configured and run.
----@class object.CMake : object.BuildObject
---- Path to the configuration file.
----@field config string
---- Path where build artifacts should be placed.
----@field output string
---- The build mode to be used.
----@field mode string
-local CMake = BuildObject:derive()
-object.CMake = CMake
-
--- * --------------------------------------------------------------------------
-
---- Path to the configuration file.
----@param config string
---- What generator to use.
----@param generator string
---- Arguments to be passed to CMake
----@param args iro.List
---- Path where build artifacts should be placed.
----@param output string
-CMake.new = function(config, generator, args, output)
-  local o = {}
-  o.config = config
-  o.output = output
-  o.generator = generator
-  o.args = args
-  return setmetatable(o, CMake)
-end
-
--- * --------------------------------------------------------------------------
-
-CMake.getOutputPath = function()
-  error("getOutputPath should never be called on a CMake")
-end
-
--- * --------------------------------------------------------------------------
-
-CMake.declareTask = function(self)
-  local output_path = self.proj.root.."/"..self.output
-  self.task =
-    lake.task("cmake "..self.output)
-      :workingDirectory(output_path)
-      :cond(function()
-        return not lake.pathExists(output_path.."/CMakeCache.txt")
-      end)
-end
-
--- * --------------------------------------------------------------------------
-
-CMake.defineTask = function(self)
-  ensureDirExists(self.output)
-
-  ---@type cmd.CMake.Params | {}
-  local params = {}
-
-  params.args = self.args
-  params.generator = self.generator
-  params.config_dir = self.config
-
-  local cmd = build.cmd.CMake.new(params)
-
-  self.task:recipe(function()
-    local result = lake.cmd(cmd, { onRead = io.write })
-
-    if result ~= 0 then
-      sys.log:error("failed to configure cmake")
-    end
-  end)
 end
 
 return object
