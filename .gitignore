@@ -43,3 +43,4 @@ cgo/
 experimental/lamu/build/
 
 toolchain.ver.mine
+/experimental/fib/build/

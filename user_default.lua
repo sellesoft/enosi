@@ -26,8 +26,9 @@ return
     "elua",
     "lake",
     "hreload",
-    --"experimental/eog",
+    -- "experimental/eog",
     -- "experimental/lamu",
+    -- "experimental/fib",
     "ecs",
   },
 
