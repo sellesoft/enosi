@@ -12,6 +12,7 @@ $ local metadata = require "reflect.Metadata"
 
 #include "Color.h"
 #include "math/vec.h"
+#include "math/Rect.h"
 
 namespace gfx
 {
@@ -21,9 +22,23 @@ struct CompiledTexture;
 /* ============================================================================
  */
 @metadata.def
+struct SpriteTexture
+{
+  gfx::TextureRef texture;
+
+  @metadata.default "{0,0,1,1}"
+  Rect uv;
+
+  @metadata.default "{255,255,255,255}"
+  Color color;
+};
+
+/* ============================================================================
+ */
+@metadata.def
 struct SpriteStatesDef
 {
-  StringMap<gfx::TextureRef> map;
+  StringMap<SpriteTexture> map;
 };
 
 @metadata.source_types(sprite_states)

@@ -1,0 +1,13 @@
+return EntityDef
+{
+  name = "Wall",
+  components = 
+  {
+    Appearance {},
+    ExtendableStructure { kind = "IronWall" },
+    cl::Sprite
+    {
+      states = "assets/entities/walls/iron/Wall"
+    }
+  }
+}

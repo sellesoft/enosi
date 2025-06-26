@@ -197,6 +197,7 @@ void GameRenderer::drawQuad(
   gfx::Renderer& renderer,
   vec2f pos,
   gfx::Texture texture,
+  vec4f uv,
   Color color)
 {
   if (texture != batches[batch_count-1].texture)
@@ -222,10 +223,10 @@ void GameRenderer::drawQuad(
   }
 
   auto vp = (gfx::Vertex*)quads_vertex_buffer.mapped_data + 4*quad_count;
-  vp[0] = { pos + vec2f(-0.f,-0.f), vec2f(0,1), color.rgba };
-  vp[1] = { pos + vec2f( 1.f,-0.f), vec2f(1,1), color.rgba };
-  vp[2] = { pos + vec2f( 1.f, 1.f), vec2f(1,0), color.rgba };
-  vp[3] = { pos + vec2f(-0.f, 1.f), vec2f(0,0), color.rgba };
+  vp[0] = { pos + vec2f(-0.f,-0.f), vec2f(uv.x,uv.w), color.rgba };
+  vp[1] = { pos + vec2f( 1.f,-0.f), vec2f(uv.z,uv.w), color.rgba };
+  vp[2] = { pos + vec2f( 1.f, 1.f), vec2f(uv.z,uv.y), color.rgba };
+  vp[3] = { pos + vec2f(-0.f, 1.f), vec2f(uv.x,uv.y), color.rgba };
 
   batches[batch_count-1].quad_count++;
   quad_count++;
@@ -322,17 +323,13 @@ b8 GameRenderer::update(const UpdateParams& params)
 
         const TileKindDef& tilekind = *tile.kind;
 
-        gfx::Texture texture = null_texture->gfx_texture;
-
-        gfx::TextureRef texref = tilekind.textures[tile.configuration];
-        if (!texref.isValid())
-          texref = tilekind.textures[TileKindConfig::Default];
-
-        if (texref.isValid())
-          texture = texref->gfx_texture;
+        gfx::Texture texture = 
+          tilekind.texture.isValid() 
+          ? tilekind.texture->gfx_texture
+          : null_texture->gfx_texture;
 
         vec2f pos = map.getTilePos(layer, tile);
-        drawQuad(renderer, pos, texture, tint);
+        drawQuad(renderer, pos, texture, {0.f,0.f,1.f,1.f}, tint);
       }
 
       layer_idx++;
@@ -358,21 +355,33 @@ b8 GameRenderer::update(const UpdateParams& params)
           " has no owner\n");
         continue;
       }
-
+      
       gfx::Texture texture = null_texture->gfx_texture;
+      vec4f uv = {0.f, 0.f, 1.f, 1.f};
+      Color color = 0xff0000ff;
       if (sprite.states.isValid())
       {
-        const gfx::TextureRef* texref =
+        const SpriteTexture* stex =
           sprite.states->map.getAtIndex(sprite.state);
 
-        if (texref != nullptr && texref->isValid())
+        if (stex != nullptr && stex->texture.isValid())
         {
-          texture = (*texref)->gfx_texture;
-        }
-        else
-        {
-          // WARN("sprite component for entity ", owner->name, 
-          //      " has no texture\n");
+          const gfx::CompiledTextureData& tex_data = stex->texture->getData();
+
+          // Sooo many dereferences. 
+          // TODO(sushi) it would be nice to cache this somehow but I'm not 
+          //             sure if that's possible given our current setup.
+          texture = stex->texture->gfx_texture;
+          color = stex->color;
+
+          vec2f uv_min = stex->uv.pos();
+          vec2f uv_max = stex->uv.extent();
+
+          // TODO(sushi) it would be nice to cache these as well.
+          uv.x = uv_min.x / f32(tex_data.width);
+          uv.y = uv_min.y / f32(tex_data.height);
+          uv.z = uv_max.x / f32(tex_data.width);
+          uv.w = uv_max.y / f32(tex_data.height);
         }
       }
 
@@ -384,10 +393,7 @@ b8 GameRenderer::update(const UpdateParams& params)
         pos.x += layer.pos.x;
         pos.y += layer.pos.y;
 
-        Color color = sprite.color;
-        if (texture == null_texture->gfx_texture)
-          color = 0xff0000ff;
-        drawQuad(renderer, pos, texture, color);
+        drawQuad(renderer, pos, texture, uv, color);
       }
     }
   }

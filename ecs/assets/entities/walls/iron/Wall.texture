@@ -1,0 +1,7 @@
+return gfx::TextureDef
+{
+  name = "assets/entities/walls/iron/Wall.png",
+  format = "RGBA",
+  filter = "Nearest",
+  address_mode = "ClampToBlack",
+}

@@ -99,8 +99,6 @@ struct MapLoader
         return false;
     }
 
-    layer->reevaluateTileConfigurations();
-
     return true;
   }
 
@@ -146,61 +144,6 @@ Tile* Layer::getTileAtPos(s32 x, s32 y)
 
 /* ----------------------------------------------------------------------------
  */
-void Layer::reevaluateTileConfigurations()
-{
-  for (s32 x = 0; x < size.x; ++x)
-  {
-    for (s32 y = 0; y < size.y; ++y)
-    {
-      Tile* tile = getTileAtPos(x,y);
-      assert(tile != nullptr);
-
-      Tile* top    = getTileAtPos(x,y+1);
-      Tile* bottom = getTileAtPos(x,y-1);
-      Tile* right  = getTileAtPos(x+1,y);
-      Tile* left   = getTileAtPos(x-1,y);
-
-      enum
-      {
-        R = 1 << 0,
-        T = 1 << 1,
-        L = 1 << 2,
-        B = 1 << 3,
-      };
-
-      u8 mask = 0;
-      mask |= (top    && top->kind    == tile->kind)? T : 0;
-      mask |= (bottom && bottom->kind == tile->kind)? B : 0;
-      mask |= (right  && right->kind  == tile->kind)? R : 0;
-      mask |= (left   && left->kind   == tile->kind)? L : 0;
-
-      static const TileKindConfig configs[] = 
-      {
-        [0]       = TileKindConfig::Default,
-        [T]       = TileKindConfig::VerticalBottomCap,
-        [B]       = TileKindConfig::VerticalTopCap,
-        [T|B]     = TileKindConfig::Vertical,
-        [R]       = TileKindConfig::HorizontalLeftCap,
-        [T|R]     = TileKindConfig::BottomLeftCorner,
-        [B|R]     = TileKindConfig::TopLeftCorner,
-        [T|B|R]   = TileKindConfig::ThreeWayIntersection,
-        [L]       = TileKindConfig::HorizontalRightCap,
-        [L|T]     = TileKindConfig::BottomRightCorner,
-        [L|B]     = TileKindConfig::TopRightCorner,
-        [L|B|T]   = TileKindConfig::ThreeWayIntersection,
-        [L|R]     = TileKindConfig::Horizontal,
-        [L|R|T]   = TileKindConfig::ThreeWayIntersection,
-        [L|R|B]   = TileKindConfig::ThreeWayIntersection,
-        [T|L|R|B] = TileKindConfig::FourWayIntersection,
-      };
-
-      tile->configuration = configs[mask];
-    }
-  }
-}
-
-/* ----------------------------------------------------------------------------
- */
 b8 MapSys::init()
 {
   return true;
@@ -229,6 +172,20 @@ b8 MapSys::load(const MapDef& def, LoadParams& params)
   raise(MapPostLoad{});
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Layer* MapSys::getLayerByIndex(u32 index)
+{
+  if (index > layers.len())
+  {
+    ERROR("attempt to get a Layer by out-of-bounds index (", index, " > ",
+          layers.len(), ")\n");
+    return nullptr;
+  }
+
+  return &layers[index];
 }
 
 /* ----------------------------------------------------------------------------

@@ -18,7 +18,6 @@ p:run()
 $$$
 @imported:get
 
-
 $ local decls =
 $ {
 $   editor = p.decls.map["struct ui::MapEditor"],

@@ -22,44 +22,10 @@ namespace gfx
 
 /* ============================================================================
  */
-enum class TileKind
-{
-  Empty,
-  Wall,
-  Floor,
-  
-  @metadata.hidden
-  COUNT,
-};
-
-/* ============================================================================
- */
-enum class TileKindConfig
-{
-  TopLeftCorner,
-  TopRightCorner,
-  BottomLeftCorner,
-  BottomRightCorner,
-  Horizontal,
-  HorizontalLeftCap,
-  HorizontalRightCap,
-  Vertical,
-  VerticalTopCap,
-  VerticalBottomCap,
-  FourWayIntersection,
-  ThreeWayIntersection,
-
-  Default,
-
-  COUNT,
-};
-
-/* ============================================================================
- */
 struct TileKindDef
 {
-  TileKind kind;
-  EnumArray<TileKindConfig, gfx::TextureRef> textures;
+  String name;
+  gfx::TextureRef texture;
 };
 
 @metadata.source_types(tile_kind)

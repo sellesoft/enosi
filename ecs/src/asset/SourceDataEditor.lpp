@@ -844,7 +844,16 @@ $ -- * ------------------------------------------------------------------------
 
 $ local function putRecordDatumState(name, decl)
 $   if decl:findMetadata "ref" then
-$     print(decl)
+$     -- TODO(sushi) return to this once I'm not so burnt out of it.
+$     --             The way I was trying to handle Refs isn't going to work
+$     --             out how I wanted to. For some reason I started them 
+$     --             with the idea that they didn't require the target be 
+$     --             be specified by a String, and I have no idea why.
+$     --             I don't think there's any reason why we wouldn't, 
+$     --             so when I return to this we should just assume 
+$     --             Ref types refer to their target this way, and use their
+$     --             source_types metadata to filter a combo box to select 
+$     --             asset targets in the source data editor.
 $   elseif decl:is(ast.TemplateSpecialization) then
 $     return (putTemplateSpecializationState(name, decl))
 $   elseif decl:is(ast.Struct) and decl.is_complete then

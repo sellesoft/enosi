@@ -122,26 +122,14 @@ b8 Editor_GameView::update(
   switch (control_state)
   {
   case ControlState::None:
-    if (focus.test(ui::FocusFlag::PrimaryPressed))
+    if (focus.test(ui::FocusFlag::TertiaryPressed))
     {
       drag_start_viewport = cursor_pos;
       drag_start_world = view.pos;
-      control_state = ControlState::DragOrSelect;
+      control_state = ControlState::Dragging;
     }
-    break;
-
-  case ControlState::DragOrSelect:
-    {
-      if (focus.test(ui::FocusFlag::PrimaryReleased))
-      {
-        select = true;
-        control_state = ControlState::None;
-      }
-      else if (drag_start_viewport != cursor_pos)
-      {
-        control_state = ControlState::Dragging;
-      }
-    }
+    else if (focus.test(ui::FocusFlag::PrimaryPressed))
+      select = true;
     break;
 
   case ControlState::Dragging:
@@ -150,7 +138,7 @@ b8 Editor_GameView::update(
 
       view.pos = drag_start_world + offset - cursor_world_pos;
 
-      if (focus.test(ui::FocusFlag::PrimaryReleased))
+      if (focus.test(ui::FocusFlag::TertiaryReleased))
         control_state = ControlState::None;
     }
     break;
@@ -182,7 +170,10 @@ b8 Editor_GameView::update(
     view = sim.gamemgr.entsysmgr.get<EyeSys>().view;
   }
 
-  MapSys& map = sim.gamemgr.entsysmgr.get<MapSys>();
+  // Evalute selection/hover state of game objects.
+  EntityMgr& entmgr = sim.entmgr;
+  EntitySysMgr& entsysmgr = sim.gamemgr.entsysmgr;
+  MapSys& map = entsysmgr.get<MapSys>();
 
   {
     Tile* tile = nullptr;

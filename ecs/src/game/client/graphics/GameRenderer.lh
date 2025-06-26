@@ -36,6 +36,8 @@ struct BroadcastEventBus;
 namespace cl
 {
 
+struct GameRenderer;
+
 /* ============================================================================
  */
 struct GameRenderer
@@ -78,8 +80,6 @@ struct GameRenderer
     gfx::Renderer& renderer;
     EntityMgr*     entmgr;
     MapSys*        map;
-
-    b8 debug = false;
   };
 
   b8 update(const UpdateParams& params);
@@ -88,6 +88,7 @@ struct GameRenderer
     gfx::Renderer& renderer,
     vec2f pos,
     gfx::Texture texture,
+    vec4f uv,
     Color color);
 
   gfx::TextureRef null_texture;

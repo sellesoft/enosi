@@ -189,7 +189,7 @@ b8 Packer::pack(const SourceData& data, Color* out)
 
     if (data.children.len() == 4)
     {
-      if (!getCol(data.children[3], &out->r))
+      if (!getCol(data.children[3], &out->a))
         return false;
     }
     else if (data.children.len() > 4)

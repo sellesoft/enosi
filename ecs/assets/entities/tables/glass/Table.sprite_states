@@ -1,17 +1,23 @@
+base =
+{
+  color = { 255,255,255,255 },
+  uv = {0,0,64,64},
+}
+
 return SpriteStatesDef
 {
   map =
   {
-    Island             = "assets/entities/tables/glass/Island",
-    BottomLeft         = "assets/entities/tables/glass/BottomLeft",
-    BottomRight        = "assets/entities/tables/glass/BottomRight",
-    TopLeft            = "assets/entities/tables/glass/TopLeft",
-    TopRight           = "assets/entities/tables/glass/TopRight",
-    Horizontal         = "assets/entities/tables/glass/Horizontal",
-    HorizontalLeftCap  = "assets/entities/tables/glass/HorizontalLeftCap",
-    HorizontalRightCap = "assets/entities/tables/glass/HorizontalRightCap",
-    Vertical           = "assets/entities/tables/glass/Vertical",
-    VerticalBottomCap  = "assets/entities/tables/glass/VerticalBottomCap",
-    VerticalTopCap     = "assets/entities/tables/glass/VerticalTopCap",
+    Island             = base : { texture = "assets/entities/tables/glass/Island" },
+    BottomLeft         = base : { texture = "assets/entities/tables/glass/BottomLeft" },
+    BottomRight        = base : { texture = "assets/entities/tables/glass/BottomRight" },
+    TopLeft            = base : { texture = "assets/entities/tables/glass/TopLeft" },
+    TopRight           = base : { texture = "assets/entities/tables/glass/TopRight" },
+    Horizontal         = base : { texture = "assets/entities/tables/glass/Horizontal" },
+    HorizontalLeftCap  = base : { texture = "assets/entities/tables/glass/HorizontalLeftCap" },
+    HorizontalRightCap = base : { texture = "assets/entities/tables/glass/HorizontalRightCap" },
+    Vertical           = base : { texture = "assets/entities/tables/glass/Vertical" },
+    VerticalBottomCap  = base : { texture = "assets/entities/tables/glass/VerticalBottomCap" },
+    VerticalTopCap     = base : { texture = "assets/entities/tables/glass/VerticalTopCap" },
   }
 }

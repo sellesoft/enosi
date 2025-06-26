@@ -6,16 +6,16 @@
 #define iterations 17
 #define formuparam 0.53
 
-#define volsteps 10
-#define stepsize 0.1
+#define volsteps 20
+#define stepsize 0.05
 
 #define zoom   0.800
 #define tile   0.850
-#define speed  0.00001
+#define speed  0.00005
 
 #define brightness 0.0015
-#define distfading 0.730
-#define saturation 0.150
+#define distfading 0.530
+#define saturation 0.050
 
 //NOTE: every field is padded to 16 bytes due to std140
 layout(std140, set = 0, binding = 0) uniform SceneBuffer
@@ -36,7 +36,7 @@ void main()
   uv.y *= scene.resolution_and_time.y / scene.resolution_and_time.x;
   vec3 dir = vec3(uv * zoom, 1.0);
   float time = scene.resolution_and_time.z * speed + 0.25;
-  vec3 from = vec3(1.0 + 2.0*time, 0.5 + time, -1.5);
+  vec3 from = vec3(1.0 + 1.2f*time, 0.5 + 0.2f*time, -1.5);
 
   // volumetric rendering
   float s = 0.1;

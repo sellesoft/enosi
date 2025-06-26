@@ -27,12 +27,17 @@ void StructureVisualizerSys::onAppearanceChange(
 
   auto& sprite_states = *sprite->states;
 
-  Layer* layer;
-  Tile*  tile;
-  if (!map->getTileAndLayerAtPos(&layer, &tile, transform->pos))
+  Layer* layer = map->getLayerByIndex(transform->placement_layer);
+  if (layer == nullptr)
   {
-    WARN("failed to get layer and tile of entity ", ec.ent.value, " at ", 
-         transform->pos, "\n");
+    ERROR("entity ", ec.ent, " has an invalid layer placement\n");
+    return;
+  }
+
+  Tile* tile = layer->getTileAtPos(transform->pos);
+  if (tile == nullptr)
+  {
+    ERROR("structure entity ", ec.ent, " placed out of layer bounds\n");
     return;
   }
 
@@ -66,15 +71,15 @@ void StructureVisualizerSys::onAppearanceChange(
     if (other_sprite == nullptr)
       continue;
 
-    Layer* other_layer;
-    Tile*  other_tile;
-    if (!map->getTileAndLayerAtPos(
-          &other_layer, 
-          &other_tile, 
-          other_transform->pos))
+    Layer* other_layer = 
+      map->getLayerByIndex(other_transform->placement_layer);
+    
+    if (layer != other_layer)
       continue;
 
-    if (layer != other_layer)
+    Tile* other_tile = layer->getTileAtPos(other_transform->pos);
+    if (other_tile == nullptr)
+      // ???
       continue;
 
     vec2f pos0 = layer->getTilePos(*tile);
@@ -107,10 +112,10 @@ void StructureVisualizerSys::onAppearanceChange(
     [T|L]     = "BottomRight"_hashed,
     [T|B]     = "Vertical"_hashed,
     [L|B]     = "TopRight"_hashed,
-    [R|T|L]   = "FullBottomCap"_hashed,
-    [R|T|B]   = "FullLeftCap"_hashed,
-    [R|L|B]   = "FullTopCap"_hashed,
-    [T|L|B]   = "FullRightCap"_hashed,
+    [R|T|L]   = "ThreeWayBottomCap"_hashed,
+    [R|T|B]   = "ThreeWayLeftCap"_hashed,
+    [R|L|B]   = "ThreeWayTopCap"_hashed,
+    [T|L|B]   = "ThreeWayRightCap"_hashed,
     [R|T|L|B] = "Full"_hashed,
   };
 
@@ -138,13 +143,31 @@ void StructureVisualizerSys::onAppearanceChange(
   if (state_idx == sprite_states.map.len)
   {
     WARN("missing sprite for state ", state_string_map[mask], "\n");
-    sprite->state = 0;
+
+    // Try to default back to a horizontal/vertical state if one of the
+    // caps are missing.
+    switch (mask)
+    {
+    case L:
+    case R:
+      state_idx = sprite_states.map.findIndex("Horizontal"_hashed);
+      break;
+    case B:
+    case T:
+      state_idx = sprite_states.map.findIndex("Vertical"_hashed);
+      break;
+    }
+
+    // If its still missing, try the Island state.
+    if (state_idx == sprite_states.map.len)
+      state_idx = sprite_states.map.findIndex("Island"_hashed);
+
+    // And if its STILL missing, just set to an invalid index.
+    if (state_idx == sprite_states.map.len)
+      state_idx = 0;
   }
-  else
-  {
-    sprite->state = state_idx;
-    DEBUG("set state of ", ec.ent.value, " to ", state_string_map[mask], "\n");
-  }
+
+  sprite->state = state_idx;
 }
 
 }

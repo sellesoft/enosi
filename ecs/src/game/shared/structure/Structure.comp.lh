@@ -3,6 +3,7 @@
  */
 
 $ require "common"
+$ local m = require "reflect.Metadata"
 
 @@lpp.import "game/shared/component/Component.lh"
 
@@ -14,27 +15,41 @@ enum class ExtendableConnection
 {
   // A state in which a structure is standing alone, this is also the default
   // state used when other states cannot be found.
-  Island,
+  Island, //
+
+  // Straight formations. If a cap is not specified, the basic 
+  // vertical/horizontal state will be used instead.
+  Horizontal, //
+  HorizontalLeftCap,  
+  HorizontalRightCap, 
+  Vertical, //      
+  VerticalBottomCap,  
+  VerticalTopCap,     
 
   // Corners.
-  BottomLeft,         
+  BottomLeft, //        
   BottomRight,        
   TopLeft,            
   TopRight,           
 
-  // Straight formations. If a cap is not specified, the basic 
-  // vertical/horizontal state will be used instead.
-  Horizontal,         
-  HorizontalLeftCap,  
-  HorizontalRightCap, 
-  Vertical,           
-  VerticalBottomCap,  
-  VerticalTopCap,     
+  // State used when the structure is bordered on 3 sides.
+  ThreeWayTopCap,
+  ThreeWayBottomCap,
+  ThreeWayLeftCap,
+  ThreeWayRightCap,
+
+  // State used when the structure is bordered on all cardinal sides,
+  // eg. north, south, east, and west.
+  FourWay, //
+
+  // State used when the structure is bordered on all sides (including 
+  // diagonals).
+  Surrounded, //
 };
 
 /* ============================================================================
  *  Used on Entities whose appearance changes when Entities of the same kind
- *  are bordering them.
+ *  are adjacent to them.
  *
  *  It is expected that the sprite states used by the entity include the 
  *  enumerated values above.
@@ -50,5 +65,6 @@ enum class ExtendableConnection
  */
 struct ExtendableStructure : Component 
 { 
+  @m.data_field
   StringHash kind;
 };

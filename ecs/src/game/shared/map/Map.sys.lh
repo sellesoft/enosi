@@ -25,7 +25,6 @@ struct Layer;
 struct Tile
 {
   TileKindRef kind;
-  TileKindConfig configuration = TileKindConfig::Default;
 
   b8 init(
     const MapTileDef& def,
@@ -70,8 +69,6 @@ struct Layer
   {
     return getTileAtPos(s32(pos.x), s32(pos.y));
   }
-
-  void reevaluateTileConfigurations();
 };
 
 /* ============================================================================
@@ -102,10 +99,13 @@ struct MapSys : EntitySys
     return &layer - layers.arr;
   }
 
+  // Attempts to get a Layer by some index. If the index is out of bounds
+  // nullptr is returned, and an error is printed.
+  Layer* getLayerByIndex(u32 index);
+
   // Outputs a Tile as well as the Layer it belongs to at the given pos.
   // Returns false if no tile was at the given pos.
   b8 getTileAndLayerAtPos(Layer** out_layer, Tile** out_tile, vec2f pos);
-
 
   // Returns the coordinates of a Tile from the given Layer in world space.
   // Asserts if the Tile does not belong to the given Layer.

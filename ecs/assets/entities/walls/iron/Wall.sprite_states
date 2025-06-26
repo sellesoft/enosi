@@ -1,0 +1,25 @@
+base = 
+{ 
+  texture = "assets/entities/walls/iron/Wall",
+  color = {255,255,255,255},
+}
+
+return SpriteStatesDef
+{
+  map = 
+  {
+    Island            = base : { uv = { 0,   0,   64, 64 } },
+    Surrounded        = base : { uv = { 64,  0,   64, 64 } },
+    Vertical          = base : { uv = { 128, 0,   64, 64 } },
+    Horizontal        = base : { uv = { 192, 0,   64, 64 } },
+    FourWay           = base : { uv = { 256, 0,   64, 64 } },
+    BottomLeft        = base : { uv = { 0,   64,  64, 64 } },
+    BottomRight       = base : { uv = { 64,  64,  64, 64 } },
+    TopLeft           = base : { uv = { 128, 64,  64, 64 } },
+    TopRight          = base : { uv = { 192, 64,  64, 64 } },
+    ThreeWayBottomCap = base : { uv = { 256, 64,  64, 64 } },
+    ThreeWayRightCap  = base : { uv = { 0,   128, 64, 64 } },
+    ThreeWayTopCap    = base : { uv = { 64,  128, 64, 64 } },
+    ThreeWayLeftCap   = base : { uv = { 128, 128, 64, 64 } },
+  }
+}

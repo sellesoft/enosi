@@ -12,24 +12,30 @@ return MapDef
         // --------------------------------------------------------------------
         // y = 0
         {
-          kind = "assets/walls/olive/Wall",
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         // --------------------------------------------------------------------
         // y = 1
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
           kind = "assets/floors/tiles/Floor",
@@ -41,12 +47,14 @@ return MapDef
           kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         // --------------------------------------------------------------------
         // y = 2
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
           kind = "assets/floors/tiles/Floor",
@@ -58,12 +66,14 @@ return MapDef
           kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         // --------------------------------------------------------------------
         // y = 3
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
           kind = "assets/floors/tiles/Floor",
@@ -75,24 +85,30 @@ return MapDef
           kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         // --------------------------------------------------------------------
         // y = 4
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
       }
     },
@@ -104,39 +120,50 @@ return MapDef
         // --------------------------------------------------------------------
         // y = 0
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         // --------------------------------------------------------------------
         // y = 1
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
           kind = "assets/floors/tiles/Floor",
@@ -163,12 +190,14 @@ return MapDef
           kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         // --------------------------------------------------------------------
         // y = 2
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
           kind = "assets/floors/tiles/Floor",
@@ -196,12 +225,14 @@ return MapDef
           kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         // --------------------------------------------------------------------
         // y = 3
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
           kind = "assets/floors/tiles/Floor",
@@ -231,12 +262,14 @@ return MapDef
           kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         // --------------------------------------------------------------------
         // y = 4
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
           kind = "assets/floors/tiles/Floor",
@@ -266,12 +299,14 @@ return MapDef
           kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         // --------------------------------------------------------------------
         // y = 5
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
           kind = "assets/floors/tiles/Floor",
@@ -291,22 +326,6 @@ return MapDef
         },
         {
           kind = "assets/floors/tiles/Floor",
-          entities = { "assets/entities/spawners/Player" }
-          // entities =
-          // {
-          //   Entity
-          //   {
-          //     name = "Spawner",
-          //     components =
-          //     {
-          //       PlayerSpawner {},
-          //       Sprite
-          //       {
-          //         texture = "assets/textures/DevSpawner",
-          //       },
-          //     },
-          //   },
-          // },
         },
         {
           kind = "assets/floors/tiles/Floor",
@@ -315,12 +334,14 @@ return MapDef
           kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         // --------------------------------------------------------------------
         // y = 6
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
           kind = "assets/floors/tiles/Floor",
@@ -348,12 +369,14 @@ return MapDef
           kind = "assets/floors/tiles/Floor",
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         // --------------------------------------------------------------------
         // y = 7
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
           kind = "assets/floors/tiles/Floor",
@@ -382,12 +405,14 @@ return MapDef
           entities = { "assets/entities/tables/steel/Table" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         // --------------------------------------------------------------------
         // y = 8
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
           kind = "assets/floors/tiles/Floor",
@@ -431,39 +456,50 @@ return MapDef
           entities = { "assets/entities/tables/steel/Table" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         // --------------------------------------------------------------------
         // y = 9
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
         {
-          kind = "assets/walls/olive/Wall"
+          kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/walls/iron/Wall" },
         },
       }
     }
