@@ -24,6 +24,8 @@ namespace cl
 struct Editor;
 struct GameSim;
 
+/* ============================================================================
+ */
 struct Editor_GameView
 {
   // True when the cursor is directly over the game view.

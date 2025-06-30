@@ -50,4 +50,23 @@ common.failIf = function(errval)
   end
 end
 
+common.joinArgs = function(delim, ...)
+  delim = delim or " "
+  local s = ""
+
+  local args = common.List{...}
+  if args:isEmpty() then
+    return 
+  end
+
+  for arg,i in args:eachWithIndex() do
+    s = s..arg
+    if i ~= args:len() then
+      s = s..delim
+    end
+  end
+
+  return s
+end
+
 return common

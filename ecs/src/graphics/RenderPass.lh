@@ -1,0 +1,25 @@
+/*
+ *  Bundle of information needed to begin a render pass. This isn't 
+ *  a graphics object, just a set of parameters for render passes.
+ */
+
+$ require "common"
+
+@@lpp.import "graphics/ImageView.lh"
+
+#include "Color.h"
+#include "math/Rect.h"
+
+namespace gfx
+{
+
+/* ============================================================================
+ */
+struct RenderPass
+{
+  Rect        render_area;
+  ImageView   target;
+  Color       clear_color;
+};
+
+}

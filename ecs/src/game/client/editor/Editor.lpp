@@ -44,6 +44,9 @@ b8 Editor::init(Client* client, AssetLoader& loader)
   if (!loader.load(&skinref, "assets/skins/Editor.skin"_str))
     return ERROR("failed to load editor skin\n");
 
+  if (!entity_list.init(this, loader))
+    return ERROR("failed to load editor entity list widget\n");
+
   start_time = TimePoint::monotonic();
 
   return true;
@@ -54,6 +57,7 @@ b8 Editor::init(Client* client, AssetLoader& loader)
 void Editor::deinit()
 {
   view.deinit(this);
+  entity_list.deinit(this);
 }
 
 /* ----------------------------------------------------------------------------
@@ -104,6 +108,9 @@ b8 Editor::update(ui::UI& ui, cl::GameSim& sim)
   ui.beginGroup(ui.getBounds().contracted(content_padding));
 
   Rect bounds = ui.getBounds();
+
+  if (!entity_list.update(this, ui, sim, skin))
+    return ERROR("failed to update entity list\n");
 
   static const String tool_names[] = 
   {
@@ -158,6 +165,9 @@ $ end
 
   ui.endGroup();
   ui.endPanel();
+
+  client->renderer.bindFramebuffer(nil);
+  client->renderer.setViewport({0,0}, client->window.size);
   ui.endFrame();
 
   return true;

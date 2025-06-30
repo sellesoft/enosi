@@ -8,6 +8,7 @@ $ require "common"
 #include "iro/Unicode.h"
 
 @@lpp.import "graphics/Shader.lh"
+@@lpp.import "graphics/DescriptorSetLayout.lh"
 
 using namespace iro;
 
@@ -21,23 +22,52 @@ struct Pipeline
 {
   u32 index = 0;
 
-  b8 init(
-    Renderer& renderer,
-    Shader vertex_shader,
-    Shader fragment_shader,
-    u64 push_constant_size,
-    b8 has_vertex_input,
-    String name = "unnamed"_str);
+  struct PushConstant
+  {
+    u32 offset;
+    u32 size;
+    // TODO(sushi) make a shader kind flags and also rename to shader 
+    //             stages
+    ShaderKind stages;
+  };
 
-  b8 init(
-    Renderer& renderer, 
-    u64 push_constant_size,
-    b8 has_vertex_input,
-    const PipelineDef& def);
+  struct Layout
+  {
+    Slice<PushConstant> push_constant_ranges;
+    Slice<DescriptorSetLayout> descriptor_set_layouts;
+  };
 
-  b8 deinit(Renderer& renderer);
+  struct CreateParams
+  {
+    Shader vertex_shader;
+    Shader fragment_shader;
+
+    b8 has_vertex_input;
+
+    Layout layout;
+
+    String debug_name;
+  };
+
+  // TODO(sushi) maybe just make all the gfx objects have a Def and 
+  //             use that instead of a CreateParams?
+  static Pipeline create(Renderer& renderer, const CreateParams& params);
+  static Pipeline create(Renderer& renderer, const PipelineDef& def);
+
+  void destroy(Renderer& renderer);
 
   DefineNilTrait(Pipeline, {0}, x.index == 0);
 };
 
+}
+
+namespace iro::io
+{
+static s64 format(io::IO* io, gfx::Pipeline& pipeline)
+{
+  if (isnil(pipeline))
+    return format(io, "gfx::Pipeline(nil)"_str);
+  else
+    return formatv(io, "gfx::Pipeline("_str, pipeline.index, ')');
+}
 }

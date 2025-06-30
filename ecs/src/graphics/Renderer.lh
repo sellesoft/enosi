@@ -6,17 +6,25 @@ $ require "common"
 
 #include "iro/Common.h"
 #include "iro/containers/Array.h"
+#include "iro/containers/StackArray.h"
 #include "iro/Unicode.h"
 #include "math/mat.h"
 #include "math/vec.h"
+#include "math/Rect.h"
 
+// TODO(sushi) ideally we dont have to import all of these.
+//             actually we dont need to import any of these, idk why we are
 @@lpp.import "graphics/Buffer.lh"
+@@lpp.import "graphics/Image.lh"
+@@lpp.import "graphics/ImageView.lh"
+@@lpp.import "graphics/Sampler.lh"
 @@lpp.import "graphics/DrawCmd.lh"
-@@lpp.import "graphics/Framebuffer.lh"
 @@lpp.import "graphics/Pipeline.lh"
-@@lpp.import "graphics/ResourceMgr.lh"
 @@lpp.import "graphics/Shader.lh"
-@@lpp.import "graphics/Texture.lh"
+@@lpp.import "graphics/DescriptorSet.lh"
+@@lpp.import "graphics/DescriptorSetLayout.lh"
+
+@@lpp.import "graphics/ResourceMgr.lh"
 
 using namespace iro;
 
@@ -29,12 +37,13 @@ struct Color;
 namespace gfx
 {
 
+struct RendererInternal;
+
 /* ============================================================================
  */
 struct Renderer
 {
   mem::Allocator* allocator;
-  void* internal;
   u64 frame;
   Array<DrawCmd> drawcmds;
   ResourceMgr resource_mgr;
@@ -56,17 +65,28 @@ struct Renderer
 
   b8 update(UpdateParams& params);
 
-  void setScissor(vec2i pos, vec2i size);
-  void setViewport(vec2i pos, vec2i size);
-  void bindFramebuffer(Framebuffer framebuffer); //{0} for default
+  b8 beginRenderPass(
+    vec2i render_area_pos,
+    vec2u render_area_size,
+    Image target,
+    ImageView target_view,
+    Color clear_color);
+
+  b8 beginRenderPassOverSwapchainImage(
+    vec2i render_area_pos,
+    vec2u render_area_size,
+    Color clear_color);
+
+  void endRenderPass();
+
+  void setScissor(vec2i pos, vec2u size);
+  void setViewport(vec2f pos, vec2f size);
   void bindPipeline(Pipeline pipeline);
-  void bindTexture(Texture texture);
-  void bindUniformBuffer(Buffer buffer);
-  void bindStorageBuffer(Buffer buffer);
-  void bindVertexBuffer(Buffer buffer);
-  void bindIndexBuffer(Buffer buffer);
+  void bindDescriptorSet(u32 set_idx, DescriptorSet set);
   void pushConstant(void* data, u64 size);
   void draw(u64 index_start, u64 index_count, u64 vertex_start);
+
+  vec2f getFramebufferSize(Framebuffer framebuffer);
 
   u64 getMaxPushConstantSize();
 
@@ -83,6 +103,8 @@ struct Renderer
   Renderer() {}
   Renderer(const Renderer& rhs) = delete;
   Renderer operator=(const Renderer& rhs) = delete;
+
+  RendererInternal* internal;
 
 private:
   b8 updateSwapchain(vec2i viewport_size);

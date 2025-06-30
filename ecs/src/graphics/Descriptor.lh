@@ -1,0 +1,47 @@
+/*
+ *  A reference to a shader resource, such as a Buffer, ImageView, or Sampler.
+ *  This is not a persistent object meant to be saved and so doesn't have a
+ *  backend handle, it is more of a helper struct for creating DescriptorSets.
+ */
+
+$ require "common"
+
+@@lpp.import "graphics/Buffer.lh"
+@@lpp.import "graphics/Sampler.lh"
+@@lpp.import "graphics/ImageView.lh"
+
+namespace gfx
+{
+
+/* ============================================================================
+ */
+enum class DescriptorKind
+{
+  UniformBuffer,
+
+  // An Image and Sampler combined in one resource.
+  CombinedImageSampler,
+};
+
+/* ============================================================================
+ */
+struct ImageDescriptor
+{
+  ImageView view;
+  Sampler sampler;
+};
+
+/* ============================================================================
+ *  TODO(sushi) since we have to track buffers internally anyways, we could
+ *              just store what their usage is so that we don't eventually 
+ *              have to manually specify buffer usage once we use things like
+ *              storage buffers.
+ */
+struct UniformBufferDescriptor
+{
+  Buffer buffer;
+  u32 offset;
+  u32 range;
+};
+
+}

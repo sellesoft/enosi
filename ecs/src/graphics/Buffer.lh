@@ -137,18 +137,22 @@ struct Buffer
   u32 index = 0;
   void* mapped_data = nullptr;
 
-  b8 init(
-    Renderer& renderer,
-    void* data,
-    u64 size,
-    Usage usage,
-    MemoryProperty properties,
-    MappingBehavior behavior,
-    String name = "unnamed"_str);
+  struct CreateParams
+  {
+    void* data;
+    u64 size;
+    Usage usage;
+    MemoryProperty properties;
+    MappingBehavior behavior;
+    String debug_name;
+  };
 
-  b8 deinit(Renderer& renderer);
+  static Buffer create(Renderer& renderer, const CreateParams& params);
+
+  void destroy(Renderer& renderer);
 
   b8 map(Renderer& renderer);
+  void unmap(Renderer& renderer);
 
   // If size is FLUSH_WHOLE_BUFFER, the range from offset to the end
   // of the buffer is flushed.
@@ -156,7 +160,18 @@ struct Buffer
 
   b8 copyAndFlush(Renderer& renderer, void* data, u64 size);
 
-  b8 unmap(Renderer& renderer);
+  DefineNilTrait(Buffer, {0}, x.index == 0);
 };
 
+}
+
+namespace iro::io
+{
+static s64 format(io::IO* out, gfx::Buffer& buffer)
+{
+  if (isnil(buffer))
+    return format(out, "gfx::Buffer(nil)"_str);
+  else
+    return formatv(out, "gfx::Buffer("_str, buffer.index, ')');
+}
 }

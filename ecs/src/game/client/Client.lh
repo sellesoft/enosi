@@ -45,6 +45,12 @@ struct Client
 
   gfx::Texture white_texture;
 
+  gfx::Buffer vertex_buffer;
+  gfx::Buffer index_buffer;
+
+  gfx::PipelineDefRef pipeline_defref;
+  gfx::Pipeline pipeline;
+
   b8 editor_active = false;
 
   b8 init(Engine* engine);

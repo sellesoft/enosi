@@ -1,0 +1,57 @@
+/*
+ *  A set of descriptor bindings that specifies the types of resources that
+ *  are going to be accessed by a Pipeline as well as where those are 
+ *  bound for a shader to access.
+ */
+
+$ require "common"
+
+@@lpp.import "graphics/Descriptor.lh"
+@@lpp.import "graphics/ShaderParams.lh"
+
+#include "iro/io/Format.h"
+
+namespace gfx
+{
+
+/* ============================================================================
+ */
+struct DescriptorSetLayout
+{
+  void* handle;
+
+  struct Binding
+  {
+    // What index is used to access this binding in a Shader.
+    u32 binding;
+
+    // How many descriptors there are for this binding. Shaders access 
+    // them as an array.
+    u32 count;
+
+    // What kind of descriptor this binding is.
+    DescriptorKind kind;
+
+    // What stage this binding can be accessed in.
+    ShaderKind stage;
+  };
+
+  static DescriptorSetLayout create(
+    Renderer& renderer, 
+    Slice<Binding> bindings,
+    String debug_name);
+
+  void destroy(Renderer& renderer);
+
+  DefineNilTrait(DescriptorSetLayout, {nullptr}, x.handle == nullptr);
+};
+
+}
+
+namespace iro::io
+{
+static s64 format(io::IO* io, const gfx::DescriptorSetLayout& layout)
+{
+  return formatv(io, "gfx::DescriptorSetLayout(", layout.handle, ')');
+}
+}

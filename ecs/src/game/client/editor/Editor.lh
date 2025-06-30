@@ -16,6 +16,7 @@ $ local ui = require "ui.UI"
 #include "iro/io/IO.h"
 
 @@lpp.import "game/client/editor/GameView.lh"
+@@lpp.import "game/client/editor/EntityList.lh"
 
 @@lpp.import "ui/UI.lh"
 @@lpp.import "game/client/editor/Skin.defs.lh"
@@ -58,6 +59,7 @@ struct Editor
   void putUI(ui::UI& ui, cl::GameSim& sim, const EditorSkinDef& skin);
 
   Editor_GameView view;
+  Editor_EntityList entity_list;
 
   // Places the left tool panel.
   void putToolPanel(ui::UI& ui, const EditorSkinDef& skin);

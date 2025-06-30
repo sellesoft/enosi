@@ -4,32 +4,9 @@
 
 $ require "common"
 
-$ if IRO_LINUX then
-#define Window X11Window
-#define Font X11Font
-#define Time X11Time
-#define KeyCode X11KeyCode
-#define VK_USE_PLATFORM_XLIB_KHR
-#include <vulkan/vulkan.h>
-#undef Window
-#undef Font
-#undef Time
-#undef KeyCode
-#undef None
-#undef X
-$ elseif IRO_WIN32 then --if IRO_LINUX
-#define VK_USE_PLATFORM_WIN32_KHR
-#include <vulkan/vulkan.h>
-#undef ERROR
-#undef min
-#undef max
-#undef interface
-$ else -- elseif IRO_WIN32
-#error "unhandled platform"
-$ end -- if IRO_LINUX
-
 #include "iro/containers/FixedPool.h"
 #include "iro/containers/StackArray.h"
+#include "iro/memory/Bump.h"
 #include "iro/io/Format.h"
 #include "iro/io/IO.h"
 #include "math/vec.h"
@@ -43,268 +20,36 @@ using namespace iro;
 
 /* ----------------------------------------------------------------------------
  */
-struct RendererHeapAllocation
-{
-  u32 memory_type;
-  u32 block_index;
-  VkDeviceSize offset;
-  VkDeviceSize size;
-  VkDeviceSize aligned_offset;
-  VkDeviceSize aligned_size;
-};
-
-struct RendererHeapBlock
-{
-  VkDeviceSize size;
-  VkDeviceMemory memory;
-  u32 cursor;
-  u32 mapped_count;
-  void* mapped_data;
-};
-
-struct RendererHeap
-{
-  VkMemoryHeap heap;
-  VkDeviceSize alignment;
-  VkDeviceSize preferred_block_size;
-  Array<RendererHeapBlock> blocks;
-  Array<RendererHeapAllocation> allocations;
-  Array<RendererHeapAllocation> free_chunks;
-};
-
-/* ----------------------------------------------------------------------------
- */
-struct RendererTexture
-{
-  VkImage image;
-  VkImageView view;
-  VkSampler sampler;
-  VkDescriptorSet descriptor_set;
-  RendererHeapAllocation* allocation;
-};
-
-/* ----------------------------------------------------------------------------
- */
-struct RendererFramebuffer
-{
-  VkFramebuffer framebuffer;
-  VkRenderPass renderpass;
-  RendererTexture* texture;
-  u32 width;
-  u32 height;
-  vec4f clear_color;
-};
-
-/* ----------------------------------------------------------------------------
- */
-struct RendererShader
-{
-  VkShaderModule module;
-  VkShaderStageFlagBits stage;
-};
-
-/* ----------------------------------------------------------------------------
- */
-struct RendererBuffer
-{
-  VkBuffer buffer;
-  VkDescriptorSet descriptor_set;
-  RendererHeapAllocation* allocation;
-};
-
-/* ----------------------------------------------------------------------------
- */
-struct RendererPipeline
-{
-  VkPipeline pipeline;
-  VkPipelineLayout layout;
-  u64 push_constant_size;
-};
-
-/* ----------------------------------------------------------------------------
- */
-constexpr u32 UNIFORM_BUFFER_DESCRIPTOR_SET_INDEX = 0;
-constexpr u32 SAMPLER_DESCRIPTOR_SET_INDEX = 1;
-constexpr u32 STORAGE_BUFFER_DESCRIPTOR_SET_INDEX = 2;
-
-/* ----------------------------------------------------------------------------
- */
 struct RendererInternal
 {
-  // Constants.
-  enum 
+  // Allocates this structure and all of the internal back end data using
+  // 'allocator'. This is designed this way to prevent needing to import
+  // any of the backend into translation units other than the one it 
+  // is defined in. We also have to import platform specific headers, which
+  // like to define really annoying stuff that sucks, so I'm quarantining 
+  // all of that into its own file.
+  //
+  // NOTE that this means its IMPORTANT that you do NOT try to create this 
+  // type ANY other way than through this function! I would just delete 
+  // the default constructor, but I don't respect nor trust C++ enough to do 
+  // that.
+  static RendererInternal* allocate(mem::Allocator* allocator);
+
+  struct InitParams
   {
-    MaxTextures = 512,
-    MaxBuffers = 512,
-    MaxFramebuffers = 4,
-    MaxShaders = 32,
-    MaxPipelines = 8,
-    MaxDefaultFramebuffers = 4,
+    mem::Allocator* allocator;
+    mem::LenientBump& temp_allocator;
+
+    Window& window;
   };
 
-  //// Renderer Objects ////
+  b8 init(const InitParams& params);
 
-  FixedPool<RendererTexture, MaxTextures> texture_pool;
-  u32 texture_count;
+  // Debug functions.
 
-  FixedPool<RendererBuffer, MaxBuffers> buffer_pool;
-  u32 buffer_count;
-
-  FixedPool<RendererFramebuffer, MaxFramebuffers> framebuffer_pool;
-  u32 framebuffer_count;
-
-  FixedPool<RendererShader, MaxShaders> shader_pool;
-  u32 shader_count;
-
-  FixedPool<RendererPipeline, MaxPipelines> pipeline_pool;
-  u32 pipeline_count;
-
-  StackArray<RendererHeap, VK_MAX_MEMORY_TYPES> heaps;
-
-  //// Vulkan Core Objects ////
-
-  VkAllocationCallbacks allocator;
-
-  VkInstance instance;
-
-$ if ECS_DEBUG then
-  VkDebugUtilsMessengerEXT debug_messenger;
-  PFN_vkCmdBeginDebugUtilsLabelEXT func_vkCmdBeginDebugUtilsLabelEXT;
-  PFN_vkCmdEndDebugUtilsLabelEXT func_vkCmdEndDebugUtilsLabelEXT;
-  PFN_vkCmdInsertDebugUtilsLabelEXT func_vkCmdInsertDebugUtilsLabelEXT;
-  PFN_vkSetDebugUtilsObjectNameEXT func_vkSetDebugUtilsObjectNameEXT;
-$ end -- if ECS_DEBUG
-
-  VkSurfaceKHR surface;
-  VkSurfaceFormatKHR surface_format;
-  VkPresentModeKHR surface_present_mode;
-  VkExtent2D surface_extent;
-
-  VkPhysicalDevice physical_device;
-  VkPhysicalDeviceProperties physical_device_properties;
-  VkPhysicalDeviceMemoryProperties physical_device_memory_properties;
-  VkPhysicalDeviceFeatures physical_device_features;
-  VkPhysicalDeviceFeatures physical_device_enabled_features;
-  u32 physical_device_graphics_and_compute_queue_family;
-  u32 physical_device_present_queue_family;
-
-  VkDevice device;
-  VkQueue graphics_queue;
-  VkQueue present_queue;
-
-  VkCommandPool command_pool;
-  VkCommandBuffer command_buffer;
-
-  VkDescriptorSetLayout default_uniform_buffer_descriptor_set_layout;
-  VkDescriptorSetLayout default_sampler_descriptor_set_layout;
-  VkDescriptorSetLayout default_storage_buffer_descriptor_set_layout;
-
-  VkDescriptorPool descriptor_pool;
-
-  VkSwapchainKHR swapchain;
-  u32 swapchain_min_image_count;
-  u32 swapchain_image_count;
-
-  VkRenderPass default_renderpass;
-  VkImage default_framebuffer_images[MaxDefaultFramebuffers];
-  RendererHeapAllocation* 
-    default_framebuffer_image_allocations[MaxDefaultFramebuffers];
-  VkImageView default_framebuffer_image_views[MaxDefaultFramebuffers];
-  VkFramebuffer default_framebuffers[MaxDefaultFramebuffers];
-  u32 default_framebuffer_index;
-
-  VkSemaphore image_acquired_semaphore;
-  VkSemaphore render_complete_semaphore;
-
-  VkPipelineCache pipeline_cache;
+  void debugBeginLabel(Color color, String label);
+  void debugEndLabel();
+  void debugInsertLabel(Color color, String label);
 };
-
-/* ----------------------------------------------------------------------------
- */
-static inline void debugSetObjectName(
-  Renderer& renderer,
-  VkObjectType type,
-  void* handle,
-  iro::io::Formattable auto... args)
-{
-$ if ECS_DEBUG then
-  RendererInternal& ri = *(RendererInternal*)renderer.internal;
-
-  if (ri.func_vkSetDebugUtilsObjectNameEXT == nullptr)
-    return;
-  if (handle == nullptr)
-    return;
-
-  iro::io::StaticBuffer<64> name = {};
-  iro::io::formatv(&name, args...);
-
-  VkDebugUtilsObjectNameInfoEXT name_info =
-  {
-    .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
-    .objectType = type,
-    .objectHandle = (u64)handle,
-    .pObjectName = (const char*)name.buffer,
-  };
-
-  ri.func_vkSetDebugUtilsObjectNameEXT(ri.device, &name_info);
-$ end -- if ECS_DEBUG
-}
-
-/* ----------------------------------------------------------------------------
- */
-static inline u32 determineMemoryType(
-  Renderer& renderer,
-  VkMemoryRequirements memory_requirements,
-  VkMemoryPropertyFlags memory_property_flags)
-{
-  RendererInternal& ri = *(RendererInternal*)renderer.internal;
-  auto& mem_props = ri.physical_device_memory_properties;
-  for (u32 i = 0; i < mem_props.memoryTypeCount; i++)
-  {
-    if (   (memory_requirements.memoryTypeBits & (1 << i))
-        && (  (  mem_props.memoryTypes[i].propertyFlags
-               & memory_property_flags)
-            == memory_property_flags))
-    {
-      return i;
-    }
-  }
-  return 0;
-}
-
-/* ----------------------------------------------------------------------------
- */
-static inline VkDeviceMemory allocationMemory(
-  Renderer& renderer,
-  RendererHeapAllocation* allocation)
-{
-  assert(allocation != nullptr);
-  RendererInternal& ri = *(RendererInternal*)renderer.internal;
-  return
-    ri.heaps[allocation->memory_type].blocks[allocation->block_index].memory;
-}
-
-/* ----------------------------------------------------------------------------
- */
-RendererHeapAllocation* allocate(
-  Renderer& renderer,
-  u32 memory_type,
-  VkMemoryRequirements memory_requirements);
-
-/* ----------------------------------------------------------------------------
- */
-void deallocate(Renderer& renderer, RendererHeapAllocation* allocation);
-
-/* ----------------------------------------------------------------------------
- */
-b8 beginSingleUseCommandBuffer(
-  Renderer& renderer,
-  VkCommandBuffer* command_buffer);
-
-/* ----------------------------------------------------------------------------
- */
-b8 endSingleUseCommandBuffer(
-  Renderer& renderer,
-  VkCommandBuffer command_buffer);
 
 }

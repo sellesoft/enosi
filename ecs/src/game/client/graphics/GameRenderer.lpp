@@ -54,8 +54,8 @@ b8 GameRenderer::init(InitParams& params)
       gfx::Buffer::UniformBuffer,
       gfx::Buffer::DeviceMappable,
       gfx::Buffer::Occasional,
-      "render.sys scene uniform"_str))
-    return ERROR("failed to init the scene uniform buffer\n");
+      "game render scene uniform"_str))
+    return ERROR("failed to init scene uniform buffer\n");
 
   //init background buffers
   gfx::Vertex background_vertices[4] =
@@ -133,7 +133,6 @@ b8 GameRenderer::init(InitParams& params)
     return ERROR("failed to init external index buffer\n");
 
   // Initialize the quad pipeline.
-  quad_pipeline_defref.name = "assets/shaders/Quad"_str;
   if (!loader.load(&quad_pipeline_defref, "assets/shaders/Quad"_str))
     return ERROR("failed to load quad pipeline def\n");
 
@@ -141,11 +140,18 @@ b8 GameRenderer::init(InitParams& params)
       return ERROR("failed to initialize quad pipeline\n");
 
   // Initialize the stars pipeline.
-  if (!loader.load( &stars_pipeline_defref, "assets/shaders/Stars"_str))
+  if (!loader.load(&stars_pipeline_defref, "assets/shaders/Stars"_str))
     return ERROR("failed to load stars pipeline def\n");
 
   if (!stars_pipeline.init(renderer, 0, true, *stars_pipeline_defref))
     return ERROR("failed to initialize stars pipeline\n");
+
+  // Initialize the dither pipeline.
+  if (!loader.load(&dither_pipeline_defref, "assets/shaders/Dither"_str))
+    return ERROR("failed to load dither pipeline def\n");
+
+  if (!dither_pipeline.init(renderer, 0, true, *dither_pipeline_defref))
+    return ERROR("failed to initialize dither pipeline\n");
 
   return true;
 }
@@ -257,6 +263,17 @@ b8 GameRenderer::update(const UpdateParams& params)
   ///////////////////////////////////////////////
   // 0. Update Scene
   {
+    vec2f framebuffer_size = renderer.getFramebufferSize(framebuffer);
+    if (isnil(framebuffer) || framebuffer_size != params.viewport.size())
+    {
+      INFO("game renderer reinitializing graphics objects due to viewport "
+           "size change ", framebuffer_size, " -> ", params.viewport.size(),
+           "\n");
+      if (!reinitializeGraphicsObjects(renderer, params.viewport.size()))
+        return ERROR("failed to reinitialize game render objects after "
+                     "viewport size change\n");
+    }
+
     renderer.setViewport(
       vec2i(params.viewport.pos()), vec2i(params.viewport.size()));
     renderer.setScissor(
@@ -289,15 +306,20 @@ b8 GameRenderer::update(const UpdateParams& params)
   {
     TRACE("render.sys draw background\n");
 
-    renderer.bindPipeline(stars_pipeline);
-
-    renderer.bindUniformBuffer(scene_uniform_buffer);
-
-    renderer.bindVertexBuffer(background_vertex_buffer);
-    renderer.bindIndexBuffer(background_index_buffer);
-
-    renderer.draw(0, 6, 0);
+    // renderer.bindFramebuffer(stars_framebuffer);
+    // renderer.bindPipeline(stars_pipeline);
+    // renderer.bindUniformBuffer(scene_uniform_buffer);
+    // renderer.bindVertexBuffer(background_vertex_buffer);
+    // renderer.bindIndexBuffer(background_index_buffer);
+    // renderer.draw(0, 6, 0);
+    //
+    // renderer.bindFramebuffer(framebuffer);
+    // renderer.bindPipeline(dither_pipeline);
+    // renderer.bindTexture(stars_texture);
+    // renderer.draw(0, 6, 0);
   }
+
+  renderer.bindFramebuffer(framebuffer);
 
   ///////////////////////////////////////////////
   // 2. Draw Map Tiles
@@ -416,6 +438,69 @@ b8 GameRenderer::update(const UpdateParams& params)
     renderer.bindIndexBuffer(external_index_buffer);
     renderer.draw(0, external_counts.y, 0);
   }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 GameRenderer::reinitializeGraphicsObjects( 
+    gfx::Renderer& renderer,
+    vec2f view_size)
+{
+  framebuffer.deinit(renderer);
+  texture.deinit(renderer);
+
+  stars_framebuffer.deinit(renderer);
+  stars_texture.deinit(renderer);
+
+  texture = gfx::Texture::create(
+    renderer,
+    view_size.x,
+    view_size.y,
+    gfx::ImageFormat::RGBA,
+      gfx::ImageUsage::Sampled
+    | gfx::ImageUsage::FramebufferColor,
+    gfx::ImageAddressMode::ClampToBlack,
+    gfx::ImageFilter::Nearest,
+    nullptr,
+    "game.texture"_str);
+
+  if (isnil(texture))
+    return ERROR("failed to create game.texture\n");
+
+  if (!framebuffer.init(
+        renderer,
+        view_size.x,
+        view_size.y,
+        texture,
+        {0,0,0,255},
+        "game.framebuffer"_str))
+    return ERROR("failed to intialize game.framebuffer\n");
+
+  stars_texture = gfx::Texture::create(
+    renderer,
+    view_size.x,
+    view_size.y,
+    gfx::ImageFormat::RGBA,
+      gfx::ImageUsage::Sampled
+    | gfx::ImageUsage::FramebufferColor,
+    gfx::ImageAddressMode::Repeat,
+    gfx::ImageFilter::Nearest,
+    nullptr,
+    "game.stars_texture"_str);
+
+  if (isnil(stars_texture))
+    return ERROR("failed to create game.stars_texture\n");
+
+  if (!stars_framebuffer.init(
+        renderer,
+        view_size.x,
+        view_size.y,
+        stars_texture,
+        {0,0,0,255},
+        "game.stars_framebuffer"_str))
+    return ERROR("failed to intialize game.stars_framebuffer\n");
 
   return true;
 }

@@ -1,0 +1,45 @@
+/*
+ *  A contiguous 'view' of an Image.
+ */
+
+$ require "common"
+
+@@lpp.import "graphics/Image.lh"
+
+#include "iro/io/Format.h"
+
+namespace gfx
+{
+
+/* ----------------------------------------------------------------------------
+ */
+struct ImageView
+{
+  void* handle;
+
+  struct CreateParams
+  {
+    // The Image which this views.
+    Image image;
+
+    // The expected format of the Image we will be viewing.
+    ImageFormat format;
+
+    String debug_name;
+  };
+
+  static ImageView create(Renderer& renderer, const CreateParams& params);
+  void destroy(Renderer& renderer);
+
+  DefineNilTrait(ImageView, {nullptr}, x.handle == nullptr);
+};
+
+}
+
+namespace iro::io
+{
+static s64 format(io::IO* io, const gfx::ImageView& view)
+{
+  return formatv(io, "gfx::ImageView("_str, view.handle, ')');
+}
+}

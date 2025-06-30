@@ -1,0 +1,40 @@
+/*
+ *  Controls how a Shader reads Image data.
+ */
+
+$ require "common"
+
+@@lpp.import "graphics/TextureParams.lh"
+
+#include "iro/io/Format.h"
+
+namespace gfx
+{
+
+/* ============================================================================
+ */
+struct Sampler
+{
+  void* handle;
+
+  struct CreateParams
+  {
+    ImageFilter filter;
+    ImageAddressMode address_mode;
+  };
+
+  static Sampler create(Renderer& renderer, const CreateParams& params);
+  void destroy();
+
+  DefineNilTrait(Sampler, {nullptr}, x.handle == nullptr);
+};
+
+}
+
+namespace iro::io
+{
+static s64 format(io::IO* io, const gfx::Sampler& sampler)
+{
+  return formatv(io, "gfx::Sampler(", sampler.handle, ')');
+}
+}

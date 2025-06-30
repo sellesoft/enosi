@@ -84,4 +84,51 @@ struct EntityMgr
   {
     return tryComp<T>(id.ent);
   }
+
+  struct EntityIter
+  {
+    EntityPool* pool;
+    EntityPool::Slot* current;
+    
+    b8 isValid() const
+    {
+      return current != pool->pool + pool->capacity();
+    }
+  };
+
+  // This sucks massively.
+  struct Iter
+  {
+    EntityPool* pool;
+    EntityPool::Slot* slot;
+
+    b8 isValid() const
+    {
+      return slot != pool->end();
+    }
+
+    void next()
+    {
+      if (!isValid())
+        return;
+
+      slot += 1;
+      while (isValid() && !slot->isUsed())
+        slot += 1;
+    }
+
+    EntityId current()
+    {
+      EntityId id;
+      id.value = slot - pool->pool;
+      id.salt = slot->salt;
+      return id;
+    }
+
+    Iter(EntityMgr& mgr)
+    {
+      pool = &mgr.ent_pool;
+      slot = pool->begin();
+    }
+  };
 };

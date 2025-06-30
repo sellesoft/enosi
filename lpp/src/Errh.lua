@@ -22,10 +22,15 @@ return function(errmsg)
       fidx = fidx + 1
     end
 
+    if type(errmsg) == "table" and errmsg.stack and errmsg.msg then
+      return errmsg
+    end
+
     return 
     {
       stack = stack,
-      msg = errmsg:gsub("%[.-%]:%d-: ", "")
+      msg = errmsg and 
+            errmsg:gsub("%[.-%]:%d-: ", "")
                   :gsub(".-:%d-: ", "")
     }
   end)}

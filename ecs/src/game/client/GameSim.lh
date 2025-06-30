@@ -63,6 +63,11 @@ struct GameSim : SharedGameSim
   {
     return gamemgr.loadMap(name, loader);
   }
+
+  gfx::Texture getRenderedTexture() const
+  {
+    return gamemgr.game_renderer.texture;
+  }
 };
 
 }

@@ -20,6 +20,7 @@ $ local ui = require "ui.UI"
 @@lpp.import "graphics/Renderer.lh"
 @@lpp.import "input/InputMgr.lh"
 @@lpp.import "graphics/Ref.defs.lh"
+@@lpp.import "graphics/Geo.lh"
 @@lpp.import "game/shared/entity/Entity.defs.lh"
 
 #include "iro/memory/LinkedHeap.h"
@@ -127,6 +128,50 @@ $ end
 
   @init(editor.init(this, asset_loader), Editor);
 
+  // Initialize the quad that's used to draw the rendered game texture 
+  // when the Editor is not active. 
+  // TODO(sushi) do this better.
+
+  gfx::Vertex game_view_vertexes[4] = 
+  {
+    { {0.f, 0.f}, { 0.f, 1.f }, 0xffffffff },
+    { {1.f, 1.f}, { 1.f, 1.f }, 0xffffffff },
+    { {1.f, 1.f}, { 1.f, 0.f }, 0xffffffff },
+    { {0.f, 1.f}, { 0.f, 0.f }, 0xffffffff }
+  };
+
+  gfx::Index game_view_indexes[6] = 
+  {
+    0, 1, 2, 0, 2, 3
+  };
+
+  if (!vertex_buffer.init(
+        renderer,
+        game_view_vertexes,
+        4 * sizeof(gfx::Vertex),
+        gfx::Buffer::VertexBuffer,
+        gfx::Buffer::DeviceLocal,
+        gfx::Buffer::Never,
+        "client.view.vertex_buffer"_str))
+    return ERROR("failed to initialize client game view vertex buffer");
+
+  if (!index_buffer.init(
+        renderer,
+        game_view_indexes,
+        6 * sizeof(gfx::Index),
+        gfx::Buffer::IndexBuffer,
+        gfx::Buffer::DeviceLocal,
+        gfx::Buffer::Never,
+        "client.view.index_buffer"_str))
+    return ERROR("failed to initialize client game view index buffer");
+
+  if (!asset_loader.load(
+        &pipeline_defref, "assets/shaders/FullscreenFlat"_str))
+    return ERROR("failed to load client game quad pipeline def\n");
+
+  if (!pipeline.init(renderer, 0, true, *pipeline_defref))
+    return ERROR("failed to initialize client game quad pipline\n");
+
   return true;
 }
 
@@ -181,6 +226,14 @@ b8 Client::update()
 
     if (!sim.render(renderer))
       return ERROR("failed to render game sim\n");
+
+    renderer.bindFramebuffer(nil);
+    renderer.setViewport({0,0}, window.size);
+    renderer.bindPipeline(pipeline);
+    renderer.bindTexture(sim.getRenderedTexture());
+    renderer.bindVertexBuffer(vertex_buffer);
+    renderer.bindIndexBuffer(index_buffer);
+    renderer.draw(0, 6, 0);
 
     console.updateUI(window, input, ui);
   }

@@ -30,7 +30,6 @@ $$$
 local Editor = p:lookupDecl "struct cl::Editor"
 local Tools = Editor:getMember "Tool"
 local TileKindDef = p:lookupDecl "struct TileKindDef"
-local TileKindConfig = p:lookupDecl "enum TileKindConfig"
 $$$
 
 namespace cl
@@ -102,20 +101,13 @@ b8 Editor_GameView::update(
   cursor_pos = ui.getLocalCursorPos() - bounds.pos();
   cursor_world_pos = view.viewportPointToWorld(cursor_pos, view_size);
 
-  // Render the state of the simulation to our framebuffer and texture.
-  renderer.bindFramebuffer(framebuffer);
-
   // TODO(sushi) this probably doesn't need to be a hard error.
+  // TODO(sushi) if this fails just render some error texture instead
   if (!sim.render(renderer, view))
     return ERROR("failed to render game sim\n");
 
-  renderer.bindFramebuffer(nil);
-  // TODO(sushi) it would be nice to avoid needing to doing this somehow,
-  //             and I figure this may break somehow.
-  renderer.setViewport({0, 0}, client.window.size);
-
   // Draw the resulting texture.
-  ui.putQuad(bounds, texture, 0xffffffff);
+  ui.putQuad(bounds, sim.getRenderedTexture(), 0xffffffff);
 
   b8 select = false;
 
