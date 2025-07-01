@@ -122,20 +122,25 @@ void NetMgr::deinit()
  */
 void NetMgr::receiveMessages()
 {
+  //NOTE(delle) lock before offline connection receive/send
+  this->lockOfflinePacketMutex(Source::Client);
+  defer { this->unlockOfflinePacketMutex(Source::Client); };
+
   // receive messages from clients
   if (this->publicity == ServerPublicity::Offline)
   {
-    this->lockOfflinePacketMutex(Source::Client);
-    defer { this->unlockOfflinePacketMutex(Source::Client); };
-
     Fragment fragment;
-    if (!this->receiveOfflinePacket(Source::Client, fragment))
-      return;
-
     if (this->sessions.len() == 0)
+    {
+      if (!this->receiveOfflinePacket(Source::Client, fragment))
+        return;
       handleConnectionlessPacket(this, Address::createOffline(), fragment);
+    }
     else
+    {
+      TODO(delle) filter out connectionless packets
       this->sessions[0].connection.receive(Source::Client, fragment);
+    }
   }
   else
   {
@@ -184,11 +189,8 @@ void NetMgr::receiveMessages()
 void NetMgr::sendMessages()
 {
   //NOTE(delle) lock before offline connection receive/send
-  if (this->publicity == ServerPublicity::Offline)
-  {
-    this->lockOfflinePacketMutex(Source::Server);
-    defer { this->unlockOfflinePacketMutex(Source::Server); };
-  }
+  this->lockOfflinePacketMutex(Source::Server);
+  defer { this->unlockOfflinePacketMutex(Source::Server); };
 
   u8 message_data[Message::MAX_SIZE];
   for (Session& session : this->sessions)

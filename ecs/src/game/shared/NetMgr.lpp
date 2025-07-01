@@ -44,8 +44,7 @@ $$$
 #include "iro/containers/FixedPool.h"
 #include "iro/Logger.h"
 #include "iro/memory/Allocator.h"
-
-#include <mutex>
+#include "iro/Mutex.h"
 
 using namespace iro;
 using namespace net;
@@ -112,7 +111,7 @@ b8 s_ipv6_socket_is_bound;
  */
 struct OfflineMessage
 {
-  std::mutex mutex;
+  iro::Mutex mutex;
   u16 size;
   u8 data[Message::MAX_SIZE];
 };
@@ -340,8 +339,16 @@ void Connection::receive(
 {
   if (this->address.type == AddressType::Offline)
   {
-    this->incoming_message_pending_fragments =
-      !this->netmgr->receiveOfflinePacket(source, data);
+    if (!this->netmgr->receiveOfflinePacket(source, data))
+    {
+      this->incoming_message_pending_fragments = true;
+      return;
+    }
+
+    // TODO(delle) remove this second memory copy
+    mem::copy(this->incoming_message_data, data.arr, data.len);
+    this->incoming_message_size = data.len;
+    this->incoming_message_pending_fragments = false;
     return;
   }
 
@@ -447,6 +454,14 @@ b8 SharedNetMgr::init(mem::Allocator* allocator)
   assertpointer(allocator);
   @log.trace("initializing network manager\n");
 
+  s_offline_messages[0].mutex.init();
+  s_offline_messages[1].mutex.init();
+  auto deinit_mutexes_if_failure = deferWithCancel
+  {
+    s_offline_messages[0].mutex.deinit();
+    s_offline_messages[1].mutex.deinit();
+  };
+
   assert(!s_ipv6_socket_is_bound);
   s_ipv6_socket = 0;
   s_ipv6_socket_is_bound = false;
@@ -532,6 +547,7 @@ $ eachNetEvent(function(name, id, decl, priority, broadcast, max_subscribers)
   this->event_bus_data->$(name)Subscriber_pool.init();
 $ end)
 
+  deinit_mutexes_if_failure.cancel();
   close_ipv6_socket_if_failure.cancel();
   return true;
 }
@@ -553,6 +569,9 @@ $ end -- if not IRO_WIN32
 
   s_ipv6_socket = 0;
   s_ipv6_socket_is_bound = false;
+
+  s_offline_messages[0].mutex.deinit();
+  s_offline_messages[1].mutex.deinit();
 }
 
 /* ----------------------------------------------------------------------------
