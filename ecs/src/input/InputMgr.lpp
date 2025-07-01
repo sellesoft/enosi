@@ -82,13 +82,6 @@ void InputMgr::onAddScroll(f32 scroll)
  */
 b8 InputMgr::update()
 {
-  real_state.keys_pressed.clear();
-  real_state.keys_released.clear();
-  real_state.mouse_pressed.clear();
-  real_state.mouse_released.clear();
-  real_state.scroll = 0.f;
-  real_state.char_count = 0;
-  real_state.cursor_delta = {};
-
+  real_state.clear();
   return true;  
 }

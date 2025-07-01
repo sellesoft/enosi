@@ -61,34 +61,33 @@ void Console::updateUI(Window& window, InputMgr& input, ui::UI& ui)
   if (this->state == State::Hidden)
     return;
 
+  InputState console_input;
+  input.cloneInputState(&console_input);
+
   ui::UI::FrameParams ui_params = 
   {
-    .input = input.real_state,
+    .input = console_input,
     .viewport = Rect::from(vec2f(0,0), vec2f(window.size.x, 20.f)),
   };
 
   ui.beginFrame(ui_params);
   ui.beginPanel("console.panel"_fid, ui.getBounds());
 
-  if (ui.putTextField(
-    "console.input"_fid,
-    ui.getBounds(),
-    &this->text_field_state,
-    this->skin->text_field))
+  ui.putTextField("console.input"_fid, ui.getBounds(),
+    &this->text_field_state, this->skin->text_field);
+  if (   this->input_buffer.len > 0
+      && input.real_state.tryConsumePressedKey(Key::Enter))
   {
-    if (   this->input_buffer.len > 0
-        && input.real_state.tryConsumePressedKey(Key::Enter))
+    RunCommandEvent event =
     {
-      RunCommandEvent event =
-      {
-        String::from(this->input_buffer.arr, this->input_buffer.len)
-      };
-      SharedConsole::runCommand(event);
-    }
+      String::from(this->input_buffer.arr, this->input_buffer.len)
+    };
+    SharedConsole::runCommand(event);
+    this->text_field_state.edit.clear();
   }
 
   ui.endPanel();
-  ui.endFrame(&input.real_state);
+  ui.endFrame(&console_input);
 }
 
 }
