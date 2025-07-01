@@ -8,23 +8,36 @@
 $ require "common"
 $ local ui = require "ui.UI"
 
-@@lpp.import "game/client/Client.lh"
-
-@@lpp.import "game/client/GameSim.lh"
-
-@@lpp.import "game/server/Server.lh"
-
 @@lpp.import "Engine.lh"
-
-@@lpp.import "ui/UI.lh"
-@@lpp.import "graphics/Renderer.lh"
-@@lpp.import "input/InputMgr.lh"
-@@lpp.import "graphics/Ref.defs.lh"
+@@lpp.import "game/client/Client.lh"
+@@lpp.import "game/client/GameSim.lh"
+@@lpp.import "game/server/Server.lh"
+@@lpp.import "game/shared/Console.events.lh"
 @@lpp.import "game/shared/entity/Entity.defs.lh"
+@@lpp.import "graphics/Renderer.lh"
+@@lpp.import "graphics/Ref.defs.lh"
+@@lpp.import "input/InputMgr.lh"
+@@lpp.import "net/Address.lh"
+@@lpp.import "ui/UI.lh"
 
 #include "iro/memory/LinkedHeap.h"
 
 @log.ger(client, Debug)
+
+/* ----------------------------------------------------------------------------
+ */
+static void handleConnectCommand(void* context, const CommandArgs& args)
+{
+  Client* client = (Client*)context;
+  if (args.len < 1)
+    return;
+  else if (args[0] == "offline"_str)
+    client->connectToServer(net::Address::createOffline());
+  else if (args[0] == "localhost"_str)
+    client->connectToServer(net::Address::createLocalHost(0));
+  else
+    client->connectToServer(args[0]);
+}
 
 /* ----------------------------------------------------------------------------
  */
@@ -114,6 +127,11 @@ $ end
   @init(ui.init(ui_params), UI);
 
   @init(console.init(*engine, asset_loader, true), Console);
+  engine->eventbus.broadcast.raise(AddCommandEvent{
+    .context = this,
+    .name = "connect"_str,
+    .func = handleConnectCommand,
+  });
 
   cl::GameSim::InitParams sim_params =
   {
