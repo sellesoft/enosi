@@ -1,16 +1,69 @@
 $ require "common"
+$ local helpers = require "graphics.Helpers"
 
-@@lpp.import "graphics/RendererInternal.lh"
-
-@@lpp.import "graphics/Renderer.lh"
 @@lpp.import "graphics/Shader.lh"
+@@lpp.import "graphics/Vulkan.lh"
+@@lpp.import "graphics/Renderer.lh"
 
-#include "iro/Logger.h"
-#include "iro/fs/File.h"
-
-@defFileLogger(gfx.shader, Info)
+@log.ger(gfx.shader, Info)
 
 namespace gfx
 {
+
+/* ----------------------------------------------------------------------------
+ */
+Shader Shader::create(Renderer& r, const CreateParams& params)
+{
+  String name = resolved(params.debug_name, "unnamed"_str);
+
+  DEBUG("creating shader '", name, "'\n");
+
+$ local cerr = helpers.defCreateErr("gfx::Shader", "name")
+
+  if (params.spv_binary.isEmpty())
+  {
+    @cerr("passed an empty spv binary");
+    return nil;
+  }
+
+  VkShaderModule shader;
+  if (!r.vk->createVkShaderModule(
+        &shader,
+        params.spv_binary,
+        name))
+  {
+    @cerr("failed to create VkShaderModule");
+    return nil;
+  }
+  
+  DeviceShader* dev_shader = r.vk->shader_pool.add();
+  dev_shader->module = shader;
+  dev_shader->stage = shaderKindToVulkan(params.kind);
+
+  Shader result = {};
+  result.index = r.vk->shader_pool.indexOf(dev_shader);
+
+  return result;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Shader::destroy(Renderer& r)
+{
+  if (isnil(*this))
+    return;
+
+  DeviceShader* dev_shader = r.vk->shader_pool.get(index);
+  if (dev_shader == nullptr)
+  {
+    ERROR("attempt to destroy ", *this, " but its index has been lost\n");
+    *this = nil;
+    return;
+  }
+
+  r.vk->destroyVkShaderModule(dev_shader->module);
+  r.vk->shader_pool.remove(dev_shader);
+  index = 0;
+}
 
 }

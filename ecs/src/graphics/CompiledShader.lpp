@@ -85,7 +85,16 @@ CompiledShader* CompiledShader::load(
   shader->asset.asset = asset;
 
   auto& data = shader->getData();
-  shader->gfx_shader.init(renderer, data.kind, data.binary.getSlice(), name);
+  shader->gfx_shader = Shader::create(
+    renderer,
+    {
+      .kind = data.kind,
+      .spv_binary = data.binary.getSlice(),
+      .debug_name = name,
+    });
+
+  if (isnil(shader->gfx_shader))
+    return nullptr;
 
   return shader;
 }

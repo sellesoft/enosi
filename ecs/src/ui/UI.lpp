@@ -37,25 +37,38 @@ b8 UI::init(InitParams& params)
   if (!params.loader.load(&pipeline_defref, "assets/shaders/UI"_str))
     return ERROR("failed to load UI pipeline def\n");
 
-  if (!pipeline.init(*renderer, c_PushConstantSize, true, *pipeline_defref))
+  pipeline = gfx::Pipeline::create(*renderer, *pipeline_defref);
+
+  if (isnil(pipeline))
     return ERROR("failed to initialize UI pipeline\n");
 
-  if (!vertex_buffer.init(
-        *renderer,
-        nullptr,
-        sizeof(gfx::Vertex) * c_MaxVertices,
-        gfx::Buffer::Usage::VertexBuffer,
-        gfx::Buffer::MemoryProperty::DeviceMappable,
-        gfx::Buffer::MappingBehavior::Occasional))
+  vertex_buffer = gfx::Buffer::create(
+    *renderer,
+    {
+      .data       = nullptr,
+      .size       = 4 * sizeof(gfx::Vertex) * c_MaxVertices,
+      .usage      = gfx::Buffer::Usage::VertexBuffer,
+      .properties = gfx::Buffer::MemoryProperty::DeviceMappable,
+      .behavior   = gfx::Buffer::MappingBehavior::Occasional,
+      .debug_name = "ui.vertex"_str,
+    });
+
+  if (isnil(vertex_buffer))
     return ERROR("failed to initialize ui vertex buffer\n");
 
-  if (!index_buffer.init(
-        *renderer,
-        nullptr,
-        sizeof(gfx::Index) * c_MaxIndices,
-        gfx::Buffer::Usage::IndexBuffer,
-        gfx::Buffer::MemoryProperty::DeviceMappable,
-        gfx::Buffer::MappingBehavior::Occasional))
+
+  index_buffer = gfx::Buffer::create(
+    *renderer,
+    {
+      .data       = nullptr,
+      .size       = 6 * sizeof(gfx::Index) * c_MaxIndices,
+      .usage      = gfx::Buffer::Usage::IndexBuffer,
+      .properties = gfx::Buffer::MemoryProperty::DeviceMappable,
+      .behavior   = gfx::Buffer::MappingBehavior::Occasional,
+      .debug_name = "ui.index"_str,
+    });
+
+  if (isnil(index_buffer))
     return ERROR("failed to initialize ui index buffer\n");
 
   if (!persistent_state_mgr.init(&mem::stl_allocator))
@@ -191,7 +204,11 @@ void UI::pushConstantFromTransform(mat3x2 transform, gfx::Renderer& renderer)
   push_constant[2] = 0.f;
   push_constant[6] = 0.f;
 
-  renderer.pushConstant(push_constant, c_PushConstantSize);
+  renderer.pushConstant(
+    push_constant, 
+    c_PushConstantSize,
+    0,
+    gfx::ShaderKind::Fragment);
 }
 
 /* ----------------------------------------------------------------------------
@@ -886,7 +903,7 @@ void UI::putItem(Rect bounds, const ItemSkin& skin)
     const gfx::CompiledTexture& ctex = *skin.texture;
     const gfx::CompiledTextureData& cdata = ctex.getData();
 
-    texture = ctex.gfx_texture;
+    texture = ctex.texture;
 
     vec2f tl = skin.uv.pos();
     vec2f br = skin.uv.extent();
@@ -989,7 +1006,7 @@ vec2f UI::putText(Rect bounds, String text, const TextSkin& skin)
         //             the same texture and color over and over again.
         putQuad(
           Rect::from(cursor, glyph_size), 
-          font.texture->gfx_texture,
+          font.texture->texture,
           uv,
           skin.color);
 
@@ -1447,7 +1464,7 @@ void ScissorCmd::execute(UI& ui, gfx::Renderer& renderer)
 {
   TRACE("execute scissor ", bounds.pos(), " ", bounds.size(), "\n");
 
-  renderer.setScissor(vec2i(bounds.pos()), vec2i(bounds.size()));
+  renderer.setScissor(vec2i(bounds.pos()), vec2u(bounds.size()));
 }
 
 /* ----------------------------------------------------------------------------
@@ -1501,8 +1518,8 @@ void QuadDrawCmd::execute(UI& ui, gfx::Renderer& renderer)
   //             not bog down the performance of UI code.
   vec2i drawn = 
     gfx::putFilledRect(
-      (gfx::Vertex*)ui.vertex_buffer.mapped_data,
-      (gfx::Index*)ui.index_buffer.mapped_data,
+      (gfx::Vertex*)ui.vertex_buffer.getMappedData(renderer),
+      (gfx::Index*)ui.index_buffer.getMappedData(renderer),
       ui.draw_counts,
       bounds.pos(),
       bounds.size(),
@@ -1529,8 +1546,8 @@ void LineDrawCmd::execute(UI& ui, gfx::Renderer& renderer)
 {
   vec2i drawn = 
     gfx::putLine(
-      (gfx::Vertex*)ui.vertex_buffer.mapped_data,
-      (gfx::Index*)ui.index_buffer.mapped_data,
+      (gfx::Vertex*)ui.vertex_buffer.getMappedData(renderer),
+      (gfx::Index*)ui.index_buffer.getMappedData(renderer),
       ui.draw_counts,
       start,
       end,
@@ -1584,8 +1601,8 @@ void BorderDrawCmd::execute(UI& ui, gfx::Renderer& renderer)
 
   vec2i drawn = 
     gfx::putBorders(
-      (gfx::Vertex*)ui.vertex_buffer.mapped_data,
-      (gfx::Index*)ui.index_buffer.mapped_data,
+      (gfx::Vertex*)ui.vertex_buffer.getMappedData(renderer),
+      (gfx::Index*)ui.index_buffer.getMappedData(renderer),
       ui.draw_counts,
       vec4f(1,1,1,1),
       bounds.pos(),

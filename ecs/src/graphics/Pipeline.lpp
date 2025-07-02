@@ -1,18 +1,158 @@
 $ require "common"
+$ local helpers = require "graphics.Helpers"
 
 @@lpp.import "graphics/Pipeline.lh"
-
-@@lpp.import "graphics/RendererInternal.lh"
-
-@@lpp.import "graphics/Geo.lh"
+@@lpp.import "graphics/Vulkan.lh"
 @@lpp.import "graphics/Renderer.lh"
+
 @@lpp.import "graphics/Pipeline.defs.lh"
 
-#include "iro/Logger.h"
-
-
-@defFileLogger(gfx.pipeline, Info)
+@log.ger(gfx.pipeline, Info)
 
 namespace gfx 
 {
+
+/* ----------------------------------------------------------------------------
+ */
+Pipeline Pipeline::create(Renderer& r, const CreateParams& params)
+{
+  String name = resolved(params.debug_name, "unnamed"_str);
+
+  DEBUG("creating gfx::Pipeline '", name, "'\n");
+
+$ local cerr = helpers.defCreateErr("gfx::Pipeline", "name")
+
+  if (isnil(params.vertex_shader))
+  {
+    @cerr("vertex shader not provided");
+    return nil;
+  }
+
+  if (isnil(params.fragment_shader))
+  {
+    @cerr("fragment shader not provided");
+    return nil;
+  }
+
+  SmallArray<VkPushConstantRange, 8> push_constant_ranges;
+  for (const PushConstant& pc : params.layout.push_constant_ranges)
+  {
+    if (pc.size > r.vk->physical_device_properties.limits.maxPushConstantsSize)
+    {
+      @cerr("requested push constant size is greater than the selected "
+            "device's maximum (", pc.size, " > ", 
+            r.vk->physical_device_properties.limits.maxPushConstantsSize, ')');
+      return nil;
+    }
+
+    push_constant_ranges.push(
+    {
+      .offset = pc.offset,
+      .size = pc.size,
+      .stageFlags = shaderKindToVulkan(pc.stages),
+    });
+  }
+
+  // This could maybe be aliased but idk i dont wanna do that.
+  SmallArray<VkDescriptorSetLayout, 8> descriptor_set_layouts;
+  for (const DescriptorSetLayout& layout : 
+       params.layout.descriptor_set_layouts)
+  {
+    descriptor_set_layouts.push((VkDescriptorSetLayout)layout.handle);
+  }
+
+  VkPipelineLayout layout;
+  if (!r.vk->createVkPipelineLayout(
+        &layout,
+        descriptor_set_layouts.asSlice(),
+        push_constant_ranges.asSlice(),
+        name))
+  {
+    @cerr("failed to create VkPipelineLayout");
+    return nil;
+  }
+
+  auto failsafe_destroy_layout = deferWithCancel
+  {
+    r.vk->destroyVkPipelineLayout(layout);
+  };
+
+  DeviceShader* vert_shader = 
+    r.vk->shader_pool.get(params.vertex_shader.index);
+  if (vert_shader == nullptr)
+  {
+    @cerr("provided vertex shader ", params.vertex_shader, 
+          " is not tracked in backend");
+    return nil;
+  }
+
+  DeviceShader* frag_shader = 
+    r.vk->shader_pool.get(params.fragment_shader.index);
+  if (vert_shader == nullptr)
+  {
+    @cerr("provided fragment shader ", params.fragment_shader, 
+          " is not tracked in backend");
+    return nil;
+  }
+
+  VkPipeline pipeline;
+  if (!r.vk->createVkPipeline(
+        &pipeline,
+        layout,
+        vert_shader->module,
+        frag_shader->module,
+        params.has_vertex_input,
+        name))
+  {
+    @cerr("failed to create VkPipeline");
+    return nil;
+  }
+
+  DevicePipeline* dev_pipeline = r.vk->pipeline_pool.add();
+  dev_pipeline->pipeline = pipeline;
+  dev_pipeline->layout = layout;
+
+  Pipeline result = {};
+  result.index = r.vk->pipeline_pool.indexOf(dev_pipeline);
+
+  failsafe_destroy_layout.cancel();
+
+  return result;
 }
+
+/* ----------------------------------------------------------------------------
+ */
+Pipeline Pipeline::create(Renderer& r, const PipelineDef& def)
+{
+  assert(false);
+
+  // CreateParams params = 
+  // {
+  //   .vertex_shader = def.vertex_shader->gfx_shader,
+  //   .fragment_shader = def.fragment_shader->gfx_shader,
+  //   .push_constant_size = def.push_constant_size,
+  //   .has_vertex_input = def.has_vertex_input,
+  //   .debug_name = def.name
+  // };
+  //
+  // return create(r, params);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Pipeline::destroy(Renderer& r)
+{
+  if (isnil(*this))
+    return;
+
+  DevicePipeline* pipeline = r.vk->pipeline_pool.get(index);
+
+  r.vk->destroyVkPipeline(pipeline->pipeline);
+  r.vk->destroyVkPipelineLayout(pipeline->layout);
+
+  index = 0;
+  r.vk->pipeline_pool.remove(pipeline);
+}
+
+}
+

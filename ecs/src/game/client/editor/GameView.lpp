@@ -46,8 +46,6 @@ b8 Editor_GameView::init(Editor* editor, AssetLoader& loader)
  */
 void Editor_GameView::deinit(Editor* editor)
 {
-  framebuffer.deinit(editor->client->renderer);
-  texture.deinit(editor->client->renderer);
 }
 
 /* ----------------------------------------------------------------------------
@@ -68,16 +66,10 @@ b8 Editor_GameView::update(
       "editor.gameview.viewport"_fid,
       bounds);
 
-  // Reinitialize the framebuffer and texture if the viewport size happens
-  // to change. Also set the viewport of the simulation.
   if (bounds.size() != view_size)
   {
     view_size = bounds.size();
     sim.setViewport(bounds);
-
-    if (!reinitializeGraphicsObjects(renderer))
-      return ERROR("failed to reinitialize graphics objects due to view size "
-                   "change\n");
   }
 
   // Step the simulation if its not paused.
@@ -107,7 +99,7 @@ b8 Editor_GameView::update(
     return ERROR("failed to render game sim\n");
 
   // Draw the resulting texture.
-  ui.putQuad(bounds, sim.getRenderedTexture(), 0xffffffff);
+  ui.putQuad(bounds, sim.getGameTexture(), 0xffffffff);
 
   b8 select = false;
 
@@ -183,45 +175,6 @@ b8 Editor_GameView::update(
       selected_layer = layer;
     }
   }
-
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 Editor_GameView::reinitializeGraphicsObjects(gfx::Renderer& renderer)
-{
-  texture.deinit(renderer);
-  framebuffer.deinit(renderer);
-
-  texture = gfx::Texture::create(
-    renderer,
-    view_size.x,
-    view_size.y,
-    gfx::ImageFormat::RGBA,
-      gfx::ImageUsage::Sampled
-    | gfx::ImageUsage::FramebufferColor,
-    gfx::ImageAddressMode::ClampToBlack,
-    gfx::ImageFilter::Nearest,
-    nullptr,
-    "editor.gameview.texture"_str);
-
-  if (isnil(texture))
-    return ERROR("failed to create editor.gameview.texture\n");
-
-  // NOTE(sushi) we could maybe just size the frame buffer to the 
-  //             size of the window as that will always be able to contain
-  //             the texture to avoid needing to reinitialize it whenever 
-  //             the view size changes. It's probably not a big deal though
-  //             as the size really shouldn't change that often.
-  if (!framebuffer.init(
-        renderer,
-        view_size.x,
-        view_size.y,
-        texture,
-        {0,0,0,255},
-        "editor.gameview.framebuffer"_str))
-    return ERROR("failed to initialize editor.gameview framebuffer\n");
 
   return true;
 }

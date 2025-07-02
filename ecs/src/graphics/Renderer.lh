@@ -12,18 +12,7 @@ $ require "common"
 #include "math/vec.h"
 #include "math/Rect.h"
 
-// TODO(sushi) ideally we dont have to import all of these.
-//             actually we dont need to import any of these, idk why we are
-@@lpp.import "graphics/Buffer.lh"
-@@lpp.import "graphics/Image.lh"
-@@lpp.import "graphics/ImageView.lh"
-@@lpp.import "graphics/Sampler.lh"
-@@lpp.import "graphics/DrawCmd.lh"
-@@lpp.import "graphics/Pipeline.lh"
-@@lpp.import "graphics/Shader.lh"
-@@lpp.import "graphics/DescriptorSet.lh"
 @@lpp.import "graphics/DescriptorSetLayout.lh"
-
 @@lpp.import "graphics/ResourceMgr.lh"
 
 using namespace iro;
@@ -37,16 +26,20 @@ struct Color;
 namespace gfx
 {
 
-struct RendererInternal;
+struct RenderTarget;
+struct Pipeline;
+struct Vulkan;
 
 /* ============================================================================
  */
 struct Renderer
 {
   mem::Allocator* allocator;
-  u64 frame;
-  Array<DrawCmd> drawcmds;
   ResourceMgr resource_mgr;
+  
+  // Temp until I figure out how to manage textures better.
+  DescriptorSetLayout default_sampler_set_layout;
+  DescriptorSetLayout default_ubo_set_layout;
 
   struct InitParams
   {
@@ -58,18 +51,10 @@ struct Renderer
   b8 init(InitParams& params);
   b8 deinit();
 
-  struct UpdateParams
-  {
-    Window& window;
-  };
-
-  b8 update(UpdateParams& params);
-
   b8 beginRenderPass(
     vec2i render_area_pos,
     vec2u render_area_size,
-    Image target,
-    ImageView target_view,
+    RenderTarget target,
     Color clear_color);
 
   b8 beginRenderPassOverSwapchainImage(
@@ -83,12 +68,22 @@ struct Renderer
   void setViewport(vec2f pos, vec2f size);
   void bindPipeline(Pipeline pipeline);
   void bindDescriptorSet(u32 set_idx, DescriptorSet set);
-  void pushConstant(void* data, u64 size);
-  void draw(u64 index_start, u64 index_count, u64 vertex_start);
+  void bindVertexBuffer(Buffer buffer);
+  void bindIndexBuffer(Buffer buffer);
+  void bindUniformBuffer(Buffer buffer);
 
-  vec2f getFramebufferSize(Framebuffer framebuffer);
+  void bindTexture(Texture texture)
+  {
+    bindDescriptorSet(1, texture.set);
+  }
 
-  u64 getMaxPushConstantSize();
+  void pushConstant(
+    void* data, 
+    u32 size, 
+    u32 offset,
+    ShaderKind stage);
+
+  void draw(u32 index_start, u32 index_count, u32 vertex_start);
 
   void debugBeginLabel(Color color, utf8::String label);
   void debugEndLabel();
@@ -104,7 +99,7 @@ struct Renderer
   Renderer(const Renderer& rhs) = delete;
   Renderer operator=(const Renderer& rhs) = delete;
 
-  RendererInternal* internal;
+  Vulkan* vk;
 
 private:
   b8 updateSwapchain(vec2i viewport_size);

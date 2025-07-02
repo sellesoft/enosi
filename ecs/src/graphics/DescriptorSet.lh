@@ -3,13 +3,16 @@
 
 $ require "common"
 
-@@lpp.import "graphics/DescriptorSetLayout.lh"
-
 #include "iro/io/Format.h"
+
+using namespace iro;
 
 namespace gfx
 {
 
+struct ImageDescriptor;
+struct DescriptorSetLayout;
+struct UniformBufferDescriptor;
 struct Renderer;
 
 /* ============================================================================

@@ -8,1496 +8,396 @@ $ require "Log"
 @@lpp.import "graphics/Renderer.lh"
 @@lpp.import "window/Window.lh"
 @@lpp.import "window/Window.events.lh"
+@@lpp.import "graphics/Vulkan.lh"
+@@lpp.import "graphics/Pipeline.lh"
+@@lpp.import "graphics/RenderTarget.lh"
 
 #include "iro/Logger.h"
 #include "Color.h"
 
-#include <string.h>
+@log.ger(gfx, Info)
 
 namespace gfx
 {
-
-@log.ger(gfx, Info)
-
-/* ----------------------------------------------------------------------------
- */
-static VKAPI_ATTR VkBool32 VKAPI_CALL vkDebugCallback(
-  VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-  VkDebugUtilsMessageTypeFlagsEXT type,
-  const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
-  void* user_data)
-{
-  // NOTE(delle) ignore info message spam before the command pool is created
-  Renderer* renderer = (Renderer*)user_data;
-  if (   renderer == nullptr
-      || ((RendererInternal*)renderer->internal)->command_pool == nullptr)
-    return VK_FALSE;
-
-  switch(severity){
-    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
-      TRACE(callback_data->pMessage, "\n");
-      break;
-    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-      INFO(callback_data->pMessage, "\n");
-      break;
-    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-      WARN(callback_data->pMessage, "\n");
-      break;
-    case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-      ERROR(callback_data->pMessage, "\n");
-      break;
-  }
-  return VK_FALSE;
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 Renderer::updateSwapchain(vec2i viewport_size)
-{
-  RendererInternal& ri = *(RendererInternal*)internal;
-}
-
-/* ----------------------------------------------------------------------------
- */
-static b8 updateFramebuffers(Renderer& renderer, u32 old_image_count)
-{
-  RendererInternal& ri = *(RendererInternal*)renderer.internal;
-
-  vkGetSwapchainImagesKHR(ri.device, ri.swapchain,
-    &ri.swapchain_image_count, nullptr);
-  if (ri.swapchain_image_count > RendererInternal::MaxDefaultFramebuffers)
-    return FATAL("vulkan swapchain image count is >",
-      RendererInternal::MaxDefaultFramebuffers,
-      "; bump RendererInternal::MaxDefaultFramebuffers\n");
-
-  for (u32 i = 0; i < old_image_count; i++)
-  {
-    vkDestroyFramebuffer(ri.device,
-      ri.default_framebuffers[i], &ri.allocator);
-    vkDestroyImageView(ri.device,
-      ri.default_framebuffer_image_views[i], &ri.allocator);
-    vkDestroyImage(ri.device,
-      ri.default_framebuffer_images[i], &ri.allocator);
-    gfx::deallocate(renderer, ri.default_framebuffer_image_allocations[i]);
-  }
-
-  for (u32 i = 0; i < ri.swapchain_image_count; i++)
-  {
-    VkImageCreateInfo image_info =
-    {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-      .imageType = VK_IMAGE_TYPE_2D,
-      .format = VK_FORMAT_R8G8B8A8_UNORM,
-      .extent =
-      {
-        .width = ri.surface_extent.width,
-        .height = ri.surface_extent.height,
-        .depth = 1
-      },
-      .mipLevels = 1,
-      .arrayLayers = 1,
-      .samples = VK_SAMPLE_COUNT_1_BIT,
-      .tiling = VK_IMAGE_TILING_OPTIMAL,
-      .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
-        | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
-    };
-
-    if (VK_SUCCESS != vkCreateImage(ri.device, &image_info, &ri.allocator,
-      &ri.default_framebuffer_images[i]))
-      return FATAL("failed to create default framebuffer image ", i, "\n");
-    auto destroy_image_if_failure = deferWithCancel
-    {
-      vkDestroyImage(ri.device, ri.default_framebuffer_images[i],
-        &ri.allocator);
-    };
-
-    debugSetObjectName(renderer, VK_OBJECT_TYPE_IMAGE,
-      ri.default_framebuffer_images[i],
-      "<default framebuffer ", i, " image>");
-
-    VkMemoryRequirements image_memory_requirements;
-    vkGetImageMemoryRequirements(ri.device, ri.default_framebuffer_images[i],
-      &image_memory_requirements);
-
-    u32 image_memory_type = determineMemoryType(renderer,
-      image_memory_requirements, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-    ri.default_framebuffer_image_allocations[i] = gfx::allocate(renderer,
-      image_memory_type, image_memory_requirements);
-    if (ri.default_framebuffer_image_allocations[i] == nullptr)
-      return FATAL("failed to allocate memory for default framebuffer"
-        " image ", i, "\n");
-    auto destroy_allocation_if_failure = deferWithCancel
-    {
-      gfx::deallocate(renderer, ri.default_framebuffer_image_allocations[i]);
-    };
-
-    vkBindImageMemory(ri.device, ri.default_framebuffer_images[i],
-      allocationMemory(renderer, ri.default_framebuffer_image_allocations[i]),
-      ri.default_framebuffer_image_allocations[i]->aligned_offset);
-
-    VkImageViewCreateInfo view_create_info =
-    {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-      .image = ri.default_framebuffer_images[i],
-      .viewType = VK_IMAGE_VIEW_TYPE_2D,
-      .format = VK_FORMAT_R8G8B8A8_UNORM,
-      .subresourceRange =
-      {
-        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-        .baseMipLevel = 0,
-        .levelCount = 1,
-        .baseArrayLayer = 0,
-        .layerCount = 1
-      }
-    };
-
-    if (VK_SUCCESS != vkCreateImageView(ri.device, &view_create_info,
-      &ri.allocator, &ri.default_framebuffer_image_views[i]))
-      return FATAL("failed to create view for default framebuffer"
-        " image ", i, "\n");
-    auto destroy_view_if_failure = deferWithCancel
-    {
-      vkDestroyImageView(ri.device, ri.default_framebuffer_image_views[i],
-        &ri.allocator);
-    };
-
-    debugSetObjectName(renderer, VK_OBJECT_TYPE_IMAGE_VIEW,
-      ri.default_framebuffer_image_views[i],
-      "<default framebuffer ", i, " image view>");
-
-    VkFramebufferCreateInfo framebuffer_create_info =
-    {
-      .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-      .renderPass = ri.default_renderpass,
-      .attachmentCount = 1,
-      .pAttachments = &ri.default_framebuffer_image_views[i],
-      .width = ri.surface_extent.width,
-      .height = ri.surface_extent.height,
-      .layers = 1,
-    };
-
-    if (VK_SUCCESS != vkCreateFramebuffer(ri.device,
-      &framebuffer_create_info, &ri.allocator,
-      &ri.default_framebuffers[i]))
-      return FATAL("failed to create the default vulkan"
-        " framebuffer ", i, "\n");
-    auto destroy_framebuffer_if_failure = deferWithCancel
-    {
-      vkDestroyFramebuffer(ri.device, ri.default_framebuffers[i],
-        &ri.allocator);
-    };
-
-    debugSetObjectName(renderer, VK_OBJECT_TYPE_FRAMEBUFFER,
-      ri.default_framebuffers[i],
-      "<default framebuffer ", i, ">");
-
-    destroy_image_if_failure.cancel();
-    destroy_allocation_if_failure.cancel();
-    destroy_view_if_failure.cancel();
-    destroy_framebuffer_if_failure.cancel();
-  }
-
-  return true;
-}
 
 /* ----------------------------------------------------------------------------
  */
 b8 Renderer::init(InitParams& params)
 {
-  INFO("Renderer::init\n");
+  vk = params.allocator.allocateType<Vulkan>();
+  mem::zero(vk, sizeof(Vulkan));
 
-  this->allocator = &params.allocator;
+  mem::LenientBump init_allocator;
+  init_allocator.init();
+  defer { init_allocator.deinit(); };
 
-  this->internal = allocator->allocate(sizeof(RendererInternal));
-  if (this->internal == nullptr)
-    return FATAL("failed to allocate memory for the renderer's internal data\n");
+  Vulkan::InitParams vk_params = 
+  {
+    .allocator = &params.allocator,
+    .temp_allocator = init_allocator,
+    .window = params.window,
+  };
 
-  mem::zero(this->internal, sizeof(RendererInternal));
-  RendererInternal& ri = *(RendererInternal*)this->internal;
-
-  this->frame = 0;
+  if (!vk->init(vk_params))
+    return ERROR("failed to initialize Vulkan\n");
 
   if (!resource_mgr.init())
-    return @log.error("failed to initialize resource manager\n");
-
-  if (!this->drawcmds.init(16))
-    return ERROR("failed to initialize draw cmd array\n");
-
-  mem::LenientBump temp_allocator;
-  if (!temp_allocator.init())
-    return ERROR("failed to initialize the renderer's temp allocator\n");
-  defer { temp_allocator.deinit(); };
-
-  {
-    TRACE("initializing the renderer pools\n");
-
-    //NOTE(delle) reserve the first slots as null values
-
-    internal->texture_pool.init();
-    internal->texture_pool.add();
-    internal->texture_count = 1;
-
-    internal->framebuffer_pool.init();
-    internal->framebuffer_pool.add();
-    internal->framebuffer_count = 1;
-
-    internal->shader_pool.init();
-    internal->shader_pool.add();
-    internal->shader_count = 1;
-
-    internal->buffer_pool.init();
-    internal->buffer_pool.add();
-    internal->buffer_count = 1;
-
-    internal->pipeline_pool.init();
-    internal->pipeline_pool.add();
-    internal->pipeline_count = 1;
-  }
-
-  if (!initAllocator())
-    return false;
-
-
+    return ERROR("failed to initialize resource manager\n");
 
   return true;
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 Renderer::deinit()
+static VkClearValue colorToVkClearValue(Color color)
 {
-  RendererInternal& ri = *(RendererInternal*)this->internal;
-  TRACE("Renderer::deinit\n");
+  VkClearValue clear_value = {};
+  clear_value.color.uint32[0] = color.r;
+  clear_value.color.uint32[1] = color.g;
+  clear_value.color.uint32[2] = color.b;
+  clear_value.color.uint32[3] = color.a;
+  return clear_value;
+}
 
-  vkDeviceWaitIdle(ri.device);
+/* ----------------------------------------------------------------------------
+ */
+static b8 beginRenderPassVk(
+    Vulkan*     vk,
+    vec2i       render_area_pos,
+    vec2u       render_area_size,
+    VkImage     image,
+    VkImageView view,
+    Color       clear_color)
+{
+  if (vk->state.command_buffer != VK_NULL_HANDLE)
+    return ERROR("attempt to start a render pass while one is already "
+                 "active\n");
 
-  for (u32 i = 0; i < ri.texture_pool.MAX_COUNT; i++)
+  vk->state.command_buffer = vk->command_buffer;
+  
+  VkRect2D render_rect = 
   {
-    RendererTexture* texture = ri.texture_pool.atIndex(i);
-    if (texture != nullptr && texture->image != VK_NULL_HANDLE)
+    .offset = 
     {
-      gfx::Texture api_texture = {i};
-      api_texture.deinit(*this);
-    }
-  }
-  ri.texture_pool.deinit();
-
-  for (u32 i = 0; i < ri.framebuffer_pool.MAX_COUNT; i++)
-  {
-    RendererFramebuffer* framebuffer = ri.framebuffer_pool.atIndex(i);
-    if (framebuffer != nullptr && framebuffer->framebuffer != VK_NULL_HANDLE)
+      .x = render_area_pos.x,
+      .y = render_area_pos.y,
+    },
+    .extent = 
     {
-      gfx::Framebuffer api_framebuffer = {i};
-      api_framebuffer.deinit(*this);
-    }
-  }
-  ri.framebuffer_pool.deinit();
+      .width = render_area_size.x,
+      .height = render_area_size.y,
+    },
+  };
 
-  for (u32 i = 0; i < ri.shader_pool.MAX_COUNT; i++)
-  {
-    RendererShader* shader = ri.shader_pool.atIndex(i);
-    if (shader != nullptr && shader->module != VK_NULL_HANDLE)
-    {
-      gfx::Shader api_shader = {i};
-      api_shader.deinit(*this);
-    }
-  }
-  ri.shader_pool.deinit();
-
-  for (u32 i = 0; i < ri.buffer_pool.MAX_COUNT; i++)
-  {
-    RendererBuffer* buffer = ri.buffer_pool.atIndex(i);
-    if (buffer != nullptr && buffer->buffer != VK_NULL_HANDLE)
-    {
-      gfx::Buffer api_buffer = {i};
-      api_buffer.deinit(*this);
-    }
-  }
-  ri.buffer_pool.deinit();
-
-  for (u32 i = 0; i < ri.pipeline_pool.MAX_COUNT; i++)
-  {
-    RendererPipeline* pipeline = ri.pipeline_pool.atIndex(i);
-    if (pipeline != nullptr && pipeline->pipeline != VK_NULL_HANDLE)
-    {
-      gfx::Pipeline api_pipeline = {i};
-      api_pipeline.deinit(*this);
-    }
-  }
-  ri.pipeline_pool.deinit();
-
-  {
-    size_t cache_size = 0;
-    vkGetPipelineCacheData(ri.device, ri.pipeline_cache, &cache_size, nullptr);
-    if (cache_size > 0)
-    {
-      void* cache_data = allocator->allocate(cache_size);
-      if (cache_data != nullptr)
-      {
-        if (VK_SUCCESS == vkGetPipelineCacheData(ri.device, ri.pipeline_cache,
-            &cache_size, cache_data))
-        {
-          auto file =
-            fs::File::from("data/pipelines.cache"_str,
-                fs::OpenFlag::Write
-              | fs::OpenFlag::Create
-              | fs::OpenFlag::Truncate);
-          if (notnil(file))
-          {
-            file.write(Bytes::from((u8*)cache_data, cache_size));
-            file.close();
-          }
-        }
-        allocator->free(cache_data);
-      }
-    }
-    vkDestroyPipelineCache(ri.device, ri.pipeline_cache, &ri.allocator);
-  }
-
-  vkDestroySemaphore(ri.device, ri.image_acquired_semaphore, &ri.allocator);
-  vkDestroySemaphore(ri.device, ri.render_complete_semaphore, &ri.allocator);
-
-  for (u32 i = 0; i < ri.swapchain_image_count; i++)
-  {
-    vkDestroyFramebuffer(ri.device,
-      ri.default_framebuffers[i], &ri.allocator);
-    vkDestroyImageView(ri.device,
-      ri.default_framebuffer_image_views[i], &ri.allocator);
-    vkDestroyImage(ri.device,
-      ri.default_framebuffer_images[i], &ri.allocator);
-    gfx::deallocate(*this, ri.default_framebuffer_image_allocations[i]);
-  }
-
-  vkDestroyRenderPass(ri.device, ri.default_renderpass, &ri.allocator);
-
-  vkDestroySwapchainKHR(ri.device, ri.swapchain, &ri.allocator);
-
-  vkDestroyDescriptorPool(ri.device, ri.descriptor_pool, &ri.allocator);
-
-  vkDestroyDescriptorSetLayout(ri.device,
-    ri.default_uniform_buffer_descriptor_set_layout, &ri.allocator);
-  vkDestroyDescriptorSetLayout(ri.device,
-    ri.default_sampler_descriptor_set_layout, &ri.allocator);
-  vkDestroyDescriptorSetLayout(ri.device,
-    ri.default_storage_buffer_descriptor_set_layout, &ri.allocator);
-
-  vkDestroyCommandPool(ri.device, ri.command_pool, &ri.allocator);
-
-  for (RendererHeap& heap : ri.heaps)
-  {
-    for (RendererHeapBlock& block : heap.blocks)
-    {
-      vkFreeMemory(ri.device, block.memory, &ri.allocator);
-    }
-    heap.blocks.destroy();
-    heap.allocations.destroy();
-    heap.free_chunks.destroy();
-  }
-
-  vkDestroyDevice(ri.device, &ri.allocator);
-
-$ if ECS_DEBUG then
-  auto vkDestroyDebugUtilsMessengerEXT = (PFN_vkDestroyDebugUtilsMessengerEXT)
-    vkGetInstanceProcAddr(ri.instance, "vkDestroyDebugUtilsMessengerEXT");
-  if (vkDestroyDebugUtilsMessengerEXT != nullptr)
-  {
-    vkDestroyDebugUtilsMessengerEXT(ri.instance, ri.debug_messenger, &ri.allocator);
-  }
-$ end -- if ECS_DEBUG
-
-  vkDestroyInstance(ri.instance, &ri.allocator);
-
-  this->drawcmds.clear();
-
-  this->allocator->free(this->internal);
+  // NOTE(sushi) the image transition occurs inside this function, however
+  //             that should probably be pulled out and done here.
+  vk->cmdBeginRendering(
+    vk->state.command_buffer,
+    render_rect,
+    image,
+    view,
+    colorToVkClearValue(clear_color));
 
   return true;
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 Renderer::update(UpdateParams& params)
+b8 Renderer::beginRenderPass(
+    vec2i render_area_pos,
+    vec2u render_area_size,
+    RenderTarget target,
+    Color clear_color)
 {
-  RendererInternal& ri = *(RendererInternal*)this->internal;
-  TRACE("Renderer::update\n");
-  frame++;
-
-  VkResult acquire_result = vkAcquireNextImageKHR(ri.device, ri.swapchain,
-    0xFFFFFFFFFFFFFFFF, ri.image_acquired_semaphore, VK_NULL_HANDLE,
-    &ri.default_framebuffer_index);
-  if (acquire_result == VK_ERROR_OUT_OF_DATE_KHR)
-  {
-    onWindowResized(params.window.size);
-    return true;
-  }
-  else if (acquire_result != VK_SUCCESS && acquire_result != VK_SUBOPTIMAL_KHR)
-  {
-    assert(false);
-    return FATAL("failed to acquired the vulkan swapchain image\n");
-  }
-
-  TRACE("beginning the vulkan command buffer\n");
-  {
-    VkCommandBufferBeginInfo begin_info =
-    {
-      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-    };
-
-    if (VK_SUCCESS != vkBeginCommandBuffer(ri.command_buffer, &begin_info))
-      return FATAL("failed to begin the vulkan command buffer\n");
-  }
-
-  TRACE("binding the default framebuffer\n");
-  {
-    VkClearValue clear_values[1] =
-    {
-      { .color = { 0.0f, 0.0f, 0.0f, 1.0f } }
-    };
-
-    VkRenderPassBeginInfo begin_info =
-    {
-      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-      .renderPass = ri.default_renderpass,
-      .framebuffer = ri.default_framebuffers[ri.default_framebuffer_index],
-      .renderArea =
-      {
-        .offset = { 0, 0 },
-        .extent =
-        {
-          .width = ri.surface_extent.width,
-          .height = ri.surface_extent.height,
-        },
-      },
-      .clearValueCount = 1,
-      .pClearValues = clear_values,
-    };
-
-$ if ECS_DEBUG then
-    if (ri.func_vkCmdBeginDebugUtilsLabelEXT != nullptr)
-    {
-      VkDebugUtilsLabelEXT label =
-      {
-        .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
-        .pLabelName = "default framebuffer",
-        .color = { 0.2f, 0.4f, 0.8f, 1.0f },
-      };
-      ri.func_vkCmdBeginDebugUtilsLabelEXT(ri.command_buffer, &label);
-    }
-$ end -- if ECS_DEBUG
-
-    vkCmdBeginRenderPass(ri.command_buffer, &begin_info,
-      VK_SUBPASS_CONTENTS_INLINE);
-  }
-
-  TRACE("executing draw commands\n");
-  Pipeline current_pipeline = {};
-  Framebuffer current_framebuffer = {};
-  for (DrawCmd& cmd : drawcmds)
-  {
-    switch (cmd.kind)
-    {
-    case DrawCmd::Kind::SetScissor:
-    {
-      TRACE("setting the scissor to"
-        " pos(",cmd.set_scissor.pos.x,",",cmd.set_scissor.pos.y,")"
-        " size(",cmd.set_scissor.size.x,",",cmd.set_scissor.size.y,")\n");
-
-      VkRect2D scissor =
-      {
-        .offset =
-        {
-          .x = cmd.set_scissor.pos.x,
-          .y = cmd.set_scissor.pos.y,
-        },
-        .extent =
-        {
-          .width = cmd.set_scissor.size.x,
-          .height = cmd.set_scissor.size.y,
-        },
-      };
-
-      vkCmdSetScissor(ri.command_buffer, 0, 1, &scissor);
-    }break;
-
-    case DrawCmd::Kind::SetViewport:
-    {
-      TRACE("setting the viewport to"
-        " pos(",cmd.set_viewport.pos.x,",",cmd.set_viewport.pos.y,")"
-        " size(",cmd.set_viewport.size.x,",",cmd.set_viewport.size.y,")\n");
-
-      VkViewport viewport =
-      {
-        .x = cmd.set_viewport.pos.x,
-        .y = cmd.set_viewport.pos.y,
-        .width = cmd.set_viewport.size.x,
-        .height = cmd.set_viewport.size.y,
-        .minDepth = 0.0f,
-        .maxDepth = 1.0f,
-      };
-
-      vkCmdSetViewport(ri.command_buffer, 0, 1, &viewport);
-    }break;
-
-    case DrawCmd::Kind::BindFramebuffer:
-    {
-      TRACE("binding the framebuffer ", cmd.bind_framebuffer.index, "\n");
-
-      VkFramebuffer vk_framebuffer = VK_NULL_HANDLE;
-      VkRenderPass vk_renderpass = VK_NULL_HANDLE;
-      VkClearValue clear_values[1] = { 0.0f, 0.0f, 0.0f, 1.0f };
-      VkExtent2D extent = { 0, 0 };
-
-      vkCmdEndRenderPass(ri.command_buffer);
-
-$ if ECS_DEBUG then
-      if (ri.func_vkCmdEndDebugUtilsLabelEXT != nullptr)
-      {
-        ri.func_vkCmdEndDebugUtilsLabelEXT(ri.command_buffer);
-      }
-$ end -- if ECS_DEBUG
-
-      // transition framebuffer image back to SHADER_READ_ONLY after rendering
-      if (current_framebuffer.index != 0)
-      {
-        RendererFramebuffer* framebuffer =
-          ri.framebuffer_pool.atIndex(current_framebuffer.index);
-        if (framebuffer == nullptr)
-        {
-          ERROR("failed to transition the framebuffer image back to"
-            " SHADER_READ_ONLY after rendering because it is out of bounds\n");
-          break;
-        }
-
-        VkImageMemoryBarrier barrier =
-        {
-          .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-          .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-          .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-          .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-          .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-          .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-          .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-          .image = framebuffer->texture->image,
-          .subresourceRange =
-          {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .baseMipLevel = 0,
-            .levelCount = 1,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
-          },
-        };
-
-        vkCmdPipelineBarrier(
-          ri.command_buffer,
-          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-          0, 0, nullptr, 0, nullptr, 1, &barrier);
-      }
-
-      if (cmd.bind_framebuffer.index == 0)
-      {
-        vk_framebuffer = ri.default_framebuffers[ri.default_framebuffer_index];
-        vk_renderpass = ri.default_renderpass;
-
-        extent =
-        {
-          .width = ri.surface_extent.width,
-          .height = ri.surface_extent.height,
-        };
-      }
-      else
-      {
-        RendererFramebuffer* framebuffer =
-          ri.framebuffer_pool.atIndex(cmd.bind_framebuffer.index);
-        if (framebuffer == nullptr)
-        {
-          ERROR("failed to bind framebuffer at index ",
-            cmd.bind_framebuffer.index, " because it is out of bounds\n");
-          break;
-        }
-
-        vk_framebuffer = framebuffer->framebuffer;
-        vk_renderpass = framebuffer->renderpass;
-
-        clear_values[0] =
-        {
-          .color =
-          {
-            framebuffer->clear_color.x,
-            framebuffer->clear_color.y,
-            framebuffer->clear_color.z,
-            framebuffer->clear_color.w,
-          },
-        };
-
-        extent =
-        {
-          .width = framebuffer->width,
-          .height = framebuffer->height,
-        };
-
-        // transition image layout to COLOR_ATTACHMENT_OPTIMAL before rendering
-        VkImageMemoryBarrier barrier =
-        {
-          .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-          .srcAccessMask = VK_ACCESS_SHADER_READ_BIT,
-          .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-          .oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-          .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-          .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-          .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-          .image = framebuffer->texture->image,
-          .subresourceRange =
-          {
-            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-            .baseMipLevel = 0,
-            .levelCount = 1,
-            .baseArrayLayer = 0,
-            .layerCount = 1,
-          },
-        };
-
-        vkCmdPipelineBarrier(ri.command_buffer,
-          VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-          VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-          0, 0, nullptr, 0, nullptr, 1, &barrier);
-      }
-
-      VkRenderPassBeginInfo begin_info =
-      {
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-        .renderPass = vk_renderpass,
-        .framebuffer = vk_framebuffer,
-        .renderArea =
-        {
-          .offset = { 0, 0 },
-          .extent = extent,
-        },
-        .clearValueCount = 1,
-        .pClearValues = clear_values,
-      };
-
-$ if ECS_DEBUG then
-      if (ri.func_vkCmdBeginDebugUtilsLabelEXT != nullptr)
-      {
-        iro::io::StaticBuffer<63> name = {};
-        iro::io::formatv(&name, "framebuffer ", cmd.bind_framebuffer.index);
-
-        VkDebugUtilsLabelEXT label =
-        {
-          .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
-          .pLabelName = (const char*)name.buffer,
-          .color = { 0.4f, 0.8f, 0.1f, 1.0f },
-        };
-        ri.func_vkCmdBeginDebugUtilsLabelEXT(ri.command_buffer, &label);
-      }
-$ end -- if ECS_DEBUG
-
-      vkCmdBeginRenderPass(ri.command_buffer, &begin_info,
-        VK_SUBPASS_CONTENTS_INLINE);
-
-      current_framebuffer = cmd.bind_framebuffer;
-    }break;
-
-    case DrawCmd::Kind::BindPipeline:
-    {
-      TRACE("binding pipeline ", cmd.bind_pipeline.index, "\n");
-
-      RendererPipeline* pipeline = 
-        ri.pipeline_pool.atIndex(cmd.bind_pipeline.index);
-      if (pipeline == nullptr || pipeline->pipeline == VK_NULL_HANDLE)
-      {
-        ERROR("failed to bind invalid pipeline\n");
-        break;
-      }
-
-      vkCmdBindPipeline(ri.command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
-        pipeline->pipeline);
-
-      current_pipeline = cmd.bind_pipeline;
-    }break;
-
-    case DrawCmd::Kind::BindTexture:
-    {
-      TRACE("binding the texture ", cmd.bind_texture.index, "\n");
-
-      if (current_pipeline.index == 0)
-      {
-        ERROR("attempted to bind texture without an active pipeline\n");
-        break;
-      }
-
-      RendererPipeline* pipeline =
-        ri.pipeline_pool.atIndex(current_pipeline.index);
-      if (pipeline == nullptr)
-      {
-        ERROR("failed to bind texture because the pipeline"
-          " is out of bounds\n");
-        break;
-      }
-
-      if (cmd.bind_texture.index == 0)
-      {
-        ERROR("failed to bind texture because it has not"
-          " been initialized\n");
-        break;
-      }
-
-      RendererTexture* texture =
-        ri.texture_pool.atIndex(cmd.bind_texture.index);
-      if (texture == nullptr)
-      {
-        ERROR("failed to bind texture at index ", cmd.bind_texture.index,
-          " because it is out of bounds\n");
-        break;
-      }
-
-      vkCmdBindDescriptorSets(ri.command_buffer,
-        VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout,
-        SAMPLER_DESCRIPTOR_SET_INDEX, 1, &texture->descriptor_set, 0, nullptr);
-    }break;
-
-    case DrawCmd::Kind::BindUniformBuffer:
-    {
-      TRACE("binding the uniform buffer ", cmd.bind_buffer.index, "\n");
-
-      if (current_pipeline.index == 0)
-      {
-        ERROR("attempted to bind a uniform buffer without"
-          " an active pipeline\n");
-        break;
-      }
-
-      RendererPipeline* pipeline =
-        ri.pipeline_pool.atIndex(current_pipeline.index);
-      if (pipeline == nullptr)
-      {
-        ERROR("failed to bind uniform buffer because the pipeline"
-          " is out of bounds\n");
-        break;
-      }
-
-      if (cmd.bind_buffer.index == 0)
-      {
-        ERROR("failed to bind uniform buffer because it has not"
-          " been initialized\n");
-        break;
-      }
-
-      RendererBuffer* buffer =
-        ri.buffer_pool.atIndex(cmd.bind_buffer.index);
-      if (buffer == nullptr)
-      {
-        ERROR("failed to bind uniform buffer at index ",
-          cmd.bind_texture.index, " because it is out of bounds\n");
-        break;
-      }
-
-      vkCmdBindDescriptorSets(ri.command_buffer,
-        VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout,
-        UNIFORM_BUFFER_DESCRIPTOR_SET_INDEX, 1, &buffer->descriptor_set,
-        0, nullptr);
-    }break;
-
-    case DrawCmd::Kind::BindStorageBuffer:
-    {
-      TRACE("binding the storage buffer ", cmd.bind_buffer.index, "\n");
-
-      if (current_pipeline.index == 0)
-      {
-        ERROR("attempted to bind a storage buffer without"
-          " an active pipeline\n");
-        break;
-      }
-
-      if (cmd.bind_buffer.index == 0)
-      {
-        ERROR("failed to bind storage buffer because it has not"
-          " been initialized\n");
-        break;
-      }
-
-      RendererBuffer* buffer =
-        ri.buffer_pool.atIndex(cmd.bind_buffer.index);
-      if (buffer == nullptr)
-      {
-        ERROR("failed to bind storage buffer at index ",
-          cmd.bind_texture.index, " because it is out of bounds\n");
-        break;
-      }
-
-      RendererPipeline* pipeline =
-        ri.pipeline_pool.atIndex(current_pipeline.index);
-      if (pipeline == nullptr)
-      {
-        ERROR("failed to bind storage buffer because the pipeline"
-          " is out of bounds\n");
-        break;
-      }
-
-      vkCmdBindDescriptorSets(ri.command_buffer,
-        VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->layout,
-        STORAGE_BUFFER_DESCRIPTOR_SET_INDEX, 1, &buffer->descriptor_set,
-        0, nullptr);
-    }break;
-
-    case DrawCmd::Kind::BindVertexBuffer:
-    {
-      TRACE("binding the vertex buffer ", cmd.bind_buffer.index, "\n");
-
-      if (cmd.bind_buffer.index == 0)
-      {
-        ERROR("attempted to bind an uninitialized buffer\n");
-        break;
-      }
-
-      RendererBuffer* buffer = ri.buffer_pool.atIndex(cmd.bind_buffer.index);
-      if (buffer == nullptr)
-      {
-        ERROR("attempted to bind buffer at index ",
-          cmd.bind_buffer.index, " which is out of bounds\n");
-        break;
-      }
-
-      if (buffer->buffer == VK_NULL_HANDLE)
-      {
-        ERROR("attempted to bind an uninitialized buffer\n");
-        break;
-      }
-
-      VkDeviceSize offsets[1] = { 0 };
-      vkCmdBindVertexBuffers(ri.command_buffer, 0, 1, &buffer->buffer, offsets);
-    }break;
-
-    case DrawCmd::Kind::BindIndexBuffer:
-    {
-      TRACE("binding the index buffer ", cmd.bind_buffer.index, "\n");
-
-      if (cmd.bind_buffer.index == 0)
-      {
-        ERROR("attempted to bind an uninitialized buffer\n");
-        break;
-      }
-
-      RendererBuffer* buffer = ri.buffer_pool.atIndex(cmd.bind_buffer.index);
-      if (buffer == nullptr)
-      {
-        ERROR("attempted to bind buffer at index ",
-          cmd.bind_buffer.index, " which is out of bounds\n");
-        break;
-      }
-
-      if (buffer->buffer == VK_NULL_HANDLE)
-      {
-        ERROR("attempted to bind an uninitialized buffer\n");
-        break;
-      }
-
-      vkCmdBindIndexBuffer(ri.command_buffer, buffer->buffer, 0,
-        VK_INDEX_TYPE_UINT32);
-    }break;
-
-    case DrawCmd::Kind::PushConstant:
-    {
-      if (current_pipeline.index == 0)
-      {
-        ERROR("attempted to push constant without an active pipeline\n");
-        break;
-      }
-
-      TRACE("pushing the constant ", cmd.push_constant.data,
-        " with size ", cmd.push_constant.size, "\n");
-
-      RendererPipeline* pipeline = ri.pipeline_pool.atIndex(current_pipeline.index);
-      if (pipeline == nullptr || pipeline->pipeline == VK_NULL_HANDLE)
-      {
-        ERROR("attempted to push constant with an invalid pipeline\n");
-        break;
-      }
-
-      if (cmd.push_constant.size > pipeline->push_constant_size)
-      {
-        ERROR("attempted to push constant with a size that is too large for"
-          " the active pipeline\n");
-        break;
-      }
-
-      vkCmdPushConstants(ri.command_buffer, pipeline->layout,
-        VK_SHADER_STAGE_VERTEX_BIT, 0, cmd.push_constant.size,
-        cmd.push_constant.data);
-    }break;
-
-    case DrawCmd::Kind::Draw:
-    {
-      TRACE("drawing indexes [", cmd.draw.index_start, "..",
-        cmd.draw.index_start + cmd.draw.index_count,
-        "] with a vertex offset of (", cmd.draw.vertex_start, ")\n");
-
-      vkCmdDrawIndexed(ri.command_buffer, cmd.draw.index_count,
-        1, cmd.draw.index_start, cmd.draw.vertex_start, 0);
-    }break;
-
-$ if ECS_DEBUG then
-    case DrawCmd::Kind::DebugBeginLabel:
-    {
-      if (ri.func_vkCmdBeginDebugUtilsLabelEXT != nullptr)
-      {
-        VkDebugUtilsLabelEXT label =
-        {
-          .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
-          .pLabelName = cmd.debug_label.label,
-          .color =
-          {
-            cmd.debug_label.color.x,
-            cmd.debug_label.color.y,
-            cmd.debug_label.color.z,
-            cmd.debug_label.color.w,
-          },
-        };
-        ri.func_vkCmdBeginDebugUtilsLabelEXT(ri.command_buffer, &label);
-      }
-    } break;
-
-    case DrawCmd::Kind::DebugEndLabel:
-    {
-      if (ri.func_vkCmdEndDebugUtilsLabelEXT != nullptr)
-      {
-        ri.func_vkCmdEndDebugUtilsLabelEXT(ri.command_buffer);
-      }
-    } break;
-
-    case DrawCmd::Kind::DebugInsertLabel:
-    {
-      if (ri.func_vkCmdInsertDebugUtilsLabelEXT != nullptr)
-      {
-        VkDebugUtilsLabelEXT label =
-        {
-          .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
-          .pLabelName = cmd.debug_label.label,
-          .color =
-          {
-            cmd.debug_label.color.x,
-            cmd.debug_label.color.y,
-            cmd.debug_label.color.z,
-            cmd.debug_label.color.w,
-          },
-        };
-        ri.func_vkCmdInsertDebugUtilsLabelEXT(ri.command_buffer, &label);
-      }
-    } break;
-$ end -- if ECS_DEBUG
-    }
-  }
-
-  TRACE("ending the render pass\n");
-  {
-    vkCmdEndRenderPass(ri.command_buffer);
-
-$ if ECS_DEBUG then
-    if (ri.func_vkCmdEndDebugUtilsLabelEXT != nullptr)
-    {
-      ri.func_vkCmdEndDebugUtilsLabelEXT(ri.command_buffer);
-    }
-$ end -- if ECS_DEBUG
-
-    // transition framebuffer image back to SHADER_READ_ONLY after rendering
-    if (current_framebuffer.index != 0)
-    {
-      RendererFramebuffer* framebuffer =
-        ri.framebuffer_pool.atIndex(current_framebuffer.index);
-      assert(framebuffer != nullptr);
-
-      VkImageMemoryBarrier barrier =
-      {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-        .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-        .dstAccessMask = VK_ACCESS_SHADER_READ_BIT,
-        .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-        .newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image = framebuffer->texture->image,
-        .subresourceRange =
-        {
-          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-          .baseMipLevel = 0,
-          .levelCount = 1,
-          .baseArrayLayer = 0,
-          .layerCount = 1,
-        },
-      };
-
-      vkCmdPipelineBarrier(
-        ri.command_buffer,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-        0, 0, nullptr, 0, nullptr, 1, &barrier);
-    }
-  }
-
-  TRACE("blitting default framebuffer to swapchain image\n");
-  {
-    VkImageMemoryBarrier barrier =
-    {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-      .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
-      .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT,
-      .oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-      .newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .image = ri.default_framebuffer_images[ri.default_framebuffer_index],
-      .subresourceRange =
-      {
-        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-        .baseMipLevel = 0,
-        .levelCount = 1,
-        .baseArrayLayer = 0,
-        .layerCount = 1
-      }
-    };
-
-    vkCmdPipelineBarrier(ri.command_buffer,
-      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-      VK_PIPELINE_STAGE_TRANSFER_BIT,
-      0, 0, nullptr, 0, nullptr, 1, &barrier);
-
-    VkImage swapchain_images[RendererInternal::MaxDefaultFramebuffers];
-    vkGetSwapchainImagesKHR(ri.device, ri.swapchain,
-      &ri.swapchain_image_count, swapchain_images);
-
-    barrier.srcAccessMask = VK_ACCESS_NONE;
-    barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    barrier.image = swapchain_images[ri.default_framebuffer_index];
-
-    vkCmdPipelineBarrier(ri.command_buffer,
-      VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-      VK_PIPELINE_STAGE_TRANSFER_BIT,
-      0, 0, nullptr, 0, nullptr, 1, &barrier);
-
-    VkImageBlit blit =
-    {
-      .srcSubresource =
-      {
-        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-        .mipLevel = 0,
-        .baseArrayLayer = 0,
-        .layerCount = 1
-      },
-      .srcOffsets =
-      {
-        {0, 0, 0},
-        {(s32)ri.surface_extent.width, (s32)ri.surface_extent.height, 1}
-      },
-      .dstSubresource =
-      {
-        .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-        .mipLevel = 0,
-        .baseArrayLayer = 0,
-        .layerCount = 1
-      },
-      .dstOffsets =
-      {
-        {0, 0, 0},
-        {(s32)ri.surface_extent.width, (s32)ri.surface_extent.height, 1}
-      }
-    };
-
-    vkCmdBlitImage(ri.command_buffer,
-      ri.default_framebuffer_images[ri.default_framebuffer_index],
-      VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-      swapchain_images[ri.default_framebuffer_index],
-      VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-      1, &blit, VK_FILTER_LINEAR);
-
-    VkMemoryBarrier memory_barrier =
-    {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-      .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-      .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT
-    };
-
-    vkCmdPipelineBarrier(ri.command_buffer,
-      VK_PIPELINE_STAGE_TRANSFER_BIT,
-      VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-      0, 1, &memory_barrier, 0, nullptr, 0, nullptr);
-
-    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    barrier.dstAccessMask = VK_ACCESS_NONE;
-    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    barrier.image = swapchain_images[ri.default_framebuffer_index];
-
-    vkCmdPipelineBarrier(ri.command_buffer,
-      VK_PIPELINE_STAGE_TRANSFER_BIT,
-      VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-      0, 0, nullptr, 0, nullptr, 1, &barrier);
-
-    barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-    barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-    barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    barrier.image = ri.default_framebuffer_images[ri.default_framebuffer_index];
-
-    vkCmdPipelineBarrier(ri.command_buffer,
-      VK_PIPELINE_STAGE_TRANSFER_BIT,
-      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-      0, 0, nullptr, 0, nullptr, 1, &barrier);
-  }
-
-  TRACE("ending the command buffer\n");
-  if (VK_SUCCESS != vkEndCommandBuffer(ri.command_buffer))
-    return FATAL("failed to end the command buffer\n");
-
-  TRACE("submitting the command buffer\n");
-  {
-    VkPipelineStageFlags wait_stages =
-      VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-
-    VkSubmitInfo submit_info =
-    {
-      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-      .waitSemaphoreCount = 1,
-      .pWaitSemaphores = &ri.image_acquired_semaphore,
-      .pWaitDstStageMask = &wait_stages,
-      .commandBufferCount = 1,
-      .pCommandBuffers = &ri.command_buffer,
-      .signalSemaphoreCount = 1,
-      .pSignalSemaphores = &ri.render_complete_semaphore,
-    };
-
-    if (VK_SUCCESS != vkQueueSubmit(ri.graphics_queue,1, &submit_info,
-        VK_NULL_HANDLE))
-      return FATAL("failed to submit the command buffer\n");
-  }
-
-  TRACE("presenting the frame\n");
-  {
-    VkPresentInfoKHR present_info =
-    {
-      .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-      .waitSemaphoreCount = 1,
-      .pWaitSemaphores = &ri.render_complete_semaphore,
-      .swapchainCount = 1,
-      .pSwapchains = &ri.swapchain,
-      .pImageIndices = &ri.default_framebuffer_index,
-    };
-
-    VkResult result = vkQueuePresentKHR(ri.graphics_queue, &present_info);
-    if (result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR)
-    {
-      onWindowResized(params.window.size);
-      return true;
-    }
-    else if (result != VK_SUCCESS)
-    {
-      return FATAL("failed to present the frame\n");
-    }
-
-    ri.default_framebuffer_index =
-      (ri.default_framebuffer_index + 1) % ri.swapchain_image_count;
-  }
-
-  TRACE("clearing drawcmds\n");
-  drawcmds.clear();
-
-  //TODO(delle) see if this is needed
-  if (VK_SUCCESS != vkDeviceWaitIdle(ri.device))
-    return FATAL("failed to wait for the device to idle\n");
-
-  return true;
-};
+  if (isnil(target.image))
+    return ERROR("attempt to begin a render pass with a nil target\n");
+
+  if (isnil(target.view))
+    return ERROR("attempt to begin a render pass with a nil target\n view");
+
+  return beginRenderPassVk(
+    vk,
+    render_area_pos,
+    render_area_size,
+    ((DeviceImage*)target.image.handle)->handle,
+    (VkImageView)target.view.handle,
+    clear_color);
+}
 
 /* ----------------------------------------------------------------------------
  */
-void Renderer::setScissor(vec2i pos, vec2i size)
+b8 Renderer::beginRenderPassOverSwapchainImage(
+    vec2i render_area_pos,
+    vec2u render_area_size,
+    Color clear_color)
 {
-  if (size.x <= 0 || size.y <= 0)
+  // TODO(sushi) this is probably not how we want to do this.
+  u32 next_image = vk->acquireNextImageIndex();
+
+  return beginRenderPassVk(
+    vk,
+    render_area_pos,
+    render_area_size,
+    vk->swapchain_buffers[next_image].image,
+    vk->swapchain_buffers[next_image].view,
+    clear_color);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::endRenderPass()
+{
+  if (vk->state.command_buffer == VK_NULL_HANDLE)
   {
-    ERROR("attempt to set a scissor with zero or negative size\n");
-    assert(false);
+    ERROR("attempt to end a render pass outside a render pass instance\n");
     return;
   }
 
-  DrawCmd cmd =
-  {
-    .kind = DrawCmd::Kind::SetScissor,
-    .set_scissor = { pos, vec2u(size) },
-  };
-  drawcmds.push(cmd);
+  vk->cmdEndRendering(vk->state.command_buffer);
+  vk->state.command_buffer = VK_NULL_HANDLE;
 }
 
 /* ----------------------------------------------------------------------------
  */
-void Renderer::setViewport(vec2i pos, vec2i size)
+void Renderer::setScissor(vec2i pos, vec2u size)
 {
-  if (size.x <= 0 || size.y <= 0)
-  {
-    ERROR("attempt to set a viewport with zero or negative size\n");
-    return;
-  }
+  TRACE("setting scissor to ", pos, ' ', size, "\n");
 
-  DrawCmd cmd =
+  VkRect2D scissor = 
   {
-    .kind = DrawCmd::Kind::SetViewport,
-    .set_viewport = { vec2f(pos), vec2f(size) },
+    .offset = 
+    {
+      .x = pos.x,
+      .y = pos.y,
+    },
+    .extent = 
+    {
+      .width = size.x,
+      .height = size.y,
+    }
   };
-  drawcmds.push(cmd);
+
+  vkCmdSetScissor(vk->command_buffer, 0, 1, &scissor);
 }
 
 /* ----------------------------------------------------------------------------
  */
-void Renderer::bindFramebuffer(Framebuffer framebuffer)
+void Renderer::setViewport(vec2f pos, vec2f size)
 {
-  DrawCmd cmd =
+  TRACE("setting viewport to ", pos, ' ', size, '\n');
+
+  VkViewport viewport = 
   {
-    .kind = DrawCmd::Kind::BindFramebuffer,
-    .bind_framebuffer = framebuffer,
+    .x = pos.x,
+    .y = pos.y,
+    .width = size.x,
+    .height = size.y,
+    .minDepth = 0.f,
+    .maxDepth = 1.f,
   };
-  drawcmds.push(cmd);
+
+  vkCmdSetViewport(vk->command_buffer, 0, 1, &viewport);
 }
 
 /* ----------------------------------------------------------------------------
  */
 void Renderer::bindPipeline(Pipeline pipeline)
 {
-  DrawCmd cmd =
+  if (isnil(pipeline))
   {
-    .kind = DrawCmd::Kind::BindPipeline,
-    .bind_pipeline = pipeline,
-  };
-  drawcmds.push(cmd);
+    ERROR("attempt to bind nil gfx::Pipeline\n");
+    return;
+  }
+
+  DevicePipeline* dpipeline = vk->pipeline_pool.get(pipeline.index);
+
+  if (dpipeline == vk->state.bound_pipeline)
+    // Already bound.
+    return;
+
+  TRACE("binding ", pipeline, '\n');
+
+  vkCmdBindPipeline(
+    vk->command_buffer, 
+    VK_PIPELINE_BIND_POINT_GRAPHICS,
+    dpipeline->pipeline);
 }
 
 /* ----------------------------------------------------------------------------
  */
-void Renderer::bindTexture(gfx::Texture texture)
+void Renderer::bindDescriptorSet(u32 set_idx, DescriptorSet set)
 {
-  assert(texture.index != 0);
-  DrawCmd cmd =
+  if (isnil(set))
   {
-    .kind = DrawCmd::Kind::BindTexture,
-    .bind_texture = texture,
-  };
-  drawcmds.push(cmd);
-}
+    ERROR("attempt to bind nil gfx::DescriptorSet\n");
+    return;
+  }
 
-/* ----------------------------------------------------------------------------
- */
-void Renderer::bindUniformBuffer(Buffer buffer)
-{
-  DrawCmd cmd =
+  if (vk->state.bound_pipeline == nullptr)
   {
-    .kind = DrawCmd::Kind::BindUniformBuffer,
-    .bind_buffer = buffer,
-  };
-  drawcmds.push(cmd);
-}
+    ERROR("attempt to bind a gfx::DescriptorSet before binding a pipeline\n");
+    return;
+  }
 
-/* ----------------------------------------------------------------------------
- */
-void Renderer::bindStorageBuffer(Buffer buffer)
-{
-  DrawCmd cmd =
-  {
-    .kind = DrawCmd::Kind::BindStorageBuffer,
-    .bind_buffer = buffer,
-  };
-  drawcmds.push(cmd);
+  vkCmdBindDescriptorSets(
+    vk->state.command_buffer,
+    VK_PIPELINE_BIND_POINT_GRAPHICS,
+    vk->state.bound_pipeline->layout,
+    set_idx,
+    1,
+    &(VkDescriptorSet&)set.handle,
+    0,
+    nullptr);
 }
 
 /* ----------------------------------------------------------------------------
  */
 void Renderer::bindVertexBuffer(Buffer buffer)
 {
-  DrawCmd cmd =
+  if (isnil(buffer))
   {
-    .kind = DrawCmd::Kind::BindVertexBuffer,
-    .bind_buffer = buffer,
-  };
-  drawcmds.push(cmd);
+    ERROR("attempt to bind a nil gfx::Buffer as a vertex buffer\n");
+    return;
+  }
+
+  VkDeviceSize offset = 0;
+  vkCmdBindVertexBuffers(
+    vk->state.command_buffer,
+    0,
+    1,
+    &(VkBuffer&)((DeviceBuffer*)buffer.handle)->handle,
+    &offset);
 }
 
 /* ----------------------------------------------------------------------------
  */
 void Renderer::bindIndexBuffer(Buffer buffer)
 {
-  DrawCmd cmd =
+  if (isnil(buffer))
   {
-    .kind = DrawCmd::Kind::BindIndexBuffer,
-    .bind_buffer = buffer,
-  };
-  drawcmds.push(cmd);
+    ERROR("attempt to bind a nil gfx::Buffer as an index buffer\n");
+    return;
+  }
+
+  vkCmdBindIndexBuffer(
+    vk->state.command_buffer,
+    (VkBuffer)((DeviceBuffer*)buffer.handle)->handle,
+    0,
+    VK_INDEX_TYPE_UINT32);
 }
 
 /* ----------------------------------------------------------------------------
  */
-void Renderer::pushConstant(void* data, u64 size)
+void Renderer::bindUniformBuffer(Buffer buffer)
 {
-    RendererInternal& ri = *(RendererInternal*)this->internal;
+  if (isnil(buffer))
+  {
+    ERROR("attempt to bind a nil gfx::Buffer as a uniform buffer\n");
+    return;
+  }
 
-    VkPhysicalDeviceLimits limits = ri.physical_device_properties.limits;
-    u64 max_push_constant_size = limits.maxPushConstantsSize;
+  vkCmdBindDescriptorSets(
+    vk->state.command_buffer,
+    VK_PIPELINE_BIND_POINT_GRAPHICS,
+    vk->state.bound_pipeline->layout,
+    0,
+    1,
+    &((DeviceBuffer*)buffer.handle)->set,
+    0,
+    nullptr);
+}
 
-    if ((data == nullptr) || (size == 0))
-      return;
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::pushConstant(
+    void* data, 
+    u32 size, 
+    u32 offset,
+    ShaderKind stage)
+{
+  if (data == nullptr)
+  {
+    ERROR("data pointer passed to pushConstant is null\n");
+    return;
+  }
 
-    if (size > max_push_constant_size)
+  if (size == 0)
+  {
+    ERROR("size passed to pushConstant is 0\n");
+    return;
+  }
+
+  if (vk->state.bound_pipeline == nullptr)
+  {
+    ERROR("attempt to push a constant before binding a pipeline\n");
+  }
+  
+  vkCmdPushConstants(
+    vk->state.command_buffer,
+    vk->state.bound_pipeline->layout,
+    shaderKindToVulkan(stage),
+    offset,
+    size,
+    data);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::draw(u32 index_start, u32 index_count, u32 vertex_start)
+{
+  vkCmdDrawIndexed(
+    vk->state.command_buffer,
+    index_count,
+    1,
+    index_start,
+    vertex_start,
+    0);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::debugBeginLabel(Color color, String label)
+{
+  if (vk->func_vkCmdBeginDebugUtilsLabelEXT != nullptr)
+  {
+    vec4f fcol = color.asVec4Norm();
+    
+    VkDebugUtilsLabelEXT info = 
     {
-      ERROR("push constant size (", size, ") exceeds device maximum allowed"
-          " size (", max_push_constant_size, ")\n");
-      return;
-    }
-
-    if (size > DrawCmd::MAX_PUSH_CONSTANT_SIZE)
-    {
-      ERROR("push constant size (", size, ") exceeds maximum allowed"
-        " size (", DrawCmd::MAX_PUSH_CONSTANT_SIZE, ")\n");
-      return;
-    }
-
-    DrawCmd cmd =
-    {
-      .kind = DrawCmd::Kind::PushConstant,
-      .push_constant =
-      {
-        {0},
-        size
-      },
+      .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+      .pLabelName = (char*)label.ptr,
+      .color = { fcol.x, fcol.y, fcol.z, fcol.w },
     };
-    memcpy(cmd.push_constant.data, data, size);
-
-    drawcmds.push(cmd);
-}
-
-/* ----------------------------------------------------------------------------
- */
-void Renderer::draw(
-  u64 index_start,
-  u64 index_count,
-  u64 vertex_start)
-{
-  DrawCmd cmd =
-  {
-    .kind = DrawCmd::Kind::Draw,
-    .draw =
-    {
-      .index_start = index_start,
-      .index_count = index_count,
-      .vertex_start = vertex_start,
-    },
-  };
-  drawcmds.push(cmd);
-}
-
-/* ----------------------------------------------------------------------------
- */
-void Renderer::debugBeginLabel(Color color, utf8::String label)
-{
-$ if ECS_DEBUG then
-  DrawCmd cmd =
-  {
-    .kind = DrawCmd::Kind::DebugBeginLabel,
-    .debug_label =
-    {
-      .color = color.asVec4Norm(),
-    }
-  };
-  mem::copy(cmd.debug_label.label, label.ptr, min<u64>(label.len, 63ULL));
-  drawcmds.push(cmd);
-$ end -- if ECS_DEBUG
+    vk->func_vkCmdBeginDebugUtilsLabelEXT(vk->state.command_buffer, &info);
+  }
 }
 
 /* ----------------------------------------------------------------------------
  */
 void Renderer::debugEndLabel()
 {
-$ if ECS_DEBUG then
-  DrawCmd cmd =
+  if (vk->func_vkCmdEndDebugUtilsLabelEXT != nullptr)
   {
-    .kind = DrawCmd::Kind::DebugEndLabel,
-  };
-  drawcmds.push(cmd);
-$ end -- if ECS_DEBUG
-}
-
-/* ----------------------------------------------------------------------------
- */
-void Renderer::debugInsertLabel(Color color, utf8::String label)
-{
-$ if ECS_DEBUG then
-  DrawCmd cmd =
-  {
-    .kind = DrawCmd::Kind::DebugInsertLabel,
-    .debug_label =
-    {
-      .color = color.asVec4Norm(),
-    }
-  };
-  mem::copy(cmd.debug_label.label, label.ptr, min<u64>(label.len, 63ULL));
-  drawcmds.push(cmd);
-$ end -- if ECS_DEBUG
-}
-
-/* ----------------------------------------------------------------------------
- */
-vec2f Renderer::getFramebufferSize(Framebuffer framebuffer)
-{
-  auto& ri = *(RendererInternal*)internal;
-  VkFramebuffer vk_fb = VK_NULL_HANDLE;
-  if (isnil(framebuffer))
-  {
-    return vec2f(ri.surface_extent.width, ri.surface_extent.height);
-  }
-  else
-  {
-    RendererFramebuffer* rfb = ri.framebuffer_pool.atIndex(framebuffer.index);
-
-    if (rfb == nullptr)
-    {
-      ERROR("invalid Framebuffer passed to getFramebufferSize (", 
-            framebuffer.index, ")\n");
-      return {};
-    }
-
-    return vec2f(rfb->width, rfb->height);
+    vk->func_vkCmdEndDebugUtilsLabelEXT(vk->state.command_buffer);
   }
 }
 
 /* ----------------------------------------------------------------------------
  */
-u64 Renderer::getMaxPushConstantSize()
+void Renderer::debugInsertLabel(Color color, String label)
 {
-    RendererInternal& ri = *(RendererInternal*)this->internal;
-    return (u64)ri.physical_device_properties.limits.maxPushConstantsSize;
-}
-
-/* ----------------------------------------------------------------------------
- */
-void Renderer::onWindowResized(vec2i size)
-{
-  RendererInternal& ri = *(RendererInternal*)this->internal;
-
-  vkDeviceWaitIdle(ri.device);
-
-  u32 old_image_count = ri.swapchain_image_count;
-
-  TRACE("recreating the vulkan swapchain\n");
-  updateSwapchain(size);
-
-  TRACE("recreating the default vulkan framebuffers\n");
-  updateFramebuffers(*this, old_image_count);
-
-  TRACE("clearing drawcmds\n");
-  drawcmds.clear();
-
-  ri.default_framebuffer_index = 0;
+  if (vk->func_vkCmdInsertDebugUtilsLabelEXT != nullptr)
+  {
+    vec4f fcol = color.asVec4Norm();
+    
+    VkDebugUtilsLabelEXT info = 
+    {
+      .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+      .pLabelName = (char*)label.ptr,
+      .color = { fcol.x, fcol.y, fcol.z, fcol.w },
+    };
+    vk->func_vkCmdInsertDebugUtilsLabelEXT(vk->state.command_buffer, &info);
+  }
 }
 
 }

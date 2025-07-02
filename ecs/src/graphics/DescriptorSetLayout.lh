@@ -38,7 +38,7 @@ struct DescriptorSetLayout
 
   static DescriptorSetLayout create(
     Renderer& renderer, 
-    Slice<Binding> bindings,
+    iro::Slice<Binding> bindings,
     String debug_name);
 
   void destroy(Renderer& renderer);

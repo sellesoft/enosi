@@ -1,6 +1,7 @@
 $ require "common"
+$ local helpers = require "graphics.Helpers"
 
-@@lpp.import "graphics/RendererInternal.lh"
+@@lpp.import "graphics/Vulkan.lh"
 
 @@lpp.import "graphics/Buffer.lh"
 @@lpp.import "graphics/Geo.lh"
@@ -12,5 +13,289 @@ $ require "common"
 
 namespace gfx
 {
+
+/* ----------------------------------------------------------------------------
+ */
+Buffer Buffer::create(Renderer& r, const CreateParams& params)
+{
+  String name = resolved(params.debug_name, "unnamed"_str);
+
+$ local cerr = helpers.defCreateErr("gfx::Buffer", "name")
+
+  DEBUG("creating a gfx::Buffer of size ", params.size, " named ", name, '\n');
+
+  if (params.size == 0)
+  {
+    @cerr("cannot create gfx::Buffer of size 0")
+    return nil;
+  }
+
+  if ((params.properties & MemoryProperty::LazilyAllocated) && 
+      (params.properties & MemoryProperty::HostCoherent
+                         | MemoryProperty::HostVisible))
+  {
+    @cerr("memory property LazilyAllocated is incompatible with HostVisible"
+          "and HostCoherent");
+    return nil;
+  }
+
+  if (params.behavior == MappingBehavior::Never &&
+      (params.properties & MemoryProperty::HostVisible
+                         | MemoryProperty::HostCoherent
+                         | MemoryProperty::HostCached))
+  {
+    @cerr("mapping behavior Never is incompatible with memory properties"
+          "HostVisible, HostCoherent, and HostCached");
+    return nil;
+  }
+
+  VkBufferUsageFlags usage = 0;
+  switch (params.usage)
+  {
+  case Usage::UniformBuffer: usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT; break;
+  case Usage::StorageBuffer: usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT; break;
+  case Usage::IndexBuffer: usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT; break;
+  case Usage::VertexBuffer: usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT; break;
+  }
+
+  if (params.behavior == MappingBehavior::Never)
+    usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+  VkBuffer handle;
+  if (!r.vk->createVkBuffer(&handle, params.size, usage, name))
+    return nil;
+
+  auto failsafe_destroy_buffer = deferWithCancel
+  {
+    r.vk->destroyVkBuffer(handle);
+  };
+
+  VkMemoryPropertyFlags properties = 0;
+$ local function mapprop(x, y)
+  if (params.properties & MemoryProperty::$(x))
+    properties |= VK_MEMORY_PROPERTY_$(y)_BIT;
+$ end
+  @mapprop(DeviceLocal,     DEVICE_LOCAL);
+  @mapprop(HostVisible,     HOST_VISIBLE);
+  @mapprop(HostCoherent,    HOST_COHERENT);
+  @mapprop(HostCached,      HOST_CACHED);
+  @mapprop(LazilyAllocated, LAZILY_ALLOCATED);
+
+  VkMemoryRequirements memreq;
+  vkGetBufferMemoryRequirements(r.vk->device, handle, &memreq);
+
+  DeviceHeapAllocation* ptr = 
+    r.vk->allocateAndBindVkBufferMemory(handle, properties, memreq);
+
+  if (ptr == nullptr)
+  {
+    @cerr("failed to allocate and bind memory for VkBuffer");
+    return nil;
+  }
+
+  auto failsafe_deallocate = deferWithCancel
+  {
+    r.vk->deallocate(ptr);
+  };
+
+  switch (params.behavior)
+  {
+  case MappingBehavior::Never:
+    if (params.data == nullptr)
+    {
+      WARN(
+        "request to allocate a gfx::Buffer with mapping behavior Never. This "
+        "type of request is mainly useful for intermediate compute shader "
+        "memory, but compute shaders are not set up yet.\n");
+    }
+    else
+    {
+      if (!r.vk->stageVkBufferMemory(
+            params.data,
+            params.size,
+            handle,
+            memreq.size))
+      {
+        @cerr("failed to stage memory for gfx::Buffer");
+        return nil;
+      }
+    }
+    break;
+
+  case MappingBehavior::Occasional:
+    if (params.data != nullptr)
+    {
+      if (!r.vk->mapCopyAndFlushVkBufferMemory(
+            params.data,
+            params.size,
+            ptr))
+      {
+        @cerr("failed to map/copy/flush initial data for gfx::Buffer");
+        return nil;
+      }
+    }
+    break;
+
+  case MappingBehavior::Persistent:
+    {
+      if (!r.vk->mapVkBuffer(nullptr, params.size, ptr))
+      {
+        @cerr("failed to map persistent gfx::Buffer");
+        return nil;
+      }
+
+      if (params.data != nullptr)
+      {
+        mem::copy(
+          r.vk->getHeapBlock(ptr)->mapped_data, params.data, params.size);
+        r.vk->flushMappedVkBuffer(0, VK_WHOLE_SIZE, ptr);
+      }
+    }
+    break;
+  }
+
+  DeviceBuffer* internal_buffer = r.vk->buffer_pool.add();
+  internal_buffer->handle = handle;
+  internal_buffer->ptr = ptr;
+
+  if (params.usage == Buffer::UniformBuffer)
+  {
+    if (!r.vk->allocateVkDescriptorSet(
+          &internal_buffer->set,
+          &(VkDescriptorSetLayout&)r.default_ubo_set_layout.handle,
+          name))
+    {
+      @cerr("failed to allocate descriptor set");
+      return nil;
+    }
+  }
+
+  failsafe_destroy_buffer.cancel();
+  failsafe_deallocate.cancel();
+
+  // The handle is our internal representation instead of the VkBuffer, as 
+  // we have to track its device memory internally.
+  return {internal_buffer};
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Buffer::destroy(Renderer& r)
+{
+  if (isnil(*this))
+    return;
+
+  DEBUG("destroying ", *this, "\n");
+
+  auto* internal_buffer = (DeviceBuffer*)handle;
+
+  // Unmapping when this is not mapped is safe and handled in this call.
+  r.vk->unmapVkBuffer(internal_buffer->ptr);
+  r.vk->destroyVkBuffer(internal_buffer->handle);
+  r.vk->deallocate(internal_buffer->ptr);
+
+  r.vk->buffer_pool.remove(internal_buffer);
+  handle = nullptr;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void* Buffer::map(Renderer& r)
+{
+  if (isnil(*this))
+  {
+    ERROR("attempt to map a nil gfx::Buffer\n");
+    return nullptr;
+  }
+
+  auto* internal_buffer = (DeviceBuffer*)handle;
+
+  TRACE("mapping ", *this, "\n");
+
+  void* mapped = nullptr;
+  if (!r.vk->mapVkBuffer(&mapped, VK_WHOLE_SIZE, internal_buffer->ptr))
+    return nullptr;
+
+  return (u8*)mapped + internal_buffer->ptr->aligned_offset;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void* Buffer::getMappedData(gfx::Renderer& r) const
+{
+  if (isnil(*this))
+    return nullptr;
+  
+  return r.vk->getHeapBlock(((DeviceBuffer*)handle)->ptr)->mapped_data;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Buffer::flush(Renderer& r, u64 offset, u64 size)
+{
+  if (isnil(*this))
+    return ERROR("attempt to flush a nil gfx::Buffer\n");
+
+  if (size == FLUSH_WHOLE_BUFFER)
+    TRACE("flushing whole buffer of ", *this, "\n");
+  else
+    TRACE("flushing ", size, " bytes of " , *this, " at offset ", offset, 
+          "\n");
+
+  auto* internal_buffer = (DeviceBuffer*)handle;
+
+  VkDeviceSize dev_size = size;
+  VkDeviceSize dev_offset = offset;
+
+  if (size == FLUSH_WHOLE_BUFFER)
+    size = VK_WHOLE_SIZE;
+
+  // NOTE(sushi) size and offset are aligned inside this call.
+  return r.vk->flushMappedVkBuffer(dev_offset, dev_size, internal_buffer->ptr);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Buffer::copyAndFlush(Renderer& r, void* data, u64 size)
+{
+  if (isnil(*this))
+    return ERROR("attempt to copy and flush a nil gfx::Buffer\n");
+
+  TRACE("copying and flushing ", *this, "\n");
+
+  auto* internal_buffer = (DeviceBuffer*)handle;
+
+  DeviceHeapBlock* ptr = r.vk->getHeapBlock(internal_buffer->ptr);
+
+  if (ptr->mapped_data == nullptr)
+    return ERROR("attempt to copy and flush unmapped ", *this, "\n");
+
+  mem::copy(ptr->mapped_data, data, size);
+
+  VkDeviceSize dev_size = size;
+  VkDeviceSize dev_offset = internal_buffer->ptr->aligned_offset;
+
+  if (size == FLUSH_WHOLE_BUFFER)
+    size = VK_WHOLE_SIZE;
+
+  // NOTE(sushi) size and offset are aligned inside this call.
+  return r.vk->flushMappedVkBuffer(dev_offset, dev_size, internal_buffer->ptr);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Buffer::unmap(Renderer& r)
+{
+  if (isnil(*this))
+  {
+    ERROR("attempt to unmap a nil gfx::Buffer\n");
+    return;
+  }
+
+  auto* internal_buffer = (DeviceBuffer*)handle;
+
+  if (!r.vk->unmapVkBuffer(internal_buffer->ptr))
+    ERROR("attempt to unmap ", *this, " but it was already unmapped\n"); 
+}
 
 }

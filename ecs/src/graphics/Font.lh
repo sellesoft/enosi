@@ -102,7 +102,7 @@ struct Font
 
   gfx::Texture getTexture() const
   {
-    return texture->gfx_texture;
+    return texture->texture;
   }
 
   f32 getHeight() const

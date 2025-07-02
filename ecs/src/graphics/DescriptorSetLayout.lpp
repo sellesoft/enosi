@@ -1,0 +1,91 @@
+$ require "common"
+$ local helpers = require "graphics.Helpers"
+
+@@lpp.import "graphics/DescriptorSetLayout.lh"
+@@lpp.import "graphics/Vulkan.lh"
+@@lpp.import "graphics/Renderer.lh"
+
+#include "iro/containers/SmallArray.h"
+
+@log.ger(gfx.dsetlayout, Info)
+
+namespace gfx
+{
+
+/* ----------------------------------------------------------------------------
+ */
+static VkDescriptorType descriptorKindToVulkan(DescriptorKind kind)
+{
+  switch (kind)
+  {
+$ local function map(x, y)
+  case DescriptorKind::$(x):
+    return VK_DESCRIPTOR_TYPE_$(y);
+$ end
+  @map(UniformBuffer, UNIFORM_BUFFER)
+  @map(CombinedImageSampler, COMBINED_IMAGE_SAMPLER)
+  default:
+    assert(false);
+    return {};
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+DescriptorSetLayout DescriptorSetLayout::create(
+    Renderer& r,
+    Slice<Binding> bindings,
+    String debug_name)
+{
+  String name = resolved(debug_name, "unnamed"_str);
+  
+  DEBUG("creating gfx::DescriptorSetLayout '", name, "'\n");
+
+$ local cerr = helpers.defCreateErr("gfx::DescriptorSetLayout", "name")
+
+  if (bindings.isEmpty())
+  {
+    @cerr("no bindings provided");
+    return nil;
+  }
+
+  SmallArray<VkDescriptorSetLayoutBinding, 16> vk_bindings;
+
+  for (Binding& binding : bindings)
+  {
+    vk_bindings.push(
+    {
+      .binding = binding.binding,
+      .descriptorType = descriptorKindToVulkan(binding.kind),
+      .descriptorCount = binding.count,
+      .stageFlags = shaderKindToVulkan(binding.stage),
+    });
+  }
+
+  VkDescriptorSetLayout layout;
+  if (!r.vk->createVkDescriptorSetLayout(
+        &layout,
+        vk_bindings.asSlice(),
+        name))
+  {
+    @cerr("failed to create VkDescriptorSetLayout");
+    return nil;
+  }
+
+  return {(void*)layout};
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void DescriptorSetLayout::destroy(Renderer& r)
+{
+  if (isnil(*this))
+    return;
+
+  DEBUG("destroying ", *this, '\n');
+
+  r.vk->destroyVkDescriptorSetLayout((VkDescriptorSetLayout)handle);
+  handle = nullptr;
+}
+
+}

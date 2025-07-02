@@ -22,6 +22,7 @@ $ require "common"
 @@lpp.import "ui/TextEdit.lh"
 @@lpp.import "ui/UI.lh"
 @@lpp.import "window/Window.lh"
+@@lpp.import "graphics/RenderTarget.lh"
 
 #include "iro/time/Time.h"
 

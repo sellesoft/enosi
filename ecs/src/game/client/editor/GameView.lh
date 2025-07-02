@@ -5,8 +5,7 @@
 $ require "common"
 
 @@lpp.import "graphics/View.lh"
-@@lpp.import "graphics/Framebuffer.lh"
-@@lpp.import "graphics/Texture.lh"
+@@lpp.import "graphics/RenderTarget.lh"
 
 struct Tile;
 struct Layer;
@@ -62,11 +61,6 @@ struct Editor_GameView
   // we are viewing it with.
   gfx::View view;
 
-  // Graphics objects used to control where the game renders to so we may 
-  // nicely display it in the UI.
-  gfx::Framebuffer framebuffer;
-  gfx::Texture texture;
-
   // Tracked view size, used to reinitialize the framebuffer and texture
   // if the visual size of the view is ever changed.
   vec2f view_size;
@@ -79,8 +73,6 @@ struct Editor_GameView
     ui::UI& ui,
     cl::GameSim& sim, 
     const EditorSkinDef& skin);
-
-  b8 reinitializeGraphicsObjects(gfx::Renderer& renderer);
 };
 
 }

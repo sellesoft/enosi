@@ -21,8 +21,7 @@ $ require "common"
 @@lpp.import "graphics/Buffer.lh"
 @@lpp.import "graphics/Pipeline.lh"
 @@lpp.import "graphics/Pipeline.defs.lh"
-@@lpp.import "graphics/Texture.lh"
-@@lpp.import "graphics/Framebuffer.lh"
+@@lpp.import "graphics/RenderTarget.lh"
 
 namespace gfx
 {
@@ -116,23 +115,7 @@ struct GameRenderer
   gfx::Pipeline quad_pipeline;
   gfx::PipelineDefRef quad_pipeline_defref;
 
-  gfx::Pipeline stars_pipeline;
-  gfx::PipelineDefRef stars_pipeline_defref;
-
-  gfx::Pipeline dither_pipeline;
-  gfx::PipelineDefRef dither_pipeline_defref;
-
-  gfx::Framebuffer stars_framebuffer;
-  gfx::Texture stars_texture;
-
-  // The framebuffer and texture that will be rendered to.
-  // These are recreated everytime the provided viewport in update() is 
-  // different from the current size of the framebuffer (or if the framebuffer
-  // is nil, eg. we are rendering the scene for the first time).
-  gfx::Framebuffer framebuffer;
-  gfx::Texture texture;
-
-  b8 reinitializeGraphicsObjects(gfx::Renderer& renderer, vec2f view_size);
+  gfx::RenderTarget render_target;
 };
 
 }

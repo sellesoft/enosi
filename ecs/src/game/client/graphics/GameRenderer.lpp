@@ -39,22 +39,18 @@ b8 GameRenderer::init(InitParams& params)
   if (!loader.load(&null_texture, "assets/textures/null"_str))
     return ERROR("failed to load null texture");
 
-  // if (compiled_null_texture == nullptr)
-  // {
-  //   compiled_null_texture =
-  //     gfx::CompiledTexture::load(
-  //       "assets/textures/white"_str, assetmgr, renderer);
-  //   if (compiled_null_texture == nullptr)
-  //     return ERROR("failed to find a valid null texture\n");
-  // }
-  // null_texture = compiled_null_texture->gfx_texture;
-
   //init scene uniform buffer
-  if (!scene_uniform_buffer.init(renderer, nullptr, sizeof(Scene),
-      gfx::Buffer::UniformBuffer,
-      gfx::Buffer::DeviceMappable,
-      gfx::Buffer::Occasional,
-      "game render scene uniform"_str))
+  scene_uniform_buffer = gfx::Buffer::create(
+    renderer,
+    {
+      .data = nullptr,
+      .size = sizeof(Scene),
+      .usage = gfx::Buffer::UniformBuffer,
+      .properties = gfx::Buffer::DeviceMappable,
+      .behavior = gfx::Buffer::Occasional,
+      .debug_name = "game.renderer.scene"_str,
+    });
+  if (isnil(scene_uniform_buffer))
     return ERROR("failed to init scene uniform buffer\n");
 
   //init background buffers
@@ -65,30 +61,48 @@ b8 GameRenderer::init(InitParams& params)
     { vec2f(1,1), vec2f(1,0), 0xFFFFFFFF },
     { vec2f(0,1), vec2f(0,0), 0xFFFFFFFF }
   };
-  if (!background_vertex_buffer.init(renderer, background_vertices,
-      4 * sizeof(gfx::Vertex),
-      gfx::Buffer::VertexBuffer,
-      gfx::Buffer::DeviceOnly,
-      gfx::Buffer::Never,
-      "render.sys background vertex"_str))
-    return ERROR("failed to init the background vertex buffer\n");
+  
+  background_vertex_buffer = gfx::Buffer::create(
+    renderer, 
+    {
+      .data       = background_vertices,
+      .size       = 4 * sizeof(gfx::Vertex),
+      .usage      = gfx::Buffer::VertexBuffer,
+      .properties = gfx::Buffer::DeviceOnly,
+      .behavior   = gfx::Buffer::Never,
+      .debug_name = "game.renderer.bg.vertex"_str,
+    });
+  if (isnil(background_vertex_buffer))
+    return ERROR("failed to init background vertex buffer\n");
 
   gfx::Index background_indices[6] = { 0, 1, 2, 0, 2, 3 };
-  if (!background_index_buffer.init(renderer, background_indices,
-      6 * sizeof(gfx::Index),
-      gfx::Buffer::IndexBuffer,
-      gfx::Buffer::DeviceOnly,
-      gfx::Buffer::Never,
-      "render.sys background index"_str))
-    return ERROR("failed to init the background index buffer\n");
+  
+  background_index_buffer = gfx::Buffer::create(
+    renderer,
+    {
+      .data       = background_indices,
+      .size       = 6 * sizeof(gfx::Index),
+      .usage      = gfx::Buffer::IndexBuffer,
+      .properties = gfx::Buffer::DeviceOnly,
+      .behavior   = gfx::Buffer::Never,
+      .debug_name = "game.renderer.bg.index"_str,
+    });
 
-  //init quad buffers
-  if (!quads_vertex_buffer.init(renderer, nullptr,
-      MAX_QUADS * 4 * sizeof(gfx::Vertex),
-      gfx::Buffer::VertexBuffer,
-      gfx::Buffer::DeviceMappable,
-      gfx::Buffer::Occasional,
-      "render.sys quad vertex"_str))
+  if (isnil(background_index_buffer))
+    return ERROR("failed to init background index buffer\n");
+
+  quads_vertex_buffer = gfx::Buffer::create(
+    renderer,
+    {
+      .data       = nullptr,
+      .size       = MAX_QUADS * 4 * sizeof(gfx::Vertex),
+      .usage      = gfx::Buffer::VertexBuffer,
+      .properties = gfx::Buffer::DeviceMappable,
+      .behavior   = gfx::Buffer::Occasional,
+      .debug_name = "game.renderer.quads.vertex"_str,
+    });
+
+  if (isnil(quads_vertex_buffer))
     return ERROR("failed to init the quads vertex buffer\n");
 
   gfx::Index quad_indices[MAX_QUADS * 6];
@@ -102,56 +116,46 @@ b8 GameRenderer::init(InitParams& params)
     quad_indices[i+5] = 4*j + 3;
   }
 
-  if (!quads_index_buffer.init(renderer, quad_indices,
-      MAX_QUADS * 6 * sizeof(gfx::Index),
-      gfx::Buffer::IndexBuffer,
-      gfx::Buffer::DeviceOnly,
-      gfx::Buffer::Never,
-      "render.sys quad index"_str))
+  quads_index_buffer = gfx::Buffer::create(
+    renderer,
+    {
+      .data = quad_indices,
+      .size = MAX_QUADS * 6 * sizeof(gfx::Index),
+      .usage = gfx::Buffer::IndexBuffer,
+      .properties = gfx::Buffer::DeviceOnly,
+      .behavior = gfx::Buffer::Never,
+      .debug_name = "game.renderer.quads.index"_str,
+    });
+
+  if (isnil(quads_index_buffer))
     return ERROR("failed to init the quads index buffer\n");
 
   //init quads batches
-  batches[0].texture = null_texture->gfx_texture;
+  batches[0].texture = null_texture->texture;
   batch_count = 1;
   quad_count = 0;
-
-  //init external buffers
-  if (!external_vertex_buffer.init(renderer, nullptr,
-      MAX_EXTERNAL * 4 * sizeof(gfx::Vertex),
-      gfx::Buffer::VertexBuffer,
-      gfx::Buffer::DeviceMappable,
-      gfx::Buffer::Occasional,
-      "render.sys external vertex"_str))
-    return ERROR("failed to init external vertex buffer\n");
-
-  if (!external_index_buffer.init(renderer, nullptr,
-      MAX_EXTERNAL * 6 * sizeof(gfx::Index),
-      gfx::Buffer::IndexBuffer,
-      gfx::Buffer::DeviceMappable,
-      gfx::Buffer::Occasional,
-      "render.sys external index"_str))
-    return ERROR("failed to init external index buffer\n");
 
   // Initialize the quad pipeline.
   if (!loader.load(&quad_pipeline_defref, "assets/shaders/Quad"_str))
     return ERROR("failed to load quad pipeline def\n");
 
-  if (!quad_pipeline.init(renderer, 0, true, *quad_pipeline_defref))
-      return ERROR("failed to initialize quad pipeline\n");
+  quad_pipeline = gfx::Pipeline::create(renderer, *quad_pipeline_defref);
+  if (isnil(quad_pipeline))
+    return ERROR("failed to initialize quad pipeline\n");
 
   // Initialize the stars pipeline.
-  if (!loader.load(&stars_pipeline_defref, "assets/shaders/Stars"_str))
-    return ERROR("failed to load stars pipeline def\n");
-
-  if (!stars_pipeline.init(renderer, 0, true, *stars_pipeline_defref))
-    return ERROR("failed to initialize stars pipeline\n");
+  // if (!loader.load(&stars_pipeline_defref, "assets/shaders/Stars"_str))
+  //   return ERROR("failed to load stars pipeline def\n");
+  //
+  // if (!stars_pipeline.init(renderer, 0, true, *stars_pipeline_defref))
+  //   return ERROR("failed to initialize stars pipeline\n");
 
   // Initialize the dither pipeline.
-  if (!loader.load(&dither_pipeline_defref, "assets/shaders/Dither"_str))
-    return ERROR("failed to load dither pipeline def\n");
-
-  if (!dither_pipeline.init(renderer, 0, true, *dither_pipeline_defref))
-    return ERROR("failed to initialize dither pipeline\n");
+  // if (!loader.load(&dither_pipeline_defref, "assets/shaders/Dither"_str))
+  //   return ERROR("failed to load dither pipeline def\n");
+  //
+  // if (!dither_pipeline.init(renderer, 0, true, *dither_pipeline_defref))
+  //   return ERROR("failed to initialize dither pipeline\n");
 
   return true;
 }
@@ -160,15 +164,12 @@ b8 GameRenderer::init(InitParams& params)
  */
 void GameRenderer::deinit(gfx::Renderer& renderer)
 {
-  scene_uniform_buffer.deinit(renderer);
-  background_vertex_buffer.deinit(renderer);
-  background_index_buffer.deinit(renderer);
-  quads_vertex_buffer.deinit(renderer);
-  quads_index_buffer.deinit(renderer);
-  external_vertex_buffer.deinit(renderer);
-  external_index_buffer.deinit(renderer);
-  quad_pipeline.deinit(renderer);
-  stars_pipeline.deinit(renderer);
+  scene_uniform_buffer.destroy(renderer);
+  background_vertex_buffer.destroy(renderer);
+  background_index_buffer.destroy(renderer);
+  quads_vertex_buffer.destroy(renderer);
+  quads_index_buffer.destroy(renderer);
+  quad_pipeline.destroy(renderer);
 }
 
 /* ----------------------------------------------------------------------------
@@ -192,7 +193,7 @@ static void drawBatches(GameRenderer& sys, gfx::Renderer& renderer)
   assert(index_offset == 6*sys.quad_count);
 
   sys.batches[0].quad_count = 0;
-  sys.batches[0].texture = sys.null_texture->gfx_texture;
+  sys.batches[0].texture = sys.null_texture->texture;
   sys.batch_count = 1;
   sys.quad_count = 0;
 }
@@ -228,7 +229,8 @@ void GameRenderer::drawQuad(
     batches[batch_count-1].texture = texture;
   }
 
-  auto vp = (gfx::Vertex*)quads_vertex_buffer.mapped_data + 4*quad_count;
+  auto vp = (gfx::Vertex*)quads_vertex_buffer.getMappedData(renderer) 
+            + 4*quad_count;
   vp[0] = { pos + vec2f(-0.f,-0.f), vec2f(uv.x,uv.w), color.rgba };
   vp[1] = { pos + vec2f( 1.f,-0.f), vec2f(uv.z,uv.w), color.rgba };
   vp[2] = { pos + vec2f( 1.f, 1.f), vec2f(uv.z,uv.y), color.rgba };
@@ -260,24 +262,19 @@ b8 GameRenderer::update(const UpdateParams& params)
 
   gfx::Renderer& renderer = params.renderer;
 
+  if (!renderer.beginRenderPass(
+        vec2i(params.viewport.pos()),
+        vec2u(params.viewport.size()),
+        render_target,
+        0x000000ff))
+    return false;
+
   ///////////////////////////////////////////////
   // 0. Update Scene
   {
-    vec2f framebuffer_size = renderer.getFramebufferSize(framebuffer);
-    if (isnil(framebuffer) || framebuffer_size != params.viewport.size())
-    {
-      INFO("game renderer reinitializing graphics objects due to viewport "
-           "size change ", framebuffer_size, " -> ", params.viewport.size(),
-           "\n");
-      if (!reinitializeGraphicsObjects(renderer, params.viewport.size()))
-        return ERROR("failed to reinitialize game render objects after "
-                     "viewport size change\n");
-    }
-
-    renderer.setViewport(
-      vec2i(params.viewport.pos()), vec2i(params.viewport.size()));
+    renderer.setViewport(params.viewport.pos(), params.viewport.size());
     renderer.setScissor(
-      vec2i(params.viewport.pos()), vec2i(params.viewport.size()));
+      vec2i(params.viewport.pos()), vec2u(params.viewport.size()));
 
     mat3x2 proj = mat3x2::identity();
     proj.set(0, 0, EyeSys::pixels_per_meter * 2.f / (f32)params.viewport.w);
@@ -297,10 +294,6 @@ b8 GameRenderer::update(const UpdateParams& params)
     scene_uniform_buffer.unmap(renderer);
   }
 
-  external_counts = {};
-  external_vertex_buffer.map(renderer);
-  external_index_buffer.map(renderer);
-
   ///////////////////////////////////////////////
   // 1. Draw Background
   {
@@ -319,7 +312,6 @@ b8 GameRenderer::update(const UpdateParams& params)
     // renderer.draw(0, 6, 0);
   }
 
-  renderer.bindFramebuffer(framebuffer);
 
   ///////////////////////////////////////////////
   // 2. Draw Map Tiles
@@ -347,8 +339,8 @@ b8 GameRenderer::update(const UpdateParams& params)
 
         gfx::Texture texture = 
           tilekind.texture.isValid() 
-          ? tilekind.texture->gfx_texture
-          : null_texture->gfx_texture;
+          ? tilekind.texture->texture
+          : null_texture->texture;
 
         vec2f pos = map.getTilePos(layer, tile);
         drawQuad(renderer, pos, texture, {0.f,0.f,1.f,1.f}, tint);
@@ -378,7 +370,7 @@ b8 GameRenderer::update(const UpdateParams& params)
         continue;
       }
       
-      gfx::Texture texture = null_texture->gfx_texture;
+      gfx::Texture texture = null_texture->texture;
       vec4f uv = {0.f, 0.f, 1.f, 1.f};
       Color color = 0xff0000ff;
       if (sprite.states.isValid())
@@ -393,7 +385,7 @@ b8 GameRenderer::update(const UpdateParams& params)
           // Sooo many dereferences. 
           // TODO(sushi) it would be nice to cache this somehow but I'm not 
           //             sure if that's possible given our current setup.
-          texture = stex->texture->gfx_texture;
+          texture = stex->texture->texture;
           color = stex->color;
 
           vec2f uv_min = stex->uv.pos();
@@ -420,87 +412,14 @@ b8 GameRenderer::update(const UpdateParams& params)
     }
   }
 
-  external_vertex_buffer.flush(renderer, 0, gfx::Buffer::FLUSH_WHOLE_BUFFER);
-  external_index_buffer.flush(renderer, 0, gfx::Buffer::FLUSH_WHOLE_BUFFER);
   quads_vertex_buffer.flush(renderer, 0, gfx::Buffer::FLUSH_WHOLE_BUFFER);
-  external_vertex_buffer.unmap(renderer);
-  external_index_buffer.unmap(renderer);
   quads_vertex_buffer.unmap(renderer);
   if (batch_count > 0)
   {
     drawBatches(*this, renderer);
   }
 
-  if (external_counts.x != 0)
-  {
-    renderer.bindTexture(white_texture);
-    renderer.bindVertexBuffer(external_vertex_buffer);
-    renderer.bindIndexBuffer(external_index_buffer);
-    renderer.draw(0, external_counts.y, 0);
-  }
-
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 GameRenderer::reinitializeGraphicsObjects( 
-    gfx::Renderer& renderer,
-    vec2f view_size)
-{
-  framebuffer.deinit(renderer);
-  texture.deinit(renderer);
-
-  stars_framebuffer.deinit(renderer);
-  stars_texture.deinit(renderer);
-
-  texture = gfx::Texture::create(
-    renderer,
-    view_size.x,
-    view_size.y,
-    gfx::ImageFormat::RGBA,
-      gfx::ImageUsage::Sampled
-    | gfx::ImageUsage::FramebufferColor,
-    gfx::ImageAddressMode::ClampToBlack,
-    gfx::ImageFilter::Nearest,
-    nullptr,
-    "game.texture"_str);
-
-  if (isnil(texture))
-    return ERROR("failed to create game.texture\n");
-
-  if (!framebuffer.init(
-        renderer,
-        view_size.x,
-        view_size.y,
-        texture,
-        {0,0,0,255},
-        "game.framebuffer"_str))
-    return ERROR("failed to intialize game.framebuffer\n");
-
-  stars_texture = gfx::Texture::create(
-    renderer,
-    view_size.x,
-    view_size.y,
-    gfx::ImageFormat::RGBA,
-      gfx::ImageUsage::Sampled
-    | gfx::ImageUsage::FramebufferColor,
-    gfx::ImageAddressMode::Repeat,
-    gfx::ImageFilter::Nearest,
-    nullptr,
-    "game.stars_texture"_str);
-
-  if (isnil(stars_texture))
-    return ERROR("failed to create game.stars_texture\n");
-
-  if (!stars_framebuffer.init(
-        renderer,
-        view_size.x,
-        view_size.y,
-        stars_texture,
-        {0,0,0,255},
-        "game.stars_framebuffer"_str))
-    return ERROR("failed to intialize game.stars_framebuffer\n");
+  renderer.endRenderPass();
 
   return true;
 }

@@ -11,6 +11,8 @@ $ require "common"
 namespace gfx
 {
 
+struct Renderer;
+
 /* ============================================================================
  */
 struct Sampler
@@ -21,10 +23,12 @@ struct Sampler
   {
     ImageFilter filter;
     ImageAddressMode address_mode;
+
+    String debug_name;
   };
 
   static Sampler create(Renderer& renderer, const CreateParams& params);
-  void destroy();
+  void destroy(Renderer& renderer);
 
   DefineNilTrait(Sampler, {nullptr}, x.handle == nullptr);
 };

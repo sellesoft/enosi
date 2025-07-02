@@ -54,6 +54,18 @@ struct Slice
 
 typedef Slice<u8> Bytes;
 
+template<typename T>
+Slice<T> makeSlice(T* ptr, u64 len)
+{
+  return {ptr, len};
+}
+
+template<typename T, int size>
+Slice<T> makeSlice(T (&ptr)[size])
+{
+  return {ptr, u64(size)};
+}
+
 }
 
 #endif // _iro_slice_h

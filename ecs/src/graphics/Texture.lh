@@ -1,1 +1,31 @@
+/*
+ *  A complete texture usable by shaders.
+ *
+ *  NOTE(sushi) this is temporary. Eventually I want to get rid of needing 
+ *              to bind descriptor sets for each Texture in favor of using
+ *              dynamic indexing and descriptor arrays so we can use push
+ *              constants instead. I'm not sure how we would manage those
+ *              indexes yet and I want to get the graphics reorganization 
+ *              working.
+ */
 
+$ require "common"
+
+@@lpp.import "graphics/DescriptorSet.lh"
+
+namespace gfx
+{
+
+struct Texture 
+{
+  DescriptorSet set;
+
+  bool operator == (const Texture& rhs) const
+  {
+    return set.handle == rhs.set.handle;
+  }
+ 
+  DefineNilTrait(Texture, {nil}, isnil(x.set));
+};
+
+}

@@ -21,7 +21,7 @@ struct Renderer;
  */
 struct Image
 {
-  u32 index;
+  void* handle;
 
   struct CreateParams
   {
@@ -43,7 +43,7 @@ struct Image
   static Image create(Renderer& renderer, const CreateParams& params);
   void destroy(Renderer& renderer);
 
-  DefineNilTrait(Image, {0}, x.index == 0);
+  DefineNilTrait(Image, {nullptr}, x.handle == nullptr);
 };
 
 }
@@ -52,6 +52,6 @@ namespace iro::io
 {
 static s64 format(io::IO* io, const gfx::Image& image)
 {
-  return formatv(io, "gfx::Image(", image.index, ')');
+  return formatv(io, "gfx::Image(", image.handle, ')');
 }
 }

@@ -1,6 +1,8 @@
 /*
  *  Bundle of information needed to begin a render pass. This isn't 
  *  a graphics object, just a set of parameters for render passes.
+ *
+ *  TODO(sushi) we need a way to pass the swapchain image/view 
  */
 
 $ require "common"

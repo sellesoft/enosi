@@ -75,6 +75,13 @@ b8 Editor::update(ui::UI& ui, cl::GameSim& sim)
   const f32 tool_select_tool_panel_spacing = 10.f;
   const f32 tool_y = tool_option_height + tool_select_tool_panel_spacing;
 
+  // TODO(sushi) separate rendering for Editor and UI into explicit functions.
+  if (!client->renderer.beginRenderPassOverSwapchainImage(
+        vec2i(0,0),
+        vec2u(client->window.size),
+        0x000000ff))
+    return ERROR("failed to begin render pass for editor\n");
+
   InputState ui_input = {};
   client->input.cloneInputState(&ui_input);
 
@@ -166,9 +173,10 @@ $ end
   ui.endGroup();
   ui.endPanel();
 
-  client->renderer.bindFramebuffer(nil);
-  client->renderer.setViewport({0,0}, client->window.size);
+  client->renderer.setViewport({0,0}, vec2f(client->window.size));
   ui.endFrame();
+
+  client->renderer.endRenderPass();
 
   return true;
 }
@@ -211,7 +219,7 @@ void Editor::putMapTool(ui::UI& ui, const EditorSkinDef& skin)
 
       ui.putQuad(
         {0.f, y, texture_size, texture_size}, 
-        tile_kind.texture->gfx_texture, 0xffffffff);
+        tile_kind.texture->texture, 0xffffffff);
 
       Rect button_bounds = 
       {

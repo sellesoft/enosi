@@ -70,6 +70,8 @@
 #include "iro/Common.h"
 #include "iro/Unicode.h"
 
+@@lpp.import "graphics/DescriptorSet.lh"
+
 using namespace iro;
 
 namespace gfx
@@ -134,8 +136,7 @@ struct Buffer
 
   static constexpr u64 FLUSH_WHOLE_BUFFER = MAX_U64;
 
-  u32 index = 0;
-  void* mapped_data = nullptr;
+  void* handle = nullptr;
 
   struct CreateParams
   {
@@ -151,8 +152,17 @@ struct Buffer
 
   void destroy(Renderer& renderer);
 
-  b8 map(Renderer& renderer);
+  void* map(Renderer& renderer);
   void unmap(Renderer& renderer);
+
+  // TODO(sushi) this sucks, but this is meant to be passed around like 
+  //             a handle at the moment. Eventually this and the related 
+  //             'low-level' types should be managed by something and Id 
+  //             types for them passed around.
+  // To avoid using this, save the pointer retuned by map() and use it until
+  // you call unmap(). I plan to eventually write a helper thing that avoids
+  // needing to use this type directly.
+  void* getMappedData(Renderer& renderer) const;
 
   // If size is FLUSH_WHOLE_BUFFER, the range from offset to the end
   // of the buffer is flushed.
@@ -160,7 +170,7 @@ struct Buffer
 
   b8 copyAndFlush(Renderer& renderer, void* data, u64 size);
 
-  DefineNilTrait(Buffer, {0}, x.index == 0);
+  DefineNilTrait(Buffer, {nullptr}, x.handle == nullptr);
 };
 
 }
@@ -169,9 +179,6 @@ namespace iro::io
 {
 static s64 format(io::IO* out, gfx::Buffer& buffer)
 {
-  if (isnil(buffer))
-    return format(out, "gfx::Buffer(nil)"_str);
-  else
-    return formatv(out, "gfx::Buffer("_str, buffer.index, ')');
+    return formatv(out, "gfx::Buffer("_str, buffer.handle, ')');
 }
 }

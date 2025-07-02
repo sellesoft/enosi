@@ -39,7 +39,6 @@ struct ResourceMgr
   b8 init();
   void deinit();
 
-  // TODO(sushi) this should be handing out the Texture handle.
   CompiledTexture* createTexture(String name);
   CompiledTexture* findTexture(String name);
 
