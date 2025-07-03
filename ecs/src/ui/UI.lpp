@@ -38,7 +38,6 @@ b8 UI::init(InitParams& params)
     return ERROR("failed to load UI pipeline def\n");
 
   pipeline = gfx::Pipeline::create(*renderer, *pipeline_defref);
-
   if (isnil(pipeline))
     return ERROR("failed to initialize UI pipeline\n");
 
@@ -208,7 +207,7 @@ void UI::pushConstantFromTransform(mat3x2 transform, gfx::Renderer& renderer)
     push_constant, 
     c_PushConstantSize,
     0,
-    gfx::ShaderKind::Fragment);
+    gfx::ShaderStage::Fragment);
 }
 
 /* ----------------------------------------------------------------------------

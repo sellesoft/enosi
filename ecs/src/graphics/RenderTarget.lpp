@@ -3,6 +3,7 @@ $ require "common"
 @@lpp.import "graphics/RenderTarget.lh"
 @@lpp.import "graphics/Renderer.lh"
 @@lpp.import "graphics/Descriptor.lh"
+@@lpp.import "graphics/Vulkan.lh"
 
 #include "iro/io/IO.h"
 
@@ -22,10 +23,16 @@ RenderTarget RenderTarget::create(
   io::StaticBuffer<64> target_name;
   io::formatv(&target_name, debug_name, " render target");
 
+  // TODO(sushi) because we set the pipeline's format to whatever the 
+  //             surface's format is, we have to keep it the same here.
+  //             Make pipeline formats parameterized soon.
+  ImageFormat forced_format = renderer.vk->getSurfaceImageFormat();
+
   Image::CreateParams image_params = 
   {
-    .usage = ImageUsage::ColorAttachment,
-    .format = params.format,
+    .usage = ImageUsage::ColorAttachment | ImageUsage::Sampled,
+    .format = forced_format,
+    // .format = params.format,
     .size = params.size,
     .debug_name = target_name.asStr(),
   };
@@ -38,7 +45,8 @@ RenderTarget RenderTarget::create(
   ImageView::CreateParams view_params = 
   {
     .image = image,
-    .format = params.format,
+    .format = forced_format,
+    // .format = params.format,
     .debug_name = target_name.asStr(),
   };
 

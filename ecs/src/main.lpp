@@ -145,7 +145,7 @@ int main(int argc, const char** args)
 
   Engine engine = { .launch_args = launch_args };
   if (!engine.init())
-    return ERROR("failed to initialize engine\n");
+    return FATAL("failed to initialize Engine\n");
 
   auto program_start_time = TimePoint::now();
 

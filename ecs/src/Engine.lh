@@ -55,8 +55,6 @@ struct Engine
 
   hr::Reloader* reloader;
 
-  ui::Inspector* inspector;
-
   // The client/server threads, allocated depending on the situation ECS
   // is running under.
   // These are how the Engine runs the game, and the Engine has little to 

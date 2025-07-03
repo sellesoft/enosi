@@ -34,17 +34,17 @@ $ local cerr = helpers.defCreateErr("gfx::Buffer", "name")
       (params.properties & MemoryProperty::HostCoherent
                          | MemoryProperty::HostVisible))
   {
-    @cerr("memory property LazilyAllocated is incompatible with HostVisible"
+    @cerr("memory property LazilyAllocated is incompatible with HostVisible "
           "and HostCoherent");
     return nil;
   }
 
   if (params.behavior == MappingBehavior::Never &&
-      (params.properties & MemoryProperty::HostVisible
-                         | MemoryProperty::HostCoherent
-                         | MemoryProperty::HostCached))
+      (params.properties & (MemoryProperty::HostVisible
+                          | MemoryProperty::HostCoherent
+                          | MemoryProperty::HostCached)))
   {
-    @cerr("mapping behavior Never is incompatible with memory properties"
+    @cerr("mapping behavior Never is incompatible with memory properties ",
           "HostVisible, HostCoherent, and HostCached");
     return nil;
   }
@@ -168,6 +168,20 @@ $ end
       @cerr("failed to allocate descriptor set");
       return nil;
     }
+
+    VkDescriptorBufferInfo descriptor_info = 
+    {
+      .buffer = internal_buffer->handle,
+      .offset = 0,
+      .range = params.size,
+    };
+
+    r.vk->updateVkDescriptorSet_Buffer(
+      internal_buffer->set,
+      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+      0,
+      0,
+      makeSlice(&descriptor_info, 1));
   }
 
   failsafe_destroy_buffer.cancel();
@@ -226,7 +240,10 @@ void* Buffer::getMappedData(gfx::Renderer& r) const
   if (isnil(*this))
     return nullptr;
   
-  return r.vk->getHeapBlock(((DeviceBuffer*)handle)->ptr)->mapped_data;
+  DeviceHeapAllocation* ptr = ((DeviceBuffer*)handle)->ptr;
+  DeviceHeapBlock* block = r.vk->getHeapBlock(ptr);
+
+  return (u8*)block->mapped_data + ptr->aligned_offset;
 }
 
 /* ----------------------------------------------------------------------------
@@ -245,10 +262,10 @@ b8 Buffer::flush(Renderer& r, u64 offset, u64 size)
   auto* internal_buffer = (DeviceBuffer*)handle;
 
   VkDeviceSize dev_size = size;
-  VkDeviceSize dev_offset = offset;
+  VkDeviceSize dev_offset = internal_buffer->ptr->aligned_offset + offset;
 
   if (size == FLUSH_WHOLE_BUFFER)
-    size = VK_WHOLE_SIZE;
+    dev_size = VK_WHOLE_SIZE;
 
   // NOTE(sushi) size and offset are aligned inside this call.
   return r.vk->flushMappedVkBuffer(dev_offset, dev_size, internal_buffer->ptr);
@@ -270,13 +287,14 @@ b8 Buffer::copyAndFlush(Renderer& r, void* data, u64 size)
   if (ptr->mapped_data == nullptr)
     return ERROR("attempt to copy and flush unmapped ", *this, "\n");
 
-  mem::copy(ptr->mapped_data, data, size);
+  mem::copy(
+    (u8*)ptr->mapped_data + internal_buffer->ptr->aligned_offset, data, size);
 
   VkDeviceSize dev_size = size;
   VkDeviceSize dev_offset = internal_buffer->ptr->aligned_offset;
 
   if (size == FLUSH_WHOLE_BUFFER)
-    size = VK_WHOLE_SIZE;
+    dev_size = VK_WHOLE_SIZE;
 
   // NOTE(sushi) size and offset are aligned inside this call.
   return r.vk->flushMappedVkBuffer(dev_offset, dev_size, internal_buffer->ptr);

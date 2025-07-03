@@ -32,8 +32,8 @@ struct DescriptorSetLayout
     // What kind of descriptor this binding is.
     DescriptorKind kind;
 
-    // What stage this binding can be accessed in.
-    ShaderKind stage;
+    // What shader stages this can be accessed in.
+    ShaderStageFlags stages;
   };
 
   static DescriptorSetLayout create(

@@ -3,18 +3,24 @@
  */
 
 #include "iro/Common.h"
+#include "iro/Flags.h"
 
 namespace gfx
 {
 
 /* ============================================================================
  */
-enum class ShaderKind : u8
+enum class ShaderStage : u8
 {
   Vertex,
   Fragment,
   Compute,
   Geometry,
+
+  COUNT
 };
+typedef iro::Flags<ShaderStage> ShaderStageFlags;
+
+DefineFlagsOrOp(ShaderStageFlags, ShaderStage)
 
 }

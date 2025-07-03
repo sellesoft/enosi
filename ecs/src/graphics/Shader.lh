@@ -22,11 +22,11 @@ struct Renderer;
  */
 struct Shader
 {
-  u32 index = 0;
+  void* handle = nullptr;
 
   struct CreateParams
   {
-    ShaderKind kind;
+    ShaderStage stage;
     Bytes spv_binary;
 
     String debug_name;
@@ -35,17 +35,12 @@ struct Shader
   static Shader create(Renderer& renderer, const CreateParams& params);
   void destroy(Renderer& renderer);
 
-  inline b8 operator==(const Shader& other) const
+  inline bool operator==(const Shader& other) const
   {
-    return index == other.index;
+    return handle == other.handle;
   }
 
-  inline b8 operator!=(const Shader& other) const
-  {
-    return index != other.index;
-  }
-
-  DefineNilTrait(Shader, {0}, x.index == 0);
+  DefineNilTrait(Shader, {nullptr}, x.handle == nullptr);
 };
 
 }
@@ -54,9 +49,6 @@ namespace iro::io
 {
 static s64 format(io::IO* io, const gfx::Shader& shader)
 {
-  if (isnil(shader))
-    return format(io, "gfx::Shader(nil)"_str);
-  else
-    return formatv(io, "gfx::Shader("_str, shader.index, ')');
+  return formatv(io, "gfx::Shader("_str, shader.handle, ')');
 }
 }

@@ -28,3 +28,10 @@ SourceData* parsePossiblyTypedSourceData(
   SourceDataFile* file, 
   io::IO* io, 
   String name);
+
+/* ----------------------------------------------------------------------------
+ */
+SourceData* parsePossiblyTypedOrDerivedSourceData(
+  SourceDataFile* file,
+  io::IO* io,
+  String name);

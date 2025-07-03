@@ -157,6 +157,7 @@ b8 GameRenderer::init(InitParams& params)
   // if (!dither_pipeline.init(renderer, 0, true, *dither_pipeline_defref))
   //   return ERROR("failed to initialize dither pipeline\n");
 
+
   return true;
 }
 
@@ -262,6 +263,24 @@ b8 GameRenderer::update(const UpdateParams& params)
 
   gfx::Renderer& renderer = params.renderer;
 
+  if (isnil(render_target))
+  {
+    // TODO(sushi) it would be nice to do this once in init, just creating
+    //             a RenderTarget sized for the Window and then rendering 
+    //             into it at whatever viewport size we are given, but 
+    //             I don't really wanna funnel that through to init rn.
+    render_target = gfx::RenderTarget::create(
+      renderer,
+      {
+        .format = gfx::ImageFormat::RGBA,
+        .size = vec2u(params.viewport.size()),
+        .debug_name = "game.renderer"_str,
+      });
+
+    if (isnil(render_target))
+      return ERROR("failed to create render target\n");
+  }
+
   if (!renderer.beginRenderPass(
         vec2i(params.viewport.pos()),
         vec2u(params.viewport.size()),
@@ -319,6 +338,7 @@ b8 GameRenderer::update(const UpdateParams& params)
   TRACE("render.sys draw map tiles\n");
 
   renderer.bindPipeline(quad_pipeline);
+  renderer.bindUniformBuffer(scene_uniform_buffer);
   quads_vertex_buffer.map(renderer);
 
   if (params.map)
@@ -420,6 +440,8 @@ b8 GameRenderer::update(const UpdateParams& params)
   }
 
   renderer.endRenderPass();
+
+  renderer.prepareImageForSampling(render_target.image);
 
   return true;
 }

@@ -20,15 +20,13 @@ struct PipelineDef;
 
 struct Pipeline
 {
-  u32 index = 0;
+  void* handle = nullptr;
 
   struct PushConstant
   {
     u32 offset;
     u32 size;
-    // TODO(sushi) make a shader kind flags and also rename to shader 
-    //             stages
-    ShaderKind stages;
+    ShaderStageFlags stages;
   };
 
   struct Layout
@@ -56,7 +54,7 @@ struct Pipeline
 
   void destroy(Renderer& renderer);
 
-  DefineNilTrait(Pipeline, {0}, x.index == 0);
+  DefineNilTrait(Pipeline, {nullptr}, x.handle == nullptr);
 };
 
 }
@@ -65,9 +63,6 @@ namespace iro::io
 {
 static s64 format(io::IO* io, gfx::Pipeline& pipeline)
 {
-  if (isnil(pipeline))
-    return format(io, "gfx::Pipeline(nil)"_str);
-  else
-    return formatv(io, "gfx::Pipeline("_str, pipeline.index, ')');
+  return formatv(io, "gfx::Pipeline("_str, pipeline.handle, ')');
 }
 }

@@ -13,7 +13,7 @@ namespace gfx
 struct ShaderDef
 {
   String source;
-  ShaderKind kind;
+  ShaderStage stage;
 };
 
 }

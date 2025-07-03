@@ -45,12 +45,15 @@ $ local cerr = helpers.defCreateErr("gfx::Pipeline", "name")
       return nil;
     }
 
-    push_constant_ranges.push(
+    if (pc.size != 0)
     {
-      .offset = pc.offset,
-      .size = pc.size,
-      .stageFlags = shaderKindToVulkan(pc.stages),
-    });
+      push_constant_ranges.push(
+      {
+        .offset = pc.offset,
+        .size = pc.size,
+        .stageFlags = shaderStageFlagsToVulkan(pc.stages),
+      });
+    }
   }
 
   // This could maybe be aliased but idk i dont wanna do that.
@@ -77,23 +80,8 @@ $ local cerr = helpers.defCreateErr("gfx::Pipeline", "name")
     r.vk->destroyVkPipelineLayout(layout);
   };
 
-  DeviceShader* vert_shader = 
-    r.vk->shader_pool.get(params.vertex_shader.index);
-  if (vert_shader == nullptr)
-  {
-    @cerr("provided vertex shader ", params.vertex_shader, 
-          " is not tracked in backend");
-    return nil;
-  }
-
-  DeviceShader* frag_shader = 
-    r.vk->shader_pool.get(params.fragment_shader.index);
-  if (vert_shader == nullptr)
-  {
-    @cerr("provided fragment shader ", params.fragment_shader, 
-          " is not tracked in backend");
-    return nil;
-  }
+  auto* vert_shader = (DeviceShader*)params.vertex_shader.handle;
+  auto* frag_shader = (DeviceShader*)params.fragment_shader.handle;
 
   VkPipeline pipeline;
   if (!r.vk->createVkPipeline(
@@ -112,30 +100,42 @@ $ local cerr = helpers.defCreateErr("gfx::Pipeline", "name")
   dev_pipeline->pipeline = pipeline;
   dev_pipeline->layout = layout;
 
-  Pipeline result = {};
-  result.index = r.vk->pipeline_pool.indexOf(dev_pipeline);
-
   failsafe_destroy_layout.cancel();
 
-  return result;
+  return {(void*)dev_pipeline};
 }
 
 /* ----------------------------------------------------------------------------
  */
 Pipeline Pipeline::create(Renderer& r, const PipelineDef& def)
 {
-  assert(false);
+  DescriptorSetLayout layouts[2] = 
+  {
+    r.default_ubo_set_layout,
+    r.default_sampler_set_layout,
+  };
 
-  // CreateParams params = 
-  // {
-  //   .vertex_shader = def.vertex_shader->gfx_shader,
-  //   .fragment_shader = def.fragment_shader->gfx_shader,
-  //   .push_constant_size = def.push_constant_size,
-  //   .has_vertex_input = def.has_vertex_input,
-  //   .debug_name = def.name
-  // };
-  //
-  // return create(r, params);
+  PushConstant push_constant = 
+  {
+    .offset = 0,
+    .size = def.push_constant_size,
+    .stages = ShaderStage::Vertex,
+  };
+
+  CreateParams params = 
+  {
+    .vertex_shader = def.vertex_shader->gfx_shader,
+    .fragment_shader = def.fragment_shader->gfx_shader,
+    .has_vertex_input = def.has_vertex_input,
+    .layout = 
+    {
+      .descriptor_set_layouts = makeSlice(layouts),
+      .push_constant_ranges = makeSlice(&push_constant, 1),
+    },
+    .debug_name = def.name,
+  };
+
+  return create(r, params);
 }
 
 /* ----------------------------------------------------------------------------
@@ -145,12 +145,12 @@ void Pipeline::destroy(Renderer& r)
   if (isnil(*this))
     return;
 
-  DevicePipeline* pipeline = r.vk->pipeline_pool.get(index);
+  auto* pipeline = (DevicePipeline*)handle;
 
   r.vk->destroyVkPipeline(pipeline->pipeline);
   r.vk->destroyVkPipelineLayout(pipeline->layout);
 
-  index = 0;
+  handle = nullptr;
   r.vk->pipeline_pool.remove(pipeline);
 }
 

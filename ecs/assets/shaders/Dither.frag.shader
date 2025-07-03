@@ -1,5 +1,5 @@
 return gfx::ShaderDef
 {
-  kind = "Fragment",
+  stage = "Fragment",
   source = "assets/shaders/Dither"
 }

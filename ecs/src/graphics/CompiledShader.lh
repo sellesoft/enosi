@@ -22,7 +22,7 @@ namespace gfx
  */
 struct CompiledShaderData
 {
-  ShaderKind kind;
+  ShaderStage stage;
   OffsetSlice<u8> binary;
 };
 
@@ -45,7 +45,7 @@ struct CompiledShader
   struct CompileParams
   {
     String          name;
-    ShaderKind      kind;
+    ShaderStage     stage;
     mem::Allocator* allocator;
     AssetMgr*       assetmgr;
   };

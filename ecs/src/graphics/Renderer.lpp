@@ -44,6 +44,39 @@ b8 Renderer::init(InitParams& params)
   if (!resource_mgr.init())
     return ERROR("failed to initialize resource manager\n");
 
+  DescriptorSetLayout::Binding ubo_binding = 
+  {
+    .binding = 0,
+    .count = 1,
+    .kind = DescriptorKind::UniformBuffer,
+    .stages = ShaderStage::Vertex | ShaderStage::Fragment,
+  };
+
+  default_ubo_set_layout = DescriptorSetLayout::create(
+    *this,
+    makeSlice(&ubo_binding, 1),
+    "default ubo"_str);
+
+  if (isnil(default_ubo_set_layout))
+    return ERROR("failed to create default uniform buffer descriptor set "
+                 "layout\n");
+
+  DescriptorSetLayout::Binding sampler_binding = 
+  {
+    .binding = 0,
+    .count = 1,
+    .kind = DescriptorKind::CombinedImageSampler,
+    .stages = ShaderStage::Fragment,
+  };
+
+  default_sampler_set_layout = DescriptorSetLayout::create(
+    *this,
+    makeSlice(&sampler_binding, 1),
+    "default sampler"_str);
+
+  if (isnil(default_sampler_set_layout))
+    return ERROR("failed to create default sampler descriptor set layout\n");
+
   return true;
 }
 
@@ -61,6 +94,66 @@ static VkClearValue colorToVkClearValue(Color color)
 
 /* ----------------------------------------------------------------------------
  */
+b8 Renderer::beginFrame()
+{
+  if (vk->state.command_buffer != VK_NULL_HANDLE)
+    return ERROR("attempt to begin a frame while one is already active\n");
+
+  vk->state.command_buffer = vk->command_buffer;
+
+  // Ensure that the previous call to submitQueue() has finished.
+  vkWaitForFences(
+    vk->device, 
+    1, 
+    &vk->queue_submit_complete_fence, 
+    VK_TRUE,
+    MAX_U64);
+
+  // Its on us to reset the fence signal.
+  vkResetFences(vk->device, 1, &vk->queue_submit_complete_fence);
+
+  // Ensure the command buffer is in the initial state.
+  vkResetCommandBuffer(vk->state.command_buffer, 0);
+
+  if (!vk->beginCommandBuffer(vk->state.command_buffer))
+    return ERROR("failed to begin command buffer\n");
+
+  next_image = vk->acquireNextImageIndex();
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::endFrame()
+{
+  if (vk->state.command_buffer == VK_NULL_HANDLE)
+  {
+    ERROR("attempt to end the frame before it was begun\n");
+    return;
+  }
+
+  // Prepare the current swapchain image for presentation.
+  // This is currently assuming that the swapchain image had a render pass
+  // performed on it via beginRenderPassOverSwapchainImage(), but it probably
+  // shouldn't. Idk how we should detect that.
+  vk->cmdImageMemoryBarrier(
+    vk->state.command_buffer,
+    vk->swapchain_buffers[next_image].image,
+    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+    VK_ACCESS_NONE,
+    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+    VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+
+  vk->endCommandBuffer(vk->state.command_buffer);
+
+  vk->state.command_buffer = VK_NULL_HANDLE;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 static b8 beginRenderPassVk(
     Vulkan*     vk,
     vec2i       render_area_pos,
@@ -69,12 +162,11 @@ static b8 beginRenderPassVk(
     VkImageView view,
     Color       clear_color)
 {
-  if (vk->state.command_buffer != VK_NULL_HANDLE)
-    return ERROR("attempt to start a render pass while one is already "
-                 "active\n");
 
-  vk->state.command_buffer = vk->command_buffer;
-  
+  if (vk->state.command_buffer == VK_NULL_HANDLE)
+    return ERROR("attempt to begin a render pass before beginning a command "
+                 "buffer\n");
+
   VkRect2D render_rect = 
   {
     .offset = 
@@ -88,6 +180,9 @@ static b8 beginRenderPassVk(
       .height = render_area_size.y,
     },
   };
+
+  TRACE("beginning render pass at ", render_area_pos, " with size ", 
+        render_area_size, '\n');
 
   // NOTE(sushi) the image transition occurs inside this function, however
   //             that should probably be pulled out and done here.
@@ -131,9 +226,6 @@ b8 Renderer::beginRenderPassOverSwapchainImage(
     vec2u render_area_size,
     Color clear_color)
 {
-  // TODO(sushi) this is probably not how we want to do this.
-  u32 next_image = vk->acquireNextImageIndex();
-
   return beginRenderPassVk(
     vk,
     render_area_pos,
@@ -153,8 +245,70 @@ void Renderer::endRenderPass()
     return;
   }
 
+  TRACE("ending render pass\n");
+
   vk->cmdEndRendering(vk->state.command_buffer);
-  vk->state.command_buffer = VK_NULL_HANDLE;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Renderer::submitQueue()
+{
+  TRACE("submitting queue\n");
+
+  VkPipelineStageFlags wait_stages = 
+    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+  VkSubmitInfo submit_info = 
+  {
+    .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+    .waitSemaphoreCount = 1,
+    .pWaitSemaphores = &vk->image_acquired_semaphore,
+    .pWaitDstStageMask = &wait_stages,
+    .commandBufferCount = 1,
+    // TODO(sushi) command buffer api or something cause this assumes 
+    //             commands were recorded to the one we store on Vulkan
+    //             BUT when we get to supporting multiple windows and 
+    //             possibly recording commands in parallel this assumption 
+    //             will be WRONG!
+    .pCommandBuffers = &vk->command_buffer,
+    .signalSemaphoreCount = 1,
+    .pSignalSemaphores = &vk->render_complete_semaphore,
+  };
+
+  if (VK_SUCCESS != vkQueueSubmit(
+        vk->graphics_queue, 
+        1, 
+        &submit_info,
+        vk->queue_submit_complete_fence))
+    return ERROR("failed to submit command buffer\n");
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Renderer::present()
+{
+  TRACE("presenting frame\n");
+
+  VkPresentInfoKHR present_info = 
+  {
+    .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+    .waitSemaphoreCount = 1,
+    .pWaitSemaphores = &vk->render_complete_semaphore,
+    .swapchainCount = 1,
+    .pSwapchains = &vk->swapchain,
+    .pImageIndices = &next_image,
+  };
+
+  if (VK_SUCCESS != vkQueuePresentKHR(vk->graphics_queue, &present_info))
+    return ERROR("failed to present frame\n");
+
+  // TODO(sushi) we need to NOT do this.
+  vkDeviceWaitIdle(vk->device);
+
+  return true;
 }
 
 /* ----------------------------------------------------------------------------
@@ -177,7 +331,7 @@ void Renderer::setScissor(vec2i pos, vec2u size)
     }
   };
 
-  vkCmdSetScissor(vk->command_buffer, 0, 1, &scissor);
+  vkCmdSetScissor(vk->state.command_buffer, 0, 1, &scissor);
 }
 
 /* ----------------------------------------------------------------------------
@@ -196,7 +350,7 @@ void Renderer::setViewport(vec2f pos, vec2f size)
     .maxDepth = 1.f,
   };
 
-  vkCmdSetViewport(vk->command_buffer, 0, 1, &viewport);
+  vkCmdSetViewport(vk->state.command_buffer, 0, 1, &viewport);
 }
 
 /* ----------------------------------------------------------------------------
@@ -209,16 +363,18 @@ void Renderer::bindPipeline(Pipeline pipeline)
     return;
   }
 
-  DevicePipeline* dpipeline = vk->pipeline_pool.get(pipeline.index);
+  auto* dpipeline = (DevicePipeline*)pipeline.handle;
 
   if (dpipeline == vk->state.bound_pipeline)
     // Already bound.
     return;
 
+  vk->state.bound_pipeline = dpipeline;
+
   TRACE("binding ", pipeline, '\n');
 
   vkCmdBindPipeline(
-    vk->command_buffer, 
+    vk->state.command_buffer, 
     VK_PIPELINE_BIND_POINT_GRAPHICS,
     dpipeline->pipeline);
 }
@@ -236,8 +392,11 @@ void Renderer::bindDescriptorSet(u32 set_idx, DescriptorSet set)
   if (vk->state.bound_pipeline == nullptr)
   {
     ERROR("attempt to bind a gfx::DescriptorSet before binding a pipeline\n");
+    assert(false);
     return;
   }
+
+  TRACE("binding ", set, " to index ", set_idx, '\n');
 
   vkCmdBindDescriptorSets(
     vk->state.command_buffer,
@@ -313,7 +472,7 @@ void Renderer::pushConstant(
     void* data, 
     u32 size, 
     u32 offset,
-    ShaderKind stage)
+    ShaderStage stage)
 {
   if (data == nullptr)
   {
@@ -335,7 +494,7 @@ void Renderer::pushConstant(
   vkCmdPushConstants(
     vk->state.command_buffer,
     vk->state.bound_pipeline->layout,
-    shaderKindToVulkan(stage),
+    shaderStageToVulkan(stage),
     offset,
     size,
     data);
@@ -352,6 +511,27 @@ void Renderer::draw(u32 index_start, u32 index_count, u32 vertex_start)
     index_start,
     vertex_start,
     0);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::prepareImageForSampling(Image image)
+{
+  if (isnil(image))
+  {
+    ERROR("passed a nil gfx::Image to prepare for sampling\n");
+    return;
+  }
+ 
+  vk->cmdImageMemoryBarrier(
+    vk->state.command_buffer,
+    ((DeviceImage*)image.handle)->handle,
+    VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+    VK_ACCESS_SHADER_READ_BIT,
+    VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+    VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
 }
 
 /* ----------------------------------------------------------------------------
@@ -374,7 +554,7 @@ void Renderer::debugBeginLabel(Color color, String label)
 
 /* ----------------------------------------------------------------------------
  */
-void Renderer::debugEndLabel()
+void Renderer::debugEndLabel() 
 {
   if (vk->func_vkCmdEndDebugUtilsLabelEXT != nullptr)
   {

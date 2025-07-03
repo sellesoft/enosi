@@ -91,6 +91,8 @@ $ local cerr = helpers.defCreateErr("gfx::Image", "name")
   internal_image->handle = image;
   internal_image->ptr = ptr;
 
+  failsafe_deallocate.cancel();
+
   // The handle is our internal representation instead of the VkImage, because
   // we have to also track the device memory for it.
   return {(void*)internal_image};

@@ -75,6 +75,7 @@ static const u32 c_enabled_extension_count = @arrlen(c_enabled_extensions);
 static const char* c_required_device_extensions[] = 
 {
   VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+  "VK_KHR_dynamic_rendering",
 };
 static const u32 c_required_device_extension_count = 
   @arrlen(c_required_device_extensions);
@@ -159,7 +160,7 @@ local strings =
   VK_ERROR_OUT_OF_HOST_MEMORY = "A host memory allocation has failed",
   VK_ERROR_OUT_OF_DEVICE_MEMORY = "A device memory allocation has failed",
   VK_ERROR_INITIALIZATION_FAILED = 
-    "Initialization of an object could not be completely for "..
+    "Initialization of an object could not be completed for "..
     "implementation-specific reasons.",
   VK_ERROR_DEVICE_LOST = "The logical or physical device has been lost.",
   VK_ERROR_MEMORY_MAP_FAILED = "Mapping of a memory object has failed.",
@@ -305,8 +306,10 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL vkDebugCallback(
     break;
   case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
     WARN(data->pMessage, '\n');
+    break;
   case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
     ERROR(data->pMessage, '\n');
+    assert(false);
     break;
   }
 
@@ -376,6 +379,20 @@ $   local args = cmn.joinArgs(',', ...)
   handleVkCallResult($(call), "$(funcname)"_str 
            $(args and ","..args or ""))
 $ end
+
+/* ----------------------------------------------------------------------------
+ */
+static void printDeviceHeapAllocation(DeviceHeapAllocation* ptr)
+{
+  @log.debug "<<-END
+         memory_type: $(ptr->memory_type)
+         block_index: $(ptr->block_index)
+              offset: $(ptr->offset)
+                size: $(ptr->size)
+      aligned_offset: $(ptr->aligned_offset)
+        aligned_size: $(ptr->aligned_size)
+    END";
+}
 
 /* ----------------------------------------------------------------------------
  */
@@ -1103,9 +1120,16 @@ b8 Vulkan::initLogicalDevice()
   if (physical_device_features.geometryShader)
     physical_device_enabled_features.geometryShader = VK_TRUE;
 
+  VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_feature = 
+  {
+    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR,
+    .dynamicRendering = VK_TRUE,
+  };
+
   VkDeviceCreateInfo create_info =
   {
     .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+    .pNext = &dynamic_rendering_feature,
     .queueCreateInfoCount = queue_create_info_count,
     .pQueueCreateInfos = queue_create_infos,
     .enabledExtensionCount = c_required_device_extension_count,
@@ -1239,6 +1263,26 @@ b8 Vulkan::initSyncObjects()
     render_complete_semaphore, 
     "<render complete semaphore>");
 
+  VkFenceCreateInfo fence_info = 
+  {
+    .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+    // Signal as soon as this fence is created, because we don't want to block
+    // on the first wait for fences call due to it never being signaled by the 
+    // GPU (since we haven't asked it to do anything yet).
+    .flags = VK_FENCE_CREATE_SIGNALED_BIT,
+  };
+
+  @vkc(vkCreateFence(
+    device, 
+    &fence_info, 
+    nullptr, 
+    &queue_submit_complete_fence))
+
+  debugSetObjectName(
+    VK_OBJECT_TYPE_FENCE,
+    queue_submit_complete_fence, 
+    "<queue submit complete fence>");
+
   return true;
 }
 
@@ -1323,6 +1367,13 @@ u32 Vulkan::acquireNextImageIndex()
 
 /* ----------------------------------------------------------------------------
  */
+ImageFormat Vulkan::getSurfaceImageFormat() const
+{
+  return vkFormatToImageFormat(surface_format.format);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 Vulkan::createVkImage(
     VkImage*          out,
     vec2u             size,
@@ -1401,7 +1452,7 @@ b8 Vulkan::createVkImageView(
     debugSetObjectName(
       VK_OBJECT_TYPE_IMAGE_VIEW,
       *out,
-      '<', debug_name, " image>");
+      '<', debug_name, " image view>");
 
   return true;
 }
@@ -1473,6 +1524,9 @@ DeviceHeapAllocation* Vulkan::allocateAndBindVkBufferMemory(
       ptr->aligned_offset), nullptr,
     "failed to bind memory of VkBuffer\n")
 
+  DEBUG("allocated and bound VkBuffer memory:\n");
+  printDeviceHeapAllocation(ptr);
+
   return ptr;
 }
 
@@ -1509,6 +1563,9 @@ DeviceHeapAllocation* Vulkan::allocateAndBindVkImageMemory(
       ptr->aligned_offset), nullptr,
     "failed to bind memory of VkImage\n")
 
+  DEBUG("allocated and bound VkImage memory:\n");
+  printDeviceHeapAllocation(ptr);
+
   return ptr;
 }
 
@@ -1534,9 +1591,9 @@ b8 Vulkan::allocateVkDescriptorSet(
 
   if (notnil(debug_name))
     debugSetObjectName(
-      VK_OBJECT_TYPE_BUFFER,
+      VK_OBJECT_TYPE_DESCRIPTOR_SET,
       *out,
-      '<', debug_name, " descriptor>");
+      '<', debug_name, " descriptor set>");
 
   return true;
 }
@@ -1644,12 +1701,11 @@ b8 Vulkan::createVkDescriptorSetLayout(
     .pBindings = bindings.ptr,
   };
 
-  VkDescriptorSetLayout layout;
   @vkc(vkCreateDescriptorSetLayout(
       device, 
       &create_info,
       &allocator_callbacks, 
-      &layout),
+      out),
     "failed to create VkDescriptorSetLayout '", debug_name, "'\n")
   
   if (notnil(debug_name))
@@ -1734,7 +1790,6 @@ b8 Vulkan::createVkPipeline(
     b8 has_vertex_input,
     String debug_name)
 {
-
   VkPipelineVertexInputStateCreateInfo vertex_input_info =
   {
     .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
@@ -1855,20 +1910,21 @@ b8 Vulkan::createVkPipeline(
   {
     {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-      .stage = VK_SHADER_STAGE_VERTEX_BIT,
-      .module = vert_shader,
+      .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+      .module = frag_shader,
       .pName = "main",
     },
     {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-      .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-      .module = frag_shader,
+      .stage = VK_SHADER_STAGE_VERTEX_BIT,
+      .module = vert_shader,
       .pName = "main",
-    }
+    },
   };
 
   VkPipelineRenderingCreateInfoKHR pipeline_rendering_info = 
   {
+    .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO,
     .colorAttachmentCount = 1,
     .pColorAttachmentFormats = &surface_format.format,
   };
@@ -1919,6 +1975,8 @@ DeviceHeapAllocation* Vulkan::allocate(
   VkDeviceSize alignment = max(memory_requirements.alignment, heap.alignment);
   VkDeviceSize aligned_size = alignUp(memory_requirements.size, alignment);
 
+  DeviceHeapAllocation* result = nullptr;
+  
   if (aligned_size < heap.preferred_block_size)
   {
     for (DeviceHeapAllocation& free_chunk : heap.free_chunks)
@@ -1940,7 +1998,8 @@ DeviceHeapAllocation* Vulkan::allocate(
 
         assert(isAligned(free_chunk.aligned_offset, alignment));
         assert(isAligned(free_chunk.aligned_size, alignment));
-        return &free_chunk;
+
+        result = &free_chunk;
       }
       else
       {
@@ -1959,58 +2018,82 @@ DeviceHeapAllocation* Vulkan::allocate(
 
         assert(isAligned(allocation->aligned_offset, alignment));
         assert(isAligned(allocation->aligned_size, alignment));
-        return allocation;
+
+        result = allocation;
       }
     }
   }
 
-  DeviceHeapBlock* last_block = heap.blocks.last();
-  if (heap.blocks.isEmpty() || 
-      ((VkDeviceSize)last_block->cursor + aligned_size > last_block->size))
+  if (result == nullptr)
   {
-    DeviceHeapBlock* block = heap.blocks.push();
-    block->size = max(heap.preferred_block_size, aligned_size);
-    block->cursor = 0;
-    block->mapped_count = 0;
-    block->mapped_data = nullptr;
+    b8 need_allocation = 
+      heap.blocks.isEmpty() ||
+      ((VkDeviceSize)heap.blocks.last()->cursor + aligned_size >
+       heap.blocks.last()->size);
 
-    VkMemoryAllocateInfo alloc_info =
+    if (need_allocation)
     {
-      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .allocationSize = block->size,
-      .memoryTypeIndex = memory_type,
-    };
+      DeviceHeapBlock* block = heap.blocks.push();
+      block->size = max(heap.preferred_block_size, aligned_size);
+      block->cursor = 0;
+      block->mapped_count = 0;
+      block->mapped_data = nullptr;
 
-    if (!@vkcnr(vkAllocateMemory(
-          device,
-          &alloc_info,
-          &allocator_callbacks,
-          &block->memory),
-          "failed to allocate memory for a vulkan heap block"))
-    {
-      heap.blocks.pop();
-      return nullptr;
+      VkMemoryAllocateInfo alloc_info =
+      {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = block->size,
+        .memoryTypeIndex = memory_type,
+      };
+
+      DEBUG("allocating new heap block of size ", block->size, '\n');
+
+      if (!@vkcnr(vkAllocateMemory(
+            device,
+            &alloc_info,
+            &allocator_callbacks,
+            &block->memory),
+            "failed to allocate memory for a vulkan heap block"))
+      {
+        heap.blocks.pop();
+        return nullptr;
+      }
     }
+
+    u32 block_index = heap.blocks.len() - 1;
+    DeviceHeapBlock& block = heap.blocks[block_index];
+
+    DeviceHeapAllocation* allocation = heap.allocations.push();
+    allocation->memory_type = memory_type;
+    allocation->block_index = block_index;
+    allocation->offset = (VkDeviceSize)block.cursor;
+    allocation->size = aligned_size;
+    allocation->aligned_offset = alignUp(allocation->offset, alignment);
+    allocation->aligned_size = aligned_size;
+
+    VkDeviceSize new_cursor = block.cursor + aligned_size;
+    assert(new_cursor <= (VkDeviceSize)UINT32_MAX);
+    block.cursor = (u32)new_cursor;
+
+    assert(isAligned(allocation->aligned_offset, alignment));
+    assert(isAligned(allocation->aligned_size, alignment));
+
+    result = allocation;
   }
 
-  u32 block_index = heap.blocks.len() - 1;
-  DeviceHeapBlock& block = heap.blocks[block_index];
+  assert(result != nullptr);
 
-  DeviceHeapAllocation* allocation = heap.allocations.push();
-  allocation->memory_type = memory_type;
-  allocation->block_index = block_index;
-  allocation->offset = (VkDeviceSize)block.cursor;
-  allocation->size = aligned_size;
-  allocation->aligned_offset = alignUp(allocation->offset, alignment);
-  allocation->aligned_size = aligned_size;
+  @log.debug "<<-END
+    device memory allocation:
+         memory_type: $(result->memory_type)
+         block_index: $(result->block_index)
+              offset: $(result->offset)
+                size: $(result->size)
+      aligned_offset: $(result->aligned_offset)
+        aligned_size: $(result->aligned_size)
+    END";
 
-  VkDeviceSize new_cursor = block.cursor + aligned_size;
-  assert(new_cursor <= (VkDeviceSize)UINT32_MAX);
-  block.cursor = (u32)new_cursor;
-
-  assert(isAligned(allocation->aligned_offset, alignment));
-  assert(isAligned(allocation->aligned_size, alignment));
-  return allocation;
+  return result;
 }
 
 /* ----------------------------------------------------------------------------
@@ -2019,6 +2102,16 @@ void Vulkan::deallocate(DeviceHeapAllocation* ptr)
 {
   if (ptr == nullptr)
     return;
+
+  @log.debug "<<-END
+    device memory DEallocation:
+         memory_type: $(ptr->memory_type)
+         block_index: $(ptr->block_index)
+              offset: $(ptr->offset)
+                size: $(ptr->size)
+      aligned_offset: $(ptr->aligned_offset)
+        aligned_size: $(ptr->aligned_size)
+    END";
 
   DeviceHeap& heap = heaps[ptr->memory_type];
   DeviceHeapBlock& block = heap.blocks[ptr->block_index];
@@ -2152,8 +2245,6 @@ b8 Vulkan::endSingleUseCommandBuffer(VkCommandBuffer command_buffer)
 
   if (fence != VK_NULL_HANDLE)
   {
-    ERROR("waiting for fence\n");
-
     @vkc(vkWaitForFences(
         device,
         1,
@@ -2187,11 +2278,10 @@ b8 Vulkan::mapVkBuffer(
     @vkc(vkMapMemory(
         device, 
         getDeviceMemory(ptr),
-        ptr->aligned_offset,
+        0,
         size,
         0,
         &block->mapped_data))
-
   }
 
   block->mapped_count += 1;
@@ -2239,7 +2329,7 @@ b8 Vulkan::flushMappedVkBuffer(
   {
     .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
     .memory = block->memory,
-    .offset = alignDown(ptr->aligned_offset + offset, heap->alignment),
+    .offset = offset,
     .size = size,
   };
 
@@ -2268,7 +2358,7 @@ b8 Vulkan::mapCopyAndFlushVkBufferMemory(
 
   mem::copy(mapped, data, size);
 
-  if (!flushMappedVkBuffer(0, VK_WHOLE_SIZE, ptr))
+  if (!flushMappedVkBuffer(ptr->aligned_offset, VK_WHOLE_SIZE, ptr))
     return false;
 
   return true;
@@ -2441,6 +2531,29 @@ b8 Vulkan::stageVkImageMemory(
 
 /* ----------------------------------------------------------------------------
  */
+b8 Vulkan::beginCommandBuffer(VkCommandBuffer command_buffer)
+{
+  VkCommandBufferBeginInfo info =
+  {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+  };
+
+  @vkc(vkBeginCommandBuffer(command_buffer, &info))
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Vulkan::endCommandBuffer(VkCommandBuffer command_buffer)
+{
+  // PROBABLY should handle the result here but whatever! just use the 
+  // damn thing correctly.
+  vkEndCommandBuffer(command_buffer);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 void Vulkan::cmdImageMemoryBarrier(
     VkCommandBuffer command_buffer, 
     VkImage image,
@@ -2581,6 +2694,26 @@ $ end
 
 /* ----------------------------------------------------------------------------
  */
+ImageFormat vkFormatToImageFormat(VkFormat x)
+{
+$ local function map(x, y)
+  case VK_FORMAT_$(y): return ImageFormat::$(x);
+$ end
+  switch (x)
+  {
+  @map(BW,   R8_UNORM)
+  @map(BWA,  R8G8_UNORM)
+  @map(RGB,  R8G8B8_UNORM)
+  @map(RGBA, R8G8B8A8_UNORM)
+  @map(BGRA, B8G8R8A8_UNORM)
+  }
+
+  assert(false);
+  return {};
+}
+
+/* ----------------------------------------------------------------------------
+ */
 u32 imageFormatToBytesPerPixel(ImageFormat x)
 {
 $ local function map(x, y)
@@ -2637,16 +2770,35 @@ VkSamplerAddressMode imageAddressModeToVulkan(ImageAddressMode x)
 
 /* ----------------------------------------------------------------------------
  */
-VkShaderStageFlagBits shaderKindToVulkan(ShaderKind kind)
+VkShaderStageFlagBits shaderStageToVulkan(ShaderStage stage)
 {
-  switch (kind)
+  switch (stage)
   {
-    case ShaderKind::Vertex:   return VK_SHADER_STAGE_VERTEX_BIT;
-    case ShaderKind::Fragment: return VK_SHADER_STAGE_FRAGMENT_BIT;
-    case ShaderKind::Compute:  return VK_SHADER_STAGE_COMPUTE_BIT;
-    case ShaderKind::Geometry: return VK_SHADER_STAGE_GEOMETRY_BIT;
+    case ShaderStage::Vertex:   return VK_SHADER_STAGE_VERTEX_BIT;
+    case ShaderStage::Fragment: return VK_SHADER_STAGE_FRAGMENT_BIT;
+    case ShaderStage::Compute:  return VK_SHADER_STAGE_COMPUTE_BIT;
+    case ShaderStage::Geometry: return VK_SHADER_STAGE_GEOMETRY_BIT;
     default: return VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
   }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+VkShaderStageFlagBits shaderStageFlagsToVulkan(ShaderStageFlags stages)
+{
+  u32 bits = {};
+
+$ local function test(x)
+  if (stages.test(ShaderStage::$(x)))
+    bits |= VK_SHADER_STAGE_$(x:upper())_BIT;
+$ end
+
+  @test(Vertex)
+  @test(Fragment)
+  @test(Compute)
+  @test(Geometry)
+
+  return (VkShaderStageFlagBits)bits;
 }
 
 }

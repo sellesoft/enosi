@@ -41,6 +41,8 @@ struct Renderer
   DescriptorSetLayout default_sampler_set_layout;
   DescriptorSetLayout default_ubo_set_layout;
 
+  u32 next_image;
+
   struct InitParams
   {
     AssetMgr& assetmgr;
@@ -50,6 +52,9 @@ struct Renderer
 
   b8 init(InitParams& params);
   b8 deinit();
+
+  b8 beginFrame();
+  void endFrame(); 
 
   b8 beginRenderPass(
     vec2i render_area_pos,
@@ -63,6 +68,9 @@ struct Renderer
     Color clear_color);
 
   void endRenderPass();
+
+  b8 submitQueue();
+  b8 present();
 
   void setScissor(vec2i pos, vec2u size);
   void setViewport(vec2f pos, vec2f size);
@@ -81,9 +89,14 @@ struct Renderer
     void* data, 
     u32 size, 
     u32 offset,
-    ShaderKind stage);
+    ShaderStage stage);
 
   void draw(u32 index_start, u32 index_count, u32 vertex_start);
+
+  // NOTE(sushi) a hacky way to get an image into a state where it can be 
+  //             sampled by a shader, for use when wanting to display a 
+  //             RenderTarget image. Needs to be done better later.
+  void prepareImageForSampling(Image image);
 
   void debugBeginLabel(Color color, utf8::String label);
   void debugEndLabel();
