@@ -38,7 +38,7 @@ $ local cerr = helpers.defCreateErr("gfx::Shader", "name")
   
   DeviceShader* dev_shader = r.vk->shader_pool.add();
   dev_shader->module = shader;
-  dev_shader->stage = shaderKindToVulkan(params.kind);
+  dev_shader->stage = shaderStageToVulkan(params.stage);
 
   Shader result = {};
   result.index = r.vk->shader_pool.indexOf(dev_shader);

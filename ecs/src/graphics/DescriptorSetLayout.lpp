@@ -58,7 +58,7 @@ $ local cerr = helpers.defCreateErr("gfx::DescriptorSetLayout", "name")
       .binding = binding.binding,
       .descriptorType = descriptorKindToVulkan(binding.kind),
       .descriptorCount = binding.count,
-      .stageFlags = shaderKindToVulkan(binding.stage),
+      .stageFlags = shaderStageFlagsToVulkan(binding.stages),
     });
   }
 

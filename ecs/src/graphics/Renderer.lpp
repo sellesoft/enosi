@@ -44,6 +44,39 @@ b8 Renderer::init(InitParams& params)
   if (!resource_mgr.init())
     return ERROR("failed to initialize resource manager\n");
 
+  DescriptorSetLayout::Binding ubo_binding = 
+  {
+    .binding = 0,
+    .count = 1,
+    .kind = DescriptorKind::UniformBuffer,
+    .stages = ShaderStage::Vertex | ShaderStage::Fragment,
+  };
+
+  default_ubo_set_layout = DescriptorSetLayout::create(
+    *this,
+    makeSlice(&ubo_binding, 1),
+    "default ubo"_str);
+
+  if (isnil(default_ubo_set_layout))
+    return ERROR("failed to create default uniform buffer descriptor set "
+                 "layout\n");
+
+  DescriptorSetLayout::Binding sampler_binding = 
+  {
+    .binding = 0,
+    .count = 1,
+    .kind = DescriptorKind::CombinedImageSampler,
+    .stages = ShaderStage::Fragment,
+  };
+
+  default_sampler_set_layout = DescriptorSetLayout::create(
+    *this,
+    makeSlice(&sampler_binding, 1),
+    "default sampler"_str);
+
+  if (isnil(default_sampler_set_layout))
+    return ERROR("failed to create default sampler descriptor set layout\n");
+
   return true;
 }
 
@@ -313,7 +346,7 @@ void Renderer::pushConstant(
     void* data, 
     u32 size, 
     u32 offset,
-    ShaderKind stage)
+    ShaderStage stage)
 {
   if (data == nullptr)
   {
@@ -335,7 +368,7 @@ void Renderer::pushConstant(
   vkCmdPushConstants(
     vk->state.command_buffer,
     vk->state.bound_pipeline->layout,
-    shaderKindToVulkan(stage),
+    shaderStageToVulkan(stage),
     offset,
     size,
     data);

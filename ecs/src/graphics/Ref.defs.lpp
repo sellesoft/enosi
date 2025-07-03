@@ -152,12 +152,12 @@ b8 ShaderRef::load(const RefLoadParams& params)
     return ERROR("loaded shader def has a nil source path\n");
 
   PathBuffer source_name_buffer;
-  switch (def->kind)
+  switch (def->stage)
   {
-  case ShaderKind::Vertex:
+  case ShaderStage::Vertex:
     io::formatv(&source_name_buffer, def->source, ".vert"_str);
     break;
-  case ShaderKind::Fragment:
+  case ShaderStage::Fragment:
     io::formatv(&source_name_buffer, def->source, ".frag"_str);
     break;
   default:
@@ -169,7 +169,7 @@ b8 ShaderRef::load(const RefLoadParams& params)
   gfx::CompiledShader::CompileParams shader_params = 
   {
     .name = source_name,
-    .kind = def->kind,
+    .stage = def->stage,
     .allocator = &mem::stl_allocator,
     .assetmgr = &params.assetmgr,
   };

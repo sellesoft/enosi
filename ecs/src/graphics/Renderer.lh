@@ -81,7 +81,7 @@ struct Renderer
     void* data, 
     u32 size, 
     u32 offset,
-    ShaderKind stage);
+    ShaderStage stage);
 
   void draw(u32 index_start, u32 index_count, u32 vertex_start);
 

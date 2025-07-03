@@ -208,7 +208,7 @@ void UI::pushConstantFromTransform(mat3x2 transform, gfx::Renderer& renderer)
     push_constant, 
     c_PushConstantSize,
     0,
-    gfx::ShaderKind::Fragment);
+    gfx::ShaderStage::Fragment);
 }
 
 /* ----------------------------------------------------------------------------

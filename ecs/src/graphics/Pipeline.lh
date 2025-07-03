@@ -26,9 +26,7 @@ struct Pipeline
   {
     u32 offset;
     u32 size;
-    // TODO(sushi) make a shader kind flags and also rename to shader 
-    //             stages
-    ShaderKind stages;
+    ShaderStageFlags stages;
   };
 
   struct Layout

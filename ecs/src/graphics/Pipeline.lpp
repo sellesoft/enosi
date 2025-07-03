@@ -49,7 +49,7 @@ $ local cerr = helpers.defCreateErr("gfx::Pipeline", "name")
     {
       .offset = pc.offset,
       .size = pc.size,
-      .stageFlags = shaderKindToVulkan(pc.stages),
+      .stageFlags = shaderStageFlagsToVulkan(pc.stages),
     });
   }
 
@@ -124,18 +124,34 @@ $ local cerr = helpers.defCreateErr("gfx::Pipeline", "name")
  */
 Pipeline Pipeline::create(Renderer& r, const PipelineDef& def)
 {
-  assert(false);
 
-  // CreateParams params = 
-  // {
-  //   .vertex_shader = def.vertex_shader->gfx_shader,
-  //   .fragment_shader = def.fragment_shader->gfx_shader,
-  //   .push_constant_size = def.push_constant_size,
-  //   .has_vertex_input = def.has_vertex_input,
-  //   .debug_name = def.name
-  // };
-  //
-  // return create(r, params);
+  DescriptorSetLayout layouts[2] = 
+  {
+    r.default_ubo_set_layout,
+    r.default_sampler_set_layout,
+  };
+
+  PushConstant push_constant = 
+  {
+    .offset = 0,
+    .size = def.push_constant_size,
+    .stages = ShaderStage::Vertex,
+  };
+
+  CreateParams params = 
+  {
+    .vertex_shader = def.vertex_shader->gfx_shader,
+    .fragment_shader = def.fragment_shader->gfx_shader,
+    .has_vertex_input = def.has_vertex_input,
+    .layout = 
+    {
+      .descriptor_set_layouts = makeSlice(layouts),
+      .push_constant_ranges = makeSlice(&push_constant, 1),
+    },
+    .debug_name = def.name,
+  };
+
+  return create(r, params);
 }
 
 /* ----------------------------------------------------------------------------

@@ -159,7 +159,7 @@ local strings =
   VK_ERROR_OUT_OF_HOST_MEMORY = "A host memory allocation has failed",
   VK_ERROR_OUT_OF_DEVICE_MEMORY = "A device memory allocation has failed",
   VK_ERROR_INITIALIZATION_FAILED = 
-    "Initialization of an object could not be completely for "..
+    "Initialization of an object could not be completed for "..
     "implementation-specific reasons.",
   VK_ERROR_DEVICE_LOST = "The logical or physical device has been lost.",
   VK_ERROR_MEMORY_MAP_FAILED = "Mapping of a memory object has failed.",
@@ -2637,16 +2637,35 @@ VkSamplerAddressMode imageAddressModeToVulkan(ImageAddressMode x)
 
 /* ----------------------------------------------------------------------------
  */
-VkShaderStageFlagBits shaderKindToVulkan(ShaderKind kind)
+VkShaderStageFlagBits shaderStageToVulkan(ShaderStage stage)
 {
-  switch (kind)
+  switch (stage)
   {
-    case ShaderKind::Vertex:   return VK_SHADER_STAGE_VERTEX_BIT;
-    case ShaderKind::Fragment: return VK_SHADER_STAGE_FRAGMENT_BIT;
-    case ShaderKind::Compute:  return VK_SHADER_STAGE_COMPUTE_BIT;
-    case ShaderKind::Geometry: return VK_SHADER_STAGE_GEOMETRY_BIT;
+    case ShaderStage::Vertex:   return VK_SHADER_STAGE_VERTEX_BIT;
+    case ShaderStage::Fragment: return VK_SHADER_STAGE_FRAGMENT_BIT;
+    case ShaderStage::Compute:  return VK_SHADER_STAGE_COMPUTE_BIT;
+    case ShaderStage::Geometry: return VK_SHADER_STAGE_GEOMETRY_BIT;
     default: return VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
   }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+VkShaderStageFlagBits shaderStageFlagsToVulkan(ShaderStageFlags stages)
+{
+  u32 bits = {};
+
+$ local function test(x)
+  if (stages.test(ShaderStage::$(x)))
+    bits |= VK_SHADER_STAGE_$(x:upper())_BIT;
+$ end
+
+  @test(Vertex)
+  @test(Fragment)
+  @test(Compute)
+  @test(Geometry)
+
+  return (VkShaderStageFlagBits)bits;
 }
 
 }

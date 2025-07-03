@@ -604,6 +604,6 @@ VkFormat imageFormatToVulkan(ImageFormat x);
 u32 imageFormatToBytesPerPixel(ImageFormat x);
 VkFilter imageFilterToVulkan(ImageFilter x);
 VkSamplerAddressMode imageAddressModeToVulkan(ImageAddressMode x);
-VkShaderStageFlagBits shaderKindToVulkan(ShaderKind kind);
-
+VkShaderStageFlagBits shaderStageToVulkan(ShaderStage kind);
+VkShaderStageFlagBits shaderStageFlagsToVulkan(ShaderStageFlags stages);
 }

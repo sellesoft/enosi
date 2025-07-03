@@ -1,0 +1,32 @@
+return gfx::PipelineDef
+{
+  layout = 
+  {
+    descriptor_set_layouts = 
+    {
+      // Fragment shader texture sampler.
+      {
+        bindings = 
+        {
+          {
+            index = 0,
+            count = 1,
+            kind = CombinedImageSampler,
+            stage = Fragment,
+          }
+        }
+      },
+      
+      // Vertex shader scene ubo.
+      {
+        bindings = 
+        {
+          index = 0,
+          count = 1,
+          kind = UniformBuffer,
+          stage = Vertex,
+        }
+      }
+    }  
+  }
+}
