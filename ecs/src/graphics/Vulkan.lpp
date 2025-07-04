@@ -1524,9 +1524,6 @@ DeviceHeapAllocation* Vulkan::allocateAndBindVkBufferMemory(
       ptr->aligned_offset), nullptr,
     "failed to bind memory of VkBuffer\n")
 
-  DEBUG("allocated and bound VkBuffer memory:\n");
-  printDeviceHeapAllocation(ptr);
-
   return ptr;
 }
 
@@ -1562,9 +1559,6 @@ DeviceHeapAllocation* Vulkan::allocateAndBindVkImageMemory(
       getDeviceMemory(ptr),
       ptr->aligned_offset), nullptr,
     "failed to bind memory of VkImage\n")
-
-  DEBUG("allocated and bound VkImage memory:\n");
-  printDeviceHeapAllocation(ptr);
 
   return ptr;
 }
@@ -1981,7 +1975,8 @@ DeviceHeapAllocation* Vulkan::allocate(
   {
     for (DeviceHeapAllocation& free_chunk : heap.free_chunks)
     {
-      VkDeviceSize chunk_aligned_offset = alignUp(free_chunk.offset, alignment);
+      VkDeviceSize chunk_aligned_offset = 
+        alignUp(free_chunk.offset, alignment);
       VkDeviceSize chunk_aligned_end = chunk_aligned_offset + aligned_size;
       if (chunk_aligned_end > free_chunk.offset + free_chunk.size)
         continue;
@@ -2046,8 +2041,6 @@ DeviceHeapAllocation* Vulkan::allocate(
         .memoryTypeIndex = memory_type,
       };
 
-      DEBUG("allocating new heap block of size ", block->size, '\n');
-
       if (!@vkcnr(vkAllocateMemory(
             device,
             &alloc_info,
@@ -2082,16 +2075,6 @@ DeviceHeapAllocation* Vulkan::allocate(
   }
 
   assert(result != nullptr);
-
-  @log.debug "<<-END
-    device memory allocation:
-         memory_type: $(result->memory_type)
-         block_index: $(result->block_index)
-              offset: $(result->offset)
-                size: $(result->size)
-      aligned_offset: $(result->aligned_offset)
-        aligned_size: $(result->aligned_size)
-    END";
 
   return result;
 }
@@ -2269,6 +2252,7 @@ b8 Vulkan::endSingleUseCommandBuffer(VkCommandBuffer command_buffer)
  */
 b8 Vulkan::mapVkBuffer(
     void** out,
+    VkDeviceSize offset,
     VkDeviceSize size,
     DeviceHeapAllocation* ptr)
 {
@@ -2278,7 +2262,7 @@ b8 Vulkan::mapVkBuffer(
     @vkc(vkMapMemory(
         device, 
         getDeviceMemory(ptr),
-        0,
+        offset,
         size,
         0,
         &block->mapped_data))
@@ -2345,12 +2329,14 @@ b8 Vulkan::flushMappedVkBuffer(
  */
 b8 Vulkan::mapCopyAndFlushVkBufferMemory(
     void* data,
+    VkDeviceSize offset,
     VkDeviceSize size,
     DeviceHeapAllocation* ptr)
 {
   void* mapped;
   if (!mapVkBuffer(
         &mapped,
+        offset,
         size,
         ptr))
     return false;
@@ -2358,7 +2344,7 @@ b8 Vulkan::mapCopyAndFlushVkBufferMemory(
 
   mem::copy(mapped, data, size);
 
-  if (!flushMappedVkBuffer(ptr->aligned_offset, VK_WHOLE_SIZE, ptr))
+  if (!flushMappedVkBuffer(offset, size, ptr))
     return false;
 
   return true;
@@ -2375,7 +2361,7 @@ b8 Vulkan::createStagingBuffer(
         out,
         required_size,
         VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        "staging buffer"_str))
+        "staging"_str))
     return ERROR("failed to create staging buffer\n");
 
   auto failsafe_destroy_buffer = deferWithCancel
@@ -2423,6 +2409,7 @@ b8 Vulkan::stageVkBufferMemory(
   void* staging_data = nullptr;
   if (!mapVkBuffer(
         &staging_data,
+        staging_ptr->aligned_offset,
         buffer_required_size,
         staging_ptr))
     return ERROR("failed to map staging buffer\n");
@@ -2473,6 +2460,7 @@ b8 Vulkan::stageVkImageMemory(
   void* staging_data = nullptr;
   if (!mapVkBuffer(
         &staging_data,
+        staging_ptr->aligned_offset,
         size,
         staging_ptr))
     return ERROR("failed to map staging buffer\n");

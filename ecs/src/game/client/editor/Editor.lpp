@@ -65,6 +65,7 @@ void Editor::deinit()
 b8 Editor::update(ui::UI& ui, cl::GameSim& sim)
 {
   const EditorSkinDef& skin = *skinref;
+  gfx::Renderer& renderer = client->renderer;
 
   const f32 content_padding = 5.f;
 
@@ -74,6 +75,12 @@ b8 Editor::update(ui::UI& ui, cl::GameSim& sim)
 
   const f32 tool_select_tool_panel_spacing = 10.f;
   const f32 tool_y = tool_option_height + tool_select_tool_panel_spacing;
+
+  // TODO(sushi) this should be managed by the Client, but I don't feel like 
+  //             reorganizing how that calls into the Editor right now and 
+  //             adding a render function for the editor and all that stuff.
+  if (!renderer.beginFrame())
+    return true;
 
   // TODO(sushi) separate rendering for Editor and UI into explicit functions.
   if (!client->renderer.beginRenderPassOverSwapchainImage(
@@ -173,10 +180,12 @@ $ end
   ui.endGroup();
   ui.endPanel();
 
-  client->renderer.setViewport({0,0}, vec2f(client->window.size));
+  renderer.setViewport({0,0}, vec2f(client->window.size));
+  renderer.setScissor({0,0}, vec2u(client->window.size));
   ui.endFrame();
 
-  client->renderer.endRenderPass();
+  renderer.endRenderPass();
+  renderer.endFrame();
 
   return true;
 }

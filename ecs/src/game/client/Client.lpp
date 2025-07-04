@@ -91,13 +91,6 @@ $ end
     return ERROR("failed to load white texture\n");
   white_texture = white_texture_compiled->texture;
 
-  SourceDataFileHandle h_sfile = 
-    engine->source_data_file_reg.loadFromDisk("my/src/data/file.ext"_str);
-  SourceDataFile* sfile = h_sfile.getFile();
-  SourceData* returned_data = sfile->returned_data;
-  for (SourceData* child : returned_data->children)
-    INFO(child->name, "\n");
-
   AssetLoader asset_loader =
   {
     .renderer = renderer,

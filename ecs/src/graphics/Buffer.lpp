@@ -127,6 +127,7 @@ $ end
     {
       if (!r.vk->mapCopyAndFlushVkBufferMemory(
             params.data,
+            ptr->aligned_offset,
             params.size,
             ptr))
       {
@@ -138,7 +139,12 @@ $ end
 
   case MappingBehavior::Persistent:
     {
-      if (!r.vk->mapVkBuffer(nullptr, params.size, ptr))
+      void* mapped;
+      if (!r.vk->mapVkBuffer(
+            &mapped, 
+            ptr->aligned_offset,
+            params.size, 
+            ptr))
       {
         @cerr("failed to map persistent gfx::Buffer");
         return nil;
@@ -146,9 +152,11 @@ $ end
 
       if (params.data != nullptr)
       {
-        mem::copy(
-          r.vk->getHeapBlock(ptr)->mapped_data, params.data, params.size);
-        r.vk->flushMappedVkBuffer(0, VK_WHOLE_SIZE, ptr);
+        mem::copy(mapped, params.data, params.size);
+        r.vk->flushMappedVkBuffer(
+            ptr->aligned_offset, 
+            VK_WHOLE_SIZE, 
+            ptr);
       }
     }
     break;
@@ -227,10 +235,14 @@ void* Buffer::map(Renderer& r)
   TRACE("mapping ", *this, "\n");
 
   void* mapped = nullptr;
-  if (!r.vk->mapVkBuffer(&mapped, VK_WHOLE_SIZE, internal_buffer->ptr))
+  if (!r.vk->mapVkBuffer(
+      &mapped, 
+      internal_buffer->ptr->aligned_offset,
+      VK_WHOLE_SIZE, 
+      internal_buffer->ptr))
     return nullptr;
 
-  return (u8*)mapped + internal_buffer->ptr->aligned_offset;
+  return mapped;
 }
 
 /* ----------------------------------------------------------------------------
@@ -243,7 +255,7 @@ void* Buffer::getMappedData(gfx::Renderer& r) const
   DeviceHeapAllocation* ptr = ((DeviceBuffer*)handle)->ptr;
   DeviceHeapBlock* block = r.vk->getHeapBlock(ptr);
 
-  return (u8*)block->mapped_data + ptr->aligned_offset;
+  return (u8*)block->mapped_data;
 }
 
 /* ----------------------------------------------------------------------------
@@ -282,22 +294,28 @@ b8 Buffer::copyAndFlush(Renderer& r, void* data, u64 size)
 
   auto* internal_buffer = (DeviceBuffer*)handle;
 
-  DeviceHeapBlock* ptr = r.vk->getHeapBlock(internal_buffer->ptr);
+  DeviceHeapAllocation* ptr = internal_buffer->ptr;
+  DeviceHeapBlock* block = r.vk->getHeapBlock(ptr);
+  DeviceHeap* heap = r.vk->getHeap(ptr);
 
-  if (ptr->mapped_data == nullptr)
+  if (block->mapped_data == nullptr)
     return ERROR("attempt to copy and flush unmapped ", *this, "\n");
 
-  mem::copy(
-    (u8*)ptr->mapped_data + internal_buffer->ptr->aligned_offset, data, size);
+  DEBUG("copying ", size, " data\n");
+  mem::copy(block->mapped_data, data, size);
 
   VkDeviceSize dev_size = size;
-  VkDeviceSize dev_offset = internal_buffer->ptr->aligned_offset;
+  VkDeviceSize dev_offset = ptr->aligned_offset;
 
   if (size == FLUSH_WHOLE_BUFFER)
     dev_size = VK_WHOLE_SIZE;
+  else 
+    dev_size = alignUp(size, heap->alignment);
+
+  DEBUG("dsize: ", dev_size, '\n');
 
   // NOTE(sushi) size and offset are aligned inside this call.
-  return r.vk->flushMappedVkBuffer(dev_offset, dev_size, internal_buffer->ptr);
+  return r.vk->flushMappedVkBuffer(dev_offset, dev_size, ptr);
 }
 
 /* ----------------------------------------------------------------------------
@@ -311,6 +329,8 @@ void Buffer::unmap(Renderer& r)
   }
 
   auto* internal_buffer = (DeviceBuffer*)handle;
+
+  TRACE("unmapping ", *this, '\n');
 
   if (!r.vk->unmapVkBuffer(internal_buffer->ptr))
     ERROR("attempt to unmap ", *this, " but it was already unmapped\n"); 

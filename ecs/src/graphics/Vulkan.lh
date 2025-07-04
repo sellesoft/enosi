@@ -49,11 +49,11 @@ struct DeviceHeapAllocation
 
 struct DeviceHeapBlock
 {
-  VkDeviceSize size;
-  VkDeviceMemory memory;
-  u32 cursor;
-  u32 mapped_count;
-  void* mapped_data;
+  VkDeviceSize size = 0;
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+  u32 cursor = 0;
+  u32 mapped_count = 0;
+  void* mapped_data = nullptr;
 };
 
 struct DeviceHeap
@@ -489,9 +489,15 @@ struct Vulkan
   b8 beginSingleUseCommandBuffer(VkCommandBuffer* out);
   b8 endSingleUseCommandBuffer(VkCommandBuffer command_buffer);
 
-  b8 mapVkBuffer(void** out, VkDeviceSize size, DeviceHeapAllocation* ptr);
+  b8 mapVkBuffer(
+    void** out, 
+    VkDeviceSize offset,
+    VkDeviceSize size, 
+    DeviceHeapAllocation* ptr);
+
   // Returns false if the given buffer was not mapped.
   b8 unmapVkBuffer(DeviceHeapAllocation* ptr);
+
   b8 flushMappedVkBuffer(
     VkDeviceSize offset,
     VkDeviceSize size,
@@ -499,6 +505,7 @@ struct Vulkan
 
   b8 mapCopyAndFlushVkBufferMemory(
     void* data, 
+    VkDeviceSize offset,
     VkDeviceSize size,
     DeviceHeapAllocation* ptr);
 

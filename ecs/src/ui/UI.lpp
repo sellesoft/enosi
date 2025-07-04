@@ -45,7 +45,7 @@ b8 UI::init(InitParams& params)
     *renderer,
     {
       .data       = nullptr,
-      .size       = 4 * sizeof(gfx::Vertex) * c_MaxVertices,
+      .size       = sizeof(gfx::Vertex) * c_MaxVertices,
       .usage      = gfx::Buffer::Usage::VertexBuffer,
       .properties = gfx::Buffer::MemoryProperty::DeviceMappable,
       .behavior   = gfx::Buffer::MappingBehavior::Occasional,
@@ -60,7 +60,7 @@ b8 UI::init(InitParams& params)
     *renderer,
     {
       .data       = nullptr,
-      .size       = 6 * sizeof(gfx::Index) * c_MaxIndices,
+      .size       = sizeof(gfx::Index) * c_MaxIndices,
       .usage      = gfx::Buffer::Usage::IndexBuffer,
       .properties = gfx::Buffer::MemoryProperty::DeviceMappable,
       .behavior   = gfx::Buffer::MappingBehavior::Occasional,

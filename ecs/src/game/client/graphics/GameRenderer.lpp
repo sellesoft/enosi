@@ -53,6 +53,8 @@ b8 GameRenderer::init(InitParams& params)
   if (isnil(scene_uniform_buffer))
     return ERROR("failed to init scene uniform buffer\n");
 
+$ if false then
+
   //init background buffers
   gfx::Vertex background_vertices[4] =
   {
@@ -90,6 +92,8 @@ b8 GameRenderer::init(InitParams& params)
 
   if (isnil(background_index_buffer))
     return ERROR("failed to init background index buffer\n");
+
+$ end
 
   quads_vertex_buffer = gfx::Buffer::create(
     renderer,
@@ -281,20 +285,9 @@ b8 GameRenderer::update(const UpdateParams& params)
       return ERROR("failed to create render target\n");
   }
 
-  if (!renderer.beginRenderPass(
-        vec2i(params.viewport.pos()),
-        vec2u(params.viewport.size()),
-        render_target,
-        0x000000ff))
-    return false;
-
   ///////////////////////////////////////////////
   // 0. Update Scene
   {
-    renderer.setViewport(params.viewport.pos(), params.viewport.size());
-    renderer.setScissor(
-      vec2i(params.viewport.pos()), vec2u(params.viewport.size()));
-
     mat3x2 proj = mat3x2::identity();
     proj.set(0, 0, EyeSys::pixels_per_meter * 2.f / (f32)params.viewport.w);
     proj.set(1, 1, EyeSys::pixels_per_meter * -2.f / (f32)params.viewport.h);
@@ -312,6 +305,17 @@ b8 GameRenderer::update(const UpdateParams& params)
     scene_uniform_buffer.copyAndFlush(renderer, &scene, sizeof(scene));
     scene_uniform_buffer.unmap(renderer);
   }
+
+  if (!renderer.beginRenderPass(
+        vec2i(params.viewport.pos()),
+        vec2u(params.viewport.size()),
+        render_target,
+        0x000000ff))
+    return false;
+
+  renderer.setViewport(params.viewport.pos(), params.viewport.size());
+  renderer.setScissor(
+    vec2i(params.viewport.pos()), vec2u(params.viewport.size()));
 
   ///////////////////////////////////////////////
   // 1. Draw Background
