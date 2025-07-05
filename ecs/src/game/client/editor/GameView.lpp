@@ -37,8 +37,9 @@ namespace cl
 
 /* ----------------------------------------------------------------------------
  */
-b8 Editor_GameView::init(Editor* editor, AssetLoader& loader)
+b8 Editor_GameView::init(Editor* editor, gfx::Renderer& renderer)
 {
+
   return true;
 }
 
@@ -70,6 +71,17 @@ b8 Editor_GameView::update(
   {
     view_size = bounds.size();
     sim.setViewport(bounds);
+
+    render_target = gfx::RenderTarget::create(
+      renderer,
+      {
+        .format = gfx::ImageFormat::RGBA,
+        .size = vec2u(view_size),
+        .debug_name = "editor.gameview"_str,
+      });
+
+    if (isnil(render_target))
+      return ERROR("failed to create game view render target");
   }
 
   // Step the simulation if its not paused.
@@ -175,8 +187,13 @@ b8 Editor_GameView::update(
   return true;
 }
 
-void Editor_GameView::render(gfx::Renderer& renderer, cl::GameSim& sim)
+void Editor_GameView::render(
+    gfx::Renderer& renderer, 
+    cl::GameSim& sim)
 {
+  
+
+
   GameSim::RenderParams render_params = 
   {
     .renderer = renderer,

@@ -61,15 +61,13 @@ struct Editor_GameView
   // we are viewing it with.
   gfx::View view;
 
-  // Tracked view size, used to reinitialize the framebuffer and texture
-  // if the visual size of the view is ever changed.
   vec2f view_size;
 
   // The RenderTarget we will ask the game to render to in order to display
   // it in a UI quad.
   gfx::RenderTarget render_target;
 
-  b8 init(Editor* editor, AssetLoader& loader);
+  b8 init(Editor* editor, gfx::Renderer& renderer);
   void deinit(Editor* editor);
 
   b8 update(

@@ -48,6 +48,9 @@ b8 Editor::init(InitParams& params)
   if (!entity_list.init(this, params.loader))
     return ERROR("failed to load editor entity list widget\n");
 
+  if (!view.init(this, params.renderer))
+    return ERROR("failed to load editor game view\n");
+
   ui::UI::InitParams ui_params = 
   {
     .renderer = params.renderer,
@@ -186,19 +189,22 @@ $ end
 
 /* ----------------------------------------------------------------------------
  */
-b8 Editor::render(gfx::Renderer& renderer, gfx::RenderTarget render_target)
+b8 Editor::render(const RenderParams& params)
 {
+  // Render the game view.
+  view.render(params.renderer, params.sim);
+
   // TODO(sushi) separate rendering for Editor and UI into explicit functions.
-  if (!client->renderer.beginRenderPass(
+  if (!params.renderer.beginRenderPass(
         vec2i(0,0),
         vec2u(client->window.size),
-        render_target,
+        params.target,
         0x000000ff))
     return ERROR("failed to begin render pass for editor\n");
 
-  ui.render(renderer, Rect::from({0,0}, vec2f(client->window.size)));
+  ui.render(params.renderer, Rect::from({0,0}, vec2f(client->window.size)));
 
-  renderer.endRenderPass();
+  params.renderer.endRenderPass();
 
   return true;
 }

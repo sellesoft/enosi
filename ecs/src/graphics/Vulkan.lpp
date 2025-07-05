@@ -2371,7 +2371,6 @@ b8 Vulkan::endSingleUseCommandBuffer(VkCommandBuffer command_buffer)
 b8 Vulkan::mapVkBuffer(
     void** out,
     VkDeviceSize offset,
-    VkDeviceSize size,
     DeviceHeapAllocation* ptr)
 {
   DeviceHeapBlock* block = getHeapBlock(ptr);
@@ -2380,18 +2379,16 @@ b8 Vulkan::mapVkBuffer(
     @vkc(vkMapMemory(
         device, 
         getDeviceMemory(ptr),
-        offset,
-        size,
+        0,
+        VK_WHOLE_SIZE,
         0,
         &block->mapped_data))
-
-    DEBUG("mapping buffer at offset ", offset, " size ", size, '\n');
   }
 
   block->mapped_count += 1;
 
   if (out) 
-    *out = block->mapped_data;
+    *out = (u8*)block->mapped_data + offset;
 
   return true;
 }
@@ -2457,7 +2454,6 @@ b8 Vulkan::mapCopyAndFlushVkBufferMemory(
   if (!mapVkBuffer(
         &mapped,
         offset,
-        size,
         ptr))
     return false;
   defer { unmapVkBuffer(ptr); };
@@ -2530,7 +2526,6 @@ b8 Vulkan::stageVkBufferMemory(
   if (!mapVkBuffer(
         &staging_data,
         staging_ptr->aligned_offset,
-        buffer_required_size,
         staging_ptr))
     return ERROR("failed to map staging buffer\n");
 
@@ -2581,7 +2576,6 @@ b8 Vulkan::stageVkImageMemory(
   if (!mapVkBuffer(
         &staging_data,
         staging_ptr->aligned_offset,
-        size,
         staging_ptr))
     return ERROR("failed to map staging buffer\n");
 

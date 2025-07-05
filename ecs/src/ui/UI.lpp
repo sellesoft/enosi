@@ -21,7 +21,7 @@ using namespace iro;
 namespace ui
 {
 
-@log.ger(ui, Info)
+@log.ger(ui, Trace)
 
 static const CombinedItemId c_root_id = {"_ui_root_"_fid.val};
 
@@ -368,7 +368,6 @@ void UI::render(gfx::Renderer& renderer, Rect viewport)
     ZoneScoped;
     ZoneName(debug_layer_name, debug_layer_name.len);
 
-    @dbgBreak;
     for (Cmd* cmd = layer->cmd_list.first;
          cmd; cmd = cmd->next)
     {
@@ -1534,8 +1533,8 @@ void QuadDrawCmd::execute(UI& ui, gfx::Renderer& renderer)
   //             not bog down the performance of UI code.
   vec2i drawn = 
     gfx::putFilledRect(
-      (gfx::Vertex*)ui.vertex_buffer.getMappedData(renderer),
-      (gfx::Index*)ui.index_buffer.getMappedData(renderer),
+      (gfx::Vertex*)ui.vertex_buffer.mapped_data,
+      (gfx::Index*)ui.index_buffer.mapped_data,
       ui.draw_counts,
       bounds.pos(),
       bounds.size(),
@@ -1562,8 +1561,8 @@ void LineDrawCmd::execute(UI& ui, gfx::Renderer& renderer)
 {
   vec2i drawn = 
     gfx::putLine(
-      (gfx::Vertex*)ui.vertex_buffer.getMappedData(renderer),
-      (gfx::Index*)ui.index_buffer.getMappedData(renderer),
+      (gfx::Vertex*)ui.vertex_buffer.mapped_data,
+      (gfx::Index*)ui.index_buffer.mapped_data,
       ui.draw_counts,
       start,
       end,
@@ -1617,8 +1616,8 @@ void BorderDrawCmd::execute(UI& ui, gfx::Renderer& renderer)
 
   vec2i drawn = 
     gfx::putBorders(
-      (gfx::Vertex*)ui.vertex_buffer.getMappedData(renderer),
-      (gfx::Index*)ui.index_buffer.getMappedData(renderer),
+      (gfx::Vertex*)ui.vertex_buffer.mapped_data,
+      (gfx::Index*)ui.index_buffer.mapped_data,
       ui.draw_counts,
       vec4f(1,1,1,1),
       bounds.pos(),

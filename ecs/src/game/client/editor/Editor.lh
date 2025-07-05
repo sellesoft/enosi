@@ -65,7 +65,14 @@ struct Editor
   }
 
   b8 update(cl::GameSim& sim);
-  b8 render(gfx::Renderer& renderer, gfx::RenderTarget render_target);
+
+  struct RenderParams
+  {
+    cl::GameSim& sim;
+    gfx::Renderer& renderer;
+    gfx::RenderTarget target;
+  };
+  b8 render(const RenderParams& params);
 
   void putUI(cl::GameSim& sim, const EditorSkinDef& skin);
 

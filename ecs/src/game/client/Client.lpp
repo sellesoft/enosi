@@ -176,7 +176,9 @@ b8 Client::update()
   // TODO(sushi) I would like to get rid of this check for window resizing
   //             but not having it allows the window size and swapchain 
   //             size to get out of sync which causes validation to 
-  //             FREAK out so.
+  //             FREAK out so. This also causes a very annoying flashing 
+  //             effect while resizing the window as we just draw nothing 
+  //             while that's happening.
   if (!window.size_changed && renderer.beginFrame())
   {
     gfx::RenderTarget swapchain_target;
@@ -185,7 +187,14 @@ b8 Client::update()
 
     if (editor_active)
     {
-      editor.render(renderer, swapchain_target);
+      cl::Editor::RenderParams render_params = 
+      {
+        .sim = sim,
+        .renderer = renderer,
+        .target = swapchain_target,
+      };
+
+      editor.render(render_params);
     }
     else
     {

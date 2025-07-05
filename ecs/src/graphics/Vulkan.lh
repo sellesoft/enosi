@@ -536,7 +536,6 @@ struct Vulkan
   b8 mapVkBuffer(
     void** out, 
     VkDeviceSize offset,
-    VkDeviceSize size, 
     DeviceHeapAllocation* ptr);
 
   // Returns false if the given buffer was not mapped.

@@ -137,6 +137,7 @@ struct Buffer
   static constexpr u64 FLUSH_WHOLE_BUFFER = MAX_U64;
 
   void* handle = nullptr;
+  void* mapped_data = nullptr;
 
   struct CreateParams
   {
@@ -154,15 +155,6 @@ struct Buffer
 
   void* map(Renderer& renderer);
   void unmap(Renderer& renderer);
-
-  // TODO(sushi) this sucks, but this is meant to be passed around like 
-  //             a handle at the moment. Eventually this and the related 
-  //             'low-level' types should be managed by something and Id 
-  //             types for them passed around.
-  // To avoid using this, save the pointer retuned by map() and use it until
-  // you call unmap(). I plan to eventually write a helper thing that avoids
-  // needing to use this type directly.
-  void* getMappedData(Renderer& renderer) const;
 
   // If size is FLUSH_WHOLE_BUFFER, the range from offset to the end
   // of the buffer is flushed.
