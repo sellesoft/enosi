@@ -61,6 +61,8 @@ struct AssetRef
 
   static AssetRef invalid() { return {{}, nullptr}; }
 
+  void invalidate() { *this = invalid(); }
+
   b8 isValid() const
   {
     return asset != nullptr && asset->data != nullptr;

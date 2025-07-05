@@ -34,6 +34,12 @@ void AssetMgr::deinit()
 {
   INFO("deinitializing AssetMgr\n");
 
+// TODO(sushi) properly clean up assets. Currently we lose a lot of them,
+//             specifically when loading gfx resource defs because they 
+//             do not store the loaded source asset data used to find the 
+//             asset desired. I'm not going to do this now because I plan to
+//             rework how all of that works soon.
+$ if false then
   if (!map.isEmpty())
   {
     ERROR("AssetMgr::deinit called but Assets still exist!\n",
@@ -45,6 +51,7 @@ void AssetMgr::deinit()
 
     assert(!"AssetMgr::deinit called while Assets are still active!");
   }
+$ end
   
   map.deinit();
 
@@ -59,8 +66,11 @@ Asset* AssetMgr::allocateAsset(String name)
   assert(map.find(name_hash) == nullptr && 
     "a Asset has already been allocated with the given name");
 
-  Asset* asset = pool.pushTail()->data;
-  
+  AssetPool::Node* node = pool.pushTail();
+
+  Asset* asset = node->data;
+
+  asset->node = node;
   asset->hash = name_hash;
   asset->name = name.allocateCopy(allocator);
 
@@ -110,6 +120,28 @@ Asset* AssetMgr::loadAssetFromDisk(String name)
   assert(asset->size == file.read({(u8*)asset->data, asset->size}));
 
   return asset;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void AssetMgr::unloadAsset(Asset* asset)
+{
+// NOTE(sushi) disabling because something is currently broken in the AVL
+//             type that causes this to crash and I don't want to deal with it
+//             right now. Just want to get proper closing of the engine to 
+//             work and I'm gonna be reworking all of this pretty soon anyways.
+$ if false then
+  INFO("unloading ", asset->name, '\n');
+
+  map.remove(asset);
+
+  allocator->free(asset->data);
+  asset->size = 0;
+  asset->name = nil;
+  asset->hash = 0;
+
+  pool.remove((AssetPool::Node*)asset->node);
+$ end
 }
 
 /* ----------------------------------------------------------------------------

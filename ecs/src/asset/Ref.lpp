@@ -17,6 +17,8 @@ $$$
 
 using namespace iro;
 
+@@lpp.import "Profiling.lh"
+
 @log.ger(ref, Debug);
 
 $ local function isRefDecl(decl)
@@ -56,6 +58,8 @@ $ end)
  */
 b8 loadRef(void* ptr, const RefLoadParams& params)
 {
+  ZoneScopedN("loadRef");
+
   switch (params.type.hash())
   {
 $ local function placeLoadCall(decl, has_load)

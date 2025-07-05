@@ -68,10 +68,11 @@ b8 Editor::init(InitParams& params)
 
 /* ----------------------------------------------------------------------------
  */
-void Editor::deinit()
+void Editor::deinit(gfx::Renderer& renderer)
 {
-  view.deinit(this);
+  view.deinit(this, renderer);
   entity_list.deinit(this);
+  ui.deinit(renderer);
 }
 
 /* ----------------------------------------------------------------------------

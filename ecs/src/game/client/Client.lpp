@@ -100,7 +100,9 @@ $ end
     .sfilereg = engine->source_data_file_reg,
   };
 
+$ if false then
   @init(console.init(*engine, asset_loader, true), Console);
+$ end
 
   cl::GameSim::InitParams sim_params =
   {
@@ -126,25 +128,50 @@ $ end
 
 /* ----------------------------------------------------------------------------
  */
-b8 Client::update()
+void Client::deinit()
+{
+  // We need to wait for the device to idle to ensure that its not still using
+  // any resources during a render pass.
+  renderer.waitForDeviceIdle();
+
+  editor.deinit(renderer);
+  sim.deinit(renderer);
+$ if false then
+  console.deinit();
+$ end
+  renderer.deinit(&mem::stl_allocator, engine->assetmgr);
+  window.deinit();
+  netmgr.deinit();
+  input.deinit();
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Client::UpdateResult Client::update()
 {
   ZoneScopedN("Client::update");
 
+  UpdateResult result = {};
+
   // Prepares input state for this frame.
-  if (!input.update())
-    return ERROR("failed to update input\n");
+  input.update();
 
   // Handles OS window events and notifies the inputmgr about any input
   // events.
-  if (!window.update(input))
-    return ERROR("failed to update window\n");
+  Window::UpdateResult window_result = window.update(input);
+
+  if (window_result.closed)
+  {
+    // When the Window is closed, notify the caller that the Client is no 
+    // longer able to do anything and needs to be deinitialized.
+    result.should_deinit = true;
+    return result;
+  }
   
   // TODO(sushi) go back to handling this via events. I don't know why but 
   //             SOMEBODY got rid of that at some point.
-  if (window.size_changed)
+  if (window_result.size_changed)
     renderer.onWindowResized(vec2u(window.size));
-
-  console.updateInput(input);
 
   // Receives messages from the server.
   netmgr.receiveMessages();
@@ -155,7 +182,7 @@ b8 Client::update()
   if (editor_active)
   {
     if (!editor.update(sim))
-      return ERROR("failed to update editor\n");
+      ERROR("failed to update editor\n");
 
     //console.updateUI(window, input, ui);
   }
@@ -169,8 +196,8 @@ b8 Client::update()
       .input = sim_input,
     };
 
-    if (!sim.update(sim_params))
-      return ERROR("failed to update game sim\n");
+    if (sim.update(sim_params))
+      result.sim_updated = true;
   }
 
   // TODO(sushi) I would like to get rid of this check for window resizing
@@ -179,11 +206,11 @@ b8 Client::update()
   //             FREAK out so. This also causes a very annoying flashing 
   //             effect while resizing the window as we just draw nothing 
   //             while that's happening.
-  if (!window.size_changed && renderer.beginFrame())
+  if (!window_result.size_changed && renderer.beginFrame())
   {
     gfx::RenderTarget swapchain_target;
     if (!renderer.getSwapchainRenderTarget(&swapchain_target))
-      return ERROR("Client failed to get swapchain render target\n");
+      ERROR("Client failed to get swapchain render target\n");
 
     if (editor_active)
     {
@@ -206,19 +233,22 @@ b8 Client::update()
         .view = nullptr,
       };
 
-      sim.setViewport(Rect::from({0,0}, vec2f(window.size)));
+      if (window_result.size_changed)
+        sim.setViewport(Rect::from({0,0}, vec2f(window.size)));
 
       if (!sim.render(render_params))
-        return ERROR("failed to render game sim\n");
+        ERROR("failed to render game sim\n");
     }
 
     renderer.endFrame();
 
     if (!renderer.submitQueue())
-      return ERROR("failed to submit command queue\n");
+      ERROR("failed to submit command queue\n");
 
     if (!renderer.present())
-      return ERROR("failed to present frame\n");
+      ERROR("failed to present frame\n");
+
+    result.rendered = true;
   }
 
   // Sends messages to the server.
@@ -228,7 +258,7 @@ b8 Client::update()
   //             want to work with the Server as well.
   FrameMark;
 
-  return true;
+  return result;
 }
 
 /* ----------------------------------------------------------------------------

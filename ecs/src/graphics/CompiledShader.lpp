@@ -101,6 +101,14 @@ CompiledShader* CompiledShader::load(
 
 /* ----------------------------------------------------------------------------
  */
+void CompiledShader::unload(AssetMgr& assetmgr, Renderer& renderer)
+{
+  gfx_shader.destroy(renderer);
+  assetmgr.unloadAsset(asset.asset);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 CompiledShader::compileGLSL(CompileParams& params)
 {
   using namespace fs;

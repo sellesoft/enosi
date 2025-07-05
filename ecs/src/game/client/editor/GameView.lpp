@@ -22,6 +22,8 @@ $$$
 @@lpp.import "ui/UI.lh"
 @@lpp.import "game/client/Client.lh"
 
+@@lpp.import "Profiling.lh"
+
 #include "math/util.h"
 
 @log.ger(editor.view, Info)
@@ -45,8 +47,9 @@ b8 Editor_GameView::init(Editor* editor, gfx::Renderer& renderer)
 
 /* ----------------------------------------------------------------------------
  */
-void Editor_GameView::deinit(Editor* editor)
+void Editor_GameView::deinit(Editor* editor, gfx::Renderer& renderer)
 {
+  render_target.destroy(renderer);
 }
 
 /* ----------------------------------------------------------------------------
@@ -57,6 +60,8 @@ b8 Editor_GameView::update(
     cl::GameSim& sim, 
     const EditorSkinDef& skin)
 {
+  ZoneScopedN("Editor_GameView::update");
+
   Client& client = *editor->client;
   gfx::Renderer& renderer = client.renderer;
 
@@ -71,6 +76,8 @@ b8 Editor_GameView::update(
   {
     view_size = bounds.size();
     sim.setViewport(bounds);
+
+    render_target.destroy(renderer);
 
     render_target = gfx::RenderTarget::create(
       renderer,
@@ -107,6 +114,9 @@ b8 Editor_GameView::update(
 
   // Put a quad displaying the texture the game will render to in 
   // render().
+  // TODO(sushi) figure out if there's a way to avoid actually drawing 
+  //             the image to a quad, eg. using a frag shader to resample 
+  //             the entire thing. It tends to be quite slow.
   ui.putQuad(bounds, {render_target.set}, 0xffffffff);
 
   b8 select = false;
@@ -191,8 +201,7 @@ void Editor_GameView::render(
     gfx::Renderer& renderer, 
     cl::GameSim& sim)
 {
-  
-
+  ZoneScopedN("Editor_GameView::update");
 
   GameSim::RenderParams render_params = 
   {

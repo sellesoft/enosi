@@ -111,10 +111,6 @@ struct GameRenderer
   u32 batch_count = 0;
   u32 quad_count = 0;
 
-  gfx::Buffer external_vertex_buffer;
-  gfx::Buffer external_index_buffer;
-  vec2i external_counts = {};
-
   gfx::Pipeline quad_pipeline;
   gfx::PipelineDefRef quad_pipeline_defref;
 };

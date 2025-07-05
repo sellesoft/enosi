@@ -41,7 +41,7 @@ struct GameSim : SharedGameSim
   Rect viewport;
 
   b8 init(InitParams& params);
-  void deinit();
+  void deinit(gfx::Renderer& renderer);
 
   struct UpdateParams : SharedGameSim::UpdateParams
   {

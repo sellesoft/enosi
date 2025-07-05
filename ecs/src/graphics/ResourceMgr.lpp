@@ -27,10 +27,18 @@ b8 ResourceMgr::init()
 
 /* ----------------------------------------------------------------------------
  */
-void ResourceMgr::deinit()
+void ResourceMgr::deinit(AssetMgr& assetmgr, gfx::Renderer& renderer)
 {
+  for (auto& texture : textures)
+    texture.resource.unload(assetmgr, renderer);
   textures.deinit();
+
+  for (auto& shader : shaders)
+    shader.resource.unload(assetmgr, renderer);
   shaders.deinit();
+  
+  for (auto& font : fonts)
+    font.resource.unload(assetmgr, renderer);
   fonts.deinit();
 }
 

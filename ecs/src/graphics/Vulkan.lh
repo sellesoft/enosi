@@ -19,6 +19,7 @@ $ require "common"
 #include "iro/containers/Array.h"
 #include "iro/containers/FixedPool.h"
 #include "iro/containers/StackArray.h"
+#include "iro/containers/Pool.h"
 #include "iro/memory/Bump.h"
 
 #include "math/vec.h"
@@ -70,7 +71,11 @@ struct DeviceHeap
   VkDeviceSize alignment;
   VkDeviceSize preferred_block_size;
   Array<DeviceHeapBlock> blocks;
-  Array<DeviceHeapAllocation> allocations;
+  // NOTE(sushi) this is a Pool for now, as our Device* types need to hold 
+  //             a pointer to them. Without this, the movement caused by 
+  //             deallocation can cause those pointers to become invalid.
+  // TODO(sushi) rework device memory management eventually.
+  Pool<DeviceHeapAllocation> allocations;
   Array<DeviceHeapAllocation> free_chunks;
 };
 
@@ -223,7 +228,7 @@ struct VirtualFrame
 };
 
 // The number of virtual frames we will allow to be 'in-flight'.
-static const u32 max_vframes = 3;
+static const u32 max_vframes = 2;
 
 /* ============================================================================
  *  All state relevant to the Vulkan graphics backend as well as its 
@@ -344,6 +349,7 @@ struct Vulkan
   };
 
   b8 init(const InitParams& params);
+  void deinit(mem::Allocator* allocator);
 
   // Initialization functions.
   // Note that these are declared in the same order they should be called in
@@ -352,21 +358,34 @@ struct Vulkan
   b8 initInstance(
     mem::Allocator* allocator,
     mem::LenientBump& temp_allocator);
+  void deinitInstance();
+
   // NOTE(sushi) implemented in platform backend files, eg. Vulkan_Linux.lpp
   b8 initSurface(Window& window);
+  void deinitSurface();
+
   b8 initPhysicalDevice(
     mem::Allocator* allocator,
     mem::LenientBump& temp_allocator);
+
   b8 initLogicalDevice();
+  void deinitLogicalDevice();
+
   b8 initCommandPool();
+  void deinitCommandPool();
+
   b8 initVirtualFrames();
+  void deinitVirtualFrames();
+
   b8 initDescriptorPools();
+  void deinitDescriptorPools();
 
   b8 initSwapchain();
   void deinitSwapchain();
   b8 recreateSwapchain();
 
   b8 initPipelineCache();
+  void deinitPipelineCache();
 
   // Implemented in platform files.
   VkFormat getPlatformDesiredSurfaceFormat();

@@ -60,8 +60,10 @@ b8 GameMgr::init(InitParams& params)
 
 /* ----------------------------------------------------------------------------
  */
-void GameMgr::deinit()
+void GameMgr::deinit(gfx::Renderer& renderer)
 {
+  entsysmgr.deinit();
+  game_renderer.deinit(renderer);
 }
 
 /* ----------------------------------------------------------------------------

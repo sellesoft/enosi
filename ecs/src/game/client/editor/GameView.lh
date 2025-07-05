@@ -68,7 +68,7 @@ struct Editor_GameView
   gfx::RenderTarget render_target;
 
   b8 init(Editor* editor, gfx::Renderer& renderer);
-  void deinit(Editor* editor);
+  void deinit(Editor* editor, gfx::Renderer& renderer);
 
   b8 update(
     Editor* editor, 

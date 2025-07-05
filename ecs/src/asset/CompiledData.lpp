@@ -56,6 +56,8 @@ $$$
 @@lpp.import "asset/AssetMgr.lh"
 @@lpp.import "asset/SourceDataFileReg.lh"
 
+@@lpp.import "Profiling.lh"
+
 /* ----------------------------------------------------------------------------
  *  Helper for searching for the proper source type of an asset when its
  *  extension is not provided by the user. I think RTR handles this now,
@@ -1065,6 +1067,8 @@ CompiledData* CompiledData::load(
     Asset** out_asset)
 {
   using namespace fs;
+
+  ZoneScopedN("CompiledData::load");
 
   PathBuffer data_path_buffer;
 

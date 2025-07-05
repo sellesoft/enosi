@@ -153,6 +153,22 @@ CompiledTexture* CompiledTexture::load(
 
 /* ----------------------------------------------------------------------------
  */
+void CompiledTexture::unload(AssetMgr& assetmgr, Renderer& renderer)
+{
+  image.destroy(renderer);
+  view.destroy(renderer);
+  sampler.destroy(renderer);
+  texture.set.destroy(renderer);
+
+  if (asset.isValid())
+  {
+    assetmgr.unloadAsset(asset.asset);
+    asset.invalidate();
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 CompiledTexture::compileFromMemory(void* pixels, CompileParams& params)
 {
   using namespace fs;

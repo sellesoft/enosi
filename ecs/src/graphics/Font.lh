@@ -140,6 +140,8 @@ struct Font
     AssetMgr& assetmgr,
     gfx::Renderer& renderer);
 
+  void unload(AssetMgr& assetmgr, Renderer& renderer);
+
   struct CompileParams
   {
     String name;

@@ -13,8 +13,11 @@ namespace gfx
 
 $ local print_success = false
 $ local print_non_error_success_as_warning = false
-$ local release_validation = true
-$ local validation = ECS_DEBUG or release_validation
+$ local release_validation = false
+$ local disable_validation = false
+$ local validation = 
+$   (ECS_DEBUG or release_validation) and 
+$   not disable_validation
 
 $ local function arrlen(arr)
   sizeof($(arr)) / sizeof($(arr)[0])
@@ -67,9 +70,9 @@ static const char* c_enabled_extensions[] =
 {
   VK_KHR_SURFACE_EXTENSION_NAME,
   c_vulkan_platform_extension,
-$ if release_validation then
+$ if validation then
   VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-$ end -- if release_validation
+$ end -- if validation
 };
 static const u32 c_enabled_extension_count = @arrlen(c_enabled_extensions);
 
@@ -452,8 +455,41 @@ $ end
       vframe.command_buffer);
   }
 
-
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Vulkan::deinit(mem::Allocator* allocator)
+{
+  for (DeviceHeap& heap : heaps)
+  {
+    for (DeviceHeapBlock& block : heap.blocks)
+    {
+      if (block.memory != VK_NULL_HANDLE)
+        vkFreeMemory(device, block.memory, &allocator_callbacks);
+    }
+
+    heap.blocks.destroy();
+    heap.allocations.deinit();
+    heap.free_chunks.destroy();
+  }
+
+  deinitPipelineCache();
+  deinitSwapchain();
+    
+  // NOTE(sushi) we manaually destroy the swapchain here because 
+  //             deinitSwapchain is currently designed for use in recreating it
+  //             so doesn't call this (so we can pass it to swapchain creation\
+  //             to help save resources).
+  vkDestroySwapchainKHR(device, swapchain, &allocator_callbacks);
+
+  deinitDescriptorPools();
+  deinitVirtualFrames();
+  deinitCommandPool();
+  deinitLogicalDevice();
+  deinitSurface();
+  deinitInstance();
 }
 
 /* ----------------------------------------------------------------------------
@@ -513,7 +549,7 @@ b8 Vulkan::initInstance(
 
   DEBUG("creating vulkan instance\n");
 
-$ if release_validation then
+$ if validation then
 
   u32 layer_count = 0;
   @vkc(vkEnumerateInstanceLayerProperties(
@@ -567,7 +603,7 @@ $ if release_validation then
     .pfnUserCallback = vkDebugCallback,
     .pUserData = this,
   };
-$ end -- if release_validation
+$ end -- if validation
 
   VkApplicationInfo app_info =
   {
@@ -582,21 +618,21 @@ $ end -- if release_validation
   VkInstanceCreateInfo create_info =
   {
     .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-$ if release_validation then
+$ if validation then
     .pNext = &debug_create_info,
-$ end -- if release_validation
+$ end -- if validation
     .pApplicationInfo = &app_info,
-$ if release_validation then
+$ if validation then
     .enabledLayerCount = c_validation_layer_count,
     .ppEnabledLayerNames = c_validation_layers,
-$ end -- if release_validation
+$ end -- if validation
     .enabledExtensionCount = c_enabled_extension_count,
     .ppEnabledExtensionNames = c_enabled_extensions,
   };
 
   @vkc(vkCreateInstance(&create_info, &allocator_callbacks, &instance))
 
-$ if release_validation then
+$ if validation then
   {
     DEBUG("creating vulkan debug messenger and utils\n");
 
@@ -644,6 +680,30 @@ $ if release_validation then
 $ end
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Vulkan::deinitInstance()
+{
+$ if validation then
+  if (debug_messenger != VK_NULL_HANDLE)
+  {
+    auto vkDestroyDebugUtilsMessengerEXT = 
+      (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
+        instance, 
+        "vkDestroyDebugUtilsMessengerEXT");
+
+    if (vkDestroyDebugUtilsMessengerEXT == nullptr)
+      ERROR("failed to retrieve proc vkDestroyDebugUtilsMessengerEXT\n");
+
+    vkDestroyDebugUtilsMessengerEXT(
+      instance, debug_messenger, &allocator_callbacks);
+  }
+$ end
+
+  if (instance != VK_NULL_HANDLE)
+    vkDestroyInstance(instance, &allocator_callbacks);
 }
 
 /* ----------------------------------------------------------------------------
@@ -753,7 +813,6 @@ b8 Vulkan::initPhysicalDevice(
         found_present_family = true;
         physical_device_present_queue_family = j;
       }
-
 
 $ local function printsupport(name)
       DEBUG("$(name): ", $(name)? "true" : "false", '\n');
@@ -867,11 +926,19 @@ $ end
       heaps[i].preferred_block_size = unit::megabytes(256);
     }
     heaps[i].blocks.init(8, allocator);
-    heaps[i].allocations.init(512, allocator);
+    heaps[i].allocations.init(allocator);
     heaps[i].free_chunks.init(8, allocator);
   }
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Vulkan::deinitSurface()
+{
+  if (surface != VK_NULL_HANDLE)
+    vkDestroySurfaceKHR(instance, surface, &allocator_callbacks);
 }
 
 /* ----------------------------------------------------------------------------
@@ -956,6 +1023,14 @@ b8 Vulkan::initLogicalDevice()
 
 /* ----------------------------------------------------------------------------
  */
+void Vulkan::deinitLogicalDevice()
+{
+  if (device != VK_NULL_HANDLE)
+    vkDestroyDevice(device, &allocator_callbacks);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 Vulkan::initCommandPool()
 {
   DEBUG("creating vulkan command pool\n");
@@ -972,6 +1047,14 @@ b8 Vulkan::initCommandPool()
     device, &create_info, &allocator_callbacks, &command_pool))
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Vulkan::deinitCommandPool()
+{
+  if (command_pool != VK_NULL_HANDLE)
+    vkDestroyCommandPool(device, command_pool, &allocator_callbacks);
 }
 
 /* ----------------------------------------------------------------------------
@@ -1013,6 +1096,21 @@ b8 Vulkan::initVirtualFrames()
 
 /* ----------------------------------------------------------------------------
  */
+void Vulkan::deinitVirtualFrames()
+{
+  for (VirtualFrame& vframe : vframes)
+  {
+    if (vframe.command_buffer_fence != VK_NULL_HANDLE)
+      destroyVkFence(vframe.command_buffer_fence);
+    if (vframe.acquire_semaphore != VK_NULL_HANDLE)
+      destroyVkSemaphore(vframe.acquire_semaphore);
+
+    TracyVkDestroy(vframe.tracy_ctx);
+  }
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 Vulkan::initDescriptorPools()
 {
   DEBUG("creating vulkan descriptor pools\n");
@@ -1029,6 +1127,14 @@ b8 Vulkan::initDescriptorPools()
     device, &create_info, &allocator_callbacks, &descriptor_pool))
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Vulkan::deinitDescriptorPools()
+{
+  if (descriptor_pool != VK_NULL_HANDLE)
+    vkDestroyDescriptorPool(device, descriptor_pool, &allocator_callbacks);
 }
 
 /* ----------------------------------------------------------------------------
@@ -1337,6 +1443,14 @@ b8 Vulkan::initPipelineCache()
 
 /* ----------------------------------------------------------------------------
  */
+void Vulkan::deinitPipelineCache()
+{
+  if (pipeline_cache != VK_NULL_HANDLE)
+    vkDestroyPipelineCache(device, pipeline_cache, &allocator_callbacks);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 u32 Vulkan::determineMemoryType(
     VkMemoryRequirements memory_requirements,
     VkMemoryPropertyFlags memory_property_flags)
@@ -1431,6 +1545,12 @@ b8 Vulkan::createVkImage(
       VK_OBJECT_TYPE_IMAGE,
       *out,
       '<', debug_name, " image>");
+
+  {
+    io::StaticBuffer<255> tmessage;
+    io::formatv(&tmessage, "VkImage ", (void*)*out, " created");
+    TracyMessage(tmessage, tmessage.len);
+  }
 
   return true;
 }
@@ -2021,7 +2141,7 @@ b8 Vulkan::createVkFence(
   @vkc(vkCreateFence(
       device,
       &info, 
-      nullptr,
+      &allocator_callbacks,
       out),
     "failed to create VkFence ", debug_name)
 
@@ -2084,7 +2204,7 @@ DeviceHeapAllocation* Vulkan::allocate(
       if (size_after_alloc < alignment)
       {
         DeviceHeapBlock& block = heap.blocks[free_chunk.block_index];
-        heap.allocations.push(free_chunk);
+        heap.allocations.add(free_chunk);
         heap.free_chunks.remove(&free_chunk);
 
         free_chunk.aligned_offset = chunk_aligned_offset;
@@ -2099,7 +2219,7 @@ DeviceHeapAllocation* Vulkan::allocate(
       {
         DeviceHeapBlock& block = heap.blocks[free_chunk.block_index];
 
-        DeviceHeapAllocation* allocation = heap.allocations.push();
+        DeviceHeapAllocation* allocation = heap.allocations.add();
         allocation->memory_type = free_chunk.memory_type;
         allocation->block_index = free_chunk.block_index;
         allocation->offset = free_chunk.offset;
@@ -2155,7 +2275,7 @@ DeviceHeapAllocation* Vulkan::allocate(
     u32 block_index = heap.blocks.len() - 1;
     DeviceHeapBlock& block = heap.blocks[block_index];
 
-    DeviceHeapAllocation* allocation = heap.allocations.push();
+    DeviceHeapAllocation* allocation = heap.allocations.add();
     allocation->memory_type = memory_type;
     allocation->block_index = block_index;
     allocation->offset = (VkDeviceSize)block.cursor;

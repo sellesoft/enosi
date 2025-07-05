@@ -89,6 +89,18 @@ $ end
 
 /* ----------------------------------------------------------------------------
  */
+void Engine::deinit()
+{
+  if (client != nullptr)
+    client->deinit();
+
+  assetmgr.deinit();
+  // TODO(sushi) eventbus.broadcast.deinit();
+  source_data_file_reg.deinit();
+}
+
+/* ----------------------------------------------------------------------------
+ */
 b8 Engine::wantHotReload()
 {
 #if ECS_HOT_RELOAD
@@ -100,24 +112,21 @@ b8 Engine::wantHotReload()
 
 /* ----------------------------------------------------------------------------
  */
-b8 Engine::update()
+Engine::UpdateResult Engine::update()
 {
+  UpdateResult result = {};
+
   iro::TimePoint time_point = iro::TimePoint::monotonic();
   frame_start_time = TimeSpan::fromSeconds(time_point.s).toSeconds()
     + TimeSpan::fromNanoseconds(time_point.ns).toSeconds();
 
   if (client)
-    client->update();
+  {
+    Client::UpdateResult client_result = client->update();
 
-  // inspector->fps->dirty = true;
-  //
-  // io::StaticBuffer<255> fps;
-  // io::format(&fps, 1.f / (TimePoint::now() - start).toSeconds());
-  // inspector->fps->set(fps.asStr());
+    if (client_result.should_deinit)
+      result.should_close = true;
+  }
 
-  // ui.root->dirty = true;
-
-  // INFO(1 / (TimePoint::monotonic() - time_point).toSeconds(), "\n");
-
-  return true;
+  return result;
 }

@@ -55,48 +55,6 @@ b8 GameRenderer::init(InitParams& params)
   if (isnil(scene_uniform_buffer))
     return ERROR("failed to init scene uniform buffer\n");
 
-$ if false then
-
-  //init background buffers
-  gfx::Vertex background_vertices[4] =
-  {
-    { vec2f(0,0), vec2f(0,1), 0xFFFFFFFF },
-    { vec2f(1,0), vec2f(1,1), 0xFFFFFFFF },
-    { vec2f(1,1), vec2f(1,0), 0xFFFFFFFF },
-    { vec2f(0,1), vec2f(0,0), 0xFFFFFFFF }
-  };
-  
-  background_vertex_buffer = gfx::Buffer::create(
-    renderer, 
-    {
-      .data       = background_vertices,
-      .size       = 4 * sizeof(gfx::Vertex),
-      .usage      = gfx::Buffer::VertexBuffer,
-      .properties = gfx::Buffer::DeviceOnly,
-      .behavior   = gfx::Buffer::Never,
-      .debug_name = "game.renderer.bg.vertex"_str,
-    });
-  if (isnil(background_vertex_buffer))
-    return ERROR("failed to init background vertex buffer\n");
-
-  gfx::Index background_indices[6] = { 0, 1, 2, 0, 2, 3 };
-  
-  background_index_buffer = gfx::Buffer::create(
-    renderer,
-    {
-      .data       = background_indices,
-      .size       = 6 * sizeof(gfx::Index),
-      .usage      = gfx::Buffer::IndexBuffer,
-      .properties = gfx::Buffer::DeviceOnly,
-      .behavior   = gfx::Buffer::Never,
-      .debug_name = "game.renderer.bg.index"_str,
-    });
-
-  if (isnil(background_index_buffer))
-    return ERROR("failed to init background index buffer\n");
-
-$ end
-
   quads_vertex_buffer = gfx::Buffer::create(
     renderer,
     {
@@ -149,21 +107,6 @@ $ end
   if (isnil(quad_pipeline))
     return ERROR("failed to initialize quad pipeline\n");
 
-  // Initialize the stars pipeline.
-  // if (!loader.load(&stars_pipeline_defref, "assets/shaders/Stars"_str))
-  //   return ERROR("failed to load stars pipeline def\n");
-  //
-  // if (!stars_pipeline.init(renderer, 0, true, *stars_pipeline_defref))
-  //   return ERROR("failed to initialize stars pipeline\n");
-
-  // Initialize the dither pipeline.
-  // if (!loader.load(&dither_pipeline_defref, "assets/shaders/Dither"_str))
-  //   return ERROR("failed to load dither pipeline def\n");
-  //
-  // if (!dither_pipeline.init(renderer, 0, true, *dither_pipeline_defref))
-  //   return ERROR("failed to initialize dither pipeline\n");
-
-
   return true;
 }
 
@@ -171,9 +114,8 @@ $ end
  */
 void GameRenderer::deinit(gfx::Renderer& renderer)
 {
+  white_texture = nil;
   scene_uniform_buffer.destroy(renderer);
-  background_vertex_buffer.destroy(renderer);
-  background_index_buffer.destroy(renderer);
   quads_vertex_buffer.destroy(renderer);
   quads_index_buffer.destroy(renderer);
   quad_pipeline.destroy(renderer);

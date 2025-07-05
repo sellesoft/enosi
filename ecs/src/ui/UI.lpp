@@ -21,7 +21,7 @@ using namespace iro;
 namespace ui
 {
 
-@log.ger(ui, Trace)
+@log.ger(ui, Info)
 
 static const CombinedItemId c_root_id = {"_ui_root_"_fid.val};
 
@@ -75,6 +75,15 @@ b8 UI::init(InitParams& params)
     return ERROR("failed to initialize persistent state manager\n");
 
   return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::deinit(gfx::Renderer& renderer)  
+{
+  pipeline.destroy(renderer);
+  vertex_buffer.destroy(renderer);
+  index_buffer.destroy(renderer);
 }
 
 /* ----------------------------------------------------------------------------

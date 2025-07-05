@@ -46,7 +46,7 @@ struct GameMgr
   };
 
   b8 init(InitParams& params);
-  void deinit();
+  void deinit(gfx::Renderer& renderer);
 
   struct UpdateParams
   { 

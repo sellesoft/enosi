@@ -38,10 +38,10 @@ b8 GameSim::init(InitParams& params)
 
 /* ----------------------------------------------------------------------------
  */
-void GameSim::deinit()
+void GameSim::deinit(gfx::Renderer& renderer)
 {
   SharedGameSim::deinit();
-  gamemgr.deinit();
+  gamemgr.deinit(renderer);
 }
 
 /* ----------------------------------------------------------------------------

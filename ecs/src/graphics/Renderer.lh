@@ -51,7 +51,9 @@ struct Renderer
   };
 
   b8 init(InitParams& params);
-  b8 deinit();
+  void deinit(mem::Allocator* allocator, AssetMgr& assetmgr);
+
+  void waitForDeviceIdle();
 
   b8 beginFrame();
   void endFrame(); 
@@ -70,12 +72,7 @@ struct Renderer
   b8 beginRenderPass(
     vec2i render_area_pos,
     vec2u render_area_size,
-    RenderTarget target,
-    Color clear_color);
-
-  b8 beginRenderPassOverSwapchainImage(
-    vec2i render_area_pos,
-    vec2u render_area_size,
+    RenderTarget& target,
     Color clear_color);
 
   void endRenderPass();

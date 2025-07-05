@@ -69,7 +69,14 @@ struct Engine
   void deinit();
 
   b8 wantHotReload();
-  b8 update();
+
+  struct UpdateResult
+  {
+    // Something has caused the Engine to want to close and exit the process.
+    b8 should_close = false;
+  };
+
+  UpdateResult update();
 
   template<typename E, typename S>
   void subscribeToBroadcast(S* sub, void (S::* in)(E&))

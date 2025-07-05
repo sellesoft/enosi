@@ -84,6 +84,24 @@ b8 Renderer::init(InitParams& params)
 
 /* ----------------------------------------------------------------------------
  */
+void Renderer::deinit(mem::Allocator* allocator, AssetMgr& assetmgr)
+{
+  default_ubo_set_layout.destroy(*this);
+  default_sampler_set_layout.destroy(*this);
+  resource_mgr.deinit(assetmgr, *this);
+  vk->deinit(allocator);
+  allocator->free(vk);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::waitForDeviceIdle()
+{
+  vkDeviceWaitIdle(vk->device);
+}
+
+/* ----------------------------------------------------------------------------
+ */
 static VkClearValue colorToVkClearValue(Color color)
 {
   VkClearValue clear_value = {};
@@ -128,10 +146,6 @@ b8 Renderer::beginFrame()
 
   vk->state.command_buffer = vframe->command_buffer;
 
-  io::StaticBuffer<255> tmessage;
-  io::formatv(&tmessage, "beginning frame with vframe ", vk->current_vframe);
-  TracyMessage(tmessage, tmessage.len);
-
   // Ensure the command buffer is in the initial state.
   vkResetCommandBuffer(vk->state.command_buffer, 0);
 
@@ -152,10 +166,6 @@ void Renderer::endFrame()
     ERROR("attempt to end the frame before it was begun\n");
     return;
   }
-
-  io::StaticBuffer<255> tmessage;
-  io::formatv(&tmessage, "ending frame with vframe ", vk->current_vframe);
-  TracyMessage(tmessage, tmessage.len);
 
   // Prepare the current swapchain image for presentation.
   // This is currently assuming that the swapchain image had a render pass
@@ -250,7 +260,7 @@ static b8 beginRenderPassVk(
 b8 Renderer::beginRenderPass(
     vec2i render_area_pos,
     vec2u render_area_size,
-    RenderTarget target,
+    RenderTarget& target,
     Color clear_color)
 {
   if (isnil(target.image))
@@ -267,28 +277,13 @@ b8 Renderer::beginRenderPass(
     ? (VkImage)target.image.handle
     : ((DeviceImage*)target.image.handle)->handle;
 
+  // TODO(sushi) pull back in here this is from other times.
   return beginRenderPassVk(
     vk,
     render_area_pos,
     render_area_size,
     image,
     (VkImageView)target.view.handle,
-    clear_color);
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 Renderer::beginRenderPassOverSwapchainImage(
-    vec2i render_area_pos,
-    vec2u render_area_size,
-    Color clear_color)
-{
-  return beginRenderPassVk(
-    vk,
-    render_area_pos,
-    render_area_size,
-    vk->swapchain_buffers[next_image].image,
-    vk->swapchain_buffers[next_image].view,
     clear_color);
 }
 

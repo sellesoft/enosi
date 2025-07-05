@@ -78,6 +78,8 @@ struct CompiledTexture
     AssetMgr& assetmgr,
     Renderer& renderer);
 
+  void unload(AssetMgr& assetmgr, Renderer& renderer);
+
   struct CompileParams
   {
     String           name;

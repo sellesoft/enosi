@@ -54,8 +54,6 @@ struct Window
 
   CursorMode cursor_mode;
 
-  b8 size_changed;
-
   // Initializes whatever backend is being used to display windows.
   static b8 initializeBackend();
 
@@ -67,7 +65,29 @@ struct Window
   b8 init(Engine& eng, String title, InputMgr& inputmgr);
   void deinit();
 
-  b8 update(InputMgr& input);
+  struct UpdateResult
+  {
+    // If any events were retrieved this frame.
+    b8 got_event;
+
+    // User has closed this Window.
+    // When this occurs, the Window needs to be cleaned up and update 
+    // should no longer be called as its likely the X11 connection will
+    // have been closed as well and further calls to it will crash.
+    b8 closed;
+
+    // The focus state changed this frame. Use the 'focus' member field to 
+    // determine if it was gained or lost.
+    b8 focus_changed;
+
+    // The window's size was changed this frame.
+    b8 size_changed;
+
+    // An error occurred.
+    b8 error;
+  };
+
+  UpdateResult update(InputMgr& input);
   
   void setCursorPosition(s32 x, s32 y);
 

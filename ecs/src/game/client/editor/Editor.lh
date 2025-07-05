@@ -57,7 +57,7 @@ struct Editor
   };
 
   b8   init(InitParams& params);
-  void deinit();
+  void deinit(gfx::Renderer& renderer);
 
   f32 getTimer() const 
   { 
@@ -70,7 +70,7 @@ struct Editor
   {
     cl::GameSim& sim;
     gfx::Renderer& renderer;
-    gfx::RenderTarget target;
+    gfx::RenderTarget& target;
   };
   b8 render(const RenderParams& params);
 

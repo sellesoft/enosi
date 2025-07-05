@@ -52,6 +52,10 @@ b8 Window::initializeBackend()
   x11.hidden_cursor = XcursorImageLoadCursor(display, native);
   XcursorImageDestroy(native);
 
+  x11.atoms.wm_state = XInternAtom(display, "WM_STATE", false);
+  x11.atoms.wm_protocols = XInternAtom(display, "WM_PROTOCOLS", false);
+  x11.atoms.wm_delete_window = XInternAtom(display, "WM_DELETE_WINDOW", false);
+
   // TODO(sushi) custom cursors
   return true;
 }
@@ -67,7 +71,8 @@ static int window_event_masks =
   | LeaveWindowMask
   | PointerMotionMask // mouse movement event
   | StructureNotifyMask // window change events
-  | FocusChangeMask;
+  | FocusChangeMask
+  | ClientMessage;
 
 /* ----------------------------------------------------------------------------
  */
@@ -166,6 +171,16 @@ b8 Window::init(Engine& eng, String title, InputMgr& inputmgr)
     (u32*)&size.x,(u32*)&size.y,
     &bw, &d);
 
+  // Ask the Window Manager to notify us when the user requests that the 
+  // window be closed.
+  Atom atoms[] = 
+  {
+    x11.atoms.wm_delete_window,
+  };
+  
+  if (0 == XSetWMProtocols(display, window, atoms, 1))
+    return ERROR("failed to set WM protocols\n");
+
   XMapRaised(display, window);
 
   return true;
@@ -173,15 +188,47 @@ b8 Window::init(Engine& eng, String title, InputMgr& inputmgr)
 
 /* ----------------------------------------------------------------------------
  */
-b8 Window::update(InputMgr& input)
+void Window::deinit()
+{
+  XDestroyWindow(x11.display, (X11Window)handle);
+}
+
+/* ----------------------------------------------------------------------------
+ */
+Window::UpdateResult Window::update(InputMgr& input)
 {
   ZoneScoped;
 
-  size_changed = false;
+  UpdateResult result = {};
+
+  if (handle == nullptr)
+  {
+    ERROR("attempt to update a Window with a null handle\n");
+    result.error = true;
+    return result;
+  }
 
   XEvent event;
   for (;;)
   {
+    // NOTE(sushi) we have to check ClientMessage separately, because
+    //             XCheckWindowEvent does not report events that do not have 
+    //             a mask value.
+    if (XCheckTypedWindowEvent(
+          x11.display, 
+          (X11Window)handle, 
+          ClientMessage,
+          &event))
+    {
+      if (event.xclient.message_type == x11.atoms.wm_protocols &&
+          event.xclient.data.l[0] == x11.atoms.wm_delete_window)
+      {
+        result.got_event = true;
+        result.closed = true;
+        break;
+      }
+    }
+
     b8 got_event = 
       XCheckWindowEvent(
         x11.display, 
@@ -192,13 +239,17 @@ b8 Window::update(InputMgr& input)
     if (!got_event)
       break;
 
+    result.got_event = true;
+
     switch (event.type)
     {
     case FocusIn:
+      result.focus_changed = true;
       focused = true;
       break;
 
     case FocusOut:
+      result.focus_changed = true;
       focused = false;
       break;
 
@@ -270,17 +321,15 @@ $ map = nil
         size.x = cev.width;
         size.y = cev.height;
 
-        size_changed = true;
+        result.size_changed = true;
 
-        INFO("size change\n");
-        
         raise<WindowResized>( *eng, { vec2f(size) });
       }
       break;
     }
   }
 
-  return true;
+  return result;
 }
 
 $$$

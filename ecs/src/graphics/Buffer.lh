@@ -150,11 +150,14 @@ struct Buffer
   };
 
   static Buffer create(Renderer& renderer, const CreateParams& params);
-
   void destroy(Renderer& renderer);
 
   void* map(Renderer& renderer);
   void unmap(Renderer& renderer);
+
+  // Stages memory for a DeviceLocal buffer. 'offset' is into the 
+  // gpu buffer, not the provided data.
+  void stage(Renderer& renderer, void* data, u32 offset, u32 size);
 
   // If size is FLUSH_WHOLE_BUFFER, the range from offset to the end
   // of the buffer is flushed.

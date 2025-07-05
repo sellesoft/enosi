@@ -24,22 +24,6 @@ static Logger logger =
 @@lpp.import "Profiling.lh"
 
 /* ----------------------------------------------------------------------------
- *  The reason we have this wrapper is to more easily support hot-reloading
- *  a single function with hreload w/o having to do the union function
- *  pointer hack that is often seen elsewhere in the codebase. This function,
- *  when hotreloading is enabled, is passed to hreload since its the primary
- *  function we call into in main, and thus is the only one we have to reload.
- *
- *  TODO(sushi) this is no longer relevant as I've since fixed the performance
- *              issues with reloading all functions, so reorganize this 
- *              sometime.
- */
-b8 updateEngine(Engine* engine)
-{
-  return engine->update();
-}
-
-/* ----------------------------------------------------------------------------
  */
 void doReload(hr::Reloader* r)
 {
@@ -144,10 +128,7 @@ $ end
   }
 
 #if ECS_HOT_RELOAD
-  void* reload_funcs[] = { (void*)&updateEngine, };
-
-  hr::Reloader* reloader =
-    hr::createReloader(Slice<void*>::from(reload_funcs, 1));
+  hr::Reloader* reloader = hr::createReloader({});
 #endif
 
   Engine engine = { .launch_args = launch_args };
@@ -164,7 +145,13 @@ $ end
     if (engine.wantHotReload())
       doReload(reloader);
 #endif
-    if (!updateEngine(&engine))
+    Engine::UpdateResult engine_result = engine.update();
+
+    if (engine_result.should_close)
       break;
   }
+
+  engine.deinit();
+
+  return 0;
 }

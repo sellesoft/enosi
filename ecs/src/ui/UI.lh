@@ -364,7 +364,7 @@ struct UI
   };
 
   b8   init(InitParams& params);
-  void deinit();
+  void deinit(gfx::Renderer& renderer);
 
   struct FrameParams
   {
@@ -522,8 +522,6 @@ struct UI
   Rect viewport = {};
 
   // Graphics stuff.
-  gfx::Shader vertex_shader;
-  gfx::Shader fragment_shader;
   gfx::Pipeline pipeline;
   gfx::PipelineDefRef pipeline_defref;
 

@@ -211,6 +211,9 @@ void Buffer::destroy(Renderer& r)
 
   auto* internal_buffer = (DeviceBuffer*)handle;
 
+  if (internal_buffer->set != VK_NULL_HANDLE)
+    r.vk->deallocateVkDescriptorSet(internal_buffer->set);
+
   // Unmapping when this is not mapped is safe and handled in this call.
   r.vk->unmapVkBuffer(internal_buffer->ptr);
   r.vk->destroyVkBuffer(internal_buffer->handle);
