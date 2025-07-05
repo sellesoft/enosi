@@ -34,7 +34,6 @@ struct Client
 {
   Engine* engine;
 
-  // Client only systems.
   cl::Console console;
   InputMgr input;
   cl::NetMgr netmgr;
@@ -45,12 +44,6 @@ struct Client
   cl::Editor editor;
 
   gfx::Texture white_texture;
-
-  gfx::Buffer vertex_buffer;
-  gfx::Buffer index_buffer;
-
-  gfx::PipelineDefRef pipeline_defref;
-  gfx::Pipeline pipeline;
 
   b8 editor_active = false;
 

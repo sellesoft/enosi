@@ -38,6 +38,8 @@ struct Editor
 
   b8 paused = false;
 
+  ui::UI ui;
+
   enum class Tool
   {
     None,
@@ -46,7 +48,15 @@ struct Editor
 
   Tool active_tool = Tool::None;
 
-  b8   init(Client* client, AssetLoader& loader);
+  struct InitParams
+  {
+    Client& client;
+    AssetLoader& loader;
+    gfx::Texture white_texture;
+    gfx::Renderer& renderer;
+  };
+
+  b8   init(InitParams& params);
   void deinit();
 
   f32 getTimer() const 
@@ -54,15 +64,16 @@ struct Editor
     return (TimePoint::monotonic() - start_time).toSeconds(); 
   }
 
-  b8 update(ui::UI& ui, cl::GameSim& sim);
+  b8 update(cl::GameSim& sim);
+  b8 render(gfx::Renderer& renderer, gfx::RenderTarget render_target);
 
-  void putUI(ui::UI& ui, cl::GameSim& sim, const EditorSkinDef& skin);
+  void putUI(cl::GameSim& sim, const EditorSkinDef& skin);
 
   Editor_GameView view;
   Editor_EntityList entity_list;
 
   // Places the left tool panel.
-  void putToolPanel(ui::UI& ui, const EditorSkinDef& skin);
+  void putToolPanel(const EditorSkinDef& skin);
 
   struct MapTool
   {
@@ -70,7 +81,7 @@ struct Editor
   };
 
   MapTool tool_map;
-  void putMapTool(ui::UI& ui, const EditorSkinDef& skin);
+  void putMapTool(const EditorSkinDef& skin);
 };
 
 }

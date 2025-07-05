@@ -17,6 +17,8 @@ $ require "common"
 @@lpp.import "game/shared/map/Map.sys.lh"
 @@lpp.import "game/shared/Eye.sys.lh"
 
+@@lpp.import "Profiling.lh"
+
 #include "iro/Logger.h"
 #include "iro/time/Time.h"
 
@@ -101,13 +103,16 @@ $ end
       .data       = nullptr,
       .size       = MAX_QUADS * 4 * sizeof(gfx::Vertex),
       .usage      = gfx::Buffer::VertexBuffer,
-      .properties = gfx::Buffer::DeviceMappable,
-      .behavior   = gfx::Buffer::Occasional,
+      .properties = gfx::Buffer::HostCached,
+      .behavior   = gfx::Buffer::Persistent,
       .debug_name = "game.renderer.quads.vertex"_str,
     });
 
   if (isnil(quads_vertex_buffer))
     return ERROR("failed to init the quads vertex buffer\n");
+  
+  mapped_quads_vertex_buffer = 
+    quads_vertex_buffer.getMappedData(renderer);
 
   gfx::Index quad_indices[MAX_QUADS * 6];
   for (int i = 0, j = 0; i < 6*MAX_QUADS; j++, i += 6)
@@ -181,6 +186,8 @@ void GameRenderer::deinit(gfx::Renderer& renderer)
  */
 static void drawBatches(GameRenderer& sys, gfx::Renderer& renderer)
 {
+  ZoneScopedN("cl::GameRenderer::drawBatches");
+
   assert(sys.batch_count <= GameRenderer::MAX_BATCHES);
   assert(sys.quad_count <= GameRenderer::MAX_QUADS);
 
@@ -205,6 +212,7 @@ static void drawBatches(GameRenderer& sys, gfx::Renderer& renderer)
 
 /* ----------------------------------------------------------------------------
  */
+IRO_FORCE_INLINE
 void GameRenderer::drawQuad(
   gfx::Renderer& renderer,
   vec2f pos,
@@ -212,6 +220,8 @@ void GameRenderer::drawQuad(
   vec4f uv,
   Color color)
 {
+  ZoneScopedN("cl::GameRenderer::drawQuad");
+
   if (texture != batches[batch_count-1].texture)
   {
     if (batches[batch_count-1].quad_count > 0)
@@ -220,9 +230,9 @@ void GameRenderer::drawQuad(
       {
         // TODO(delle) investigate if this stalls
         quads_vertex_buffer.flush(renderer, 0, gfx::Buffer::FLUSH_WHOLE_BUFFER);
-        quads_vertex_buffer.unmap(renderer);
+        // quads_vertex_buffer.unmap(renderer);
         drawBatches(*this, renderer);
-        quads_vertex_buffer.map(renderer);
+        // quads_vertex_buffer.map(renderer);
       }
       else
       {
@@ -234,12 +244,39 @@ void GameRenderer::drawQuad(
     batches[batch_count-1].texture = texture;
   }
 
-  auto vp = (gfx::Vertex*)quads_vertex_buffer.getMappedData(renderer) 
-            + 4*quad_count;
-  vp[0] = { pos + vec2f(-0.f,-0.f), vec2f(uv.x,uv.w), color.rgba };
-  vp[1] = { pos + vec2f( 1.f,-0.f), vec2f(uv.z,uv.w), color.rgba };
-  vp[2] = { pos + vec2f( 1.f, 1.f), vec2f(uv.z,uv.y), color.rgba };
-  vp[3] = { pos + vec2f(-0.f, 1.f), vec2f(uv.x,uv.y), color.rgba };
+  static const vec2f offsets[4] = 
+  {
+    vec2f(-0.f,-0.f),
+    vec2f( 1.f,-0.f),
+    vec2f( 1.f, 1.f),
+    vec2f(-0.f, 1.f),
+  };
+
+  gfx::Vertex quad_verts[4] = {};
+
+  quad_verts[0].pos = pos + offsets[0];
+  quad_verts[1].pos = pos + offsets[1];
+  quad_verts[2].pos = pos + offsets[2];
+  quad_verts[3].pos = pos + offsets[3];
+
+  quad_verts[0].uv = vec2f(uv.x, uv.w);
+  quad_verts[1].uv = vec2f(uv.z, uv.w);
+  quad_verts[2].uv = vec2f(uv.z, uv.y);
+  quad_verts[3].uv = vec2f(uv.x, uv.y);
+
+  quad_verts[0].color = color.rgba;
+  quad_verts[1].color = color.rgba;
+  quad_verts[2].color = color.rgba;
+  quad_verts[3].color = color.rgba;
+
+  auto vp = (gfx::Vertex*)mapped_quads_vertex_buffer + 4*quad_count;
+  mem::copy(vp, quad_verts, 4 * sizeof(quad_verts));
+    
+
+  // vp[0] = { pos + , vec2f(uv.x,uv.w), color.rgba };
+  // vp[1] = { pos + , vec2f(uv.z,uv.w), color.rgba };
+  // vp[2] = { pos + , vec2f(uv.z,uv.y), color.rgba };
+  // vp[3] = { pos + , vec2f(uv.x,uv.y), color.rgba };
 
   batches[batch_count-1].quad_count++;
   quad_count++;
@@ -248,15 +285,15 @@ void GameRenderer::drawQuad(
   {
     // TODO(delle) investigate if this stalls
     quads_vertex_buffer.flush(renderer, 0, gfx::Buffer::FLUSH_WHOLE_BUFFER);
-    quads_vertex_buffer.unmap(renderer);
+    // quads_vertex_buffer.unmap(renderer);
     drawBatches(*this, renderer);
-    quads_vertex_buffer.map(renderer);
+    // quads_vertex_buffer.map(renderer);
   }
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 GameRenderer::update(const UpdateParams& params)
+b8 GameRenderer::render(const RenderParams& params)
 {
   // TODO(delle) We might want to sort quads by texture before
   // building their vertexes so we can produce bigger batches.
@@ -265,29 +302,17 @@ b8 GameRenderer::update(const UpdateParams& params)
   // to change the texture (this is probably the better option).
   TRACE("render.sys update\n");
 
+  ZoneScopedN("cl::GameRenderer::update");
+
   gfx::Renderer& renderer = params.renderer;
 
-  if (isnil(render_target))
-  {
-    // TODO(sushi) it would be nice to do this once in init, just creating
-    //             a RenderTarget sized for the Window and then rendering 
-    //             into it at whatever viewport size we are given, but 
-    //             I don't really wanna funnel that through to init rn.
-    render_target = gfx::RenderTarget::create(
-      renderer,
-      {
-        .format = gfx::ImageFormat::RGBA,
-        .size = vec2u(params.viewport.size()),
-        .debug_name = "game.renderer"_str,
-      });
-
-    if (isnil(render_target))
-      return ERROR("failed to create render target\n");
-  }
+  assert(notnil(params.target));
 
   ///////////////////////////////////////////////
   // 0. Update Scene
   {
+    ZoneScopedN("cl::GameRenderer update scene");
+
     mat3x2 proj = mat3x2::identity();
     proj.set(0, 0, EyeSys::pixels_per_meter * 2.f / (f32)params.viewport.w);
     proj.set(1, 1, EyeSys::pixels_per_meter * -2.f / (f32)params.viewport.h);
@@ -309,7 +334,7 @@ b8 GameRenderer::update(const UpdateParams& params)
   if (!renderer.beginRenderPass(
         vec2i(params.viewport.pos()),
         vec2u(params.viewport.size()),
-        render_target,
+        params.target,
         0x000000ff))
     return false;
 
@@ -343,10 +368,12 @@ b8 GameRenderer::update(const UpdateParams& params)
 
   renderer.bindPipeline(quad_pipeline);
   renderer.bindUniformBuffer(scene_uniform_buffer);
-  quads_vertex_buffer.map(renderer);
+  // quads_vertex_buffer.map(renderer);
 
   if (params.map)
   {
+    ZoneScopedN("cl::GameRenderer draw map tiles");
+
     MapSys& map = *params.map;
 
     u32 layer_idx = 0;
@@ -380,6 +407,8 @@ b8 GameRenderer::update(const UpdateParams& params)
 
   if (params.entmgr && params.map)
   {
+    ZoneScopedN("cl::GameRenderer draw sprites");
+
     MapSys&       map    = *params.map;
     EntityMgr&    entmgr = *params.entmgr;
     ComponentMgr& cmpmgr = entmgr.cmpmgr;
@@ -437,15 +466,13 @@ b8 GameRenderer::update(const UpdateParams& params)
   }
 
   quads_vertex_buffer.flush(renderer, 0, gfx::Buffer::FLUSH_WHOLE_BUFFER);
-  quads_vertex_buffer.unmap(renderer);
+  // quads_vertex_buffer.unmap(renderer);
   if (batch_count > 0)
   {
     drawBatches(*this, renderer);
   }
 
   renderer.endRenderPass();
-
-  renderer.prepareImageForSampling(render_target.image);
 
   return true;
 }

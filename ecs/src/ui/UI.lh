@@ -357,13 +357,9 @@ struct UI
  
   struct InitParams
   {
-    AssetMgr& assetmgr;
     gfx::Renderer& renderer;
-
     gfx::Texture white_texture;
-
     Rect viewport;
-
     AssetLoader loader;
   };
 
@@ -381,6 +377,11 @@ struct UI
 
   void beginFrame(const FrameParams& params);
   void endFrame(InputState* consumed_input = nullptr);
+
+  // NOTE(sushi) UI state is not cleared in endFrame but here, for now.
+  //             I need to clean that up later but i want to be done with 
+  //             renderer rework !
+  void render(gfx::Renderer& renderer, Rect viewport);
 
   Rect getBounds() const 
   { 
@@ -519,8 +520,6 @@ struct UI
   mem::Bump frame_allocator;
 
   Rect viewport = {};
-
-  gfx::Renderer* renderer = nullptr;
 
   // Graphics stuff.
   gfx::Shader vertex_shader;

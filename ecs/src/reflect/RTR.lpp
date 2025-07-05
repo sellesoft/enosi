@@ -5,7 +5,7 @@ $$$
 local importer = require "reflect.Importer"
 {
   patterns = { "src/**/*.lh", },
-  excludes = { "src/graphics/RendererInternal.lh" },
+  excludes = { "src/graphics/Vulkan.lh" },
 }
 $$$
 
@@ -58,7 +58,6 @@ $ end
   return nil;
 }
 $ end
-
 
 $ if decl:is(ast.Enum) then
 /* ----------------------------------------------------------------------------

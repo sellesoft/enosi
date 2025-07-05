@@ -13,6 +13,8 @@ namespace gfx
 
 $ local print_success = false
 $ local print_non_error_success_as_warning = false
+$ local release_validation = true
+$ local validation = ECS_DEBUG or release_validation
 
 $ local function arrlen(arr)
   sizeof($(arr)) / sizeof($(arr)[0])
@@ -65,9 +67,9 @@ static const char* c_enabled_extensions[] =
 {
   VK_KHR_SURFACE_EXTENSION_NAME,
   c_vulkan_platform_extension,
-$ if ECS_DEBUG then
+$ if release_validation then
   VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-$ end -- if ECS_DEBUG
+$ end -- if release_validation
 };
 static const u32 c_enabled_extension_count = @arrlen(c_enabled_extensions);
 
@@ -398,6 +400,14 @@ static void printDeviceHeapAllocation(DeviceHeapAllocation* ptr)
  */
 b8 Vulkan::init(const InitParams& params)
 {
+  // TODO(sushi) once I get around to actually setting it up, it would be 
+  //             nice to design the deinit function to be robust to Vulkan
+  //             being in an uninitialized or incomplete state so that 
+  //             init can define only one failsafe defer for the entire 
+  //             process.
+
+  window = &params.window;
+
   if (!initInstance(params.allocator, params.temp_allocator))
     return false;
 
@@ -413,16 +423,13 @@ b8 Vulkan::init(const InitParams& params)
   if (!initCommandPool())
     return false;
 
-  if (!initCommandBuffer())
+  if (!initVirtualFrames())
     return false;
 
   if (!initDescriptorPools())
     return false;
 
-  if (!initSwapchain(params.window.size, params.temp_allocator))
-    return false;
-
-  if (!initSyncObjects())
+  if (!initSwapchain())
     return false;
 
   if (!initPipelineCache())
@@ -436,227 +443,16 @@ $ end
   @initpool(shader)
   @initpool(pipeline)
 
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 Vulkan::updateSwapchain(
-    vec2i viewport_size,
-    mem::LenientBump& temp_allocator)
-{
-  VkSwapchainKHR old_swapchain = swapchain;
-
-  VkSurfaceCapabilitiesKHR capabilities;
-
-  @vkc(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
-    physical_device,
-    surface, 
-    &capabilities))
-
-  u32 format_count = 0;
-  
-  @vkc(vkGetPhysicalDeviceSurfaceFormatsKHR(
-    physical_device,
-    surface, 
-    &format_count, 
-    nullptr))
-  assert(format_count != 0 && "surface should not have been selected");
-
-  auto formats =
-    temp_allocator.allocateType<VkSurfaceFormatKHR>(format_count);
-  if (formats == nullptr)
-    return ERROR("failed to alloc memory for vulkan surface formats\n");
-
-  @vkc(vkGetPhysicalDeviceSurfaceFormatsKHR(
-    physical_device,
-    surface, 
-    &format_count, 
-    formats))
-
-  VkFormat desired_format = getPlatformDesiredSurfaceFormat();
-
-  surface_format = formats[0];
-  for (u32 i = 0; i < format_count; i++)
+  for (VirtualFrame& vframe : vframes)
   {
-    if (   formats[i].format == desired_format
-        && formats[i].colorSpace == VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT)
-    {
-      surface_format = formats[i];
-      break;
-    }
+    vframe.tracy_ctx = TracyVkContext(
+      physical_device,
+      device,
+      graphics_queue,
+      vframe.command_buffer);
   }
 
-  u32 present_mode_count = 0;
-  @vkc(vkGetPhysicalDeviceSurfacePresentModesKHR(
-    physical_device,
-    surface, 
-    &present_mode_count, 
-    nullptr))
-  assert(present_mode_count != 0 && "surface should not have been selected");
 
-  auto present_modes =
-    temp_allocator.allocateType<VkPresentModeKHR>(present_mode_count);
-  if (present_modes == nullptr)
-    return FATAL("failed to alloc memory for vulkan surface present modes\n");
-
-  @vkc(vkGetPhysicalDeviceSurfacePresentModesKHR(
-    physical_device,
-    surface, 
-    &present_mode_count, 
-    present_modes))
-
-  b8 immediate = false;
-  b8 fifo_relaxed = false;
-  b8 mailbox = false;
-  for (u32 i = 0; i < present_mode_count; i++)
-  {
-    switch (present_modes[i])
-    {
-      case VK_PRESENT_MODE_IMMEDIATE_KHR:
-        immediate = true;
-      break;
-      case VK_PRESENT_MODE_MAILBOX_KHR:
-        mailbox = true;
-        break;
-      case VK_PRESENT_MODE_FIFO_RELAXED_KHR:
-        fifo_relaxed = true;
-        break;
-    }
-  }
-
-  //TODO(delle) user settings for present mode selection
-  if (mailbox)
-  {
-    swapchain_min_image_count = 3;
-    surface_present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
-  }
-  else if (immediate)
-  {
-    swapchain_min_image_count = 1;
-    surface_present_mode = VK_PRESENT_MODE_IMMEDIATE_KHR;
-  }
-  else if (fifo_relaxed)
-  {
-    swapchain_min_image_count = 2;
-    surface_present_mode = VK_PRESENT_MODE_FIFO_RELAXED_KHR;
-  }
-  else
-  {
-    swapchain_min_image_count = 3;
-    surface_present_mode = VK_PRESENT_MODE_FIFO_KHR;
-    @log.info("selected fifo\n");
-  }
-
-  swapchain_min_image_count = 
-    max(capabilities.minImageCount,
-        min(capabilities.maxImageCount, 
-            swapchain_min_image_count));
-
-  if (capabilities.currentExtent.width != 0xFFFFFFFF)
-  {
-    surface_extent = capabilities.currentExtent;
-  }
-  else
-  {
-    //TODO(delle) user settings for resolution selection
-    surface_extent.width = 
-      max(capabilities.minImageExtent.width,
-          min(capabilities.maxImageExtent.width,
-              (u32)viewport_size.x));
-
-    surface_extent.height = 
-      max(capabilities.minImageExtent.height,
-          min(capabilities.maxImageExtent.height,
-              (u32)viewport_size.y));
-  }
-
-  u32 queue_family_indices[2] =
-  {
-    physical_device_graphics_queue_family,
-    physical_device_present_queue_family,
-  };
-
-  VkSwapchainCreateInfoKHR create_info =
-  {
-    .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-    .surface = surface,
-    .minImageCount = swapchain_min_image_count,
-    .imageFormat = surface_format.format,
-    .imageColorSpace = surface_format.colorSpace,
-    .imageExtent = surface_extent,
-    .imageArrayLayers = 1,
-    .imageUsage = 
-        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
-      | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
-    .preTransform = capabilities.currentTransform,
-    .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-    .presentMode = surface_present_mode,
-    .clipped = VK_TRUE,
-    .oldSwapchain = old_swapchain,
-  };
-
-  if (   physical_device_graphics_queue_family
-      != physical_device_present_queue_family)
-  {
-    create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-    create_info.queueFamilyIndexCount = 2;
-    create_info.pQueueFamilyIndices = queue_family_indices;
-  }
-  else
-  {
-    create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    create_info.queueFamilyIndexCount = 0;
-    create_info.pQueueFamilyIndices = nullptr;
-  }
-
-  @vkc(vkCreateSwapchainKHR(
-    device,
-    &create_info,
-    &allocator_callbacks,
-    &swapchain))
-
-  vkDestroySwapchainKHR(device, old_swapchain, &allocator_callbacks);
-
-  @vkc(vkGetSwapchainImagesKHR(
-    device,
-    swapchain,
-    &swapchain_image_count,
-    nullptr))
-
-  if (isnil(swapchain_buffers))
-    swapchain_buffers = Array<SwapchainBuffer>::create(swapchain_image_count);
-  else
-    swapchain_buffers.resize(swapchain_image_count);
-
-  VkImage swapchain_images[8];
-  assert(swapchain_image_count <= 8);
-
-  @vkc(vkGetSwapchainImagesKHR(
-    device,
-    swapchain,
-    &swapchain_image_count,
-    swapchain_images));
-  
-  io::StaticBuffer<128> image_view_name;
-  for (s32 i = 0; i < swapchain_image_count; ++i)
-  {
-    image_view_name.clear();
-    io::formatv(&image_view_name, "swapchain ", i);
-
-    auto* scb = swapchain_buffers.push(); 
-
-    scb->image = swapchain_images[i];
-
-    if (!createVkImageView(
-          &scb->view,
-          scb->image,
-          surface_format.format,
-          {},
-          image_view_name.asStr()))
-      return ERROR("failed to create swapchain ", i, " image view\n");
-  }
-    
   return true;
 }
 
@@ -717,7 +513,7 @@ b8 Vulkan::initInstance(
 
   DEBUG("creating vulkan instance\n");
 
-$ if ECS_DEBUG then
+$ if release_validation then
 
   u32 layer_count = 0;
   @vkc(vkEnumerateInstanceLayerProperties(
@@ -771,7 +567,7 @@ $ if ECS_DEBUG then
     .pfnUserCallback = vkDebugCallback,
     .pUserData = this,
   };
-$ end -- if ECS_DEBUG
+$ end -- if release_validation
 
   VkApplicationInfo app_info =
   {
@@ -786,21 +582,21 @@ $ end -- if ECS_DEBUG
   VkInstanceCreateInfo create_info =
   {
     .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
-$ if ECS_DEBUG then
+$ if release_validation then
     .pNext = &debug_create_info,
-$ end -- if ECS_DEBUG
+$ end -- if release_validation
     .pApplicationInfo = &app_info,
-$ if ECS_DEBUG then
+$ if release_validation then
     .enabledLayerCount = c_validation_layer_count,
     .ppEnabledLayerNames = c_validation_layers,
-$ end -- if ECS_DEBUG
+$ end -- if release_validation
     .enabledExtensionCount = c_enabled_extension_count,
     .ppEnabledExtensionNames = c_enabled_extensions,
   };
 
   @vkc(vkCreateInstance(&create_info, &allocator_callbacks, &instance))
 
-$ if ECS_DEBUG then
+$ if release_validation then
   {
     DEBUG("creating vulkan debug messenger and utils\n");
 
@@ -1180,18 +976,37 @@ b8 Vulkan::initCommandPool()
 
 /* ----------------------------------------------------------------------------
  */
-b8 Vulkan::initCommandBuffer()
+b8 Vulkan::initVirtualFrames()
 {
-  DEBUG("creating the vulkan command buffer\n");
-  VkCommandBufferAllocateInfo alloc_info =
-  {
-    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-    .commandPool = command_pool,
-    .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-    .commandBufferCount = 1,
-  };
+  DEBUG("creating virtual frames\n");
 
-  @vkc(vkAllocateCommandBuffers(device, &alloc_info, &command_buffer))
+  io::StaticBuffer<128> name;
+  for (s32 vframe_idx = 0; vframe_idx < max_vframes; ++vframe_idx)
+  {
+    VirtualFrame* vframe = &vframes[vframe_idx];
+
+    name.clear();
+    io::formatv(&name, "vframe ", vframe_idx);
+
+    if (!createVkCommandBuffer(
+          &vframe->command_buffer,
+          name))
+      return false;
+
+    if (!createVkFence(
+          &vframe->command_buffer_fence,
+          true, // create signaled
+          name))
+      return true;
+
+    io::StaticBuffer<255> semaphore_name;
+
+    io::formatv(&semaphore_name, name, " acquire image");
+    if (!createVkSemaphore(
+          &vframe->acquire_semaphore,
+          semaphore_name))
+      return false;
+  }
 
   return true;
 }
@@ -1218,70 +1033,264 @@ b8 Vulkan::initDescriptorPools()
 
 /* ----------------------------------------------------------------------------
  */
-b8 Vulkan::initSwapchain(
-    vec2i viewport_size,
-    mem::LenientBump& temp_allocator)
+b8 Vulkan::initSwapchain()
 {
   DEBUG("creating vulkan swapchain\n");
 
-  if (!updateSwapchain(viewport_size, temp_allocator))
-    return false;
+  DEBUG("window size: ", window->size, '\n');
 
+  vec2u viewport_size = vec2u(window->size);
+
+  mem::LenientBump temp_allocator;
+  temp_allocator.init();
+  defer { temp_allocator.deinit(); };
+
+  VkSwapchainKHR old_swapchain = swapchain;
+
+  VkSurfaceCapabilitiesKHR capabilities;
+
+  @vkc(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+    physical_device,
+    surface, 
+    &capabilities))
+
+  u32 format_count = 0;
+  
+  @vkc(vkGetPhysicalDeviceSurfaceFormatsKHR(
+    physical_device,
+    surface, 
+    &format_count, 
+    nullptr))
+  assert(format_count != 0 && "surface should not have been selected");
+
+  auto formats =
+    temp_allocator.allocateType<VkSurfaceFormatKHR>(format_count);
+  if (formats == nullptr)
+    return ERROR("failed to alloc memory for vulkan surface formats\n");
+
+  @vkc(vkGetPhysicalDeviceSurfaceFormatsKHR(
+    physical_device,
+    surface, 
+    &format_count, 
+    formats))
+
+  VkFormat desired_format = getPlatformDesiredSurfaceFormat();
+
+  surface_format = formats[0];
+  for (u32 i = 0; i < format_count; i++)
+  {
+    if (   formats[i].format == desired_format
+        && formats[i].colorSpace == VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT)
+    {
+      surface_format = formats[i];
+      break;
+    }
+  }
+
+  u32 present_mode_count = 0;
+  @vkc(vkGetPhysicalDeviceSurfacePresentModesKHR(
+    physical_device,
+    surface, 
+    &present_mode_count, 
+    nullptr))
+  assert(present_mode_count != 0 && "surface should not have been selected");
+
+  auto present_modes =
+    temp_allocator.allocateType<VkPresentModeKHR>(present_mode_count);
+  if (present_modes == nullptr)
+    return FATAL("failed to alloc memory for vulkan surface present modes\n");
+
+  @vkc(vkGetPhysicalDeviceSurfacePresentModesKHR(
+    physical_device,
+    surface, 
+    &present_mode_count, 
+    present_modes))
+
+  b8 immediate = false;
+  b8 fifo_relaxed = false;
+  b8 mailbox = false;
+  for (u32 i = 0; i < present_mode_count; i++)
+  {
+    switch (present_modes[i])
+    {
+      case VK_PRESENT_MODE_IMMEDIATE_KHR:
+        immediate = true;
+      break;
+      case VK_PRESENT_MODE_MAILBOX_KHR:
+        mailbox = true;
+        break;
+      case VK_PRESENT_MODE_FIFO_RELAXED_KHR:
+        fifo_relaxed = true;
+        break;
+    }
+  }
+
+  //TODO(delle) user settings for present mode selection
+  if (mailbox)
+  {
+    swapchain_min_image_count = 3;
+    surface_present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
+  }
+  else if (immediate)
+  {
+    swapchain_min_image_count = 1;
+    surface_present_mode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+  }
+  else if (fifo_relaxed)
+  {
+    swapchain_min_image_count = 2;
+    surface_present_mode = VK_PRESENT_MODE_FIFO_RELAXED_KHR;
+  }
+  else
+  {
+    swapchain_min_image_count = 3;
+    surface_present_mode = VK_PRESENT_MODE_FIFO_KHR;
+  }
+
+  swapchain_min_image_count = 
+    max(capabilities.minImageCount,
+        min(capabilities.maxImageCount, 
+            swapchain_min_image_count));
+
+  if (capabilities.currentExtent.width != 0xFFFFFFFF)
+  {
+    surface_extent = capabilities.currentExtent;
+  }
+  else
+  {
+    //TODO(delle) user settings for resolution selection
+    surface_extent.width = 
+      max(capabilities.minImageExtent.width,
+          min(capabilities.maxImageExtent.width,
+              (u32)viewport_size.x));
+
+    surface_extent.height = 
+      max(capabilities.minImageExtent.height,
+          min(capabilities.maxImageExtent.height,
+              (u32)viewport_size.y));
+  }
+
+  DEBUG("surface extent: ", surface_extent.width, ' ', surface_extent.height, '\n');
+
+  u32 queue_family_indices[2] =
+  {
+    physical_device_graphics_queue_family,
+    physical_device_present_queue_family,
+  };
+
+  VkSwapchainCreateInfoKHR create_info =
+  {
+    .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+    .surface = surface,
+    .minImageCount = swapchain_min_image_count,
+    .imageFormat = surface_format.format,
+    .imageColorSpace = surface_format.colorSpace,
+    .imageExtent = surface_extent,
+    .imageArrayLayers = 1,
+    .imageUsage = 
+        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+      | VK_IMAGE_USAGE_TRANSFER_DST_BIT,
+    .preTransform = capabilities.currentTransform,
+    .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+    .presentMode = surface_present_mode,
+    .clipped = VK_TRUE,
+    .oldSwapchain = old_swapchain,
+  };
+
+  if (   physical_device_graphics_queue_family
+      != physical_device_present_queue_family)
+  {
+    create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+    create_info.queueFamilyIndexCount = 2;
+    create_info.pQueueFamilyIndices = queue_family_indices;
+  }
+  else
+  {
+    create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    create_info.queueFamilyIndexCount = 0;
+    create_info.pQueueFamilyIndices = nullptr;
+  }
+
+  @vkc(vkCreateSwapchainKHR(
+    device,
+    &create_info,
+    &allocator_callbacks,
+    &swapchain))
+
+  vkDestroySwapchainKHR(device, old_swapchain, &allocator_callbacks);
+
+  @vkc(vkGetSwapchainImagesKHR(
+    device,
+    swapchain,
+    &swapchain_image_count,
+    nullptr))
+  
+  DEBUG("swapchain image count: ", swapchain_image_count, '\n');
+
+  if (isnil(swapchain_buffers))
+    swapchain_buffers = Array<SwapchainBuffer>::create(swapchain_image_count);
+
+  VkImage swapchain_images[8];
+  assert(swapchain_image_count <= 8);
+
+  @vkc(vkGetSwapchainImagesKHR(
+    device,
+    swapchain,
+    &swapchain_image_count,
+    swapchain_images));
+  
+  io::StaticBuffer<128> swapchain_name;
+  for (s32 i = 0; i < swapchain_image_count; ++i)
+  {
+    swapchain_name.clear();
+    io::formatv(&swapchain_name, "swapchain ", i);
+
+    auto* scb = swapchain_buffers.push(); 
+
+    scb->image = swapchain_images[i];
+
+    if (!createVkImageView(
+          &scb->view,
+          scb->image,
+          surface_format.format,
+          {},
+          swapchain_name.asStr()))
+      return ERROR("failed to create swapchain ", i, " image view\n");
+
+    if (!createVkSemaphore(&scb->submit_semaphore, swapchain_name))
+      return ERROR("failed to create swapchain ", i, " submit semaphore\n");
+  }
+
+  DEBUG("swapchain created with size ", viewport_size, '\n');
+    
   return true;
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 Vulkan::initSyncObjects()
+void Vulkan::deinitSwapchain()
 {
-  DEBUG("creating vulkan sync objects\n");
-
-  VkSemaphoreCreateInfo semaphore_info =
+  for (SwapchainBuffer& scb : swapchain_buffers)
   {
-    .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-  };
+    destroyVkImageView(scb.view);
+    destroyVkSemaphore(scb.submit_semaphore);
+  }
 
-  @vkc(vkCreateSemaphore(
-    device,
-    &semaphore_info,
-    &allocator_callbacks,
-    &image_acquired_semaphore))
+  swapchain_buffers.clear();
+}
 
-  debugSetObjectName(
-    VK_OBJECT_TYPE_SEMAPHORE,
-    image_acquired_semaphore, 
-    "<image acquired semaphore>");
+/* ----------------------------------------------------------------------------
+ */
+b8 Vulkan::recreateSwapchain() 
+{
+  ZoneScopedN("Vulkan::recreateSwapchain");
 
-  @vkc(vkCreateSemaphore(
-    device,
-    &semaphore_info,
-    &allocator_callbacks,
-    &render_complete_semaphore))
+  vkDeviceWaitIdle(device);
 
-  debugSetObjectName(
-    VK_OBJECT_TYPE_SEMAPHORE,
-    render_complete_semaphore, 
-    "<render complete semaphore>");
+  deinitSwapchain();
 
-  VkFenceCreateInfo fence_info = 
-  {
-    .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-    // Signal as soon as this fence is created, because we don't want to block
-    // on the first wait for fences call due to it never being signaled by the 
-    // GPU (since we haven't asked it to do anything yet).
-    .flags = VK_FENCE_CREATE_SIGNALED_BIT,
-  };
-
-  @vkc(vkCreateFence(
-    device, 
-    &fence_info, 
-    nullptr, 
-    &queue_submit_complete_fence))
-
-  debugSetObjectName(
-    VK_OBJECT_TYPE_FENCE,
-    queue_submit_complete_fence, 
-    "<queue submit complete fence>");
+  if (!initSwapchain())
+    return ERROR("failed to recreate Vulkan swapchain");
 
   return true;
 }
@@ -1351,18 +1360,27 @@ u32 Vulkan::determineMemoryType(
 
 /* ----------------------------------------------------------------------------
  */
-u32 Vulkan::acquireNextImageIndex()
+b8 Vulkan::acquireNextImageIndex(u32* out)
 {
-  u32 index = 0;
-  vkAcquireNextImageKHR(
-    device,
-    swapchain,
-    MAX_U64,
-    image_acquired_semaphore,
-    VK_NULL_HANDLE,
-    &index);
+  ZoneScopedN("Vulkan::acquireNextImageIndex");
 
-  return index;
+  VkResult result = 
+    vkAcquireNextImageKHR(
+      device,
+      swapchain,
+      MAX_U64,
+      getCurrentVirtualFrame()->acquire_semaphore,
+      VK_NULL_HANDLE,
+      out);
+
+  if (result == VK_ERROR_OUT_OF_DATE_KHR || 
+      result == VK_SUBOPTIMAL_KHR)
+  {
+    recreateSwapchain();
+    return false;
+  }
+
+  return true;
 }
 
 /* ----------------------------------------------------------------------------
@@ -1787,41 +1805,43 @@ b8 Vulkan::createVkPipeline(
   VkPipelineVertexInputStateCreateInfo vertex_input_info =
   {
     .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+    .pVertexAttributeDescriptions = nullptr,
   };
+
+  // TODO(sushi) make this parameterized and data driven.
+  VkVertexInputBindingDescription vertex_binding =
+  {
+    .binding = 0,
+    .stride = sizeof(Vertex),
+    .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+  };
+
+  static VkVertexInputAttributeDescription vertex_attributes[] =
+  {
+    {
+      .location = 0,
+      .binding = 0,
+      .format = VK_FORMAT_R32G32_SFLOAT,
+      .offset = offsetof(Vertex, pos),
+    },
+    {
+      .location = 1,
+      .binding = 0,
+      .format = VK_FORMAT_R32G32_SFLOAT,
+      .offset = offsetof(Vertex, uv),
+    },
+    {
+      .location = 2,
+      .binding = 0,
+      .format = VK_FORMAT_R8G8B8A8_UNORM,
+      .offset = offsetof(Vertex, color),
+    },
+  };
+  constexpr u32 vertex_attribute_count =
+    sizeof(vertex_attributes) / sizeof(vertex_attributes[0]);
 
   if (has_vertex_input)
   {
-    VkVertexInputBindingDescription vertex_binding =
-    {
-      .binding = 0,
-      .stride = sizeof(Vertex),
-      .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-    };
-
-    VkVertexInputAttributeDescription vertex_attributes[] =
-    {
-      {
-        .location = 0,
-        .binding = 0,
-        .format = VK_FORMAT_R32G32_SFLOAT,
-        .offset = offsetof(Vertex, pos),
-      },
-      {
-        .location = 1,
-        .binding = 0,
-        .format = VK_FORMAT_R32G32_SFLOAT,
-        .offset = offsetof(Vertex, uv),
-      },
-      {
-        .location = 2,
-        .binding = 0,
-        .format = VK_FORMAT_R8G8B8A8_UNORM,
-        .offset = offsetof(Vertex, color),
-      },
-    };
-    constexpr u32 vertex_attribute_count =
-      sizeof(vertex_attributes) / sizeof(vertex_attributes[0]);
-
     vertex_input_info.vertexBindingDescriptionCount = 1;
     vertex_input_info.pVertexBindingDescriptions = &vertex_binding;
     vertex_input_info.vertexAttributeDescriptionCount = vertex_attribute_count;
@@ -1960,6 +1980,85 @@ b8 Vulkan::createVkPipeline(
 
 /* ----------------------------------------------------------------------------
  */
+b8 Vulkan::createVkSemaphore(VkSemaphore* out, String debug_name)
+{
+  VkSemaphoreCreateInfo info = 
+  {
+    .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+  };
+
+  @vkc(vkCreateSemaphore(
+      device,
+      &info,
+      &allocator_callbacks,
+      out),
+    "failed to create VkSemaphore ", debug_name);
+
+  if (notnil(debug_name))
+    debugSetObjectName(
+      VK_OBJECT_TYPE_SEMAPHORE,
+      *out,
+      '<', debug_name, " semaphore>");
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Vulkan::createVkFence(
+    VkFence* out, 
+    b8 create_signaled,
+    String debug_name)
+{
+  VkFenceCreateInfo info = 
+  {
+    .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+  };
+  
+  if (create_signaled)
+    info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
+
+  @vkc(vkCreateFence(
+      device,
+      &info, 
+      nullptr,
+      out),
+    "failed to create VkFence ", debug_name)
+
+  if (notnil(debug_name))
+    debugSetObjectName(
+      VK_OBJECT_TYPE_FENCE,
+      *out,
+      '<', debug_name, " fence>");
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Vulkan::createVkCommandBuffer(VkCommandBuffer* out, String debug_name)
+{
+  VkCommandBufferAllocateInfo alloc_info =
+  {
+    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+    .commandPool = command_pool,
+    .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+    .commandBufferCount = 1,
+  };
+
+  @vkc(vkAllocateCommandBuffers(device, &alloc_info, out));
+
+  if (notnil(debug_name))
+    debugSetObjectName(
+      VK_OBJECT_TYPE_COMMAND_BUFFER,
+      *out,
+      '<', debug_name, " command buffer>");
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 DeviceHeapAllocation* Vulkan::allocate(
   u32 memory_type,
   VkMemoryRequirements memory_requirements)
@@ -2086,16 +2185,6 @@ void Vulkan::deallocate(DeviceHeapAllocation* ptr)
   if (ptr == nullptr)
     return;
 
-  @log.debug "<<-END
-    device memory DEallocation:
-         memory_type: $(ptr->memory_type)
-         block_index: $(ptr->block_index)
-              offset: $(ptr->offset)
-                size: $(ptr->size)
-      aligned_offset: $(ptr->aligned_offset)
-        aligned_size: $(ptr->aligned_size)
-    END";
-
   DeviceHeap& heap = heaps[ptr->memory_type];
   DeviceHeapBlock& block = heap.blocks[ptr->block_index];
 
@@ -2159,6 +2248,35 @@ void Vulkan::deallocate(DeviceHeapAllocation* ptr)
 
     heap.allocations.remove(ptr);
   }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Vulkan::queuePresent(VkSemaphore wait_semaphore, u32 image_index)
+{
+  VkPresentInfoKHR present_info = 
+  {
+    .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+    .waitSemaphoreCount = 1,
+    .pWaitSemaphores = &wait_semaphore,
+    .swapchainCount = 1,
+    .pSwapchains = &swapchain,
+    .pImageIndices = &image_index,
+  };
+
+  VkResult result = vkQueuePresentKHR(graphics_queue, &present_info);
+
+  if (matchAny(result, VK_ERROR_OUT_OF_DATE_KHR, VK_SUBOPTIMAL_KHR))
+  {
+    DEBUG("recreating swapchain due to out-of-date or suboptimal result "
+          "from vkQueuePresentKHR\n");
+
+    recreateSwapchain();
+  }
+  else if (!handleVkCallResult(result, "vkQueuePresentKHR"_str))
+    return false;
+
+  return true;
 }
 
 /* ----------------------------------------------------------------------------
@@ -2266,6 +2384,8 @@ b8 Vulkan::mapVkBuffer(
         size,
         0,
         &block->mapped_data))
+
+    DEBUG("mapping buffer at offset ", offset, " size ", size, '\n');
   }
 
   block->mapped_count += 1;

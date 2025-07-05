@@ -56,6 +56,17 @@ struct Renderer
   b8 beginFrame();
   void endFrame(); 
 
+  // Attempts to retrieve a RenderTarget representing the currently acquired 
+  // swapchain image. Anything performing a 'final' render should pass this 
+  // as its target. Fails if not currently in a frame.
+  // TODO(sushi) rework all of this to store the data for rendering in
+  //             a different object so we don't have to pass around 
+  //             RenderTargets and can just pass that around instead. 
+  //             RenderTarget stores more information than we need for this 
+  //             case, and should probably be reworked into that object 
+  //             storing more opaque information or something.
+  b8 getSwapchainRenderTarget(RenderTarget* out);
+
   b8 beginRenderPass(
     vec2i render_area_pos,
     vec2u render_area_size,
@@ -102,7 +113,7 @@ struct Renderer
   void debugEndLabel();
   void debugInsertLabel(Color color, utf8::String label);
 
-  void onWindowResized(vec2i size);
+  void onWindowResized(vec2u size);
 
   // NOTE(sushi) explicitly deleting the copy constructor of Renderer
   //             to prevent accidental copies since operating on a copy

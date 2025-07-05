@@ -6,6 +6,8 @@ $ require "common"
 
 @log.ger(cl.gamesim, Debug)
 
+@@lpp.import "Profiling.lh"
+
 namespace cl
 {
 
@@ -46,6 +48,8 @@ void GameSim::deinit()
  */
 b8 GameSim::update(UpdateParams& params)
 {
+  ZoneScopedN("cl::GameSim::update");
+
   if (!SharedGameSim::update(params))
     return false;
 
@@ -59,16 +63,18 @@ b8 GameSim::update(UpdateParams& params)
 
 /* ----------------------------------------------------------------------------
  */
-b8 GameSim::render(gfx::Renderer& renderer)
+b8 GameSim::render(const RenderParams& params)
 {
-  return gamemgr.render(renderer);
-}
+  ZoneScopedN("cl::GameSim::render");
 
-/* ----------------------------------------------------------------------------
- */
-b8 GameSim::render(gfx::Renderer& renderer, const gfx::View& view)
-{
-  return gamemgr.render(renderer, view);
+  GameMgr::RenderParams render_params = 
+  {
+    .renderer = params.renderer,
+    .target = params.target,
+    .view = params.view,
+  };
+
+  return gamemgr.render(render_params);
 }
 
 }

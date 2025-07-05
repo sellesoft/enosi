@@ -65,6 +65,10 @@ struct Editor_GameView
   // if the visual size of the view is ever changed.
   vec2f view_size;
 
+  // The RenderTarget we will ask the game to render to in order to display
+  // it in a UI quad.
+  gfx::RenderTarget render_target;
+
   b8 init(Editor* editor, AssetLoader& loader);
   void deinit(Editor* editor);
 
@@ -73,6 +77,8 @@ struct Editor_GameView
     ui::UI& ui,
     cl::GameSim& sim, 
     const EditorSkinDef& skin);
+
+  void render(gfx::Renderer& renderer, cl::GameSim& sim);
 };
 
 }

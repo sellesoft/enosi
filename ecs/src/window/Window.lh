@@ -54,6 +54,8 @@ struct Window
 
   CursorMode cursor_mode;
 
+  b8 size_changed;
+
   // Initializes whatever backend is being used to display windows.
   static b8 initializeBackend();
 

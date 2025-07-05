@@ -71,19 +71,20 @@ struct GameRenderer
   };
 
   b8 init(InitParams& params);
-
   void deinit(gfx::Renderer& renderer);
 
-  struct UpdateParams
+  struct RenderParams
   {
-    Rect           viewport;
-    mat3x2         view;
+    EntityMgr* entmgr;
+    MapSys* map;
+
+    Rect   viewport;
+    mat3x2 view;
     gfx::Renderer& renderer;
-    EntityMgr*     entmgr;
-    MapSys*        map;
+    gfx::RenderTarget& target;
   };
 
-  b8 update(const UpdateParams& params);
+  b8 render(const RenderParams& params);
 
   void drawQuad(
     gfx::Renderer& renderer,
@@ -104,6 +105,8 @@ struct GameRenderer
   gfx::Buffer quads_vertex_buffer;
   gfx::Buffer quads_index_buffer;
 
+  void* mapped_quads_vertex_buffer;
+
   QuadBatch batches[MAX_BATCHES];
   u32 batch_count = 0;
   u32 quad_count = 0;
@@ -114,8 +117,6 @@ struct GameRenderer
 
   gfx::Pipeline quad_pipeline;
   gfx::PipelineDefRef quad_pipeline_defref;
-
-  gfx::RenderTarget render_target;
 };
 
 }

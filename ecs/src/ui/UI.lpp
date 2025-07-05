@@ -7,6 +7,7 @@ $ local ui = require "ui.UI"
 @@lpp.import "graphics/Geo.lh"
 @@lpp.import "math/util.h"
 @@lpp.import "ui/TextEdit.lh"
+@@lpp.import "Profiling.lh"
 
 #include "iro/Logger.h"
 #include "iro/containers/SmallArray.h"
@@ -28,8 +29,9 @@ static const CombinedItemId c_root_id = {"_ui_root_"_fid.val};
  */
 b8 UI::init(InitParams& params)
 {
-  renderer = &params.renderer;
   white_texture = params.white_texture;
+
+  gfx::Renderer& renderer = params.renderer;
 
   if (!frame_allocator.init())
     return ERROR("failed to initialize UI frame allocator\n");
@@ -37,12 +39,12 @@ b8 UI::init(InitParams& params)
   if (!params.loader.load(&pipeline_defref, "assets/shaders/UI"_str))
     return ERROR("failed to load UI pipeline def\n");
 
-  pipeline = gfx::Pipeline::create(*renderer, *pipeline_defref);
+  pipeline = gfx::Pipeline::create(renderer, *pipeline_defref);
   if (isnil(pipeline))
     return ERROR("failed to initialize UI pipeline\n");
 
   vertex_buffer = gfx::Buffer::create(
-    *renderer,
+    renderer,
     {
       .data       = nullptr,
       .size       = sizeof(gfx::Vertex) * c_MaxVertices,
@@ -55,9 +57,8 @@ b8 UI::init(InitParams& params)
   if (isnil(vertex_buffer))
     return ERROR("failed to initialize ui vertex buffer\n");
 
-
   index_buffer = gfx::Buffer::create(
-    *renderer,
+    renderer,
     {
       .data       = nullptr,
       .size       = sizeof(gfx::Index) * c_MaxIndices,
@@ -207,7 +208,7 @@ void UI::pushConstantFromTransform(mat3x2 transform, gfx::Renderer& renderer)
     push_constant, 
     c_PushConstantSize,
     0,
-    gfx::ShaderStage::Fragment);
+    gfx::ShaderStage::Vertex);
 }
 
 /* ----------------------------------------------------------------------------
@@ -216,70 +217,19 @@ void UI::endFrame(InputState* consumed_input)
 {
   DEBUG("UI::endFrame\n");
 
+  ZoneScopedN("UI::endFrame");
+
   assert(id_stack.isEmpty());
   assert(popup_stack.isEmpty());
 
-  // Bind UI's gfx objects.
-  TRACE("binding ui gfx objects\n");
-  renderer->bindPipeline(pipeline);
-  renderer->bindVertexBuffer(vertex_buffer);
-  renderer->bindIndexBuffer(index_buffer);
-
-  // Map the draw info buffers.
-  TRACE("mapping ui draw info buffers\n");
-  vertex_buffer.map(*renderer);
-  index_buffer.map(*renderer);
-
   Layer* top_layer = nullptr;
 
-  io::StaticBuffer<255> debug_layer_name;
-
-  // Execute each layer's Cmds.
-  TRACE("executing layer draw commands\n");
-  u32 layer_idx = 0;
-  Group* active_render_group = nullptr;
-  for (Layer* layer = root_layer; layer; layer = layer->next, layer_idx++)
-  {
-    debug_layer_name.clear();
-    io::formatv(&debug_layer_name, "layer ", layer_idx);
-    renderer->debugBeginLabel(0x3d405bff, debug_layer_name.asStr());
-
-    for (Cmd* cmd = layer->cmd_list.first;
-         cmd; cmd = cmd->next)
-    {
-      if (cmd->group != active_render_group)
-      {
-        Group* group = cmd->group;
-
-        // TODO(sushi) this culling needs to be done earlier but not sure 
-        //             how to nicely yet. Invisible cmds should not be 
-        //             queued at all.
-        if (group->scissor.w <= 0.f || group->scissor.h <= 0.f)
-          continue;
-
-        active_render_group = group;
-
-        vec2f group_pos = group->transform.getTranslation();
-
-        ScissorCmd scissor_cmd = {};
-        scissor_cmd.bounds = group->scissor;
-        scissor_cmd.execute(*this, *renderer);
-
-        TransformCmd transform_cmd = {};
-        transform_cmd.transform = &group->transform;
-
-        transform_cmd.execute(*this, *renderer);
-
-        renderer->debugInsertLabel(0x000033ff, "group change"_str);
-      }
-
-      cmd->execute(*this, *renderer);
-    }
-
+  // TODO(sushi) this sucks and we need to track the top layer while a 
+  //             UI frame is active. We didn't originally because rendering
+  //             and UI logic were performed in this function, but due to 
+  //             how the rendering api is now we can no longer do that.
+  for (Layer* layer = root_layer; layer; layer = layer->next)
     top_layer = layer;
-
-    renderer->debugEndLabel();
-  }
 
   vec2f hovered_cursor_offset = {};
 
@@ -324,49 +274,6 @@ void UI::endFrame(InputState* consumed_input)
     if (notnil(next_focus_state.hovered.id))
       break;
   }
-
-  if (debug_cmds != nullptr)
-  {
-    TRACE("executing debug draw commands\n");
-
-    mat3x2 screen_transform = mat3x2::createTransform(vec2f(0,0), 0.f);
-
-    TransformCmd transform_cmd = {};
-    transform_cmd.transform = &screen_transform;
-
-    ScissorCmd scissor_cmd = {};
-    scissor_cmd.bounds = viewport;
-
-    transform_cmd.execute(*this, *renderer);
-    scissor_cmd.execute(*this, *renderer);
-
-    for (Cmd* cmd = debug_cmds; cmd; cmd = cmd->next)
-    {
-      cmd->execute(*this, *renderer);
-    }
-  }
-
-  debug_cmds = nullptr;
-
-  // u64 mem_usage = frame_allocator.estimateMemUsage();
-  // INFO("ui frame used ", color::green(io::ByteUnits(mem_usage)), " bytes \n");
-
-  // Clean up the frame's memory.
-  TRACE("clearing ui frame allocator\n");
-  frame_allocator.clear();
-
-  // Flush and unmap the buffers.
-  TRACE("flushing ui draw buffers\n");
-  vertex_buffer.flush(*renderer, 0, gfx::Buffer::FLUSH_WHOLE_BUFFER);
-  index_buffer.flush(*renderer, 0, gfx::Buffer::FLUSH_WHOLE_BUFFER);
-
-  TRACE("unmapping ui draw buffers\n");
-  vertex_buffer.unmap(*renderer);
-  index_buffer.unmap(*renderer);
-
-  // Reset layer states.
-  root_layer = nullptr;
-  current_layer = nullptr;
 
   if (notnil(next_focus_state.hovered.id) &&
       frame_input.wasMouseButtonPressed(MouseButton::Left))
@@ -429,6 +336,116 @@ void UI::endFrame(InputState* consumed_input)
   frame_input.clear();
 
   in_frame = false;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void UI::render(gfx::Renderer& renderer, Rect viewport)
+{
+  // Bind UI's gfx objects.
+  TRACE("binding ui gfx objects\n");
+  renderer.bindPipeline(pipeline);
+  renderer.bindVertexBuffer(vertex_buffer);
+  renderer.bindIndexBuffer(index_buffer);
+  renderer.setViewport({0,0}, viewport.size());
+
+  // Map the draw info buffers.
+  TRACE("mapping ui draw info buffers\n");
+  vertex_buffer.map(renderer);
+  index_buffer.map(renderer);
+
+  // Execute each layer's Cmds.
+  TRACE("executing layer draw commands\n");
+  u32 layer_idx = 0;
+  Group* active_render_group = nullptr;
+  io::StaticBuffer<255> debug_layer_name;
+  for (Layer* layer = root_layer; layer; layer = layer->next, layer_idx++)
+  {
+    debug_layer_name.clear();
+    io::formatv(&debug_layer_name, "layer ", layer_idx);
+    renderer.debugBeginLabel(0x3d405bff, debug_layer_name.asStr());
+
+    ZoneScoped;
+    ZoneName(debug_layer_name, debug_layer_name.len);
+
+    @dbgBreak;
+    for (Cmd* cmd = layer->cmd_list.first;
+         cmd; cmd = cmd->next)
+    {
+      if (cmd->group != active_render_group)
+      {
+        Group* group = cmd->group;
+
+        // TODO(sushi) this culling needs to be done earlier but not sure 
+        //             how to nicely yet. Invisible cmds should not be 
+        //             queued at all.
+        if (group->scissor.w <= 0.f || group->scissor.h <= 0.f)
+          continue;
+
+        active_render_group = group;
+
+        vec2f group_pos = group->transform.getTranslation();
+
+        ScissorCmd scissor_cmd = {};
+        scissor_cmd.bounds = group->scissor;
+        scissor_cmd.execute(*this, renderer);
+
+        TransformCmd transform_cmd = {};
+        transform_cmd.transform = &group->transform;
+
+        transform_cmd.execute(*this, renderer);
+
+        renderer.debugInsertLabel(0x000033ff, "group change"_str);
+      }
+
+      cmd->execute(*this, renderer);
+    }
+
+    renderer.debugEndLabel();
+  }
+
+  if (debug_cmds != nullptr)
+  {
+    TRACE("executing debug draw commands\n");
+
+    mat3x2 screen_transform = mat3x2::createTransform(vec2f(0,0), 0.f);
+
+    TransformCmd transform_cmd = {};
+    transform_cmd.transform = &screen_transform;
+
+    ScissorCmd scissor_cmd = {};
+    scissor_cmd.bounds = viewport;
+
+    transform_cmd.execute(*this, renderer);
+    scissor_cmd.execute(*this, renderer);
+
+    for (Cmd* cmd = debug_cmds; cmd; cmd = cmd->next)
+    {
+      cmd->execute(*this, renderer);
+    }
+  }
+
+  debug_cmds = nullptr;
+
+  // u64 mem_usage = frame_allocator.estimateMemUsage();
+  // INFO("ui frame used ", color::green(io::ByteUnits(mem_usage)), " bytes \n");
+
+  // Clean up the frame's memory.
+  TRACE("clearing ui frame allocator\n");
+  frame_allocator.clear();
+
+  // Flush and unmap the buffers.
+  TRACE("flushing ui draw buffers\n");
+  vertex_buffer.flush(renderer, 0, gfx::Buffer::FLUSH_WHOLE_BUFFER);
+  index_buffer.flush(renderer, 0, gfx::Buffer::FLUSH_WHOLE_BUFFER);
+
+  TRACE("unmapping ui draw buffers\n");
+  vertex_buffer.unmap(renderer);
+  index_buffer.unmap(renderer);
+
+  // Reset layer states.
+  root_layer = nullptr;
+  current_layer = nullptr;
 }
 
 /* ----------------------------------------------------------------------------

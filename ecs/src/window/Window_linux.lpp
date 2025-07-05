@@ -14,8 +14,10 @@ $ if IRO_LINUX then
 @lpp.import "window/Window.lh"
 @lpp.import "window/Window_linux.lh"
 
+#include "external/tracy/tracy/Tracy.hpp"
+
 static Logger logger = 
-  Logger::create("ecs.window"_str, Logger::Verbosity::Notice);
+  Logger::create("ecs.window"_str, Logger::Verbosity::Info);
 
 X11Stuff x11;
 
@@ -173,6 +175,10 @@ b8 Window::init(Engine& eng, String title, InputMgr& inputmgr)
  */
 b8 Window::update(InputMgr& input)
 {
+  ZoneScoped;
+
+  size_changed = false;
+
   XEvent event;
   for (;;)
   {
@@ -263,8 +269,12 @@ $ map = nil
         XConfigureEvent cev = event.xconfigure;
         size.x = cev.width;
         size.y = cev.height;
+
+        size_changed = true;
+
+        INFO("size change\n");
         
-        // raise<WindowResized>( { size });
+        raise<WindowResized>( *eng, { vec2f(size) });
       }
       break;
     }

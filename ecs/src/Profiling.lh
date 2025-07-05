@@ -1,0 +1,14 @@
+// Because I don't want to type this in every file that I wanna profile
+// and cause we will eventually be wrapping Tracy (hopefully) in iro due to the 
+// fact that it uses stdc++ which causes any translation unit its included in
+// to take over twice as long to compile (so stupid!)
+// Also, prevent including tracy when importing files for reflection purposes
+// (I added this feature specifically for this file!) because Tracy uses a 
+// lot of dumb C++ stuff like classes (ew!) and since the reflection system
+// does not take private stuff into account (because its gross!) it will
+// break some of the reflection code. So, do NOT try to import this into 
+// any headers and then use Tracy in them (not like there's any reason to..
+// hopefully) because this prevents that from happening.
+$ if not ECS_REFLECTION_IMPORT then
+#include "external/tracy/tracy/Tracy.hpp"
+$ end

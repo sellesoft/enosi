@@ -21,6 +21,8 @@ $ end
 static Logger logger =
   Logger::create("ecs"_str, Logger::Verbosity::Trace);
 
+@@lpp.import "Profiling.lh"
+
 /* ----------------------------------------------------------------------------
  *  The reason we have this wrapper is to more easily support hot-reloading
  *  a single function with hreload w/o having to do the union function
@@ -112,6 +114,11 @@ int main(int argc, const char** args)
 
     iro::log.newDestination("stdout"_str, &fs::stdout, flags);
   }
+
+$ if ECS_WAIT_FOR_TRACY_CONNECTION then
+  while (!TracyIsConnected)
+    platform::sleep(TimeSpan::fromMilliseconds(1));
+$ end
 
   LaunchArgs launch_args = {};
   if (argc > 1)

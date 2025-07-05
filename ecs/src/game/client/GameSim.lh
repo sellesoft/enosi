@@ -50,8 +50,17 @@ struct GameSim : SharedGameSim
 
   b8 update(UpdateParams& params);
 
-  b8 render(gfx::Renderer& renderer);
-  b8 render(gfx::Renderer& renderer, const gfx::View& view);
+  struct RenderParams
+  {
+    gfx::Renderer& renderer;
+    gfx::RenderTarget& target;
+
+    // An optional view to render the game from which will overload the 
+    // eye sys' view.
+    gfx::View* view;
+  };
+
+  b8 render(const RenderParams& params);
 
   void setViewport(Rect viewport) 
   {
@@ -62,11 +71,6 @@ struct GameSim : SharedGameSim
   b8 loadMap(String name, AssetLoader loader)
   {
     return gamemgr.loadMap(name, loader);
-  }
-
-  gfx::Texture getGameTexture() const
-  {
-    return {gamemgr.game_renderer.render_target.set};
   }
 };
 

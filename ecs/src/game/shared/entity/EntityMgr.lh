@@ -60,7 +60,14 @@ struct EntityMgr
   void destroyEntity(EntityId id);
   void destroyAllEntities();
 
-  Entity* getEntity(EntityId id) const;
+  IRO_FORCE_INLINE
+  Entity* getEntity(EntityId id) const
+  {
+    if (isnil(id))
+      return nullptr;
+
+    return ent_pool.getFromId(id.value, id.salt);
+  }
   
   template<typename TComp>
   b8 addComp(Entity* ent, EntityId id, TComp* cmp) const;

@@ -335,11 +335,16 @@ Processor.resolveType = function(self, ctype)
       return builtin
     end
 
+    local canonical_ctype = ctype:getCanonicalType()
+    if canonical_ctype:isBuiltin() then
+      return ast.BuiltinType[canonical_ctype:getTypeName()]
+    end
+
     local cdecl = ctype:getDecl()
     if not cdecl then
       ctype:dump()
       error("failed to get declaration of type '"..
-            ctype:getCanonicalTypeName().."'")
+            ctype:getCanonicalTypeName()..' ('..ctype:getTypeName()..")")
     end
 
     local decl = self:resolveDecl(cdecl)

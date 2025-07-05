@@ -26,6 +26,14 @@ $ require "common"
 @@lpp.import "graphics/TextureParams.lh"
 @@lpp.import "graphics/ShaderParams.lh"
 
+// TODO(sushi) THIS SUCKS as it increases the compile times of EVERYTHING 
+//             using this header by a LOT. We REALLY need to wrap Tracy
+//             GOD DAMNIT! We have to import this here though because 
+//             Tracy needs us to track an object to profile GPU stuff 
+//             what NONSENSE is THAT ?!!?
+@@lpp.import "Profiling.lh"
+#include "external/tracy/tracy/TracyVulkan.hpp"
+
 using namespace iro;
 
 struct Window;
@@ -203,6 +211,20 @@ struct ResourcePool
   }
 };
 
+/* ============================================================================ 
+ */
+struct VirtualFrame
+{
+  VkCommandBuffer command_buffer;
+  VkSemaphore acquire_semaphore;
+  VkFence command_buffer_fence;
+
+  TracyVkCtx tracy_ctx;
+};
+
+// The number of virtual frames we will allow to be 'in-flight'.
+static const u32 max_vframes = 3;
+
 /* ============================================================================
  *  All state relevant to the Vulkan graphics backend as well as its 
  *  functionality.
@@ -211,8 +233,8 @@ struct Vulkan
 {
   enum
   {
-    c_MaxImages = 512,
-    c_MaxBuffers = 512,
+    c_MaxImages = 64,
+    c_MaxBuffers = 64,
     c_MaxShaders = 32,
     c_MaxPipelines = 8,
     c_MaxDefaultFramebuffers = 4,
@@ -253,8 +275,6 @@ struct Vulkan
   VkQueue present_queue;
 
   VkCommandPool command_pool;
-  VkCommandBuffer command_buffer;
-
   VkDescriptorPool descriptor_pool;
 
   VkSurfaceKHR surface;
@@ -270,8 +290,22 @@ struct Vulkan
   {
     VkImage image;
     VkImageView view;
+    VkSemaphore submit_semaphore;
   };
   Array<SwapchainBuffer> swapchain_buffers;
+
+  VirtualFrame vframes[max_vframes];
+  u32 current_vframe;
+
+  VirtualFrame* getCurrentVirtualFrame()
+  {
+    return &vframes[current_vframe];
+  }
+
+  void advanceVirtualFrame()
+  {
+    current_vframe = (current_vframe + 1) % max_vframes;
+  }
 
   // Check if an opaque pointer is equal to one of our swapchain images.
   // The way this is implemented seems quite unsafe and ideally should
@@ -299,10 +333,6 @@ struct Vulkan
     return false;
   }
 
-  VkSemaphore image_acquired_semaphore;
-  VkSemaphore render_complete_semaphore;
-  VkFence queue_submit_complete_fence;
-
   VkPipelineCache pipeline_cache;
 
   struct InitParams
@@ -315,10 +345,9 @@ struct Vulkan
 
   b8 init(const InitParams& params);
 
-  // Updates the swapchain to the given viewport size.
-  b8 updateSwapchain(vec2i viewport_size, mem::LenientBump& temp_allocator);
-
   // Initialization functions.
+  // Note that these are declared in the same order they should be called in
+  // init().
   
   b8 initInstance(
     mem::Allocator* allocator,
@@ -330,10 +359,13 @@ struct Vulkan
     mem::LenientBump& temp_allocator);
   b8 initLogicalDevice();
   b8 initCommandPool();
-  b8 initCommandBuffer();
+  b8 initVirtualFrames();
   b8 initDescriptorPools();
-  b8 initSwapchain(vec2i viewport_size, mem::LenientBump& temp_allocator);
-  b8 initSyncObjects();
+
+  b8 initSwapchain();
+  void deinitSwapchain();
+  b8 recreateSwapchain();
+
   b8 initPipelineCache();
 
   // Implemented in platform files.
@@ -482,6 +514,18 @@ struct Vulkan
   void destroyVkPipeline(VkPipeline pipeline)
     { vkDestroyPipeline(device, pipeline, &allocator_callbacks); }
 
+  b8 createVkSemaphore(VkSemaphore* out, String debug_name);
+
+  void destroyVkSemaphore(VkSemaphore semaphore)
+    { vkDestroySemaphore(device, semaphore, &allocator_callbacks); }
+
+  b8 createVkFence(VkFence* out, b8 create_signaled, String debug_name);
+
+  void destroyVkFence(VkFence fence)
+    { vkDestroyFence(device, fence, &allocator_callbacks); }
+
+  b8 createVkCommandBuffer(VkCommandBuffer* out, String debug_name);
+
   // Misc. helpers for doing common Vulkan things.
 
   // Begin/end a command buffer for temporary use, eg. copying pixels to 
@@ -532,7 +576,13 @@ struct Vulkan
     VkMemoryRequirements memory_requirements,
     VkMemoryPropertyFlags memory_property_flags);
 
-  u32 acquireNextImageIndex();
+  // Note that this should (at the time of writing) only return false 
+  // if the swapchain is found to be out of date.
+  b8 acquireNextImageIndex(u32* out);
+
+  b8 queuePresent(
+    VkSemaphore wait_semaphore,
+    u32 image_index);
 
   ImageFormat getSurfaceImageFormat() const;
 
@@ -610,6 +660,15 @@ struct Vulkan
   };
 
   RenderState state;
+
+  // NOTE(sushi) caching this because we need it to properly recreate the 
+  //             swapchain when its resized (need its size, duh) but due
+  //             to how the api is set up now, we would have to pass the 
+  //             window or its size into various functions. Really, we 
+  //             should be associating swapchains with Windows, but we don't
+  //             support displaying multiple at the moment so don't have a
+  //             reason to yet.
+  Window* window;
 };
 
 /* ----------------------------------------------------------------------------

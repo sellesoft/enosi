@@ -12,6 +12,8 @@ $ require "Log"
 @@lpp.import "graphics/Pipeline.lh"
 @@lpp.import "graphics/RenderTarget.lh"
 
+@@lpp.import "Profiling.lh"
+
 #include "iro/Logger.h"
 #include "Color.h"
 
@@ -96,29 +98,45 @@ static VkClearValue colorToVkClearValue(Color color)
  */
 b8 Renderer::beginFrame()
 {
+  ZoneScopedN("gfx::Renderer::beginFrame");
+
   if (vk->state.command_buffer != VK_NULL_HANDLE)
     return ERROR("attempt to begin a frame while one is already active\n");
 
-  vk->state.command_buffer = vk->command_buffer;
+  VirtualFrame* vframe = vk->getCurrentVirtualFrame();
 
   // Ensure that the previous call to submitQueue() has finished.
-  vkWaitForFences(
-    vk->device, 
-    1, 
-    &vk->queue_submit_complete_fence, 
-    VK_TRUE,
-    MAX_U64);
+  {
+    ZoneScopedN("wait for command buffer fence");
+
+    vkWaitForFences(
+      vk->device, 
+      1, 
+      &vframe->command_buffer_fence,
+      VK_TRUE,
+      MAX_U64);
+  }
+
+  // If this returns false, its due to the swapchain being out of date.
+  // We simply want to avoid rendering when this happens and it is not an
+  // error.
+  if (!vk->acquireNextImageIndex(&next_image))
+    return false;
 
   // Its on us to reset the fence signal.
-  vkResetFences(vk->device, 1, &vk->queue_submit_complete_fence);
+  vkResetFences(vk->device, 1, &vframe->command_buffer_fence);
+
+  vk->state.command_buffer = vframe->command_buffer;
+
+  io::StaticBuffer<255> tmessage;
+  io::formatv(&tmessage, "beginning frame with vframe ", vk->current_vframe);
+  TracyMessage(tmessage, tmessage.len);
 
   // Ensure the command buffer is in the initial state.
   vkResetCommandBuffer(vk->state.command_buffer, 0);
 
   if (!vk->beginCommandBuffer(vk->state.command_buffer))
     return ERROR("failed to begin command buffer\n");
-
-  next_image = vk->acquireNextImageIndex();
 
   return true;
 }
@@ -127,11 +145,17 @@ b8 Renderer::beginFrame()
  */
 void Renderer::endFrame()
 {
+  ZoneScopedN("gfx::Renderer::endFrame");
+
   if (vk->state.command_buffer == VK_NULL_HANDLE)
   {
     ERROR("attempt to end the frame before it was begun\n");
     return;
   }
+
+  io::StaticBuffer<255> tmessage;
+  io::formatv(&tmessage, "ending frame with vframe ", vk->current_vframe);
+  TracyMessage(tmessage, tmessage.len);
 
   // Prepare the current swapchain image for presentation.
   // This is currently assuming that the swapchain image had a render pass
@@ -147,9 +171,30 @@ void Renderer::endFrame()
     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
     VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
 
+  TracyVkCollect(
+    vk->getCurrentVirtualFrame()->tracy_ctx, vk->state.command_buffer);
+
   vk->endCommandBuffer(vk->state.command_buffer);
 
   vk->state.command_buffer = VK_NULL_HANDLE;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Renderer::getSwapchainRenderTarget(RenderTarget* out)
+{
+  assert(out != nullptr);
+  
+  if (vk->state.command_buffer == VK_NULL_HANDLE)
+  {
+    ERROR("attempt to get swapchain render target outside of a frame\n");
+    return false;
+  }
+
+  out->image = {vk->swapchain_buffers[next_image].image};
+  out->view = {vk->swapchain_buffers[next_image].view};
+
+  return true;
 }
 
 /* ----------------------------------------------------------------------------
@@ -162,7 +207,6 @@ static b8 beginRenderPassVk(
     VkImageView view,
     Color       clear_color)
 {
-
   if (vk->state.command_buffer == VK_NULL_HANDLE)
     return ERROR("attempt to begin a render pass before beginning a command "
                  "buffer\n");
@@ -183,6 +227,11 @@ static b8 beginRenderPassVk(
 
   TRACE("beginning render pass at ", render_area_pos, " with size ", 
         render_area_size, '\n');
+
+  TracyVkZone(
+    vk->getCurrentVirtualFrame()->tracy_ctx, 
+    vk->state.command_buffer, 
+    "render pass");
 
   // NOTE(sushi) the image transition occurs inside this function, however
   //             that should probably be pulled out and done here.
@@ -210,11 +259,19 @@ b8 Renderer::beginRenderPass(
   if (isnil(target.view))
     return ERROR("attempt to begin a render pass with a nil target\n view");
 
+  // TODO(sushi) this kind of blows and is another reason why I want to 
+  //             rework how we handle this as mentioned in the todo above 
+  //             getSwapchainRenderTarget().
+  VkImage image = 
+    vk->isSwapchainImage(target.image.handle)
+    ? (VkImage)target.image.handle
+    : ((DeviceImage*)target.image.handle)->handle;
+
   return beginRenderPassVk(
     vk,
     render_area_pos,
     render_area_size,
-    ((DeviceImage*)target.image.handle)->handle,
+    image,
     (VkImageView)target.view.handle,
     clear_color);
 }
@@ -248,6 +305,8 @@ void Renderer::endRenderPass()
   TRACE("ending render pass\n");
 
   vk->cmdEndRendering(vk->state.command_buffer);
+
+  vk->state.bound_pipeline = nullptr;
 }
 
 /* ----------------------------------------------------------------------------
@@ -256,6 +315,10 @@ b8 Renderer::submitQueue()
 {
   TRACE("submitting queue\n");
 
+  ZoneScopedN("gfx::Renderer::submitQueue");
+
+  VirtualFrame* vframe = vk->getCurrentVirtualFrame();
+
   VkPipelineStageFlags wait_stages = 
     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
@@ -263,24 +326,19 @@ b8 Renderer::submitQueue()
   {
     .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
     .waitSemaphoreCount = 1,
-    .pWaitSemaphores = &vk->image_acquired_semaphore,
+    .pWaitSemaphores = &vframe->acquire_semaphore,
     .pWaitDstStageMask = &wait_stages,
     .commandBufferCount = 1,
-    // TODO(sushi) command buffer api or something cause this assumes 
-    //             commands were recorded to the one we store on Vulkan
-    //             BUT when we get to supporting multiple windows and 
-    //             possibly recording commands in parallel this assumption 
-    //             will be WRONG!
-    .pCommandBuffers = &vk->command_buffer,
+    .pCommandBuffers = &vframe->command_buffer,
     .signalSemaphoreCount = 1,
-    .pSignalSemaphores = &vk->render_complete_semaphore,
+    .pSignalSemaphores = &vk->swapchain_buffers[next_image].submit_semaphore,
   };
 
   if (VK_SUCCESS != vkQueueSubmit(
         vk->graphics_queue, 
         1, 
         &submit_info,
-        vk->queue_submit_complete_fence))
+        vframe->command_buffer_fence))
     return ERROR("failed to submit command buffer\n");
 
   return true;
@@ -292,21 +350,14 @@ b8 Renderer::present()
 {
   TRACE("presenting frame\n");
 
-  VkPresentInfoKHR present_info = 
-  {
-    .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
-    .waitSemaphoreCount = 1,
-    .pWaitSemaphores = &vk->render_complete_semaphore,
-    .swapchainCount = 1,
-    .pSwapchains = &vk->swapchain,
-    .pImageIndices = &next_image,
-  };
+  ZoneScopedN("gfx::Renderer::present");
 
-  if (VK_SUCCESS != vkQueuePresentKHR(vk->graphics_queue, &present_info))
+  if (!vk->queuePresent(
+        vk->swapchain_buffers[next_image].submit_semaphore,
+        next_image))
     return ERROR("failed to present frame\n");
 
-  // TODO(sushi) we need to NOT do this.
-  vkDeviceWaitIdle(vk->device);
+  vk->advanceVirtualFrame();
 
   return true;
 }
@@ -504,6 +555,11 @@ void Renderer::pushConstant(
  */
 void Renderer::draw(u32 index_start, u32 index_count, u32 vertex_start)
 {
+  TracyVkZone(
+    vk->getCurrentVirtualFrame()->tracy_ctx, 
+    vk->state.command_buffer, 
+    "draw");
+
   vkCmdDrawIndexed(
     vk->state.command_buffer,
     index_count,
@@ -517,6 +573,11 @@ void Renderer::draw(u32 index_start, u32 index_count, u32 vertex_start)
  */
 void Renderer::prepareImageForSampling(Image image)
 {
+  TracyVkZone(
+    vk->getCurrentVirtualFrame()->tracy_ctx, 
+    vk->state.command_buffer, 
+    "prepareImageForSampling");
+
   if (isnil(image))
   {
     ERROR("passed a nil gfx::Image to prepare for sampling\n");
@@ -578,6 +639,13 @@ void Renderer::debugInsertLabel(Color color, String label)
     };
     vk->func_vkCmdInsertDebugUtilsLabelEXT(vk->state.command_buffer, &info);
   }
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Renderer::onWindowResized(vec2u size)
+{
+  vk->recreateSwapchain();
 }
 
 }
