@@ -369,6 +369,13 @@ String String::nullTerminate(mem::Allocator* allocator) const
 
 /* ----------------------------------------------------------------------------
  */
+b8 String::nullTerminate(io::IO* io) const
+{
+  return io::formatv(io, *this, '\0') == len;
+}
+
+/* ----------------------------------------------------------------------------
+ */
 u64 String::countCharacters() const
 {
   String scan = *this;

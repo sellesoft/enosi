@@ -15,6 +15,11 @@
 
 #include "assert.h"
 
+namespace iro::io
+{
+  struct IO;
+}
+
 namespace iro::utf8
 {
 
@@ -116,6 +121,8 @@ struct String
   // Allocates a nullterminated copy of this string using the provided
   // allocator. The length of the returned string will be the same.
   String nullTerminate(mem::Allocator* allocator) const;
+
+  b8 nullTerminate(io::IO* io) const;
 
   b8 isNullTerminated() const
   {

@@ -340,7 +340,16 @@ b8 Driver::construct(Lpp* lpp)
 void Driver::cleanupAfterFailure()
 { 
   if (notnil(streams.out.file))
-    fs::Path::unlink(streams.out.name);
+  {
+    // Ensure that the name we pass to unlink() is properly null-terminated,
+    // as sometimes it isn't which causes lpp to fail to delete the output 
+    // file which can cause build systems (such as lake) to think the output
+    // is already built.
+    io::SmallBuffer<512> null_terminated;
+    streams.out.name.nullTerminate(&null_terminated);
+
+    fs::Path::unlink(null_terminated.asStr());
+  }
 } 
 
 }
