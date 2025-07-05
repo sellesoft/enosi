@@ -192,7 +192,7 @@ void SharedConsole::runCommand(RunCommandEvent& event)
   // split input by semicolons and execute each command
   while(input.len > 0)
   {
-    input.trimLeft();
+    input = input.trimLeft();
     if (isnil(input))
       break;
 
@@ -222,7 +222,7 @@ void SharedConsole::runCommand(RunCommandEvent& event)
     }
 
     // skip empty commands
-    command.trimRight();
+    command = command.trimRight();
     if (isnil(command))
       continue;
 
@@ -231,7 +231,7 @@ void SharedConsole::runCommand(RunCommandEvent& event)
     cursor = command;
     while(cursor.len > 0)
     {
-      cursor.trimLeft();
+      cursor = cursor.trimLeft();
       if (isnil(cursor))
         break;
 
@@ -288,7 +288,7 @@ void SharedConsole::runCommand(RunCommandEvent& event)
           cursor.len -= word.len;
         }
       }
-      cursor.trimLeft();
+      cursor = cursor.trimLeft();
     }
 
     // execute the command
