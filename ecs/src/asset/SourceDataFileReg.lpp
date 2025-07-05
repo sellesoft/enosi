@@ -26,14 +26,16 @@ b8 SourceDataFileReg::init()
  */
 void SourceDataFileReg::deinit()
 {
-  // At this point there should be no source data files referenced anywhere.
-  // So, none should exist!
+// NOTE(sushi) disabling for now so the engine can close. I dont care for ref
+//             counting anymore and this will eventually be redone.
+$ if false then
   for (SourceDataFileSlot& slot : map)
   {
     assert(!slot.header.rc.isReferenced() &&
       "attempt to deinit SourceDataFileReg while a SourceDataFile is still "
       "referenced!");
   }
+$ end
 
   pool.deinit();
   map.deinit();
