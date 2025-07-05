@@ -228,7 +228,13 @@ struct VirtualFrame
 };
 
 // The number of virtual frames we will allow to be 'in-flight'.
-static const u32 max_vframes = 2;
+// TODO(sushi) make this a runtime thing eventually.
+// NOTE(sushi) keeping this at 1 for now as the way the GameRenderer uses 
+//             its quad vertex buffer does not work well with double buffering
+//             as if we are running too fast, it will write to the buffer 
+//             while its still being rendered (or presented or queued or 
+//             whatever, i have no idea yet).
+static const u32 max_vframes = 1;
 
 /* ============================================================================
  *  All state relevant to the Vulkan graphics backend as well as its 

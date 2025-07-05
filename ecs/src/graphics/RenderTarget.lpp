@@ -91,6 +91,8 @@ void RenderTarget::destroy(Renderer& renderer)
 
   image.destroy(renderer);
   view.destroy(renderer);
+  set.destroy(renderer);
+  sampler.destroy(renderer);
 }
 
 }
