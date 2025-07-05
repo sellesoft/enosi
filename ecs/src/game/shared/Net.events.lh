@@ -50,6 +50,15 @@ struct ChallengeNetEvent
 
 /* ============================================================================
  */
+@metadata.netevent({priority = true, broadcast = false})
+struct ConnectionSuccessNetEvent
+{
+  @metadata.netfield_ignore({})
+  void* session;
+};
+
+/* ============================================================================
+ */
 @metadata.netevent({priority = false, broadcast = false})
 struct MessageNetEvent
 {

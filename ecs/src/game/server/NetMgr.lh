@@ -29,10 +29,9 @@ struct NetMgr : public SharedNetMgr
   };
 
 
-  // TODO(delle) change sessions to a pool so we're not copying the large
-  // Connection structs when a client disconnects
-  u16 max_sessions;
-  iro::Array<Session> sessions;
+  u16 sessions_capacity;
+  u16 session_count;
+  Session* sessions;
   PasswordBuffer password;
   ServerPublicity publicity;
 

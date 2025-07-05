@@ -15,20 +15,26 @@ using namespace net;
 
 /* ----------------------------------------------------------------------------
  */
-static void handleChallengeEvent(void* server_ptr, ChallengeNetEvent& event)
+static void handleChallengeEvent(void* netmgr_ptr, ChallengeNetEvent& event)
 {
+  sv::NetMgr* netmgr = (sv::NetMgr*)netmgr_ptr;
   sv::NetMgr::Session* session = (sv::NetMgr::Session*)event.session;
   assertpointer(session);
   if (event.challenge_value == session->challenge_value)
   {
     session->connection.state = Connection::State::Connected;
     @log.info("CONNECTED [", session->connection.address, "]\n");
+
+    ConnectionSuccessNetEvent connection_success_event = {
+      .session = session,
+    };
+    netmgr->queueEvent(connection_success_event);
   }
 }
 
 /* ----------------------------------------------------------------------------
  */
-static void handleMessageEvent(void* server_ptr, MessageNetEvent& event)
+static void handleMessageEvent(void* netmgr_ptr, MessageNetEvent& event)
 {
   if (event.message_length > 0 && event.message_length < 513)
   {
@@ -39,40 +45,64 @@ static void handleMessageEvent(void* server_ptr, MessageNetEvent& event)
 
 /* ----------------------------------------------------------------------------
  */
-static void handleConnectionlessPacket(
+static b8 handleConnectionlessPacket(
   void* server_ptr,
   Address address,
   Fragment& fragment)
 {
   sv::NetMgr* netmgr = (sv::NetMgr*)server_ptr;
 
+  //NOTE(delle) fragment length validated externally
+  if (fragment.len < sizeof(CONNECTIONLESS_PROTOCOL_ID))
+    return false;
+
   u64 connectionless_protocol_id = *(u64*)(fragment.arr);
-  if (   fragment.len < sizeof(CONNECTIONLESS_PROTOCOL_ID)
-      || connectionless_protocol_id != CONNECTIONLESS_PROTOCOL_ID)
-    return;
+  if (connectionless_protocol_id != CONNECTIONLESS_PROTOCOL_ID)
+    return false;
 
-  if (netmgr->sessions.len() >= netmgr->max_sessions)
+  void* connectionless_data =
+    fragment.arr + sizeof(CONNECTIONLESS_PROTOCOL_ID);
+  u32 connectionless_data_size =
+    fragment.len - sizeof(CONNECTIONLESS_PROTOCOL_ID);
+
+  String connect_message = "connect"_str;
+  if (   connectionless_data_size == connect_message.len
+      && mem::equal(connectionless_data, connect_message.ptr,
+                    connect_message.len))
   {
-    String string = "server_full"_str;
-    if (!netmgr->sendOnlinePacket(address, string.ptr, string.len))
-      @log.error("Failed to send server full message\n");
+    sv::NetMgr::Session* free_session = nullptr;
+    for (u16 i = 0; i < netmgr->sessions_capacity; i++)
+    {
+      sv::NetMgr::Session& session = netmgr->sessions[i];
+      if (session.connection.address == address)
+        return true; // skip extra connection requests from connected clients
 
-    @log.info("Rejecting connection from ", address,
-              " because the server is full\n");
-    return;
+      if (session.connection.state == Connection::State::Disconnected)
+        free_session = &session;
+    }
+
+    if (netmgr->session_count >= netmgr->sessions_capacity)
+    {
+      String string = "server_full"_str;
+      if (!netmgr->sendOnlinePacket(address, string.ptr, string.len))
+        @log.error("Failed to send server full message\n");
+
+      @log.info("Rejecting connection from ", address,
+                " because the server is full\n");
+      return true;
+    }
+
+    sv::NetMgr::Session* session = free_session;
+    if (!session->connection.init(address, netmgr))
+      return true;
+
+    session->connection.state = Connection::State::Challenging;
+    session->challenge_value = (u32)TimePoint::monotonic().ns;
+    session->last_challenge_time = TimePoint::monotonic();
+    netmgr->session_count++;
   }
 
-  sv::NetMgr::Session* session = netmgr->sessions.push();
-  if (!session)
-  {
-    @log.error("Failed to create a session\n");
-    return;
-  }
-
-  session->connection.init(address, netmgr);
-  session->connection.state = Connection::State::Challenging;
-  session->challenge_value = (u32)TimePoint::monotonic().ns;
-  @log.info("CHALLENGED [", address, "]\n");
+  return true;
 }
 
 namespace sv
@@ -89,8 +119,9 @@ b8 NetMgr::init(
   if (!SharedNetMgr::init(allocator))
     return false;
 
-  this->max_sessions = max_sessions;
-  if (!this->sessions.init(max_sessions, allocator))
+  this->sessions_capacity = max_sessions;
+  this->sessions = allocator->allocateType<Session>(max_sessions);
+  if (!this->sessions)
     return @log.error("failed to init the server sessions array\n");
 
   this->password.copy(password);
@@ -114,7 +145,7 @@ b8 NetMgr::init(
  */
 void NetMgr::deinit()
 {
-  this->sessions.destroy();
+  this->allocator->free(this->sessions);
   SharedNetMgr::deinit();
 }
 
@@ -130,17 +161,14 @@ void NetMgr::receiveMessages()
   if (this->publicity == ServerPublicity::Offline)
   {
     Fragment fragment;
-    if (this->sessions.len() == 0)
-    {
-      if (!this->receiveOfflinePacket(Source::Client, fragment))
-        return;
-      handleConnectionlessPacket(this, Address::createOffline(), fragment);
-    }
-    else
-    {
-      TODO(delle) filter out connectionless packets
+    if (!this->receiveOfflinePacket(Source::Client, fragment))
+      return;
+
+    if (handleConnectionlessPacket(this, Address::createOffline(), fragment))
+      return;
+
+    if (this->session_count > 0)
       this->sessions[0].connection.receive(Source::Client, fragment);
-    }
   }
   else
   {
@@ -153,9 +181,10 @@ void NetMgr::receiveMessages()
         sizeof(FragmentHeader), MAX_FRAGMENT_SIZE);
 
       b8 packet_handled = false;
-      for (Session& session : this->sessions)
+      for (u16 i = 0; i < this->sessions_capacity; i++)
       {
-        if (mem::equal(session.connection.address, packet_address))
+        Session& session = this->sessions[i];
+        if (session.connection.address == packet_address)
         {
           session.connection.receive(Source::Client, fragment);
           packet_handled = true;
@@ -170,8 +199,11 @@ void NetMgr::receiveMessages()
   }
 
   // parse messages from clients
-  for (Session& session : this->sessions)
+  for (u16 i = 0; i < this->sessions_capacity; i++)
   {
+    Session& session = this->sessions[i];
+    if (session.connection.state == Connection::State::Disconnected)
+      continue;
     if (session.connection.incoming_message_pending_fragments)
       continue;
 
@@ -181,6 +213,22 @@ void NetMgr::receiveMessages()
 
     if (!this->parseEventsFromMessage(message, &session))
       @log.error("failed to parse network message\n");
+  }
+
+  // if a client has been disconencting for too long, disconnect it
+  for (u16 i = 0; i < this->sessions_capacity; i++)
+  {
+    Session& session = this->sessions[i];
+    if (session.connection.state == Connection::State::Disconnecting)
+    {
+      TimeSpan time_since_disconnect = TimePoint::monotonic()
+                                      - session.last_challenge_time;
+      if (time_since_disconnect.toMilliseconds() > 1000)
+      {
+        session.connection.deinit();
+        this->session_count--;
+      }
+    }
   }
 }
 
@@ -193,10 +241,11 @@ void NetMgr::sendMessages()
   defer { this->unlockOfflinePacketMutex(Source::Server); };
 
   u8 message_data[Message::MAX_SIZE];
-  for (Session& session : this->sessions)
+  for (u16 i = 0; i < this->sessions_capacity; i++)
   {
-    Message message;
-    message.init(message_data, 0);
+    Session& session = this->sessions[i];
+    if (session.connection.state == Connection::State::Disconnected)
+      continue;
 
     if (session.connection.state == Connection::State::Challenging)
     {
@@ -206,6 +255,8 @@ void NetMgr::sendMessages()
       {
         //TODO(delle) drop connection if time since challenge is too long
         @log.info("CHALLENGE TIMED OUT [", session.connection.address, "]\n");
+        session.connection.state = Connection::State::Disconnecting;
+        session.last_challenge_time = TimePoint::monotonic();
         continue;
       }
 
@@ -215,9 +266,15 @@ void NetMgr::sendMessages()
       };
       this->queueEvent(challenge_event);
       session.last_challenge_time = TimePoint::monotonic();
+      @log.info("CHALLENGED [", session.connection.address, "]\n");
     }
 
+    Message message;
+    message.init(message_data, 0);
     this->packEventsIntoMessage(message, &session);
+    if (message.size == 0)
+      continue;
+
     if (!message.writeOverflowed())
     {
       session.connection.send(Source::Server, message, false);

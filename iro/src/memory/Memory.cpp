@@ -19,7 +19,7 @@ void zero(void* ptr, u64 bytes)
   memset(ptr, 0, bytes);
 }
 
-b8 equal(void* lhs, void* rhs, u64 bytes)
+b8 equal(const void* lhs, const void* rhs, u64 bytes)
 {
   return 0 == memcmp(lhs, rhs, bytes);
 }

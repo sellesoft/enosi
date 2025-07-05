@@ -52,6 +52,8 @@ struct Address
   static Address createLocalHost(u16 port);
   u32 getIPv4() const;
   b8 isIPv4() const;
+
+  b8 operator==(const Address& other) const;
 };
 
 s64 format(iro::io::IO* io, Address address);

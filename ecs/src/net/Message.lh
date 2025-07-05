@@ -1,8 +1,11 @@
 /*
  * A blob of data meant to be transmitted over the network.
  */
+$require "common"
 
 #include "iro/Common.h"
+
+@@lpp.import "net/Fragment.lh"
 
 namespace net
 {
@@ -11,7 +14,7 @@ namespace net
  */
 struct Message
 {
-  constexpr static u16 MAX_SIZE = 16384; // in bytes
+  constexpr static u16 MAX_SIZE = 2 * MAX_FRAGMENT_SIZE; // in bytes
 
 
   u8* data;

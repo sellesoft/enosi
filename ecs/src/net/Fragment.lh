@@ -1,0 +1,37 @@
+$ require "common"
+
+#include "iro/Common.h"
+#include "iro/containers/StackArray.h"
+
+namespace net
+{
+
+/* ============================================================================
+ */
+// TODO(delle) networking data_size might be unnecessary
+struct FragmentHeader
+{
+  u32 protocol; // validate this is a packet we care about
+  u32 sequence_index; // sequence index of this message
+  u32 ack_index; // sequence index of the last message received
+  u32 ack_bitfield; // each bit acknowledges the indexes before ack_index
+  u16 fragment_offset; // offset into the message
+  u16 data_size; // number of bytes after this header
+};
+
+static constexpr u16 MAX_FRAGMENT_SIZE = 1200; // in bytes
+static constexpr u16 MAX_FRAGMENT_DATA_SIZE =
+  MAX_FRAGMENT_SIZE - sizeof(FragmentHeader);
+
+typedef iro::StackArray<u8, MAX_FRAGMENT_SIZE> Fragment;
+
+/* ============================================================================
+ * Protocol ID: <3><C><dollar><version>
+ */
+static constexpr u32 PROTOCOL_VERSION = 0;
+static constexpr u32 PROTOCOL_ID = 0x33422400 + PROTOCOL_VERSION;
+static constexpr u64 CONNECTIONLESS_PROTOCOL_ID =
+  0xFFFFFFFF | (u64)PROTOCOL_ID << 32;
+static constexpr u16 SERVER_PORT = 40230;
+
+} // namespace net

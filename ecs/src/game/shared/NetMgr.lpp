@@ -42,6 +42,7 @@ $$$
 
 #include "iro/Common.h"
 #include "iro/containers/FixedPool.h"
+#include "iro/io/IO.h"
 #include "iro/Logger.h"
 #include "iro/memory/Allocator.h"
 #include "iro/Mutex.h"
@@ -49,7 +50,7 @@ $$$
 using namespace iro;
 using namespace net;
 
-@log.ger(sh.NetMgr, Info)
+@log.ger(sh.NetMgr, Debug)
 
 /* ============================================================================
  * Net Event Iterator Macro
@@ -136,7 +137,7 @@ b8 Connection::init(Address address, SharedNetMgr* netmgr)
   this->state = State::Disconnected;
   this->netmgr = netmgr;
   this->address = address;
-  if (this->address.port == 0)
+  if (this->address.port == 0 && this->address.type != AddressType::Offline)
     this->address.port = SERVER_PORT;
   this->acknowledged_sequence = 0;
   this->acknowledged_bitfield = 0;
@@ -335,29 +336,31 @@ b8 Connection::send(Source source, const Message& message, b8 priority)
  */
 void Connection::receive(
   Source source,
-  StackArray<u8, MAX_FRAGMENT_SIZE>& data)
+  Fragment& fragment)
 {
   if (this->address.type == AddressType::Offline)
   {
-    if (!this->netmgr->receiveOfflinePacket(source, data))
+    //NOTE(delle) offline packets are received externally
+    if (fragment.len == 0)
     {
       this->incoming_message_pending_fragments = true;
-      return;
     }
-
-    // TODO(delle) remove this second memory copy
-    mem::copy(this->incoming_message_data, data.arr, data.len);
-    this->incoming_message_size = data.len;
-    this->incoming_message_pending_fragments = false;
+    else
+    {
+      // TODO(delle) remove this second memory copy of the offline message
+      mem::copy(this->incoming_message_data, fragment.arr, fragment.len);
+      this->incoming_message_size = fragment.len;
+      this->incoming_message_pending_fragments = false;
+    }
     return;
   }
 
   // range validated in net::receiveOnlinePacket
-  assertrange(data.len, sizeof(FragmentHeader), MAX_FRAGMENT_SIZE);
+  assertrange(fragment.len, sizeof(FragmentHeader), MAX_FRAGMENT_SIZE);
   @log.trace("receiving a packet via a remote connection\n");
 
   Message message;
-  message.init(data.arr, data.len);
+  message.init(fragment.arr, fragment.len);
   u32 protocol = message.readU32();
   u32 sequence = message.readU32();
   u32 ack_index = message.readU32();
@@ -424,7 +427,7 @@ void Connection::receive(
 
     // add the fragment to the message buffer
     mem::copy(this->incoming_message_data + this->incoming_message_size,
-              data.arr + sizeof(FragmentHeader), data_size);
+              fragment.arr + sizeof(FragmentHeader), data_size);
     this->incoming_message_size = new_message_size;
 
     // the final message fragment size is less than MAX_FRAGMENT_DATA_SIZE
@@ -436,8 +439,8 @@ void Connection::receive(
   }
   else // not fragmented
   {
-    mem::copy(this->incoming_message_data, data.arr + sizeof(FragmentHeader),
-              data_size);
+    mem::copy(this->incoming_message_data,
+              fragment.arr + sizeof(FragmentHeader), data_size);
     this->incoming_message_size = data_size;
   }
 
@@ -727,18 +730,15 @@ b8 SharedNetMgr::sendOfflinePacket(Source source, void* data, u16 size)
 b8 SharedNetMgr::receiveOfflinePacket(Source source, Fragment& fragment)
 {
   @log.trace("receiving an offline packet\n");
-  if (s_offline_messages[(int)source].size == 0)
-  {
-    return false;
-  }
-  else
+  fragment.len = s_offline_messages[(int)source].size;
+  if (fragment.len > 0)
   {
     mem::copy(fragment.arr, s_offline_messages[(int)source].data,
-              s_offline_messages[(int)source].size);
-    fragment.len = s_offline_messages[(int)source].size;
+              fragment.len);
     s_offline_messages[(int)source].size = 0;
     return true;
   }
+  return false;
 }
 
 /* ----------------------------------------------------------------------------
@@ -755,7 +755,36 @@ void SharedNetMgr::unlockOfflinePacketMutex(Source source)
   s_offline_messages[(int)source].mutex.unlock();
 }
 
+//TODO(delle) add a logger macro for formatting any type
 $ eachNetEvent(function(name, id, decl, priority, broadcast, max_subscribers)
+/* ----------------------------------------------------------------------------
+ */
+static s64 format(io::IO* io, $(name)& event)
+{
+  io::format(io, "$(name){ "_str);
+$ for field in decl:eachFieldWithIndex() do
+$   if not field.metadata.netfield_ignore then
+$     if field.metadata.netfield_blob then
+$       local blob_length = field.metadata.netfield_blob
+  io::format(io, "$(field.name) = [");
+  for (u16 i = 0; i < $(blob_length) - 1; i++)
+  {
+    io::format(io, io::Hex(event.$(field.name)[i], 2, true, false));
+    io::format(io, " ");
+  }
+  io::format(io, io::Hex(event.$(field.name)[$(blob_length) - 1], 2, true, false));
+  io::format(io, "], "_str);
+$     else
+  io::format(io, "$(field.name) = "_str);
+  io::format(io, event.$(field.name));
+  io::format(io, ", "_str);
+$     end
+$   end
+$ end
+  io::format(io, "}"_str);
+  return 0;
+}
+
 /* ----------------------------------------------------------------------------
  */
 template<>
@@ -807,6 +836,8 @@ void SharedNetMgr::queueEvent<$(name)>($(name)& event)
   for (auto& sub : this->event_bus_data->$(name)Subscriber_pool)
     if (sub.callback != nullptr)
       sub.callback(sub.subscriber, event);
+
+  @log.debug("queued netevent: ", event, "\n");
 }
 
 $ end) -- eachNetEvent
@@ -849,7 +880,8 @@ $   end
 $   for field in decl:eachFieldWithIndex() do
 $     if not field.metadata.netfield_ignore then
 $       if field.metadata.netfield_blob then
-      message.writeData(event.$(field.name), (u16)event.$(field.name)_length);
+      message.writeData(event.$(field.name),
+                        (u16)$(field.metadata.netfield_blob));
 $       else
 $         local type = field.type.name:gsub("([us])(%d+)", "%1%2")
       message.write$(type:gsub("^%l", string.upper))(event.$(field.name));
@@ -896,6 +928,9 @@ $   end
       for (auto& sub : this->event_bus_data->$(name)Subscriber_pool)
         if (sub.callback != nullptr)
           sub.callback(sub.subscriber, event);
+
+      @log.debug("received netevent from session ", session,
+                 ": ", event, "\n");
     }
     break;
 $ end) -- eachNetEvent

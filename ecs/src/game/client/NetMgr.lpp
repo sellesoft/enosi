@@ -20,6 +20,7 @@ static void handleChallengeEvent(void* client_ptr, ChallengeNetEvent& event)
   cl::NetMgr* netmgr = (cl::NetMgr*)client_ptr;
   netmgr->challenge_value = event.challenge_value;
   netmgr->connection.state = Connection::State::Challenging;
+  netmgr->last_challenge_time = TimePoint::monotonic();
 }
 
 /* ----------------------------------------------------------------------------
@@ -101,6 +102,9 @@ void NetMgr::receiveMessages()
     defer { this->unlockOfflinePacketMutex(Source::Server); };
 
     Fragment fragment;
+    if (!this->receiveOfflinePacket(Source::Server, fragment))
+      return;
+
     connection.receive(Source::Server, fragment);
     if (connection.incoming_message_pending_fragments)
       return;
@@ -176,6 +180,7 @@ void NetMgr::sendMessages()
     {
       //TODO(delle) drop connection if time since challenge is too long
       @log.info("CHALLENGE TIMED OUT [", connection.address, "]\n");
+      this->disconnectFromServer();
       return;
     }
 
