@@ -3,6 +3,8 @@
 
 using namespace iro;
 
+/* ============================================================================
+ */
 template<typename T, u64 size>
 struct IndexedPool
 {
@@ -46,6 +48,11 @@ struct IndexedPool
   {
     mem::stl_allocator.free(pool);
     // TODO(sushi) actual clean up
+  }
+
+  u64 capacity() const
+  {
+    return size;
   }
 
   T* add()
@@ -97,5 +104,20 @@ struct IndexedPool
     assert(slot->salt == salt);
 
     return &slot->elem;
+  }
+
+  Slot* begin() 
+  { 
+    Slot* ptr = pool;
+    Slot* stop = end();
+    while (ptr != stop && !ptr->isUsed())
+      ptr += 1;
+
+    return ptr == stop? nullptr : ptr; 
+  }
+
+  Slot* end() 
+  {
+    return pool + size;
   }
 };

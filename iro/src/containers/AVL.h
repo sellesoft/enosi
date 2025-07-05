@@ -585,8 +585,8 @@ private:
     }
     else
     {
-      A->balance_factor =  0;
-      C->balance_factor = -1;
+      A->balance_factor = 0;
+      C->balance_factor = 1;
     }
 
     return B;
@@ -627,8 +627,8 @@ private:
     }
     else
     {
-      A->balance_factor =  0;
-      C->balance_factor = -1;
+      A->balance_factor = 0;
+      C->balance_factor = 1;
     }
 
     return B;

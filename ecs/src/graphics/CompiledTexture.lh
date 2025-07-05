@@ -12,6 +12,9 @@ $ local metadata = require "reflect.Metadata"
 @@lpp.import "asset/Asset.lh"
 @@lpp.import "asset/OffsetPtr.lh"
 @@lpp.import "graphics/Texture.lh"
+@@lpp.import "graphics/Image.lh"
+@@lpp.import "graphics/ImageView.lh"
+@@lpp.import "graphics/Sampler.lh"
 
 struct AssetMgr;
 
@@ -60,8 +63,13 @@ struct CompiledTexture
     return *asset;
   }
 
-  // The texture loaded on the gpu.
-  Texture gfx_texture;
+  u32 gfx_id;
+
+  // gfx objects representing this texture.
+  Image image;
+  ImageView view;
+  Sampler sampler;
+  Texture texture; // This is what is actually bound to display this texture.
 
   static s64 writeDataPath(io::IO* io, String name, AssetMgr& assetmgr);
 
@@ -69,6 +77,8 @@ struct CompiledTexture
     String name,
     AssetMgr& assetmgr,
     Renderer& renderer);
+
+  void unload(AssetMgr& assetmgr, Renderer& renderer);
 
   struct CompileParams
   {

@@ -1,0 +1,37 @@
+/*
+ *  Widget that displays a list of entities in the game world.
+ */
+
+$ require "common"
+
+#include "iro/Common.h"
+
+namespace ui
+{
+struct UI;
+}
+
+struct EditorSkinDef;
+struct AssetLoader;
+
+namespace cl
+{
+
+struct Editor;
+struct GameSim;
+
+/* ============================================================================
+ */
+struct Editor_EntityList
+{
+  b8 init(Editor* editor, AssetLoader& loader) { return true; }
+  void deinit(Editor* editor) { }
+
+  b8 update(
+    Editor* editor,
+    ui::UI& ui,
+    cl::GameSim& sim,
+    const EditorSkinDef& skin);
+};
+
+}

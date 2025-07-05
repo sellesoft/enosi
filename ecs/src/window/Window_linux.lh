@@ -39,6 +39,13 @@ struct X11Stuff
 
   Cursor default_cursor;
   Cursor hidden_cursor;
+
+  struct 
+  {
+    Atom wm_state;
+    Atom wm_protocols;
+    Atom wm_delete_window;
+  } atoms;
 };
 
 extern X11Stuff x11;

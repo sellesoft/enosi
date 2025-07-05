@@ -16,6 +16,7 @@ $ local ui = require "ui.UI"
 #include "iro/io/IO.h"
 
 @@lpp.import "game/client/editor/GameView.lh"
+@@lpp.import "game/client/editor/EntityList.lh"
 
 @@lpp.import "ui/UI.lh"
 @@lpp.import "game/client/editor/Skin.defs.lh"
@@ -37,6 +38,8 @@ struct Editor
 
   b8 paused = false;
 
+  ui::UI ui;
+
   enum class Tool
   {
     None,
@@ -45,22 +48,39 @@ struct Editor
 
   Tool active_tool = Tool::None;
 
-  b8   init(Client* client, AssetLoader& loader);
-  void deinit();
+  struct InitParams
+  {
+    Client& client;
+    AssetLoader& loader;
+    gfx::Texture white_texture;
+    gfx::Renderer& renderer;
+  };
+
+  b8   init(InitParams& params);
+  void deinit(gfx::Renderer& renderer);
 
   f32 getTimer() const 
   { 
     return (TimePoint::monotonic() - start_time).toSeconds(); 
   }
 
-  b8 update(ui::UI& ui, cl::GameSim& sim);
+  b8 update(cl::GameSim& sim);
 
-  void putUI(ui::UI& ui, cl::GameSim& sim, const EditorSkinDef& skin);
+  struct RenderParams
+  {
+    cl::GameSim& sim;
+    gfx::Renderer& renderer;
+    gfx::RenderTarget& target;
+  };
+  b8 render(const RenderParams& params);
+
+  void putUI(cl::GameSim& sim, const EditorSkinDef& skin);
 
   Editor_GameView view;
+  Editor_EntityList entity_list;
 
   // Places the left tool panel.
-  void putToolPanel(ui::UI& ui, const EditorSkinDef& skin);
+  void putToolPanel(const EditorSkinDef& skin);
 
   struct MapTool
   {
@@ -68,7 +88,7 @@ struct Editor
   };
 
   MapTool tool_map;
-  void putMapTool(ui::UI& ui, const EditorSkinDef& skin);
+  void putMapTool(const EditorSkinDef& skin);
 };
 
 }

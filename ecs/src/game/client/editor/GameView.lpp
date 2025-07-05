@@ -22,6 +22,8 @@ $$$
 @@lpp.import "ui/UI.lh"
 @@lpp.import "game/client/Client.lh"
 
+@@lpp.import "Profiling.lh"
+
 #include "math/util.h"
 
 @log.ger(editor.view, Info)
@@ -30,7 +32,6 @@ $$$
 local Editor = p:lookupDecl "struct cl::Editor"
 local Tools = Editor:getMember "Tool"
 local TileKindDef = p:lookupDecl "struct TileKindDef"
-local TileKindConfig = p:lookupDecl "enum TileKindConfig"
 $$$
 
 namespace cl
@@ -38,17 +39,17 @@ namespace cl
 
 /* ----------------------------------------------------------------------------
  */
-b8 Editor_GameView::init(Editor* editor, AssetLoader& loader)
+b8 Editor_GameView::init(Editor* editor, gfx::Renderer& renderer)
 {
+
   return true;
 }
 
 /* ----------------------------------------------------------------------------
  */
-void Editor_GameView::deinit(Editor* editor)
+void Editor_GameView::deinit(Editor* editor, gfx::Renderer& renderer)
 {
-  framebuffer.deinit(editor->client->renderer);
-  texture.deinit(editor->client->renderer);
+  render_target.destroy(renderer);
 }
 
 /* ----------------------------------------------------------------------------
@@ -59,6 +60,8 @@ b8 Editor_GameView::update(
     cl::GameSim& sim, 
     const EditorSkinDef& skin)
 {
+  ZoneScopedN("Editor_GameView::update");
+
   Client& client = *editor->client;
   gfx::Renderer& renderer = client.renderer;
 
@@ -69,16 +72,23 @@ b8 Editor_GameView::update(
       "editor.gameview.viewport"_fid,
       bounds);
 
-  // Reinitialize the framebuffer and texture if the viewport size happens
-  // to change. Also set the viewport of the simulation.
   if (bounds.size() != view_size)
   {
     view_size = bounds.size();
     sim.setViewport(bounds);
 
-    if (!reinitializeGraphicsObjects(renderer))
-      return ERROR("failed to reinitialize graphics objects due to view size "
-                   "change\n");
+    render_target.destroy(renderer);
+
+    render_target = gfx::RenderTarget::create(
+      renderer,
+      {
+        .format = gfx::ImageFormat::RGBA,
+        .size = vec2u(view_size),
+        .debug_name = "editor.gameview"_str,
+      });
+
+    if (isnil(render_target))
+      return ERROR("failed to create game view render target");
   }
 
   // Step the simulation if its not paused.
@@ -102,20 +112,12 @@ b8 Editor_GameView::update(
   cursor_pos = ui.getLocalCursorPos() - bounds.pos();
   cursor_world_pos = view.viewportPointToWorld(cursor_pos, view_size);
 
-  // Render the state of the simulation to our framebuffer and texture.
-  renderer.bindFramebuffer(framebuffer);
-
-  // TODO(sushi) this probably doesn't need to be a hard error.
-  if (!sim.render(renderer, view))
-    return ERROR("failed to render game sim\n");
-
-  renderer.bindFramebuffer(nil);
-  // TODO(sushi) it would be nice to avoid needing to doing this somehow,
-  //             and I figure this may break somehow.
-  renderer.setViewport({0, 0}, client.window.size);
-
-  // Draw the resulting texture.
-  ui.putQuad(bounds, texture, 0xffffffff);
+  // Put a quad displaying the texture the game will render to in 
+  // render().
+  // TODO(sushi) figure out if there's a way to avoid actually drawing 
+  //             the image to a quad, eg. using a frag shader to resample 
+  //             the entire thing. It tends to be quite slow.
+  ui.putQuad(bounds, {render_target.set}, 0xffffffff);
 
   b8 select = false;
 
@@ -195,43 +197,22 @@ b8 Editor_GameView::update(
   return true;
 }
 
-/* ----------------------------------------------------------------------------
- */
-b8 Editor_GameView::reinitializeGraphicsObjects(gfx::Renderer& renderer)
+void Editor_GameView::render(
+    gfx::Renderer& renderer, 
+    cl::GameSim& sim)
 {
-  texture.deinit(renderer);
-  framebuffer.deinit(renderer);
+  ZoneScopedN("Editor_GameView::update");
 
-  texture = gfx::Texture::create(
-    renderer,
-    view_size.x,
-    view_size.y,
-    gfx::ImageFormat::RGBA,
-      gfx::ImageUsage::Sampled
-    | gfx::ImageUsage::FramebufferColor,
-    gfx::ImageAddressMode::ClampToBlack,
-    gfx::ImageFilter::Nearest,
-    nullptr,
-    "editor.gameview.texture"_str);
+  GameSim::RenderParams render_params = 
+  {
+    .renderer = renderer,
+    .target = render_target,
+    .view = &view,
+  };
 
-  if (isnil(texture))
-    return ERROR("failed to create editor.gameview.texture\n");
+  sim.render(render_params);
 
-  // NOTE(sushi) we could maybe just size the frame buffer to the 
-  //             size of the window as that will always be able to contain
-  //             the texture to avoid needing to reinitialize it whenever 
-  //             the view size changes. It's probably not a big deal though
-  //             as the size really shouldn't change that often.
-  if (!framebuffer.init(
-        renderer,
-        view_size.x,
-        view_size.y,
-        texture,
-        {0,0,0,255},
-        "editor.gameview.framebuffer"_str))
-    return ERROR("failed to initialize editor.gameview framebuffer\n");
-
-  return true;
+  renderer.prepareImageForSampling(render_target.image);
 }
 
 }

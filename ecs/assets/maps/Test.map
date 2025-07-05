@@ -320,6 +320,7 @@ return MapDef
         },
         {
           kind = "assets/floors/tiles/Floor",
+          entities = { "assets/entities/spawners/Player" },
         },
         {
           kind = "assets/floors/tiles/Floor",

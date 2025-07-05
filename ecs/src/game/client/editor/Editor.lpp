@@ -26,6 +26,7 @@ $$$
 @@lpp.import "game/shared/map/Map.sys.lh"
 
 @@lpp.import "asset/SourceDataFileReg.lh"
+@@lpp.import "Profiling.lh"
 
 #include "math/util.h"
 #include "iro/fs/Glob.h"
@@ -37,12 +38,28 @@ namespace cl
 
 /* ----------------------------------------------------------------------------
  */
-b8 Editor::init(Client* client, AssetLoader& loader)
+b8 Editor::init(InitParams& params)
 {
-  this->client = client;
+  this->client = &params.client;
 
-  if (!loader.load(&skinref, "assets/skins/Editor.skin"_str))
+  if (!params.loader.load(&skinref, "assets/skins/Editor.skin"_str))
     return ERROR("failed to load editor skin\n");
+
+  if (!entity_list.init(this, params.loader))
+    return ERROR("failed to load editor entity list widget\n");
+
+  if (!view.init(this, params.renderer))
+    return ERROR("failed to load editor game view\n");
+
+  ui::UI::InitParams ui_params = 
+  {
+    .renderer = params.renderer,
+    .white_texture = params.white_texture,
+    .loader = params.loader,
+  };
+  
+  if (!ui.init(ui_params))
+    return ERROR("failed to initialize Editor ui\n");
 
   start_time = TimePoint::monotonic();
 
@@ -51,16 +68,21 @@ b8 Editor::init(Client* client, AssetLoader& loader)
 
 /* ----------------------------------------------------------------------------
  */
-void Editor::deinit()
+void Editor::deinit(gfx::Renderer& renderer)
 {
-  view.deinit(this);
+  view.deinit(this, renderer);
+  entity_list.deinit(this);
+  ui.deinit(renderer);
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 Editor::update(ui::UI& ui, cl::GameSim& sim)
+b8 Editor::update(cl::GameSim& sim)
 {
+  ZoneScopedN("Editor::update");
+
   const EditorSkinDef& skin = *skinref;
+  gfx::Renderer& renderer = client->renderer;
 
   const f32 content_padding = 5.f;
 
@@ -104,6 +126,9 @@ b8 Editor::update(ui::UI& ui, cl::GameSim& sim)
   ui.beginGroup(ui.getBounds().contracted(content_padding));
 
   Rect bounds = ui.getBounds();
+
+  if (!entity_list.update(this, ui, sim, skin))
+    return ERROR("failed to update entity list\n");
 
   static const String tool_names[] = 
   {
@@ -150,7 +175,7 @@ $ end
 
     switch(active_tool)
     {
-    case Tool::Map: putMapTool(ui, skin); break;
+    case Tool::Map: putMapTool(skin); break;
     }
 
     ui.endGroup();
@@ -165,7 +190,29 @@ $ end
 
 /* ----------------------------------------------------------------------------
  */
-void Editor::putMapTool(ui::UI& ui, const EditorSkinDef& skin)
+b8 Editor::render(const RenderParams& params)
+{
+  // Render the game view.
+  view.render(params.renderer, params.sim);
+
+  // TODO(sushi) separate rendering for Editor and UI into explicit functions.
+  if (!params.renderer.beginRenderPass(
+        vec2i(0,0),
+        vec2u(client->window.size),
+        params.target,
+        0x000000ff))
+    return ERROR("failed to begin render pass for editor\n");
+
+  ui.render(params.renderer, Rect::from({0,0}, vec2f(client->window.size)));
+
+  params.renderer.endRenderPass();
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Editor::putMapTool(const EditorSkinDef& skin)
 {
   TileKindRef tile_kind_ref;
 
@@ -201,7 +248,7 @@ void Editor::putMapTool(ui::UI& ui, const EditorSkinDef& skin)
 
       ui.putQuad(
         {0.f, y, texture_size, texture_size}, 
-        tile_kind.texture->gfx_texture, 0xffffffff);
+        tile_kind.texture->texture, 0xffffffff);
 
       Rect button_bounds = 
       {

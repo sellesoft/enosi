@@ -1,5 +1,5 @@
 return gfx::ShaderDef
 {
-  kind = "Vertex",
+  stage = "Vertex",
   source = "assets/shaders/Fullscreen",
 }

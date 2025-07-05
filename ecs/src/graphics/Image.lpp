@@ -1,0 +1,128 @@
+$ require "common"
+$ local helpers = require "graphics.Helpers"
+
+@@lpp.import "graphics/Image.lh"
+@@lpp.import "graphics/Vulkan.lh"
+@@lpp.import "graphics/Renderer.lh"
+
+@log.ger(gfx.image, Info)
+
+namespace gfx
+{
+
+/* ----------------------------------------------------------------------------
+ */
+Image Image::create(Renderer& r, const CreateParams& params)
+{
+  String name = resolved(params.debug_name, "unnamed"_str);
+
+  DEBUG("creating gfx::Image '", name, "'\n");
+
+$ local cerr = helpers.defCreateErr("gfx::Image", "name")
+
+  if (params.size.x == 0 || params.size.y == 0)
+  {
+    @cerr("cannot create a texture with 0 width or height");
+    return nil;
+  }
+
+  if (params.usage.isNone())
+  {
+    @cerr("no usage flags set");
+    return nil;
+  }
+  
+  VkFormat format = imageFormatToVulkan(params.format);
+
+  // This image will be transfered to.
+  VkImageUsageFlags usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+  
+  if (params.usage.test(ImageUsage::Sampled))
+    usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+  if (params.usage.test(ImageUsage::ColorAttachment))
+    usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+  
+  VkImage image;
+  if (!r.vk->createVkImage(
+        &image,
+        params.size,
+        format,
+        usage,
+        name))
+  {
+    @cerr("failed to create VkImage");
+    return nil;
+  }
+
+  DeviceHeapAllocation* ptr =
+    r.vk->allocateAndBindVkImageMemory(image);
+
+  if (ptr == nullptr)
+  {
+    @cerr("failed to allocate or bind VkImage memory");
+    return nil;
+  }
+
+  auto failsafe_deallocate = deferWithCancel
+  {
+    r.vk->deallocate(ptr);
+  };
+
+  if (params.pixels != nullptr)
+  {
+    VkDeviceSize size = 
+      params.size.x * params.size.y * 
+      imageFormatToBytesPerPixel(params.format);
+
+    if (!r.vk->stageVkImageMemory(
+          params.pixels,
+          size,
+          image,
+          params.size))
+    {
+      @cerr("failed to stage image memory");
+      return nil;
+    }
+  }
+  
+  // Track the Image internally since we have to allocate device memory
+  // for it.
+  DeviceImage* internal_image = r.vk->image_pool.add();
+  internal_image->handle = image;
+  internal_image->ptr = ptr;
+
+  failsafe_deallocate.cancel();
+
+  // The handle is our internal representation instead of the VkImage, because
+  // we have to also track the device memory for it.
+  return {(void*)internal_image};
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Image::destroy(Renderer& r)
+{
+  if (isnil(*this))
+    return;
+
+  DEBUG("destroying ", *this, '\n');
+
+  // Check if this is a swapchain image before interpretting it as one of 
+  // our internal images. We have to do this, because we can hand out 
+  // a RenderTarget containing an Image who's handle is a swapchain image,
+  // which we do not own.
+  // This needs to be done better eventually, but I just wanna get stuff
+  // working again!
+  if (!r.vk->isSwapchainImage(handle))
+  {
+    auto* internal_image = (DeviceImage*)handle;
+    r.vk->destroyVkImage(internal_image->handle);
+    r.vk->deallocate(internal_image->ptr);
+    r.vk->image_pool.remove(internal_image);
+  }
+
+  *this = nil;
+}
+
+
+}

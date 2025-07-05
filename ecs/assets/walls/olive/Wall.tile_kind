@@ -1,7 +1,5 @@
 return TileKindDef
 {
-  kind = "Wall",
-
   textures = 
   {
     BottomLeftCorner    = "assets/walls/olive/BottomLeft",

@@ -1,0 +1,707 @@
+/*
+ *  All Vulkan state and functionality. None of this should be included in 
+ *  any public api header.
+ *
+ *  This is meant to provide many helpers for using Vulkan as it comes with 
+ *  quite a lot of boilerplate when writing its code directly. Its not 
+ *  completely off limits to use Vulkan directly in files other than 
+ *  Vulkan.lpp, but you should prefer to use, extend, or add helpers to this 
+ *  especially if you find yourself writing the same code over and over again
+ *  and ESPECIALLY if that code is in different files.
+ */
+
+$ require "common"
+
+#include "vulkan/vulkan.h"
+
+#include "iro/io/IO.h"
+#include "iro/io/Format.h"
+#include "iro/containers/Array.h"
+#include "iro/containers/FixedPool.h"
+#include "iro/containers/StackArray.h"
+#include "iro/containers/Pool.h"
+#include "iro/memory/Bump.h"
+
+#include "math/vec.h"
+
+@@lpp.import "graphics/TextureParams.lh"
+@@lpp.import "graphics/ShaderParams.lh"
+
+// TODO(sushi) THIS SUCKS as it increases the compile times of EVERYTHING 
+//             using this header by a LOT. We REALLY need to wrap Tracy
+//             GOD DAMNIT! We have to import this here though because 
+//             Tracy needs us to track an object to profile GPU stuff 
+//             what NONSENSE is THAT ?!!?
+@@lpp.import "Profiling.lh"
+#include "external/tracy/tracy/TracyVulkan.hpp"
+
+using namespace iro;
+
+struct Window;
+
+namespace gfx
+{
+
+/* ============================================================================
+ *  Objects used to manage device memory manually.
+ */
+// TODO(sushi) move these elsewhere.
+struct DeviceHeapAllocation
+{
+  u32 memory_type;
+  u32 block_index;
+  VkDeviceSize offset;
+  VkDeviceSize size;
+  VkDeviceSize aligned_offset;
+  VkDeviceSize aligned_size;
+};
+
+struct DeviceHeapBlock
+{
+  VkDeviceSize size = 0;
+  VkDeviceMemory memory = VK_NULL_HANDLE;
+  u32 cursor = 0;
+  u32 mapped_count = 0;
+  void* mapped_data = nullptr;
+};
+
+struct DeviceHeap
+{
+  VkMemoryHeap heap;
+  VkDeviceSize alignment;
+  VkDeviceSize preferred_block_size;
+  Array<DeviceHeapBlock> blocks;
+  // NOTE(sushi) this is a Pool for now, as our Device* types need to hold 
+  //             a pointer to them. Without this, the movement caused by 
+  //             deallocation can cause those pointers to become invalid.
+  // TODO(sushi) rework device memory management eventually.
+  Pool<DeviceHeapAllocation> allocations;
+  Array<DeviceHeapAllocation> free_chunks;
+};
+
+/* ============================================================================
+ */
+struct DeviceBuffer
+{
+  VkBuffer handle;
+  DeviceHeapAllocation* ptr;
+  VkDescriptorSet set;
+
+  void reset()
+  {
+    handle = VK_NULL_HANDLE;
+    ptr = nullptr;
+  }
+
+  b8 isValid() const
+  {
+    return handle != VK_NULL_HANDLE && ptr != nullptr;
+  }
+};
+
+/* ============================================================================
+ */
+struct DeviceImage
+{
+  VkImage handle;
+  DeviceHeapAllocation* ptr;
+
+  void reset() 
+  { 
+    handle = VK_NULL_HANDLE; 
+    ptr = nullptr;
+  }
+
+  b8 isValid() const 
+  { 
+    return handle != VK_NULL_HANDLE && ptr != nullptr;
+  }
+};
+
+/* ============================================================================
+ *  TODO(sushi) remove
+ */
+struct DeviceShader
+{
+  VkShaderModule module;
+  VkShaderStageFlagBits stage;
+
+  void reset()
+  {
+    module = VK_NULL_HANDLE;
+    stage = {};
+  }
+
+  b8 isValid() const
+  {
+    return 
+      module != VK_NULL_HANDLE;
+  }
+};
+
+/* ============================================================================
+ */
+struct DevicePipeline
+{
+  VkPipeline pipeline;
+  VkPipelineLayout layout;
+
+  void reset()
+  {
+    pipeline = VK_NULL_HANDLE;
+    layout = VK_NULL_HANDLE;
+  }
+
+  b8 isValid() const
+  {
+    return 
+      pipeline != VK_NULL_HANDLE &&
+      layout != VK_NULL_HANDLE;
+  }
+};
+
+/* ============================================================================
+ */
+struct DeviceSampler
+{
+  VkSampler handle;
+
+  b8 isValid() const 
+  {
+    return handle != VK_NULL_HANDLE;
+  }
+};
+
+/* ============================================================================
+ *  Helper for tracking allocated device resources as well as counting them.
+ *  TODO(sushi) move elsewhere.
+ */
+template<typename T, u64 capacity>
+struct ResourcePool
+{ 
+  FixedPool<T, capacity> pool;
+  u32 count;
+
+  T* add()
+  {
+    T* elem = pool.add();
+    if (elem == nullptr)
+      return nullptr;
+    count += 1;
+    return elem;
+  }
+
+  void remove(T* elem)
+  {
+    assert(elem != nullptr);
+    elem->reset();
+    pool.remove(elem);
+    count -= 1;
+  }
+
+  // We assert that any internally stored resource is valid, since 
+  // they should never get corrupted for the time we store them.
+  T* get(u32 index)
+  {
+    T* elem = pool.atIndex(index);
+    if (elem == nullptr)
+      return nullptr;
+    assert(elem->isValid());
+    return elem;
+  }
+
+  u32 indexOf(T* elem)
+  {
+    return pool.indexOf(elem);
+  }
+};
+
+/* ============================================================================ 
+ */
+struct VirtualFrame
+{
+  VkCommandBuffer command_buffer;
+  VkSemaphore acquire_semaphore;
+  VkFence command_buffer_fence;
+
+  TracyVkCtx tracy_ctx;
+};
+
+// The number of virtual frames we will allow to be 'in-flight'.
+// TODO(sushi) make this a runtime thing eventually.
+// NOTE(sushi) keeping this at 1 for now as the way the GameRenderer uses 
+//             its quad vertex buffer does not work well with double buffering
+//             as if we are running too fast, it will write to the buffer 
+//             while its still being rendered (or presented or queued or 
+//             whatever, i have no idea yet).
+static const u32 max_vframes = 1;
+
+/* ============================================================================
+ *  All state relevant to the Vulkan graphics backend as well as its 
+ *  functionality.
+ */
+struct Vulkan
+{
+  enum
+  {
+    c_MaxImages = 64,
+    c_MaxBuffers = 64,
+    c_MaxShaders = 32,
+    c_MaxPipelines = 8,
+    c_MaxDefaultFramebuffers = 4,
+  };
+
+  //// Renderer Objects ////
+
+  // TODO(sushi) maybe rework these to store a salt value.
+  ResourcePool<DeviceBuffer,   c_MaxBuffers>   buffer_pool;
+  ResourcePool<DeviceImage,    c_MaxImages>    image_pool;
+  ResourcePool<DeviceShader,   c_MaxShaders>   shader_pool;
+  ResourcePool<DevicePipeline, c_MaxPipelines> pipeline_pool;
+
+  StackArray<DeviceHeap, VK_MAX_MEMORY_TYPES> heaps;
+
+  //// Vulkan Core Objects ////
+
+  VkAllocationCallbacks allocator_callbacks;
+
+  VkInstance instance;
+
+  VkDebugUtilsMessengerEXT debug_messenger;
+  PFN_vkCmdBeginDebugUtilsLabelEXT func_vkCmdBeginDebugUtilsLabelEXT;
+  PFN_vkCmdEndDebugUtilsLabelEXT func_vkCmdEndDebugUtilsLabelEXT;
+  PFN_vkCmdInsertDebugUtilsLabelEXT func_vkCmdInsertDebugUtilsLabelEXT;
+  PFN_vkSetDebugUtilsObjectNameEXT func_vkSetDebugUtilsObjectNameEXT;
+
+  VkPhysicalDevice physical_device;
+  VkPhysicalDeviceProperties physical_device_properties;
+  VkPhysicalDeviceMemoryProperties physical_device_memory_properties;
+  VkPhysicalDeviceFeatures physical_device_features;
+  VkPhysicalDeviceFeatures physical_device_enabled_features;
+  u32 physical_device_graphics_queue_family;
+  u32 physical_device_present_queue_family;
+
+  VkDevice device;
+  VkQueue graphics_queue;
+  VkQueue present_queue;
+
+  VkCommandPool command_pool;
+  VkDescriptorPool descriptor_pool;
+
+  VkSurfaceKHR surface;
+  VkSurfaceFormatKHR surface_format;
+  VkPresentModeKHR surface_present_mode;
+  VkExtent2D surface_extent;
+
+  VkSwapchainKHR swapchain;
+  u32 swapchain_min_image_count;
+  u32 swapchain_image_count;
+
+  struct SwapchainBuffer
+  {
+    VkImage image;
+    VkImageView view;
+    VkSemaphore submit_semaphore;
+  };
+  Array<SwapchainBuffer> swapchain_buffers;
+
+  VirtualFrame vframes[max_vframes];
+  u32 current_vframe;
+
+  VirtualFrame* getCurrentVirtualFrame()
+  {
+    return &vframes[current_vframe];
+  }
+
+  void advanceVirtualFrame()
+  {
+    current_vframe = (current_vframe + 1) % max_vframes;
+  }
+
+  // Check if an opaque pointer is equal to one of our swapchain images.
+  // The way this is implemented seems quite unsafe and ideally should
+  // be done better later on. We do this when we delete Images and ImageViews
+  // because we can hand them out as RenderTargets, which stores those 
+  // types as handles.
+  b8 isSwapchainImage(void* ptr) const
+  {
+    for (const SwapchainBuffer& buffer : swapchain_buffers)
+    {
+      if (ptr == (void*)buffer.image)
+        return true;
+    }
+    return false;
+  }
+
+  // Same as above.
+  b8 isSwapchainView(void* ptr) const
+  {
+    for (const SwapchainBuffer& buffer : swapchain_buffers)
+    {
+      if (ptr == (void*)buffer.view)
+        return true;
+    }
+    return false;
+  }
+
+  VkPipelineCache pipeline_cache;
+
+  struct InitParams
+  {
+    mem::Allocator* allocator;
+    mem::LenientBump& temp_allocator;
+
+    Window& window;
+  };
+
+  b8 init(const InitParams& params);
+  void deinit(mem::Allocator* allocator);
+
+  // Initialization functions.
+  // Note that these are declared in the same order they should be called in
+  // init().
+  
+  b8 initInstance(
+    mem::Allocator* allocator,
+    mem::LenientBump& temp_allocator);
+  void deinitInstance();
+
+  // NOTE(sushi) implemented in platform backend files, eg. Vulkan_Linux.lpp
+  b8 initSurface(Window& window);
+  void deinitSurface();
+
+  b8 initPhysicalDevice(
+    mem::Allocator* allocator,
+    mem::LenientBump& temp_allocator);
+
+  b8 initLogicalDevice();
+  void deinitLogicalDevice();
+
+  b8 initCommandPool();
+  void deinitCommandPool();
+
+  b8 initVirtualFrames();
+  void deinitVirtualFrames();
+
+  b8 initDescriptorPools();
+  void deinitDescriptorPools();
+
+  b8 initSwapchain();
+  void deinitSwapchain();
+  b8 recreateSwapchain();
+
+  b8 initPipelineCache();
+  void deinitPipelineCache();
+
+  // Implemented in platform files.
+  VkFormat getPlatformDesiredSurfaceFormat();
+
+  // Internal graphics memory management.
+
+  DeviceHeapAllocation* allocate(
+    u32 memory_type,
+    VkMemoryRequirements memory_requirements);
+
+  void deallocate(DeviceHeapAllocation* ptr);
+
+  DeviceHeap* getHeap(DeviceHeapAllocation* ptr)
+  {
+    return &heaps[ptr->memory_type];
+  }
+
+  DeviceHeapBlock* getHeapBlock(DeviceHeapAllocation* ptr)
+  {
+    return &getHeap(ptr)->blocks[ptr->block_index];
+  }
+
+  DeviceHeapBlock* getHeapBlock(DeviceHeap* heap, DeviceHeapAllocation* ptr)
+  {
+    return &heap->blocks[ptr->block_index];
+  }
+
+  VkDeviceMemory getDeviceMemory(DeviceHeapAllocation* ptr)
+  {
+    return getHeapBlock(ptr)->memory;
+  }
+
+  // Makes an internal allocation for the given buffer and binds it 
+  // to the buffer on the device.
+  DeviceHeapAllocation* allocateAndBindVkBufferMemory(
+    VkBuffer buffer,
+    VkMemoryPropertyFlags properties);
+  DeviceHeapAllocation* allocateAndBindVkBufferMemory(
+    VkBuffer buffer,
+    VkMemoryPropertyFlags properties,
+    VkMemoryRequirements memreq);
+
+  // Makes an internal allocation for the given image and binds it 
+  // to the buffer on the device.
+  DeviceHeapAllocation* allocateAndBindVkImageMemory(VkImage image);
+  DeviceHeapAllocation* allocateAndBindVkImageMemory(
+    VkImage image,
+    VkMemoryRequirements memreq);
+
+  // Vulkan object creation and management helpers.
+
+  // Does not make any internal allocation, use allocateVkBuffer to do so.
+  b8 createVkBuffer(
+    VkBuffer* out,
+    VkDeviceSize size,
+    VkBufferUsageFlags usage,
+    String debug_name);
+
+  void destroyVkBuffer(VkBuffer buffer)
+    { vkDestroyBuffer(device, buffer, &allocator_callbacks); }
+
+  b8 createVkImage(
+    VkImage*          out,
+    vec2u             size,
+    VkFormat          format,
+    VkImageUsageFlags usage,
+    String            debug_name);
+
+  void destroyVkImage(VkImage image)
+    { vkDestroyImage(device, image, &allocator_callbacks); }
+
+  b8 createVkImageView(
+    VkImageView* out,
+    VkImage image,
+    VkFormat format,
+    const VkComponentMapping& components,
+    String debug_name);
+
+  void destroyVkImageView(VkImageView view)
+    { vkDestroyImageView(device, view, &allocator_callbacks); }
+
+  b8 createVkSampler(
+    VkSampler* out,
+    VkFilter filter,
+    VkSamplerAddressMode address_mode,
+    String debug_name);
+
+  void destroyVkSampler(VkSampler sampler)
+    { vkDestroySampler(device, sampler, &allocator_callbacks); }
+
+  b8 createVkDescriptorSetLayout(
+    VkDescriptorSetLayout* out,
+    Slice<VkDescriptorSetLayoutBinding> bindings,
+    String debug_name);
+
+  void destroyVkDescriptorSetLayout(VkDescriptorSetLayout layout)
+    { vkDestroyDescriptorSetLayout(device, layout, &allocator_callbacks); }
+
+  b8 allocateVkDescriptorSet(
+    VkDescriptorSet* out,
+    const VkDescriptorSetLayout* layout,
+    String debug_name);
+
+  void deallocateVkDescriptorSet(VkDescriptorSet set)
+    { vkFreeDescriptorSets(device, descriptor_pool, 1, &set); }
+
+  void updateVkDescriptorSet_Buffer(
+    VkDescriptorSet set,
+    VkDescriptorType type,
+    u32 binding,
+    u32 array_offset,
+    Slice<VkDescriptorBufferInfo> buffers);
+
+  void updateVkDescriptorSet_Image(
+    VkDescriptorSet set,
+    u32 array_offset,
+    u32 binding,
+    Slice<VkDescriptorImageInfo> images);
+
+  b8 createVkShaderModule(
+    VkShaderModule* out,
+    Bytes spv_binary,
+    String debug_name);
+    
+  void destroyVkShaderModule(VkShaderModule shader)
+    { vkDestroyShaderModule(device, shader, &allocator_callbacks); }
+
+  b8 createVkPipelineLayout(
+    VkPipelineLayout* out,
+    Slice<VkDescriptorSetLayout> set_layouts,
+    Slice<VkPushConstantRange> push_constants,
+    String debug_name);
+
+  void destroyVkPipelineLayout(VkPipelineLayout layout)
+    { vkDestroyPipelineLayout(device, layout, &allocator_callbacks); }
+
+  b8 createVkPipeline(
+    VkPipeline* out,
+    VkPipelineLayout layout,
+    VkShaderModule vert_shader,
+    VkShaderModule frag_shader,
+    b8 has_vertex_input,
+    String debug_name);
+
+  void destroyVkPipeline(VkPipeline pipeline)
+    { vkDestroyPipeline(device, pipeline, &allocator_callbacks); }
+
+  b8 createVkSemaphore(VkSemaphore* out, String debug_name);
+
+  void destroyVkSemaphore(VkSemaphore semaphore)
+    { vkDestroySemaphore(device, semaphore, &allocator_callbacks); }
+
+  b8 createVkFence(VkFence* out, b8 create_signaled, String debug_name);
+
+  void destroyVkFence(VkFence fence)
+    { vkDestroyFence(device, fence, &allocator_callbacks); }
+
+  b8 createVkCommandBuffer(VkCommandBuffer* out, String debug_name);
+
+  // Misc. helpers for doing common Vulkan things.
+
+  // Begin/end a command buffer for temporary use, eg. copying pixels to 
+  // a texture.
+  b8 beginSingleUseCommandBuffer(VkCommandBuffer* out);
+  b8 endSingleUseCommandBuffer(VkCommandBuffer command_buffer);
+
+  b8 mapVkBuffer(
+    void** out, 
+    VkDeviceSize offset,
+    DeviceHeapAllocation* ptr);
+
+  // Returns false if the given buffer was not mapped.
+  b8 unmapVkBuffer(DeviceHeapAllocation* ptr);
+
+  b8 flushMappedVkBuffer(
+    VkDeviceSize offset,
+    VkDeviceSize size,
+    DeviceHeapAllocation* ptr);
+
+  b8 mapCopyAndFlushVkBufferMemory(
+    void* data, 
+    VkDeviceSize offset,
+    VkDeviceSize size,
+    DeviceHeapAllocation* ptr);
+
+  // Create a buffer meant for temporary use, typically for queueing a 
+  // write to a device-only gfx object.
+  b8 createStagingBuffer(
+    VkBuffer* out,
+    DeviceHeapAllocation** out_allocation,
+    VkDeviceSize required_size);
+
+  b8 stageVkBufferMemory(
+    void* data, 
+    VkDeviceSize size, 
+    VkBuffer buffer,
+    VkDeviceSize buffer_required_size);
+
+  b8 stageVkImageMemory(
+    void* data, 
+    VkDeviceSize size, 
+    VkImage image,
+    vec2u image_size);
+
+  u32 determineMemoryType(
+    VkMemoryRequirements memory_requirements,
+    VkMemoryPropertyFlags memory_property_flags);
+
+  // Note that this should (at the time of writing) only return false 
+  // if the swapchain is found to be out of date.
+  b8 acquireNextImageIndex(u32* out);
+
+  b8 queuePresent(
+    VkSemaphore wait_semaphore,
+    u32 image_index);
+
+  ImageFormat getSurfaceImageFormat() const;
+
+  b8 beginCommandBuffer(VkCommandBuffer command_buffer);
+  void endCommandBuffer(VkCommandBuffer command_buffer);
+
+  // Command functions.
+
+  void cmdImageMemoryBarrier(
+    VkCommandBuffer command_buffer, 
+    VkImage image,
+    VkAccessFlags src_access,
+    VkAccessFlags dst_access,
+    VkImageLayout old_layout,
+    VkImageLayout new_layout,
+    VkPipelineStageFlags src_stage,
+    VkPipelineStageFlags dst_stage);
+
+  void cmdCopyBufferToImage(
+    VkCommandBuffer command_buffer,
+    VkImage image,
+    VkBuffer buffer,
+    vec2u size);
+
+  void cmdBeginRendering(
+    VkCommandBuffer command_buffer,
+    VkRect2D render_area,
+    VkImage image,
+    VkImageView image_view,
+    VkClearValue clear_value);
+
+  void cmdEndRendering(VkCommandBuffer command_buffer);
+
+  /* --------------------------------------------------------------------------
+   *  Attaches a name to a Vulkan object that will appear in tools like 
+   *  RenderDoc. Ideally, all of the objects we create are named.
+   */
+  void debugSetObjectName(
+    VkObjectType type, 
+    void* handle, 
+    iro::io::Formattable auto... args)
+  {
+  $ if ECS_DEBUG then
+    if (func_vkSetDebugUtilsObjectNameEXT == nullptr)
+      return;
+    if (handle == nullptr)
+      return;
+
+    iro::io::StaticBuffer<64> name = {};
+    iro::io::formatv(&name, args...);
+
+    VkDebugUtilsObjectNameInfoEXT name_info =
+    {
+      .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+      .objectType = type,
+      .objectHandle = (u64)handle,
+      .pObjectName = (const char*)name.buffer,
+    };
+
+    assert(
+      VK_SUCCESS == func_vkSetDebugUtilsObjectNameEXT(device, &name_info));
+  $ end -- if ECS_DEBUG
+  }
+
+  // Data tracking the current render state of the Vulkan instance.
+  struct RenderState
+  {
+    // The command buffer of the current render pass instance, if we are in 
+    // one. Eg. this is VK_NULL_HANDLE if vkCmdBeginRendering has not been
+    // called yet.
+    VkCommandBuffer command_buffer;
+
+    // The currently bound pipeline.
+    DevicePipeline* bound_pipeline;
+  };
+
+  RenderState state;
+
+  // NOTE(sushi) caching this because we need it to properly recreate the 
+  //             swapchain when its resized (need its size, duh) but due
+  //             to how the api is set up now, we would have to pass the 
+  //             window or its size into various functions. Really, we 
+  //             should be associating swapchains with Windows, but we don't
+  //             support displaying multiple at the moment so don't have a
+  //             reason to yet.
+  Window* window;
+};
+
+/* ----------------------------------------------------------------------------
+ */
+VkFormat imageFormatToVulkan(ImageFormat x);
+ImageFormat vkFormatToImageFormat(VkFormat x);
+u32 imageFormatToBytesPerPixel(ImageFormat x);
+VkFilter imageFilterToVulkan(ImageFilter x);
+VkSamplerAddressMode imageAddressModeToVulkan(ImageAddressMode x);
+VkShaderStageFlagBits shaderStageToVulkan(ShaderStage kind);
+VkShaderStageFlagBits shaderStageFlagsToVulkan(ShaderStageFlags stages);
+}

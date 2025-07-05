@@ -1,103 +1,61 @@
 $ require "common"
+$ local helpers = require "graphics.Helpers"
 
-@@lpp.import "graphics/RendererInternal.lh"
-
-@@lpp.import "graphics/Renderer.lh"
 @@lpp.import "graphics/Shader.lh"
+@@lpp.import "graphics/Vulkan.lh"
+@@lpp.import "graphics/Renderer.lh"
 
-#include "iro/Logger.h"
-#include "iro/fs/File.h"
-
-@defFileLogger(gfx.shader, Info)
+@log.ger(gfx.shader, Info)
 
 namespace gfx
 {
 
 /* ----------------------------------------------------------------------------
  */
-static VkShaderStageFlagBits shaderKindToVulkan(ShaderKind kind)
+Shader Shader::create(Renderer& r, const CreateParams& params)
 {
-  switch (kind)
+  String name = resolved(params.debug_name, "unnamed"_str);
+
+  DEBUG("creating shader '", name, "'\n");
+
+$ local cerr = helpers.defCreateErr("gfx::Shader", "name")
+
+  if (params.spv_binary.isEmpty())
   {
-    case ShaderKind::Vertex:   return VK_SHADER_STAGE_VERTEX_BIT;
-    case ShaderKind::Fragment: return VK_SHADER_STAGE_FRAGMENT_BIT;
-    case ShaderKind::Compute:  return VK_SHADER_STAGE_COMPUTE_BIT;
-    case ShaderKind::Geometry: return VK_SHADER_STAGE_GEOMETRY_BIT;
-    default: return VK_SHADER_STAGE_FLAG_BITS_MAX_ENUM;
+    @cerr("passed an empty spv binary");
+    return nil;
   }
-}
 
-/* ----------------------------------------------------------------------------
- */
-b8 Shader::init(
-  Renderer& renderer,
-  ShaderKind kind,
-  iro::Slice<u8> spv_binary,
-  String name)
-{
-  RendererInternal& ri = *(RendererInternal*)renderer.internal;
-  TRACE("initializing a shader\n");
-
-  if (ri.shader_count >= ri.shader_pool.MAX_COUNT)
-    return ERROR("failed to initialize a shader because the maximum number"
-      " of shaders has been reached (", ri.shader_pool.MAX_COUNT, ")\n");
-
-  if (index != 0)
-    return ERROR("failed to initialize a shader because the shader is"
-      " already initialized\n");
-
-  if (spv_binary.len == 0)
-    return ERROR("failed to initialize a shader because the binary is"
-      " empty\n");
-  assert(spv_binary.ptr != nullptr);
-
-  VkShaderModuleCreateInfo create_info =
+  VkShaderModule shader;
+  if (!r.vk->createVkShaderModule(
+        &shader,
+        params.spv_binary,
+        name))
   {
-    .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-    .codeSize = spv_binary.len,
-    .pCode = (const u32*)spv_binary.ptr,
-  };
+    @cerr("failed to create VkShaderModule");
+    return nil;
+  }
+  
+  // TODO(sushi) I don't think we need to do this.
+  DeviceShader* dev_shader = r.vk->shader_pool.add();
+  dev_shader->module = shader;
+  dev_shader->stage = shaderStageToVulkan(params.stage);
 
-  VkShaderModule shader_module;
-  if (VK_SUCCESS != vkCreateShaderModule(ri.device, &create_info,
-    &ri.allocator, &shader_module))
-    return ERROR("failed to create shader module\n");
-
-  RendererShader* shader = ri.shader_pool.add();
-  shader->module = shader_module;
-  shader->stage = shaderKindToVulkan(kind);
-  index = ri.shader_pool.indexOf(shader);
-  ri.shader_count++;
-
-  debugSetObjectName(renderer, VK_OBJECT_TYPE_SHADER_MODULE, shader_module,
-    "<", name, " shader>");
-
-  return true;
+  return {(void*)dev_shader};
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 Shader::deinit(Renderer& renderer)
+void Shader::destroy(Renderer& r)
 {
-  RendererInternal& ri = *(RendererInternal*)renderer.internal;
+  if (isnil(*this))
+    return;
 
-  if (index == 0)
-    return true;
+  auto* dev_shader = (DeviceShader*)handle;
 
-  RendererShader* shader = ri.shader_pool.atIndex(index);
-  if (shader == nullptr)
-    return ERROR("invalid shader index ", index, "\n");
-
-  if (shader->module == VK_NULL_HANDLE)
-    return ERROR("attempted to destroy an uninitialized shader\n");
-
-  vkDestroyShaderModule(ri.device, shader->module, &ri.allocator);
-
-  index = 0;
-  ri.shader_pool.remove(shader);
-  ri.shader_count--;
-
-  return true;
+  r.vk->destroyVkShaderModule(dev_shader->module);
+  r.vk->shader_pool.remove(dev_shader);
+  handle = nullptr;
 }
 
 }

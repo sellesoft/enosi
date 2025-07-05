@@ -526,6 +526,7 @@ b8 Lexer::lexMacroTupleArgs()
 
   for (;;)
   {
+    // TODO(sushi) handle quotes
     while (
         not at(',') and 
         not at(')') and 
@@ -533,6 +534,7 @@ b8 Lexer::lexMacroTupleArgs()
         not at('}') and
         not at('(') and 
         not at(')') and
+        not at('"') and
         not eof())
       advance();
 

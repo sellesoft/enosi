@@ -22,6 +22,7 @@ $ require "common"
 @@lpp.import "ui/TextEdit.lh"
 @@lpp.import "ui/UI.lh"
 @@lpp.import "window/Window.lh"
+@@lpp.import "graphics/RenderTarget.lh"
 
 #include "iro/time/Time.h"
 
@@ -33,7 +34,6 @@ struct Client
 {
   Engine* engine;
 
-  // Client only systems.
   cl::Console console;
   InputMgr input;
   cl::NetMgr netmgr;
@@ -48,8 +48,22 @@ struct Client
   b8 editor_active = false;
 
   b8 init(Engine* engine);
+  void deinit();
 
-  b8 update();
+  struct UpdateResult
+  {
+    // The Client has been put in a situation where it needs deinitialized 
+    // and no more calls to update() should occur.
+    b8 should_deinit = false;
+
+    // The simulation was updated this frame.
+    b8 sim_updated = false;
+
+    // The Client rendered this frame.
+    b8 rendered = false;
+  };
+
+  UpdateResult update();
 
   b8 compileRequiredAssets(AssetMgr& assetmgr);
 

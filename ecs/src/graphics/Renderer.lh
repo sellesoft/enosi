@@ -6,17 +6,14 @@ $ require "common"
 
 #include "iro/Common.h"
 #include "iro/containers/Array.h"
+#include "iro/containers/StackArray.h"
 #include "iro/Unicode.h"
 #include "math/mat.h"
 #include "math/vec.h"
+#include "math/Rect.h"
 
-@@lpp.import "graphics/Buffer.lh"
-@@lpp.import "graphics/DrawCmd.lh"
-@@lpp.import "graphics/Framebuffer.lh"
-@@lpp.import "graphics/Pipeline.lh"
+@@lpp.import "graphics/DescriptorSetLayout.lh"
 @@lpp.import "graphics/ResourceMgr.lh"
-@@lpp.import "graphics/Shader.lh"
-@@lpp.import "graphics/Texture.lh"
 
 using namespace iro;
 
@@ -29,15 +26,22 @@ struct Color;
 namespace gfx
 {
 
+struct RenderTarget;
+struct Pipeline;
+struct Vulkan;
+
 /* ============================================================================
  */
 struct Renderer
 {
   mem::Allocator* allocator;
-  void* internal;
-  u64 frame;
-  Array<DrawCmd> drawcmds;
   ResourceMgr resource_mgr;
+  
+  // Temp until I figure out how to manage textures better.
+  DescriptorSetLayout default_sampler_set_layout;
+  DescriptorSetLayout default_ubo_set_layout;
+
+  u32 next_image;
 
   struct InitParams
   {
@@ -47,34 +51,66 @@ struct Renderer
   };
 
   b8 init(InitParams& params);
-  b8 deinit();
+  void deinit(mem::Allocator* allocator, AssetMgr& assetmgr);
 
-  struct UpdateParams
-  {
-    Window& window;
-  };
+  void waitForDeviceIdle();
 
-  b8 update(UpdateParams& params);
+  b8 beginFrame();
+  void endFrame(); 
 
-  void setScissor(vec2i pos, vec2i size);
-  void setViewport(vec2i pos, vec2i size);
-  void bindFramebuffer(Framebuffer framebuffer); //{0} for default
+  // Attempts to retrieve a RenderTarget representing the currently acquired 
+  // swapchain image. Anything performing a 'final' render should pass this 
+  // as its target. Fails if not currently in a frame.
+  // TODO(sushi) rework all of this to store the data for rendering in
+  //             a different object so we don't have to pass around 
+  //             RenderTargets and can just pass that around instead. 
+  //             RenderTarget stores more information than we need for this 
+  //             case, and should probably be reworked into that object 
+  //             storing more opaque information or something.
+  b8 getSwapchainRenderTarget(RenderTarget* out);
+
+  b8 beginRenderPass(
+    vec2i render_area_pos,
+    vec2u render_area_size,
+    RenderTarget& target,
+    Color clear_color);
+
+  void endRenderPass();
+
+  b8 submitQueue();
+  b8 present();
+
+  void setScissor(vec2i pos, vec2u size);
+  void setViewport(vec2f pos, vec2f size);
   void bindPipeline(Pipeline pipeline);
-  void bindTexture(Texture texture);
-  void bindUniformBuffer(Buffer buffer);
-  void bindStorageBuffer(Buffer buffer);
+  void bindDescriptorSet(u32 set_idx, DescriptorSet set);
   void bindVertexBuffer(Buffer buffer);
   void bindIndexBuffer(Buffer buffer);
-  void pushConstant(void* data, u64 size);
-  void draw(u64 index_start, u64 index_count, u64 vertex_start);
+  void bindUniformBuffer(Buffer buffer);
 
-  u64 getMaxPushConstantSize();
+  void bindTexture(Texture texture)
+  {
+    bindDescriptorSet(1, texture.set);
+  }
+
+  void pushConstant(
+    void* data, 
+    u32 size, 
+    u32 offset,
+    ShaderStage stage);
+
+  void draw(u32 index_start, u32 index_count, u32 vertex_start);
+
+  // NOTE(sushi) a hacky way to get an image into a state where it can be 
+  //             sampled by a shader, for use when wanting to display a 
+  //             RenderTarget image. Needs to be done better later.
+  void prepareImageForSampling(Image image);
 
   void debugBeginLabel(Color color, utf8::String label);
   void debugEndLabel();
   void debugInsertLabel(Color color, utf8::String label);
 
-  void onWindowResized(vec2i size);
+  void onWindowResized(vec2u size);
 
   // NOTE(sushi) explicitly deleting the copy constructor of Renderer
   //             to prevent accidental copies since operating on a copy
@@ -83,6 +119,8 @@ struct Renderer
   Renderer() {}
   Renderer(const Renderer& rhs) = delete;
   Renderer operator=(const Renderer& rhs) = delete;
+
+  Vulkan* vk;
 
 private:
   b8 updateSwapchain(vec2i viewport_size);

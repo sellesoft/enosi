@@ -1,0 +1,49 @@
+$ require "common"
+$ local helpers = require "graphics.Helpers"
+
+@@lpp.import "graphics/Sampler.lh"
+@@lpp.import "graphics/Vulkan.lh"
+@@lpp.import "graphics/Renderer.lh"
+
+@log.ger(gfx.sampler, Info)
+
+namespace gfx
+{
+
+/* ----------------------------------------------------------------------------
+ */
+Sampler Sampler::create(Renderer& r, const CreateParams& params)
+{
+  String name = resolved(params.debug_name, "unnamed"_str);
+
+  DEBUG("creating gfx::Image '", name, "'\n");
+
+$ local cerr = helpers.defCreateErr("gfx::Sampler", "name")
+
+  VkSampler sampler;
+  if (!r.vk->createVkSampler(
+        &sampler,
+        imageFilterToVulkan(params.filter),
+        imageAddressModeToVulkan(params.address_mode),
+        name))
+  {
+    @cerr("failed to create VkSampler");
+    return nil;
+  }
+
+  return {(void*)sampler};
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void Sampler::destroy(Renderer& r)
+{
+  if (isnil(*this))
+    return;
+
+  r.vk->destroyVkSampler((VkSampler)handle);
+
+  handle = nullptr;
+}
+
+}

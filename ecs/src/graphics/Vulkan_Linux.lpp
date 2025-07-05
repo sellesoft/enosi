@@ -1,0 +1,64 @@
+$ require "common"
+$ if IRO_LINUX then
+
+@@lpp.import "graphics/Vulkan.lh"
+@@lpp.import "window/Window_linux.lh"
+@@lpp.import "window/Window.lh"
+
+// so stupid
+#define Window X11Window
+#define Font X11Font
+#define Time X11Time
+#define KeyCode X11KeyCode
+#include "vulkan/vulkan_xlib.h"
+#undef Window
+#undef Font
+#undef Time
+#undef KeyCode
+#undef None
+#undef X
+#undef Bool
+#undef True
+#undef False
+#undef Status
+
+@log.ger(vulkan.linux, Info)
+
+namespace gfx
+{
+
+const char* c_vulkan_platform_extension = VK_KHR_XLIB_SURFACE_EXTENSION_NAME;
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Vulkan::initSurface(Window& window)
+{
+  VkXlibSurfaceCreateInfoKHR create_info =
+  {
+    .sType = VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR,
+    .dpy = x11.display,
+    .window = (X11Window)window.handle,
+  };
+
+  if (VK_SUCCESS != vkCreateXlibSurfaceKHR(
+        instance, 
+        &create_info, 
+        &allocator_callbacks, 
+        &surface))
+  {
+    return ERROR("failed to initialize xlib surface\n");
+  }
+
+  return true;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+VkFormat Vulkan::getPlatformDesiredSurfaceFormat()
+{
+  return VK_FORMAT_R8G8B8A8_UNORM;
+}
+
+}
+
+$ end

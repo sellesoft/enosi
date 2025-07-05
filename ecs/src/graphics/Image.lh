@@ -1,0 +1,57 @@
+/*
+ *  Multidimensional arrays of data, typically used for sampling in a 
+ *  shader or as an attachment to render to.
+ *
+ *  NOTE(sushi) currently, only 2D images are supported.
+ */
+
+$ require "common"
+
+@@lpp.import "graphics/TextureParams.lh"
+
+#include "iro/io/Format.h"
+#include "math/vec.h"
+
+namespace gfx
+{
+
+struct Renderer;
+
+/* ============================================================================
+ */
+struct Image
+{
+  void* handle;
+
+  struct CreateParams
+  {
+    // What this Image is intended to be used for.
+    ImageUsageFlags usage;
+
+    // What format the texels contained in the Image are.
+    ImageFormat format;
+
+    // Optional pointer to pixel data to upload on creation.
+    void* pixels;
+
+    // The size of the Image.
+    vec2u size;
+
+    String debug_name;
+  };
+
+  static Image create(Renderer& renderer, const CreateParams& params);
+  void destroy(Renderer& renderer);
+
+  DefineNilTrait(Image, {nullptr}, x.handle == nullptr);
+};
+
+}
+
+namespace iro::io
+{
+static s64 format(io::IO* io, const gfx::Image& image)
+{
+  return formatv(io, "gfx::Image(", image.handle, ')');
+}
+}

@@ -200,13 +200,33 @@ SourceData* parsePossiblyTypedSourceData(
 
   if (!parser.init(file, io, name))
     return nullptr;
+  defer { parser.deinit(); };
 
   SourceData* result = file->allocateSourceData();
 
   if (!parser.parsePossiblyTypedData(result))
     return nullptr;
 
-  parser.deinit();
+  return result;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+SourceData* parsePossiblyTypedOrDerivedSourceData(
+    SourceDataFile* file,
+    io::IO* io,
+    String name)
+{
+  Parser parser;
+
+  if (!parser.init(file, io, name))
+    return nullptr;
+  defer { parser.deinit(); };
+
+  SourceData* result = file->allocateSourceData();
+
+  if (!parser.parsePossiblyTypedOrDerivedData(result))
+    return nullptr;
 
   return result;
 }

@@ -9,6 +9,8 @@ $ local cmn = require "common"
 @@lpp.import "asset/AssetMgr.lh"
 @@lpp.import "graphics/Renderer.lh"
 @@lpp.import "graphics/CompiledTexture.lh"
+@@lpp.import "graphics/DescriptorSetLayout.lh"
+@@lpp.import "graphics/DescriptorSet.lh"
 
 #include "cassert"
 
@@ -88,19 +90,81 @@ CompiledTexture* CompiledTexture::load(
   auto& data = texture->getData();
   assert(data.width != 0 && data.height != 0);
 
-  texture->gfx_texture = 
-    Texture::create(
-      renderer, 
-      data.width, 
-      data.height,
-      data.format, 
-      data.usage, 
-      data.address_mode, 
-      data.filter,
-      data.pixels.get(), 
-      name);
+  texture->image = Image::create(
+    renderer,
+    {
+      .usage = data.usage,
+      .format = data.format,
+      .pixels = data.pixels.get(),
+      .size = vec2u(data.width, data.height),
+      .debug_name = name,
+    });
+
+  // gfx should print enough error info.
+  if (isnil(texture->image))
+    return nullptr;
+
+  texture->view = ImageView::create(
+    renderer,
+    {
+      .image = texture->image,
+      .format = data.format,
+      .debug_name = name,
+    });
+
+  if (isnil(texture->view))
+    return nullptr;
+
+  texture->sampler = Sampler::create(
+    renderer,
+    {
+      .filter = data.filter,
+      .address_mode = data.address_mode,
+      .debug_name = name,
+    });
+
+  if (isnil(texture->sampler))
+    return nullptr;
+ 
+  // NOTE(sushi) the below code should be temporary, just trying to get 
+  //             stuff working again after gfx reorganization.
+  texture->texture.set = DescriptorSet::create(
+    renderer,
+    renderer.default_sampler_set_layout,
+    name);
+
+  if (isnil(texture->texture.set))
+    return nullptr;
+
+  ImageDescriptor descriptor = 
+  {
+    .view = texture->view,
+    .sampler = texture->sampler,
+  };
+
+  texture->texture.set.update(
+    renderer,
+    0,
+    0,
+    makeSlice(&descriptor, 1));
 
   return texture;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void CompiledTexture::unload(AssetMgr& assetmgr, Renderer& renderer)
+{
+  image.destroy(renderer);
+  view.destroy(renderer);
+  sampler.destroy(renderer);
+  texture.set.destroy(renderer);
+
+  if (asset.isValid())
+  {
+    assetmgr.unloadAsset(asset.asset);
+    asset.invalidate();
+  }
 }
 
 /* ----------------------------------------------------------------------------

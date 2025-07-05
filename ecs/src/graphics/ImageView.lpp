@@ -1,0 +1,95 @@
+$ require "common"
+$ local helpers = require "graphics.Helpers"
+
+@@lpp.import "graphics/ImageView.lh"
+@@lpp.import "graphics/Vulkan.lh"
+@@lpp.import "graphics/Renderer.lh"
+
+#include "iro/containers/StackArray.h"
+
+@log.ger(gfx.imageview, Info)
+
+namespace gfx
+{
+
+/* ----------------------------------------------------------------------------
+ */
+ImageView ImageView::create(Renderer& r, const CreateParams& params)
+{
+  String name = resolved(params.debug_name, "unnamed"_str);
+
+  DEBUG("creating gfx::ImageView ", name, '\n');
+
+$ local cerr = helpers.defCreateErr("gfx::ImageView", "name")
+
+  if (isnil(params.image))
+  {
+    @cerr("provided gfx::Image is nil");
+    return nil;
+  }
+
+  auto* internal_image = (DeviceImage*)params.image.handle;
+
+  VkComponentMapping components = {};
+  switch (params.format)
+  {
+  case ImageFormat::BW:
+    components.r = VK_COMPONENT_SWIZZLE_R;
+    components.g = VK_COMPONENT_SWIZZLE_R;
+    components.b = VK_COMPONENT_SWIZZLE_R;
+    components.a = VK_COMPONENT_SWIZZLE_R;
+    break;
+
+  case ImageFormat::BWA:
+    components.r = VK_COMPONENT_SWIZZLE_R;
+    components.g = VK_COMPONENT_SWIZZLE_R;
+    components.b = VK_COMPONENT_SWIZZLE_R;
+    components.a = VK_COMPONENT_SWIZZLE_A;
+    break;
+
+  case ImageFormat::RGB:
+    components.r = VK_COMPONENT_SWIZZLE_R;
+    components.g = VK_COMPONENT_SWIZZLE_G;
+    components.b = VK_COMPONENT_SWIZZLE_B;
+    components.a = VK_COMPONENT_SWIZZLE_ONE;
+    break;
+  }
+
+  VkImageView view;
+  if (!r.vk->createVkImageView(
+        &view,
+        internal_image->handle,
+        imageFormatToVulkan(params.format),
+        components,
+        name))
+  {
+    @cerr("failed to create VkImageView");
+    return nil;
+  }
+
+  return {(void*)view};
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void ImageView::destroy(Renderer& r)
+{
+  if (isnil(*this))
+    return;
+
+  DEBUG("destroying ", *this, '\n');
+
+  // Check if this is a swapchain view before interpretting it as one of 
+  // our internal views. We have to do this, because we can hand out 
+  // a RenderTarget containing an Image who's handle is a swapchain view,
+  // which we DO own, but we don't want to delete until we are done with 
+  // the swapchain..
+  // This needs to be done better eventually, but I just wanna get stuff
+  // working again!
+  if (!r.vk->isSwapchainView(handle))
+    r.vk->destroyVkImageView((VkImageView)handle);
+
+  handle = nullptr;
+}
+
+}

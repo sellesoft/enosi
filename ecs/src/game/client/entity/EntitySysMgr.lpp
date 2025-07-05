@@ -2,6 +2,7 @@ $ local cmn = require "common"
 $ local ast = require "reflect.AST"
 
 @@lpp.import "game/client/entity/EntitySysMgr.lh"
+@@lpp.import "Profiling.lh"
 
 #include "iro/time/Time.h"
 
@@ -165,9 +166,14 @@ $ end)
  */
 b8 EntitySysMgr::update()
 {
+  ZoneScopedN("cl::EntitySysMgr::update");
+
 $ systems:each(function(sys)
 $   if sys.decl:hasMethod "update" then
-  systems->$(sys.name).update();
+  {
+    ZoneScopedN("EntitySys $(sys.typename)");
+    systems->$(sys.name).update();
+  }
 $   end
 $ end)
   return true;

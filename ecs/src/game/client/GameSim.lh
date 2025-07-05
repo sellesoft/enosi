@@ -41,7 +41,7 @@ struct GameSim : SharedGameSim
   Rect viewport;
 
   b8 init(InitParams& params);
-  void deinit();
+  void deinit(gfx::Renderer& renderer);
 
   struct UpdateParams : SharedGameSim::UpdateParams
   {
@@ -50,8 +50,17 @@ struct GameSim : SharedGameSim
 
   b8 update(UpdateParams& params);
 
-  b8 render(gfx::Renderer& renderer);
-  b8 render(gfx::Renderer& renderer, const gfx::View& view);
+  struct RenderParams
+  {
+    gfx::Renderer& renderer;
+    gfx::RenderTarget& target;
+
+    // An optional view to render the game from which will overload the 
+    // eye sys' view.
+    gfx::View* view;
+  };
+
+  b8 render(const RenderParams& params);
 
   void setViewport(Rect viewport) 
   {

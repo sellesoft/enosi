@@ -6,7 +6,7 @@
 #define iterations 17
 #define formuparam 0.53
 
-#define volsteps 20
+#define volsteps 10
 #define stepsize 0.05
 
 #define zoom   0.800
@@ -31,7 +31,7 @@ layout(location = 0) out vec4 out_color;
 
 void main()
 {
-  // get coords and direction
+  // get coords and direction 
   vec2 uv = gl_FragCoord.xy / scene.resolution_and_time.xy - 0.5;
   uv.y *= scene.resolution_and_time.y / scene.resolution_and_time.x;
   vec3 dir = vec3(uv * zoom, 1.0);

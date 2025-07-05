@@ -88,6 +88,12 @@ inline b8 resolve(T& x, T v)
   return false;
 }
 
+template<Nillable T>
+inline T resolved(T x, T v)
+{
+  return isnil(x)? v : x;
+}
+
 /* ----------------------------------------------------------------------------
  *  And finally, *the* nil value.
  */

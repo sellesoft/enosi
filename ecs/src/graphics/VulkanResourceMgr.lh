@@ -1,0 +1,3 @@
+/*
+ *  Manager for Vulkan objects that need to be bound to some device memory.
+ */

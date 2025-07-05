@@ -21,14 +21,14 @@ typedef io::StaticBuffer<512> PathBuffer;
 
 /* ----------------------------------------------------------------------------
  */
-static shaderc_shader_kind shaderKindToShaderc(ShaderKind kind)
+static shaderc_shader_kind shaderKindToShaderc(ShaderStage stage)
 {
-  switch (kind)
+  switch (stage)
   {
-    case ShaderKind::Vertex:   return shaderc_vertex_shader;
-    case ShaderKind::Fragment: return shaderc_fragment_shader;
-    case ShaderKind::Compute:  return shaderc_compute_shader;
-    case ShaderKind::Geometry: return shaderc_geometry_shader;
+    case ShaderStage::Vertex:   return shaderc_vertex_shader;
+    case ShaderStage::Fragment: return shaderc_fragment_shader;
+    case ShaderStage::Compute:  return shaderc_compute_shader;
+    case ShaderStage::Geometry: return shaderc_geometry_shader;
     default: return shaderc_glsl_infer_from_source;
   }
 }
@@ -85,9 +85,26 @@ CompiledShader* CompiledShader::load(
   shader->asset.asset = asset;
 
   auto& data = shader->getData();
-  shader->gfx_shader.init(renderer, data.kind, data.binary.getSlice(), name);
+  shader->gfx_shader = Shader::create(
+    renderer,
+    {
+      .stage = data.stage,
+      .spv_binary = data.binary.getSlice(),
+      .debug_name = name,
+    });
+
+  if (isnil(shader->gfx_shader))
+    return nullptr;
 
   return shader;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void CompiledShader::unload(AssetMgr& assetmgr, Renderer& renderer)
+{
+  gfx_shader.destroy(renderer);
+  assetmgr.unloadAsset(asset.asset);
 }
 
 /* ----------------------------------------------------------------------------
@@ -156,7 +173,7 @@ $ end -- if ECS_DEBUG
   shaderc_compilation_result_t result = shaderc_compile_into_spv(
     compiler,
     (const char*)source_buffer.ptr, source_size,
-    shaderKindToShaderc(params.kind),
+    shaderKindToShaderc(params.stage),
     (const char*)asset_path.ptr, "main",
     options);
   defer { shaderc_result_release(result); };
@@ -177,7 +194,7 @@ $ end -- if ECS_DEBUG
   u64 spv_binary_length = shaderc_result_get_length(result);
 
   CompiledShaderData data;
-  data.kind = params.kind;
+  data.stage = params.stage;
   data.binary.setSlice((u8*)&data + sizeof(CompiledShaderData),
     spv_binary_length);
 

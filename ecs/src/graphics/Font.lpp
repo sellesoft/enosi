@@ -150,4 +150,12 @@ Font* Font::load(
   return font;
 }
 
+/* ----------------------------------------------------------------------------
+ */
+void Font::unload(AssetMgr& assetmgr, Renderer& renderer)
+{
+  texture->unload(assetmgr, renderer);
+  assetmgr.unloadAsset(asset.asset);
+}
+
 }

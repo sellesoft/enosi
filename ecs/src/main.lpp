@@ -21,21 +21,7 @@ $ end
 static Logger logger =
   Logger::create("ecs"_str, Logger::Verbosity::Trace);
 
-/* ----------------------------------------------------------------------------
- *  The reason we have this wrapper is to more easily support hot-reloading
- *  a single function with hreload w/o having to do the union function
- *  pointer hack that is often seen elsewhere in the codebase. This function,
- *  when hotreloading is enabled, is passed to hreload since its the primary
- *  function we call into in main, and thus is the only one we have to reload.
- *
- *  TODO(sushi) this is no longer relevant as I've since fixed the performance
- *              issues with reloading all functions, so reorganize this 
- *              sometime.
- */
-b8 updateEngine(Engine* engine)
-{
-  return engine->update();
-}
+@@lpp.import "Profiling.lh"
 
 /* ----------------------------------------------------------------------------
  */
@@ -113,6 +99,11 @@ int main(int argc, const char** args)
     iro::log.newDestination("stdout"_str, &fs::stdout, flags);
   }
 
+$ if ECS_WAIT_FOR_TRACY_CONNECTION then
+  while (!TracyIsConnected)
+    platform::sleep(TimeSpan::fromMilliseconds(1));
+$ end
+
   LaunchArgs launch_args = {};
   if (argc > 1)
   {
@@ -137,15 +128,12 @@ int main(int argc, const char** args)
   }
 
 #if ECS_HOT_RELOAD
-  void* reload_funcs[] = { (void*)&updateEngine, };
-
-  hr::Reloader* reloader =
-    hr::createReloader(Slice<void*>::from(reload_funcs, 1));
+  hr::Reloader* reloader = hr::createReloader({});
 #endif
 
   Engine engine = { .launch_args = launch_args };
   if (!engine.init())
-    return ERROR("failed to initialize engine\n");
+    return FATAL("failed to initialize Engine\n");
 
   auto program_start_time = TimePoint::now();
 
@@ -157,7 +145,13 @@ int main(int argc, const char** args)
     if (engine.wantHotReload())
       doReload(reloader);
 #endif
-    if (!updateEngine(&engine))
+    Engine::UpdateResult engine_result = engine.update();
+
+    if (engine_result.should_close)
       break;
   }
+
+  engine.deinit();
+
+  return 0;
 }

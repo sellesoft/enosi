@@ -86,5 +86,14 @@ return
   all_projects =
   {
     enabled_warnings = {}
+  },
+
+  tracy = 
+  {
+    -- Enables the Tracy profiler. Currently this is only supported for ecs.
+    enabled = true,
+
+    -- Wait for a Tracy server to connect to the client.
+    wait_for_connection = false,
   }
 }

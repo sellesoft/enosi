@@ -51,23 +51,24 @@ struct EntitySys
 
   // Raises the event TEvent on the given entity.
   template<typename TEvent>
-  void raise(EntityId id, TEvent& event)
+  IRO_FORCE_INLINE void raise(EntityId id, TEvent& event)
   {
     entmgr->eventbus.raise(id, event);
   }
 
   template<typename TEvent>
+  IRO_FORCE_INLINE 
   void raise(EntityId id, TEvent&& event) { raise(id, event); }
 
   // Raises the event TEvent without a reference entity.
   template<typename TEvent>
-  void raise(TEvent& event)
+  IRO_FORCE_INLINE void raise(TEvent& event)
   {
     entmgr->eventbus.raise(event);
   }
 
   template<typename TEvent>
-  void raise(TEvent&& event) { raise<TEvent>(event); }
+  IRO_FORCE_INLINE void raise(TEvent&& event) { raise<TEvent>(event); }
 
   // Attempts to retrieve a Component of type TComp from the given entity.
   template<typename TComp>

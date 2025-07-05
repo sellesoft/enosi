@@ -358,6 +358,8 @@ $   else
 $   end
       break;
 $ end
+      default:
+        return ERROR("struct $(name) has no field '", child->name, "'\n");
     }
   }
 
@@ -409,8 +411,12 @@ $   if field.metadata.default and not field.metadata.hidden then
 
     auto view = io::StringView::from("$(field.metadata.default)"_str);
   
+    // NOTE(sushi) this probably isnt the right stage to start at, but 
+    //             we currently dont have a better one that could handle
+    //             typed objects and values.
     SourceData* default_data = 
-      parsePossiblyTypedSourceData(&file, &view, "$(field.name) default"_str);
+      parsePossiblyTypedOrDerivedSourceData(
+        &file, &view, "$(field.name) default"_str);
     
     if (default_data == nullptr)
       return ERROR("failed to parse default value of $(field.name)\n");
@@ -594,8 +600,12 @@ $     if field.metadata.default and not field.metadata.hidden then
 
       auto view = io::StringView::from("$(field.metadata.default)"_str);
 
+      // NOTE(sushi) this probably isnt the right stage to start at, but 
+      //             we currently dont have a better one that could handle
+      //             typed objects and values.
       SourceData* default_data = 
-        parsePossiblyTypedSourceData(&file, &view, "$(field.name) default"_str);
+        parsePossiblyTypedOrDerivedSourceData(
+          &file, &view, "$(field.name) default"_str);
       
       if (default_data == nullptr)
         return ERROR("failed to parse default value of $(field.name)\n");

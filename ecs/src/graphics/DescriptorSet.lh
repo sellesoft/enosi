@@ -1,0 +1,54 @@
+/*
+ */
+
+$ require "common"
+
+#include "iro/io/Format.h"
+
+using namespace iro;
+
+namespace gfx
+{
+
+struct ImageDescriptor;
+struct DescriptorSetLayout;
+struct UniformBufferDescriptor;
+struct Renderer;
+
+/* ============================================================================
+ */
+struct DescriptorSet
+{
+  void* handle;
+
+  static DescriptorSet create(
+    Renderer& renderer, 
+    DescriptorSetLayout layout,
+    String debug_name);
+
+  void destroy(Renderer& renderer);
+
+  void update(
+    Renderer& renderer, 
+    u32 binding,
+    u32 array_offset,
+    Slice<ImageDescriptor> images);
+
+  void update(
+    Renderer& renderer,
+    u32 binding,
+    u32 array_offset,
+    Slice<UniformBufferDescriptor> buffers);
+
+  DefineNilTrait(DescriptorSet, {nullptr}, x.handle == nullptr);
+};
+
+}
+
+namespace iro::io
+{
+static s64 format(io::IO* io, const gfx::DescriptorSet& set)
+{
+  return formatv(io, "gfx::DescriptorSet(", set.handle, ')');
+}
+}

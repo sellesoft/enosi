@@ -117,6 +117,12 @@ inline b8 matchSeqRev(V* v, T... args)
 #define release_inline inline
 #endif
 
+#if IRO_LINUX
+#define IRO_FORCE_INLINE __attribute__((always_inline))
+#else
+#define IRO_FORCE_INLINE __forceinline
+#endif
+
 /* ----------------------------------------------------------------------------
  */
 // TODO(sushi) eventually this would be better placed in platform.h, but I don't really like the

@@ -1,5 +1,5 @@
 return TileKindDef
 {
-  kind = "Floor",
+  name = "light-grey-floor",
   texture = "assets/floors/tiles/LightGray"
 }

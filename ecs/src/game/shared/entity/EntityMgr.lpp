@@ -174,16 +174,6 @@ void EntityMgr::destroyAllEntities()
   }
 }
 
-/* ----------------------------------------------------------------------------
- */
-Entity* EntityMgr::getEntity(EntityId id) const
-{
-  if (isnil(id))
-    return nullptr;
-
-  return ent_pool.getFromId(id.value, id.salt);
-}
-
 $ eachComp(function(name, decl)
 
 /* ----------------------------------------------------------------------------

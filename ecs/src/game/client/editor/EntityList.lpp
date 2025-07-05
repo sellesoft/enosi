@@ -1,0 +1,32 @@
+$ require "common"
+
+@@lpp.import "game/client/editor/EntityList.lh"
+@@lpp.import "game/client/editor/Editor.lh"
+@@lpp.import "game/client/Client.lh"
+
+@@lpp.import "ui/UI.lh"
+
+@log.ger(editor.list, Info)
+
+namespace cl
+{
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Editor_EntityList::update(
+    Editor* editor, 
+    ui::UI& ui,
+    cl::GameSim& sim,
+    const EditorSkinDef& skin)
+{
+  EntityMgr& entmgr = sim.entmgr;
+
+  for (EntityMgr::Iter iter(entmgr); iter.isValid(); iter.next())
+  {
+    EntityId id = iter.current();
+  }
+
+  return true;
+}
+
+}

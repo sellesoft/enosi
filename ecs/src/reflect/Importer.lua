@@ -26,9 +26,12 @@ Importer.new = function(opts)
   o.excludes = cmn.List(opts.excludes)
 
   if opts.suppress_imports then
+    -- NOTE(sushi) i have no idea what this was for so be wary.
     print "suppress_imports"
     reflect.pushImportedStack()
   end
+
+  ECS_REFLECTION_IMPORT = true
 
   o.imported = cmn.buffer.new()
   for pattern in o.patterns:each() do
@@ -46,6 +49,8 @@ Importer.new = function(opts)
       end
     end)
   end
+
+  ECS_REFLECTION_IMPORT = nil
 
   if opts.suppress_imports then
     reflect.popImportedStack()

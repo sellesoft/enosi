@@ -1,52 +1,31 @@
 /*
- *  Representation of a Texture on the GPU. This likely should only be used
- *  when a reference to a Texture needs to be kept around, eg. to render to
- *  one using a Framebuffer.
+ *  A complete texture usable by shaders.
+ *
+ *  NOTE(sushi) this is temporary. Eventually I want to get rid of needing 
+ *              to bind descriptor sets for each Texture in favor of using
+ *              dynamic indexing and descriptor arrays so we can use push
+ *              constants instead. I'm not sure how we would manage those
+ *              indexes yet and I want to get the graphics reorganization 
+ *              working.
  */
+
 $ require "common"
 
-#include "iro/Common.h"
-#include "iro/Unicode.h"
-
-@@lpp.import "graphics/TextureParams.lh"
-
-using namespace iro;
+@@lpp.import "graphics/DescriptorSet.lh"
 
 namespace gfx
 {
 
-struct Renderer;
-
-/* ============================================================================
- */
-struct Texture
+struct Texture 
 {
-  u32 index = 0;
+  DescriptorSet set;
 
-  static Texture create(
-    Renderer&        renderer,
-    u32              width,
-    u32              height,
-    ImageFormat      format,
-    ImageUsageFlags  usage,
-    ImageAddressMode address_mode,
-    ImageFilter      filter,
-    void*            pixels,
-    String           name = "unnamed"_str);
-
-  b8 deinit(Renderer& renderer);
-
-  inline b8 operator==(const Texture& other) const
+  bool operator == (const Texture& rhs) const
   {
-    return index == other.index;
+    return set.handle == rhs.set.handle;
   }
-
-  inline b8 operator!=(const Texture& other) const
-  {
-    return index != other.index;
-  }
-
-  DefineNilTrait(Texture, {0}, x.index == 0);
+ 
+  DefineNilTrait(Texture, {nil}, isnil(x.set));
 };
 
 }

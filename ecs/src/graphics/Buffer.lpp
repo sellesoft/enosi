@@ -1,6 +1,7 @@
 $ require "common"
+$ local helpers = require "graphics.Helpers"
 
-@@lpp.import "graphics/RendererInternal.lh"
+@@lpp.import "graphics/Vulkan.lh"
 
 @@lpp.import "graphics/Buffer.lh"
 @@lpp.import "graphics/Geo.lh"
@@ -15,533 +16,310 @@ namespace gfx
 
 /* ----------------------------------------------------------------------------
  */
-b8 Buffer::init(
-  Renderer& renderer,
-  void* initial_data,
-  u64 requested_size,
-  Usage usage,
-  MemoryProperty properties,
-  MappingBehavior behavior,
-  String name)
+Buffer Buffer::create(Renderer& r, const CreateParams& params)
 {
-  RendererInternal& ri = *(RendererInternal*)renderer.internal;
-  TRACE("initializing a buffer with ",requested_size," bytes\n");
+  String name = resolved(params.debug_name, "unnamed"_str);
 
-  mapped_data = nullptr;
+$ local cerr = helpers.defCreateErr("gfx::Buffer", "name")
 
-  if (index != 0)
-    return ERROR("failed to initialize a buffer because the buffer"
-      " is already initialized\n");
+  DEBUG("creating a gfx::Buffer of size ", params.size, " named ", name, '\n');
 
-  if (ri.buffer_count >= ri.buffer_pool.MAX_COUNT)
-    return ERROR("failed to initialize a buffer because the maximum"
-      " number of buffers has been reached (",
-      ri.buffer_pool.MAX_COUNT, ")\n");
-
-  if (requested_size == 0)
-    return ERROR("failed to initialize a buffer because the size is"
-      " not positive\n");
-
-  if (   (properties & MemoryProperty::LazilyAllocated)
-      && (properties &
-          ( MemoryProperty::HostVisible
-          | MemoryProperty::HostCoherent)))
-    return ERROR("MemoryProperty::LazilyAllocated is incompatible with"
-      " MemoryProperty::HostVisible and MemoryProperty::HostCoherent\n");
-
-  if (   (behavior == MappingBehavior::Never)
-      && (properties &
-          ( MemoryProperty::HostVisible
-          | MemoryProperty::HostCoherent
-          | MemoryProperty::HostCached)))
-    return ERROR("MappingBehavior::Never is incompatible with"
-      " MemoryProperty::HostVisible, MemoryProperty::HostCoherent,"
-      " and MemoryProperty::HostCached\n");
-
-  VkBufferUsageFlags vk_usage = 0;
-  switch (usage)
+  if (params.size == 0)
   {
-    case Usage::UniformBuffer:
-      vk_usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-      break;
-    case Usage::StorageBuffer:
-      vk_usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
-      break;
-    case Usage::IndexBuffer:
-      vk_usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT;
-      break;
-    case Usage::VertexBuffer:
-      vk_usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-      break;
+    @cerr("cannot create gfx::Buffer of size 0")
+    return nil;
   }
-  if (behavior == MappingBehavior::Never)
-    vk_usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 
-  VkBufferCreateInfo create_info =
+  if ((params.properties & MemoryProperty::LazilyAllocated) && 
+      (params.properties & MemoryProperty::HostCoherent
+                         | MemoryProperty::HostVisible))
   {
-    .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-    .size = requested_size,
-    .usage = vk_usage,
-    .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    @cerr("memory property LazilyAllocated is incompatible with HostVisible "
+          "and HostCoherent");
+    return nil;
+  }
+
+  if (params.behavior == MappingBehavior::Never &&
+      (params.properties & (MemoryProperty::HostVisible
+                          | MemoryProperty::HostCoherent
+                          | MemoryProperty::HostCached)))
+  {
+    @cerr("mapping behavior Never is incompatible with memory properties ",
+          "HostVisible, HostCoherent, and HostCached");
+    return nil;
+  }
+
+  VkBufferUsageFlags usage = 0;
+  switch (params.usage)
+  {
+  case Usage::UniformBuffer: usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT; break;
+  case Usage::StorageBuffer: usage = VK_BUFFER_USAGE_STORAGE_BUFFER_BIT; break;
+  case Usage::IndexBuffer: usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT; break;
+  case Usage::VertexBuffer: usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT; break;
+  }
+
+  if (params.behavior == MappingBehavior::Never)
+    usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+
+  VkBuffer handle;
+  if (!r.vk->createVkBuffer(&handle, params.size, usage, name))
+    return nil;
+
+  auto failsafe_destroy_buffer = deferWithCancel
+  {
+    r.vk->destroyVkBuffer(handle);
   };
 
-  VkBuffer buffer_handle;
-  if (VK_SUCCESS != vkCreateBuffer(ri.device, &create_info,
-    &ri.allocator, &buffer_handle))
-    return ERROR("failed to create a vulkan buffer\n");
-  auto delete_buffer_if_failure = deferWithCancel
+  VkMemoryPropertyFlags properties = 0;
+$ local function mapprop(x, y)
+  if (params.properties & MemoryProperty::$(x))
+    properties |= VK_MEMORY_PROPERTY_$(y)_BIT;
+$ end
+  @mapprop(DeviceLocal,     DEVICE_LOCAL);
+  @mapprop(HostVisible,     HOST_VISIBLE);
+  @mapprop(HostCoherent,    HOST_COHERENT);
+  @mapprop(HostCached,      HOST_CACHED);
+  @mapprop(LazilyAllocated, LAZILY_ALLOCATED);
+
+  VkMemoryRequirements memreq;
+  vkGetBufferMemoryRequirements(r.vk->device, handle, &memreq);
+
+  DeviceHeapAllocation* ptr = 
+    r.vk->allocateAndBindVkBufferMemory(handle, properties, memreq);
+
+  if (ptr == nullptr)
   {
-    vkDestroyBuffer(ri.device, buffer_handle, &ri.allocator);
+    @cerr("failed to allocate and bind memory for VkBuffer");
+    return nil;
+  }
+
+  auto failsafe_deallocate = deferWithCancel
+  {
+    r.vk->deallocate(ptr);
   };
 
-  VkMemoryRequirements memory_requirements;
-  vkGetBufferMemoryRequirements(ri.device, buffer_handle,
-    &memory_requirements);
+  void* mapped_data = nullptr;
 
-  VkMemoryPropertyFlags vk_properties = 0;
-  if (properties & MemoryProperty::DeviceLocal)
-    vk_properties |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
-  if (properties & MemoryProperty::HostVisible)
-    vk_properties |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
-  if (properties & MemoryProperty::HostCoherent)
-    vk_properties |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-  if (properties & MemoryProperty::HostCached)
-    vk_properties |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
-  if (properties & MemoryProperty::LazilyAllocated)
-    vk_properties |= VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT;
-
-  u32 memory_type = determineMemoryType(renderer, memory_requirements,
-    vk_properties);
-
-  RendererHeapAllocation* allocation = gfx::allocate(renderer,
-    memory_type, memory_requirements);
-  if (allocation == nullptr)
-    return ERROR("failed to allocate memory for a vulkan buffer\n");
-  auto deallocate_if_failure = deferWithCancel
+  switch (params.behavior)
   {
-    gfx::deallocate(renderer, allocation);
-  };
-
-  if (VK_SUCCESS != vkBindBufferMemory(ri.device, buffer_handle,
-    allocationMemory(renderer, allocation), allocation->aligned_offset))
-    return ERROR("failed to bind memory to a vulkan buffer\n");
-
-  if (behavior == MappingBehavior::Never)
-  {
-    if (initial_data == nullptr)
+  case MappingBehavior::Never:
+    if (params.data == nullptr)
     {
-      WARN("Allocated a buffer with no initial data and"
-        " MappingBehavior::Never specified, so the buffer will not be able to"
-        " be mapped and written to. This is mainly usefuly for intermediate"
-        " compute shader memory, but compute shaders are not setup yet.\n");
+      WARN(
+        "request to allocate a gfx::Buffer with mapping behavior Never. This "
+        "type of request is mainly useful for intermediate compute shader "
+        "memory, but compute shaders are not set up yet.\n");
     }
     else
     {
-      VkBufferCreateInfo staging_buffer_create_info =
+      if (!r.vk->stageVkBufferMemory(
+            params.data,
+            params.size,
+            handle,
+            memreq.size))
       {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = memory_requirements.size,
-        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-      };
-
-      VkBuffer staging_buffer_handle;
-      if (VK_SUCCESS != vkCreateBuffer(ri.device,
-        &staging_buffer_create_info, &ri.allocator, &staging_buffer_handle))
-        return ERROR("failed to create a vulkan staging buffer to upload"
-          " initial buffer data\n");
-      defer
-      {
-        vkDestroyBuffer(ri.device, staging_buffer_handle, &ri.allocator);
-      };
-
-      VkMemoryRequirements staging_memory_requirements;
-      vkGetBufferMemoryRequirements(ri.device,
-        (VkBuffer)staging_buffer_handle, &staging_memory_requirements);
-
-      VkMemoryPropertyFlags vk_staging_properties =
-          VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
-        | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-
-      u32 staging_memory_type = determineMemoryType(renderer,
-        staging_memory_requirements, vk_staging_properties);
-
-      RendererHeapAllocation* staging_allocation =
-        gfx::allocate(renderer, staging_memory_type,
-          staging_memory_requirements);
-      if (staging_allocation == nullptr)
-        return ERROR("failed to allocate memory for a staging buffer when"
-          " uploading initial buffer data\n");
-      defer { gfx::deallocate(renderer, staging_allocation); };
-
-      VkDeviceMemory staging_buffer_memory =
-        allocationMemory(renderer, staging_allocation);
-
-      if (VK_SUCCESS != vkBindBufferMemory(ri.device, staging_buffer_handle,
-        staging_buffer_memory, staging_allocation->aligned_offset))
-        return ERROR("failed to bind memory to a vulkan staging buffer when"
-          " trying to upload initial buffer data\n");
-
-      void* staging_memory_data;
-      if (VK_SUCCESS != vkMapMemory(ri.device, staging_buffer_memory,
-        staging_allocation->aligned_offset, memory_requirements.size, 0,
-        &staging_memory_data))
-        return ERROR("failed to map memory for a vulkan staging buffer when"
-          " trying to upload initial buffer data\n");
-
-      mem::copy(staging_memory_data, initial_data, requested_size);
-
-      vkUnmapMemory(ri.device, staging_buffer_memory);
-
-      VkCommandBuffer single_use_command_buffer;
-      if (!beginSingleUseCommandBuffer(renderer, &single_use_command_buffer))
-        return false;
-
-      VkBufferCopy copy_region =
-      {
-        .size = requested_size,
-      };
-
-      vkCmdCopyBuffer(single_use_command_buffer, staging_buffer_handle,
-        buffer_handle, 1, &copy_region);
-
-      if(!endSingleUseCommandBuffer(renderer, single_use_command_buffer))
-        return false;
-    }
-  }
-  else if (behavior == MappingBehavior::Occasional)
-  {
-    if (initial_data != nullptr)
-    {
-      RendererHeap& heap = ri.heaps[allocation->memory_type];
-      RendererHeapBlock& block = heap.blocks[allocation->block_index];
-
-      if (VK_SUCCESS != vkMapMemory(ri.device, block.memory,
-        allocation->aligned_offset, memory_requirements.size, 0, &mapped_data))
-        return ERROR("failed to map memory when trying to upload initial"
-          " vulkan buffer data\n");
-      defer { vkUnmapMemory(ri.device, block.memory); };
-
-      mem::copy(mapped_data, initial_data, requested_size);
-
-      VkMappedMemoryRange range =
-      {
-        .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
-        .memory = block.memory,
-        .offset = allocation->aligned_offset,
-        .size = VK_WHOLE_SIZE,
-      };
-
-      if (VK_SUCCESS != vkFlushMappedMemoryRanges(ri.device, 1, &range))
-        return ERROR("failed to flush mapped memory when trying to upload"
-          " initial vulkan buffer data\n");
-    }
-  }
-  else
-  {
-    assert(behavior == MappingBehavior::Persistent);
-
-    RendererHeap& heap = ri.heaps[allocation->memory_type];
-    RendererHeapBlock& block = heap.blocks[allocation->block_index];
-
-    if (VK_SUCCESS != vkMapMemory(ri.device, block.memory,
-      allocation->aligned_offset, memory_requirements.size, 0, &block.mapped_data))
-      return ERROR("failed to map memory when trying to upload initial"
-        " vulkan buffer data\n");
-    mapped_data = block.mapped_data;
-
-    if (initial_data != nullptr)
-    {
-      mem::copy(mapped_data, initial_data, requested_size);
-
-      VkMappedMemoryRange range =
-      {
-        .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
-        .memory = block.memory,
-        .offset = allocation->aligned_offset,
-        .size = VK_WHOLE_SIZE,
-      };
-
-      if (VK_SUCCESS != vkFlushMappedMemoryRanges(ri.device, 1, &range))
-      {
-        vkUnmapMemory(ri.device, block.memory);
-        return ERROR("failed to flush mapped memory when trying to upload"
-          " initial vulkan buffer data\n");
+        @cerr("failed to stage memory for gfx::Buffer");
+        return nil;
       }
     }
-  }
+    break;
 
-  VkDescriptorSet descriptor_set = VK_NULL_HANDLE;
-  if (usage == Usage::UniformBuffer || usage == Usage::StorageBuffer)
-  {
-    VkDescriptorSetAllocateInfo alloc_info =
+  case MappingBehavior::Occasional:
+    if (params.data != nullptr)
     {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-      .descriptorPool = ri.descriptor_pool,
-      .descriptorSetCount = 1,
-      .pSetLayouts = (usage == Usage::UniformBuffer)
-        ? &ri.default_uniform_buffer_descriptor_set_layout
-        : &ri.default_storage_buffer_descriptor_set_layout,
-    };
-
-    if (VK_SUCCESS != vkAllocateDescriptorSets(ri.device, &alloc_info,
-      &descriptor_set))
-      return ERROR("failed to allocate a descriptor set for a vulkan buffer\n");
-
-    VkDescriptorType descriptor_type;
-    if (usage == Usage::UniformBuffer)
-      descriptor_type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    else
-      descriptor_type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-
-    VkDescriptorBufferInfo descriptor_info =
-    {
-      .buffer = buffer_handle,
-      .offset = 0,
-      .range = requested_size,
-    };
-
-    VkWriteDescriptorSet descriptor_set_write =
-    {
-      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      .dstSet = descriptor_set,
-      .dstBinding = 0,
-      .dstArrayElement = 0,
-      .descriptorCount = 1,
-      .descriptorType = descriptor_type,
-      .pBufferInfo = &descriptor_info,
-    };
-
-    vkUpdateDescriptorSets(ri.device, 1, &descriptor_set_write, 0, nullptr);
-  }
-
-  RendererBuffer* buffer = ri.buffer_pool.add();
-  buffer->buffer = buffer_handle;
-  buffer->allocation = allocation;
-  buffer->descriptor_set = descriptor_set;
-  index = ri.buffer_pool.indexOf(buffer);
-  ri.buffer_count++;
-
-  debugSetObjectName(renderer, VK_OBJECT_TYPE_BUFFER, buffer_handle,
-    "<", name, " buffer>");
-  debugSetObjectName(renderer, VK_OBJECT_TYPE_DESCRIPTOR_SET, descriptor_set,
-    "<", name, " descriptor>");
-
-  delete_buffer_if_failure.cancel();
-  deallocate_if_failure.cancel();
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 Buffer::deinit(Renderer& renderer)
-{
-  RendererInternal& ri = *(RendererInternal*)renderer.internal;
-  TRACE("deinitializing the buffer at index ",index,"\n");
-
-  if (index == 0)
-    return true;
-
-  RendererBuffer* buffer = ri.buffer_pool.atIndex(index);
-  if (buffer == nullptr)
-    return ERROR("attempted to destroy a buffer at index ", index,
-      " which is out of bounds\n");
-
-  if (buffer->buffer == VK_NULL_HANDLE)
-    return ERROR("attempted to destroy an uninitialized buffer\n");
-
-  if (mapped_data != nullptr)
-  {
-    RendererHeap& heap = ri.heaps[buffer->allocation->memory_type];
-    RendererHeapBlock& block = heap.blocks[buffer->allocation->block_index];
-
-    block.mapped_count--;
-    if (block.mapped_count == 0)
-    {
-      vkUnmapMemory(ri.device, block.memory);
-      block.mapped_data = nullptr;
+      if (!r.vk->mapCopyAndFlushVkBufferMemory(
+            params.data,
+            ptr->aligned_offset,
+            params.size,
+            ptr))
+      {
+        @cerr("failed to map/copy/flush initial data for gfx::Buffer");
+        return nil;
+      }
     }
+    break;
+
+  case MappingBehavior::Persistent:
+    {
+      if (!r.vk->mapVkBuffer(
+            &mapped_data, 
+            ptr->aligned_offset,
+            ptr))
+      {
+        @cerr("failed to map persistent gfx::Buffer");
+        return nil;
+      }
+
+      if (params.data != nullptr)
+      {
+        mem::copy(mapped_data, params.data, params.size);
+        r.vk->flushMappedVkBuffer(
+            ptr->aligned_offset, 
+            VK_WHOLE_SIZE, 
+            ptr);
+      }
+    }
+    break;
   }
 
-  vkDestroyBuffer(ri.device, buffer->buffer, &ri.allocator);
-  gfx::deallocate(renderer, buffer->allocation);
+  DeviceBuffer* internal_buffer = r.vk->buffer_pool.add();
+  internal_buffer->handle = handle;
+  internal_buffer->ptr = ptr;
 
-  mapped_data = nullptr;
-  buffer->buffer = VK_NULL_HANDLE;
-  buffer->allocation = nullptr;
-  buffer->descriptor_set = VK_NULL_HANDLE;
-
-  index = 0;
-  ri.buffer_pool.remove(buffer);
-  ri.buffer_count--;
-
-  return true;
-}
-
-/* ----------------------------------------------------------------------------
- */
-b8 Buffer::map(Renderer& renderer)
-{
-  RendererInternal& ri = *(RendererInternal*)renderer.internal;
-  TRACE("mapping the buffer at index ", index, "\n");
-
-  if (index == 0)
-    return ERROR("attempted to map an uninitialized buffer\n");
-
-  RendererBuffer* buffer = ri.buffer_pool.atIndex(index);
-  if (buffer == nullptr)
-    return ERROR("attempted to map the buffer at index ", index,
-      " which is out of bounds\n");
-
-  if (buffer->buffer == VK_NULL_HANDLE)
-    return ERROR("attempted to map an uninitialized buffer\n");
-  assert(buffer->allocation != nullptr);
-
-  if (mapped_data != nullptr)
-    return ERROR("attempted to map the already mapped buffer at index ",
-      index, "\n");
-
-  RendererHeap& heap = ri.heaps[buffer->allocation->memory_type];
-  RendererHeapBlock& block = heap.blocks[buffer->allocation->block_index];
-
-  if (block.mapped_data == nullptr)
+  if (params.usage == Buffer::UniformBuffer)
   {
-    if (VK_SUCCESS != vkMapMemory(ri.device, block.memory, 0, VK_WHOLE_SIZE, 0,
-      &block.mapped_data))
-      return ERROR("failed to map the buffer at index ", index, "\n");
+    if (!r.vk->allocateVkDescriptorSet(
+          &internal_buffer->set,
+          &(VkDescriptorSetLayout&)r.default_ubo_set_layout.handle,
+          name))
+    {
+      @cerr("failed to allocate descriptor set");
+      return nil;
+    }
+
+    VkDescriptorBufferInfo descriptor_info = 
+    {
+      .buffer = internal_buffer->handle,
+      .offset = 0,
+      .range = params.size,
+    };
+
+    r.vk->updateVkDescriptorSet_Buffer(
+      internal_buffer->set,
+      VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+      0,
+      0,
+      makeSlice(&descriptor_info, 1));
   }
 
-  mapped_data = (u8*)block.mapped_data + buffer->allocation->aligned_offset;
-  block.mapped_count++;
-  return true;
+  failsafe_destroy_buffer.cancel();
+  failsafe_deallocate.cancel();
+
+  // The handle is our internal representation instead of the VkBuffer, as 
+  // we have to track its device memory internally.
+  return {internal_buffer, mapped_data};
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 Buffer::flush(Renderer& renderer, u64 offset, u64 size)
+void Buffer::destroy(Renderer& r)
 {
-  RendererInternal& ri = *(RendererInternal*)renderer.internal;
+  if (isnil(*this))
+    return;
+
+  DEBUG("destroying ", *this, "\n");
+
+  auto* internal_buffer = (DeviceBuffer*)handle;
+
+  if (internal_buffer->set != VK_NULL_HANDLE)
+    r.vk->deallocateVkDescriptorSet(internal_buffer->set);
+
+  // Unmapping when this is not mapped is safe and handled in this call.
+  r.vk->unmapVkBuffer(internal_buffer->ptr);
+  r.vk->destroyVkBuffer(internal_buffer->handle);
+  r.vk->deallocate(internal_buffer->ptr);
+
+  r.vk->buffer_pool.remove(internal_buffer);
+  handle = nullptr;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void* Buffer::map(Renderer& r)
+{
+  if (isnil(*this))
+  {
+    ERROR("attempt to map a nil gfx::Buffer\n");
+    return nullptr;
+  }
+
+  auto* internal_buffer = (DeviceBuffer*)handle;
+
+  TRACE("mapping ", *this, "\n");
+
+  if (!r.vk->mapVkBuffer(
+      &mapped_data, 
+      internal_buffer->ptr->aligned_offset,
+      internal_buffer->ptr))
+    return nullptr;
+
+  return mapped_data;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+b8 Buffer::flush(Renderer& r, u64 offset, u64 size)
+{
+  if (isnil(*this))
+    return ERROR("attempt to flush a nil gfx::Buffer\n");
 
   if (size == FLUSH_WHOLE_BUFFER)
-    TRACE("flushing the whole buffer at index ", index, "\n");
+    TRACE("flushing whole buffer of ", *this, "\n");
   else
-    TRACE("flushing ", size, " bytes of the buffer at index ", index, "\n");
+    TRACE("flushing ", size, " bytes of " , *this, " at offset ", offset, 
+          "\n");
 
-  if (index == 0)
-    return ERROR("attempted to flush an uninitialized buffer\n");
+  auto* internal_buffer = (DeviceBuffer*)handle;
 
-  RendererBuffer* buffer = ri.buffer_pool.atIndex(index);
-  if (buffer == nullptr)
-    return ERROR("attempted to flush the buffer at index ", index,
-      " which is out of bounds\n");
+  DeviceHeapAllocation* ptr = internal_buffer->ptr;
 
-  if (buffer->buffer == VK_NULL_HANDLE)
-    return ERROR("attempted to flush an uninitialized buffer\n");
-  assert(buffer->allocation != nullptr);
+  VkDeviceSize dev_size = size;
+  VkDeviceSize dev_offset = ptr->aligned_offset + offset;
 
-  if (mapped_data == nullptr)
-    return ERROR("attempted to flush an unmapped buffer\n");
+  if (size == FLUSH_WHOLE_BUFFER)
+    dev_size = ptr->aligned_size;
 
-  RendererHeap& heap = ri.heaps[buffer->allocation->memory_type];
-  RendererHeapBlock& block = heap.blocks[buffer->allocation->block_index];
-
-  VkDeviceSize aligned_offset =
-    alignDown(buffer->allocation->aligned_offset + offset, heap.alignment);
-  VkDeviceSize flush_size = (size == FLUSH_WHOLE_BUFFER)
-    ? VK_WHOLE_SIZE : alignUp(size, heap.alignment);
-
-  VkMappedMemoryRange range =
-  {
-    .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
-    .memory = block.memory,
-    .offset = aligned_offset,
-    .size = flush_size,
-  };
-
-  if (VK_SUCCESS != vkFlushMappedMemoryRanges(ri.device, 1, &range))
-    return ERROR("failed to flush ", flush_size, " bytes of the buffer"
-      " at index ", index, "\n");
-
-  return true;
+  // NOTE(sushi) size and offset are aligned inside this call.
+  return r.vk->flushMappedVkBuffer(dev_offset, dev_size, internal_buffer->ptr);
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 Buffer::copyAndFlush(Renderer& renderer, void* data, u64 size)
+b8 Buffer::copyAndFlush(Renderer& r, void* data, u64 size)
 {
-  RendererInternal& ri = *(RendererInternal*)renderer.internal;
-  TRACE("copying and flushing the buffer at index ", index, "\n");
-  
-  if (index == 0)
-    return ERROR("attempted to copy and flush an uninitialized buffer\n");
+  if (isnil(*this))
+    return ERROR("attempt to copy and flush a nil gfx::Buffer\n");
 
-  RendererBuffer* buffer = ri.buffer_pool.atIndex(index);
-  if (buffer == nullptr)
-    return ERROR("attempted to copy and flush the buffer at index ", index,
-      " which is out of bounds\n");
-
-  if (buffer->buffer == VK_NULL_HANDLE)
-    return ERROR("attempted to copy and flush an uninitialized buffer\n");
-  assert(buffer->allocation != nullptr);
+  TRACE("copying and flushing ", *this, "\n");
 
   if (mapped_data == nullptr)
-    return ERROR("attempted to copy and flush an unmapped buffer\n");
+    return ERROR("attempt to copy and flush unmapped ", *this, "\n");
 
-  RendererHeap& heap = ri.heaps[buffer->allocation->memory_type];
-  RendererHeapBlock& block = heap.blocks[buffer->allocation->block_index];
+  auto* internal_buffer = (DeviceBuffer*)handle;
+  DeviceHeapAllocation* ptr = internal_buffer->ptr;
 
+  DEBUG("copying ", size, " data\n");
   mem::copy(mapped_data, data, size);
 
-  VkDeviceSize flush_size = alignUp(size, heap.alignment);
-  VkMappedMemoryRange range =
-  {
-    .sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE,
-    .memory = block.memory,
-    .offset = buffer->allocation->aligned_offset,
-    .size = flush_size,
-  };
+  VkDeviceSize dev_size = size;
+  VkDeviceSize dev_offset = ptr->aligned_offset;
 
-  if (VK_SUCCESS != vkFlushMappedMemoryRanges(ri.device, 1, &range))
-    return ERROR("failed to flush ", flush_size, " bytes of the buffer"
-      " at index ", index, "\n");
+  if (size == FLUSH_WHOLE_BUFFER)
+    dev_size = VK_WHOLE_SIZE;
+  else 
+    dev_size = alignUp(size, r.vk->getHeap(ptr)->alignment);
 
-  return true;
+  DEBUG("dsize: ", dev_size, '\n');
+
+  return r.vk->flushMappedVkBuffer(dev_offset, dev_size, ptr);
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 Buffer::unmap(Renderer& renderer)
+void Buffer::unmap(Renderer& r)
 {
-  RendererInternal& ri = *(RendererInternal*)renderer.internal;
-  TRACE("unmapping the buffer at index ", index, "\n");
-
-  if (mapped_data == nullptr)
-    return true;
-
-  if (index == 0)
-    return ERROR("attempted to unmap an uninitialized buffer\n");
-
-  RendererBuffer* buffer = ri.buffer_pool.atIndex(index);
-  if (buffer == nullptr)
-    return ERROR("attempted to unmap the buffer at index ", index,
-      " which is out of bounds\n");
-
-  if (buffer->buffer == VK_NULL_HANDLE)
-    return ERROR("attempted to unmap an uninitialized buffer\n");
-  assert(buffer->allocation != nullptr);
-
-  RendererHeap& heap = ri.heaps[buffer->allocation->memory_type];
-  RendererHeapBlock& block = heap.blocks[buffer->allocation->block_index];
-  
-  block.mapped_count--;
-  if (block.mapped_count == 0)
+  if (isnil(*this))
   {
-    vkUnmapMemory(ri.device, block.memory);
-    block.mapped_data = nullptr;
+    ERROR("attempt to unmap a nil gfx::Buffer\n");
+    return;
   }
 
-  mapped_data = nullptr;
-  return true;
+  auto* internal_buffer = (DeviceBuffer*)handle;
+
+  TRACE("unmapping ", *this, '\n');
+
+  if (!r.vk->unmapVkBuffer(internal_buffer->ptr))
+    ERROR("attempt to unmap ", *this, " but it was already unmapped\n"); 
 }
 
 }

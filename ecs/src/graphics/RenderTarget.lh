@@ -1,0 +1,45 @@
+/*
+ *  A pair of an Image and ImageView intended to be rendered to.
+ */
+
+$ require "common"
+
+@@lpp.import "graphics/Image.lh"
+@@lpp.import "graphics/ImageView.lh"
+@@lpp.import "graphics/DescriptorSet.lh"
+@@lpp.import "graphics/Sampler.lh"
+
+namespace gfx
+{
+
+/* ============================================================================
+ */
+struct RenderTarget
+{
+  Image image;
+  ImageView view;
+
+  // A set and sampler that can be used to bind this render target to a 
+  // shader for drawing.
+  // TODO(sushi) do this some better way later.
+  DescriptorSet set;
+  Sampler sampler;
+
+  struct CreateParams
+  {
+    // The format to render to.
+    ImageFormat format;
+
+    // The size of the image rendered.
+    vec2u size;
+
+    String debug_name;
+  };
+
+  static RenderTarget create(Renderer& renderer, const CreateParams& params);
+  void destroy(Renderer& renderer);
+
+  DefineNilTrait(RenderTarget, {nil}, isnil(x.image))
+};
+
+}

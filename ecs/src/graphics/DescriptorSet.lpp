@@ -1,0 +1,146 @@
+$ require "common"
+$ local helpers = require "graphics.Helpers"
+
+@@lpp.import "graphics/DescriptorSet.lh"
+@@lpp.import "graphics/Vulkan.lh"
+@@lpp.import "graphics/DescriptorSetLayout.lh"
+@@lpp.import "graphics/Renderer.lh"
+
+@log.ger(gfx.dset, Info)
+
+namespace gfx
+{
+
+/* ----------------------------------------------------------------------------
+ */
+DescriptorSet DescriptorSet::create(
+    Renderer& r, 
+    DescriptorSetLayout layout,
+    String debug_name)
+{
+  String name = resolved(debug_name, "unnamed"_str);
+  
+  DEBUG("creating gfx::DescriptorSet '", name, "'\n");
+
+$ local cerr = helpers.defCreateErr("gfx::DescriptorSet", "name")
+
+  if (isnil(layout))
+  {
+    @cerr("provided descriptor set layout is nil");
+    return nil;
+  }
+
+  VkDescriptorSet set;
+  if (!r.vk->allocateVkDescriptorSet(
+        &set,
+        &(VkDescriptorSetLayout&)layout.handle,
+        name))
+  {
+    @cerr("failed to allocate VkDescriptorSet");
+    return nil;
+  }
+
+  return {(void*)set};
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void DescriptorSet::destroy(Renderer& r)
+{
+  if (isnil(*this))
+    return;
+
+  DEBUG("destroying ", *this, '\n');
+
+  r.vk->deallocateVkDescriptorSet((VkDescriptorSet)handle);
+  handle = nullptr;
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void DescriptorSet::update(
+    Renderer& r,
+    u32 binding,
+    u32 array_offset,
+    Slice<ImageDescriptor> images)
+{
+  if (isnil(*this))
+  {
+    ERROR("attempt to update a nil gfx::DescriptorSetLayout\n");
+    return;
+  }
+
+  SmallArray<VkDescriptorImageInfo, 16> infos;
+
+  for (ImageDescriptor& image : images)
+  {
+    if (isnil(image.sampler))
+    {
+      ERROR("image descriptor contains nil gfx::Sampler\n");
+      return;
+    }
+
+    if (isnil(image.view))
+    {
+      ERROR("image descriptor contains nil gfx::ImageView\n");
+      return;
+    }
+
+    infos.push(
+    {
+      .sampler = (VkSampler)image.sampler.handle,
+      .imageView = (VkImageView)image.view.handle,
+      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    });
+  }
+
+  r.vk->updateVkDescriptorSet_Image(
+    (VkDescriptorSet)handle,
+    array_offset,
+    binding,
+    infos.asSlice());
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void DescriptorSet::update(
+    Renderer& r,
+    u32 binding,
+    u32 array_offset,
+    Slice<UniformBufferDescriptor> buffers)
+{
+  if (isnil(*this))
+  {
+    ERROR("attempt to update a nil DescriptorSetLayout\n");
+    return;
+  }
+
+  SmallArray<VkDescriptorBufferInfo, 16> infos;
+
+  for (UniformBufferDescriptor& write : buffers)
+  {
+    if (isnil(write.buffer))
+    {
+      ERROR("buffer write contains nil gfx::Buffer\n");
+      return;
+    }
+
+    auto* internal_buffer = (DeviceBuffer*)write.buffer.handle;
+
+    infos.push(
+    {
+      .buffer = internal_buffer->handle,
+      .offset = write.offset,
+      .range = write.range,
+    });
+  }
+
+  r.vk->updateVkDescriptorSet_Buffer(
+    (VkDescriptorSet)handle,
+    VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+    binding,
+    array_offset,
+    infos.asSlice());
+}
+
+}

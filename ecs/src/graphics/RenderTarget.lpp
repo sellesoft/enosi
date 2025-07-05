@@ -1,0 +1,98 @@
+$ require "common"
+
+@@lpp.import "graphics/RenderTarget.lh"
+@@lpp.import "graphics/Renderer.lh"
+@@lpp.import "graphics/Descriptor.lh"
+@@lpp.import "graphics/Vulkan.lh"
+
+#include "iro/io/IO.h"
+
+@log.ger(gfx.rendertarget, Info)
+
+namespace gfx
+{
+
+/* ----------------------------------------------------------------------------
+ */
+RenderTarget RenderTarget::create(
+    Renderer& renderer, 
+    const CreateParams& params)
+{
+  String debug_name = resolved(params.debug_name, "unnamed"_str);
+
+  io::StaticBuffer<64> target_name;
+  io::formatv(&target_name, debug_name, " render target");
+
+  // TODO(sushi) because we set the pipeline's format to whatever the 
+  //             surface's format is, we have to keep it the same here.
+  //             Make pipeline formats parameterized soon.
+  ImageFormat forced_format = renderer.vk->getSurfaceImageFormat();
+
+  Image::CreateParams image_params = 
+  {
+    .usage = ImageUsage::ColorAttachment | ImageUsage::Sampled,
+    .format = forced_format,
+    // .format = params.format,
+    .size = params.size,
+    .debug_name = target_name.asStr(),
+  };
+
+  Image image = Image::create(renderer, image_params);
+
+  if (isnil(image))
+    return nil;
+
+  ImageView::CreateParams view_params = 
+  {
+    .image = image,
+    .format = forced_format,
+    // .format = params.format,
+    .debug_name = target_name.asStr(),
+  };
+
+  ImageView view = ImageView::create(renderer, view_params);
+
+  if (isnil(view))
+    return nil;
+
+  auto set = DescriptorSet::create(
+    renderer,
+    renderer.default_sampler_set_layout,
+    debug_name);
+
+  if (isnil(set))
+    return nil;
+
+  auto sampler = Sampler::create(
+    renderer,
+    {
+      .filter = ImageFilter::Nearest,
+      .address_mode = ImageAddressMode::ClampToBlack,
+      .debug_name = debug_name,
+    });
+
+  ImageDescriptor descriptor = 
+  {
+    .view = view,
+    .sampler = sampler,
+  };
+
+  set.update(renderer, 0, 0, makeSlice(&descriptor, 1));
+
+  return {image, view, set, sampler};
+}
+
+/* ----------------------------------------------------------------------------
+ */
+void RenderTarget::destroy(Renderer& renderer)
+{
+  if (isnil(*this))
+    return;
+
+  image.destroy(renderer);
+  view.destroy(renderer);
+  set.destroy(renderer);
+  sampler.destroy(renderer);
+}
+
+}

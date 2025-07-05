@@ -46,7 +46,7 @@ struct GameMgr
   };
 
   b8 init(InitParams& params);
-  void deinit();
+  void deinit(gfx::Renderer& renderer);
 
   struct UpdateParams
   { 
@@ -55,8 +55,17 @@ struct GameMgr
 
   b8 update(UpdateParams& params);
 
-  b8 render(gfx::Renderer& renderer);
-  b8 render(gfx::Renderer& renderer, const gfx::View& view);
+  struct RenderParams
+  {
+    gfx::Renderer& renderer;
+    gfx::RenderTarget& target;
+
+    // An optional view to render the game from which will overload the 
+    // eye sys' view.
+    gfx::View* view;
+  };
+
+  b8 render(const RenderParams& params);
 
   /* --------------------------------------------------------------------------
    *  Loads the client into some map.

@@ -1,318 +1,158 @@
 $ require "common"
+$ local helpers = require "graphics.Helpers"
 
 @@lpp.import "graphics/Pipeline.lh"
-
-@@lpp.import "graphics/RendererInternal.lh"
-
-@@lpp.import "graphics/Geo.lh"
+@@lpp.import "graphics/Vulkan.lh"
 @@lpp.import "graphics/Renderer.lh"
+
 @@lpp.import "graphics/Pipeline.defs.lh"
 
-#include "iro/Logger.h"
-
-
-@defFileLogger(gfx.pipeline, Info)
+@log.ger(gfx.pipeline, Info)
 
 namespace gfx 
 {
 
 /* ----------------------------------------------------------------------------
  */
-b8 Pipeline::init(
-  Renderer& renderer,
-  Shader vert_shader,
-  Shader frag_shader,
-  u64 push_constant_size,
-  b8 has_vertex_input,
-  String name)
+Pipeline Pipeline::create(Renderer& r, const CreateParams& params)
 {
-  RendererInternal& ri = *(RendererInternal*)renderer.internal;
-  TRACE("initializing a pipeline with vertex shader ", vert_shader.index,
-    " and fragment shader ", frag_shader.index, "\n");
+  String name = resolved(params.debug_name, "unnamed"_str);
 
-  if (index != 0)
-    return ERROR("attempted to initialize a pipeline with an already"
-      " initialized pipeline\n");
+  DEBUG("creating gfx::Pipeline '", name, "'\n");
 
-  if (ri.pipeline_count >= ri.pipeline_pool.MAX_COUNT)
-    return ERROR("failed to initialize a pipeline because the maximum"
-      " number of pipelines has been reached (", ri.pipeline_pool.MAX_COUNT,
-      ")\n");
+$ local cerr = helpers.defCreateErr("gfx::Pipeline", "name")
 
-  if (vert_shader.index == 0)
-    return ERROR("attempted to initialize a pipeline with an invalid"
-      " vertex shader\n");
-
-  if (frag_shader.index == 0)
-    return ERROR("attempted to initialize a pipeline with an invalid"
-      " fragment shader\n");
-
-  if (push_constant_size > renderer.getMaxPushConstantSize())
-    return ERROR("attempted to initialize a pipeline with a push constant"
-      " size that is too large (", push_constant_size, " > ",
-      renderer.getMaxPushConstantSize(), ")\n");
-
-  VkPushConstantRange push_constant =
+  if (isnil(params.vertex_shader))
   {
-    .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-    .offset = 0,
-    .size = (u32)push_constant_size,
-  };
-
-  VkDescriptorSetLayout descriptor_set_layouts[] =
-  {
-    ri.default_uniform_buffer_descriptor_set_layout,
-    ri.default_sampler_descriptor_set_layout,
-    ri.default_storage_buffer_descriptor_set_layout,
-  };
-  constexpr u32 descriptor_set_layout_count =
-    sizeof(descriptor_set_layouts) / sizeof(descriptor_set_layouts[0]);
-
-  VkPipelineLayoutCreateInfo pipeline_layout_create_info =
-  {
-    .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-    .setLayoutCount = descriptor_set_layout_count,
-    .pSetLayouts = descriptor_set_layouts,
-    .pushConstantRangeCount = (push_constant_size > 0) ? 1u : 0u,
-    .pPushConstantRanges = (push_constant_size > 0) ? &push_constant : nullptr,
-  };
-
-  VkPipelineLayout pipeline_layout;
-  if (VK_SUCCESS != vkCreatePipelineLayout(ri.device,
-      &pipeline_layout_create_info, &ri.allocator, &pipeline_layout))
-    return ERROR("failed to create the pipeline layout\n");
-
-  auto destroy_pipeline_layout = deferWithCancel
-  {
-    vkDestroyPipelineLayout(ri.device, pipeline_layout, &ri.allocator);
-  };
-
-  VkPipelineVertexInputStateCreateInfo vertex_input_info =
-  {
-    .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-  };
-
-  if (has_vertex_input)
-  {
-    VkVertexInputBindingDescription vertex_binding =
-    {
-      .binding = 0,
-      .stride = sizeof(Vertex),
-      .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-    };
-
-    VkVertexInputAttributeDescription vertex_attributes[] =
-    {
-      {
-        .location = 0,
-        .binding = 0,
-        .format = VK_FORMAT_R32G32_SFLOAT,
-        .offset = offsetof(Vertex, pos),
-      },
-      {
-        .location = 1,
-        .binding = 0,
-        .format = VK_FORMAT_R32G32_SFLOAT,
-        .offset = offsetof(Vertex, uv),
-      },
-      {
-        .location = 2,
-        .binding = 0,
-        .format = VK_FORMAT_R8G8B8A8_UNORM,
-        .offset = offsetof(Vertex, color),
-      },
-    };
-    constexpr u32 vertex_attribute_count =
-      sizeof(vertex_attributes) / sizeof(vertex_attributes[0]);
-
-    vertex_input_info.vertexBindingDescriptionCount = 1;
-    vertex_input_info.pVertexBindingDescriptions = &vertex_binding;
-    vertex_input_info.vertexAttributeDescriptionCount = vertex_attribute_count;
-    vertex_input_info.pVertexAttributeDescriptions = vertex_attributes;
+    @cerr("vertex shader not provided");
+    return nil;
   }
 
-  VkPipelineInputAssemblyStateCreateInfo input_assembly =
+  if (isnil(params.fragment_shader))
   {
-    .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-    .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-    .primitiveRestartEnable = VK_FALSE,
-  };
+    @cerr("fragment shader not provided");
+    return nil;
+  }
 
-  VkPipelineViewportStateCreateInfo viewport_state =
+  SmallArray<VkPushConstantRange, 8> push_constant_ranges;
+  for (const PushConstant& pc : params.layout.push_constant_ranges)
   {
-    .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-    .viewportCount = 1,
-    .scissorCount = 1,
-  };
-
-  VkPipelineRasterizationStateCreateInfo rasterizer =
-  {
-    .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-    .depthClampEnable = VK_FALSE,
-    .rasterizerDiscardEnable = VK_FALSE,
-    .polygonMode = VK_POLYGON_MODE_FILL,
-    .cullMode = VK_CULL_MODE_NONE,
-    .frontFace = VK_FRONT_FACE_CLOCKWISE,
-    .depthBiasEnable = VK_FALSE,
-    .lineWidth = 1.0f,
-  };
-
-  VkPipelineMultisampleStateCreateInfo multisampling =
-  {
-    .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-    .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
-    .sampleShadingEnable = VK_FALSE,
-  };
-
-  VkPipelineColorBlendAttachmentState blend_attachment =
-  {
-    .blendEnable = VK_TRUE,
-    .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
-    .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-    .colorBlendOp = VK_BLEND_OP_ADD,
-    .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-    .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-    .alphaBlendOp = VK_BLEND_OP_ADD,
-    .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
-      | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
-  };
-
-  VkPipelineColorBlendStateCreateInfo blend_state =
-  {
-    .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-    .logicOpEnable = VK_FALSE,
-    .attachmentCount = 1,
-    .pAttachments = &blend_attachment,
-  };
-
-  VkDynamicState dynamic_states[] =
-  {
-    VK_DYNAMIC_STATE_VIEWPORT,
-    VK_DYNAMIC_STATE_SCISSOR
-  };
-  constexpr u32 dynamic_state_count =
-    sizeof(dynamic_states) / sizeof(dynamic_states[0]);
-
-  VkPipelineDynamicStateCreateInfo dynamic_state =
-  {
-    .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-    .dynamicStateCount = dynamic_state_count,
-    .pDynamicStates = dynamic_states,
-  };
-
-  RendererShader* vert_renderer_shader =
-    ri.shader_pool.atIndex(vert_shader.index);
-  if (vert_renderer_shader == nullptr)
-    return ERROR("attempted to initialize a pipeline with an invalid"
-      " vertex shader\n");
-
-  RendererShader* frag_renderer_shader =
-    ri.shader_pool.atIndex(frag_shader.index);
-  if (frag_renderer_shader == nullptr)
-    return ERROR("attempted to initialize a pipeline with an invalid"
-      " fragment shader\n");
-
-  VkPipelineShaderStageCreateInfo shader_stages[2] =
-  {
+    if (pc.size > r.vk->physical_device_properties.limits.maxPushConstantsSize)
     {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-      .stage = VK_SHADER_STAGE_VERTEX_BIT,
-      .module = vert_renderer_shader->module,
-      .pName = "main",
-    },
-    {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-      .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-      .module = frag_renderer_shader->module,
-      .pName = "main",
+      @cerr("requested push constant size is greater than the selected "
+            "device's maximum (", pc.size, " > ", 
+            r.vk->physical_device_properties.limits.maxPushConstantsSize, ')');
+      return nil;
     }
-  };
 
-  VkGraphicsPipelineCreateInfo pipeline_create_info =
+    if (pc.size != 0)
+    {
+      push_constant_ranges.push(
+      {
+        .offset = pc.offset,
+        .size = pc.size,
+        .stageFlags = shaderStageFlagsToVulkan(pc.stages),
+      });
+    }
+  }
+
+  // This could maybe be aliased but idk i dont wanna do that.
+  SmallArray<VkDescriptorSetLayout, 8> descriptor_set_layouts;
+  for (const DescriptorSetLayout& layout : 
+       params.layout.descriptor_set_layouts)
   {
-    .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-    .stageCount = 2,
-    .pStages = shader_stages,
-    .pVertexInputState = &vertex_input_info,
-    .pInputAssemblyState = &input_assembly,
-    .pViewportState = &viewport_state,
-    .pRasterizationState = &rasterizer,
-    .pMultisampleState = &multisampling,
-    .pColorBlendState = &blend_state,
-    .pDynamicState = &dynamic_state,
-    .layout = pipeline_layout,
-    .renderPass = ri.default_renderpass,
-    .subpass = 0,
+    descriptor_set_layouts.push((VkDescriptorSetLayout)layout.handle);
+  }
+
+  VkPipelineLayout layout;
+  if (!r.vk->createVkPipelineLayout(
+        &layout,
+        descriptor_set_layouts.asSlice(),
+        push_constant_ranges.asSlice(),
+        name))
+  {
+    @cerr("failed to create VkPipelineLayout");
+    return nil;
+  }
+
+  auto failsafe_destroy_layout = deferWithCancel
+  {
+    r.vk->destroyVkPipelineLayout(layout);
   };
 
-  VkPipeline pipeline_handle;
-  if (VK_SUCCESS != vkCreateGraphicsPipelines(ri.device, ri.pipeline_cache, 1,
-    &pipeline_create_info, &ri.allocator, &pipeline_handle))
-    return ERROR("failed to create the graphics pipeline\n");
+  auto* vert_shader = (DeviceShader*)params.vertex_shader.handle;
+  auto* frag_shader = (DeviceShader*)params.fragment_shader.handle;
 
-  RendererPipeline* pipeline = ri.pipeline_pool.atIndex(ri.pipeline_count);
-  pipeline->pipeline = pipeline_handle;
-  pipeline->layout = pipeline_layout;
-  pipeline->push_constant_size = push_constant_size;
-  index = ri.pipeline_pool.indexOf(pipeline);
-  ri.pipeline_count++;
+  VkPipeline pipeline;
+  if (!r.vk->createVkPipeline(
+        &pipeline,
+        layout,
+        vert_shader->module,
+        frag_shader->module,
+        params.has_vertex_input,
+        name))
+  {
+    @cerr("failed to create VkPipeline");
+    return nil;
+  }
 
-  debugSetObjectName(renderer, VK_OBJECT_TYPE_PIPELINE, pipeline_handle,
-    "<", name, " pipeline>");
-  debugSetObjectName(renderer, VK_OBJECT_TYPE_PIPELINE_LAYOUT, pipeline_layout,
-    "<", name, " pipeline layout>");
+  DevicePipeline* dev_pipeline = r.vk->pipeline_pool.add();
+  dev_pipeline->pipeline = pipeline;
+  dev_pipeline->layout = layout;
 
-  destroy_pipeline_layout.cancel();
-  return true;
+  failsafe_destroy_layout.cancel();
+
+  return {(void*)dev_pipeline};
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 Pipeline::deinit(Renderer& renderer)
+Pipeline Pipeline::create(Renderer& r, const PipelineDef& def)
 {
-  RendererInternal& ri = *(RendererInternal*)renderer.internal;
-  TRACE("destroying the pipeline at index ", index, "\n");
+  DescriptorSetLayout layouts[2] = 
+  {
+    r.default_ubo_set_layout,
+    r.default_sampler_set_layout,
+  };
 
-  if (index == 0)
-    return true;
+  PushConstant push_constant = 
+  {
+    .offset = 0,
+    .size = def.push_constant_size,
+    .stages = ShaderStage::Vertex,
+  };
 
-  RendererPipeline* pipeline = ri.pipeline_pool.atIndex(index);
-  if (pipeline == nullptr)
-    return ERROR("attempted to destroy a pipeline at index ", index,
-      " which is out of bounds\n");
+  CreateParams params = 
+  {
+    .vertex_shader = def.vertex_shader->gfx_shader,
+    .fragment_shader = def.fragment_shader->gfx_shader,
+    .has_vertex_input = def.has_vertex_input,
+    .layout = 
+    {
+      .descriptor_set_layouts = makeSlice(layouts),
+      .push_constant_ranges = makeSlice(&push_constant, 1),
+    },
+    .debug_name = def.name,
+  };
 
-  if (pipeline->pipeline == VK_NULL_HANDLE)
-    return ERROR("attempted to destroy an uninitialized pipeline\n");
-
-  vkDestroyPipeline(ri.device, pipeline->pipeline, &ri.allocator);
-  vkDestroyPipelineLayout(ri.device, pipeline->layout, &ri.allocator);
-
-  pipeline->pipeline = VK_NULL_HANDLE;
-  pipeline->layout = VK_NULL_HANDLE;
-
-  index = 0;
-  ri.pipeline_pool.remove(pipeline);
-  ri.pipeline_count--;
-
-  return true;
+  return create(r, params);
 }
 
 /* ----------------------------------------------------------------------------
  */
-b8 Pipeline::init(
-    Renderer& renderer, 
-    u64 push_constant_size,
-    b8 has_vertex_input,
-    const PipelineDef& def)
+void Pipeline::destroy(Renderer& r)
 {
-  return 
-    init(
-      renderer, 
-      def.vertex_shader->gfx_shader,
-      def.fragment_shader->gfx_shader,
-      push_constant_size,
-      has_vertex_input,
-      def.name);
+  if (isnil(*this))
+    return;
+
+  auto* pipeline = (DevicePipeline*)handle;
+
+  r.vk->destroyVkPipeline(pipeline->pipeline);
+  r.vk->destroyVkPipelineLayout(pipeline->layout);
+
+  handle = nullptr;
+  r.vk->pipeline_pool.remove(pipeline);
 }
 
 }
+

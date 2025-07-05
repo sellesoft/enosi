@@ -251,6 +251,7 @@ struct StaticBuffer : public IO
   String asStr() { return String{buffer, u64(len)}; }
 
   operator char*() { return (char*)buffer; }
+  operator String() { return asStr(); }
 
   virtual s64 write(Bytes slice) override
   {

@@ -31,8 +31,6 @@ struct AssetMgr
   typedef DLinkedPool<Asset> AssetPool;
   typedef AVL<Asset, Asset::getHash> AssetMap;
 
-  typedef DList<Asset> AssetList;
-  
   AssetPool pool;
   AssetMap map;
 
@@ -51,6 +49,8 @@ struct AssetMgr
   Asset* allocateAsset(String name);
 
   Asset* loadAssetFromDisk(String path);
+
+  void unloadAsset(Asset* asset);
 
   // Attempts to find an asset from a given name and returns it.
   Asset* findAsset(String name) const;

@@ -23,6 +23,7 @@ struct ResourceRef
   @metadata.hidden
   void* resource;
 
+  IRO_FORCE_INLINE
   b8 isValid() const
   {
     return resource != nullptr;

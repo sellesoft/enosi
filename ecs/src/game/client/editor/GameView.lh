@@ -5,8 +5,7 @@
 $ require "common"
 
 @@lpp.import "graphics/View.lh"
-@@lpp.import "graphics/Framebuffer.lh"
-@@lpp.import "graphics/Texture.lh"
+@@lpp.import "graphics/RenderTarget.lh"
 
 struct Tile;
 struct Layer;
@@ -24,6 +23,8 @@ namespace cl
 struct Editor;
 struct GameSim;
 
+/* ============================================================================
+ */
 struct Editor_GameView
 {
   // True when the cursor is directly over the game view.
@@ -60,17 +61,14 @@ struct Editor_GameView
   // we are viewing it with.
   gfx::View view;
 
-  // Graphics objects used to control where the game renders to so we may 
-  // nicely display it in the UI.
-  gfx::Framebuffer framebuffer;
-  gfx::Texture texture;
-
-  // Tracked view size, used to reinitialize the framebuffer and texture
-  // if the visual size of the view is ever changed.
   vec2f view_size;
 
-  b8 init(Editor* editor, AssetLoader& loader);
-  void deinit(Editor* editor);
+  // The RenderTarget we will ask the game to render to in order to display
+  // it in a UI quad.
+  gfx::RenderTarget render_target;
+
+  b8 init(Editor* editor, gfx::Renderer& renderer);
+  void deinit(Editor* editor, gfx::Renderer& renderer);
 
   b8 update(
     Editor* editor, 
@@ -78,7 +76,7 @@ struct Editor_GameView
     cl::GameSim& sim, 
     const EditorSkinDef& skin);
 
-  b8 reinitializeGraphicsObjects(gfx::Renderer& renderer);
+  void render(gfx::Renderer& renderer, cl::GameSim& sim);
 };
 
 }

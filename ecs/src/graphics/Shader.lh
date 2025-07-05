@@ -7,6 +7,7 @@ $ require "common"
 #include "iro/containers/Slice.h"
 #include "iro/Common.h"
 #include "iro/Unicode.h"
+#include "iro/io/Format.h"
 
 @@lpp.import "graphics/ShaderParams.lh"
 
@@ -21,27 +22,33 @@ struct Renderer;
  */
 struct Shader
 {
-  u32 index = 0;
+  void* handle = nullptr;
 
-  b8 init(
-    Renderer& renderer,
-    ShaderKind kind,
-    Slice<u8> spv_binary,
-    String name = "unnamed"_str);
-
-  b8 deinit(Renderer& renderer);
-
-  inline b8 operator==(const Shader& other) const
+  struct CreateParams
   {
-    return index == other.index;
+    ShaderStage stage;
+    Bytes spv_binary;
+
+    String debug_name;
+  };
+
+  static Shader create(Renderer& renderer, const CreateParams& params);
+  void destroy(Renderer& renderer);
+
+  inline bool operator==(const Shader& other) const
+  {
+    return handle == other.handle;
   }
 
-  inline b8 operator!=(const Shader& other) const
-  {
-    return index != other.index;
-  }
-
-  DefineNilTrait(Shader, {0}, x.index == 0);
+  DefineNilTrait(Shader, {nullptr}, x.handle == nullptr);
 };
 
+}
+
+namespace iro::io
+{
+static s64 format(io::IO* io, const gfx::Shader& shader)
+{
+  return formatv(io, "gfx::Shader("_str, shader.handle, ')');
+}
 }

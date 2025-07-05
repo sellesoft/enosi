@@ -10,6 +10,8 @@ $ require "common"
 
 @@lpp.import "graphics/Renderer.lh"
 
+@@lpp.import "Profiling.lh"
+
 #include "iro/Platform.h"
 #include "iro/Logger.h"
 
@@ -41,9 +43,12 @@ static String formName(PathBuffer* buf, String name, String ext)
 /* ----------------------------------------------------------------------------
  */
 template<typename T>
-static T* loadDef(String name, String ext, const RefLoadParams& params)
+static TypedSourceAssetRef<T> loadDef(
+    String name, 
+    String ext, 
+    const RefLoadParams& params)
 {
-  TypedSourceAssetRef<T> defref;
+  TypedSourceAssetRef<T> defref = {};
 
   PathBuffer path;
   defref.name = formName(&path, name, ext);
@@ -54,10 +59,10 @@ static T* loadDef(String name, String ext, const RefLoadParams& params)
   if (!defref.load(def_params))
   {
      ERROR("failed to load def ", defref.name, "\n");
-     return nullptr;
+     return defref;
   }
 
-  return &*defref;
+  return defref;
 }
 
 /* ----------------------------------------------------------------------------
@@ -69,9 +74,10 @@ b8 TextureRef::load(const RefLoadParams& params)
   if (isnil(name))
     return true;
 
-  const auto* def = loadDef<TextureDef>(name, ".texture"_str, params);
-  if (def == nullptr)
+  auto defref = loadDef<TextureDef>(name, ".texture"_str, params);
+  if (!defref.isValid())
     return false;
+  const auto* def = &*defref;
 
   if (isnil(def->name))
     return ERROR("loaded texture def has a nil name\n");
@@ -108,9 +114,10 @@ b8 FontRef::load(const RefLoadParams& params)
   if (isnil(name))
     return true;
 
-  const auto* def = loadDef<FontDef>(name, ".font"_str, params);
-  if (def == nullptr)
+  auto defref = loadDef<FontDef>(name, ".font"_str, params);
+  if (!defref.isValid())
     return false;
+  const auto* def = &*defref;
 
   if (isnil(def->name))
     return ERROR("loaded font def has a nil name\n");
@@ -144,20 +151,21 @@ b8 ShaderRef::load(const RefLoadParams& params)
   if (isnil(name))
     return true;
 
-  auto* def = loadDef<ShaderDef>(name, ".shader"_str, params);
-  if (def == nullptr)
+  auto defref = loadDef<ShaderDef>(name, ".shader"_str, params);
+  if (!defref.isValid())
     return false;
+  const auto* def = &*defref;
 
   if (isnil(def->source))
     return ERROR("loaded shader def has a nil source path\n");
 
   PathBuffer source_name_buffer;
-  switch (def->kind)
+  switch (def->stage)
   {
-  case ShaderKind::Vertex:
+  case ShaderStage::Vertex:
     io::formatv(&source_name_buffer, def->source, ".vert"_str);
     break;
-  case ShaderKind::Fragment:
+  case ShaderStage::Fragment:
     io::formatv(&source_name_buffer, def->source, ".frag"_str);
     break;
   default:
@@ -169,7 +177,7 @@ b8 ShaderRef::load(const RefLoadParams& params)
   gfx::CompiledShader::CompileParams shader_params = 
   {
     .name = source_name,
-    .kind = def->kind,
+    .stage = def->stage,
     .allocator = &mem::stl_allocator,
     .assetmgr = &params.assetmgr,
   };
